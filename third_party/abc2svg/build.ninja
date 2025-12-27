@@ -1,0 +1,190 @@
+# rules for ninja (ninja-build) or samurai
+
+# minifying with 'jsmin' or 'uglifyjs' may be disabled by running
+#	NOMIN=1 ninja -v
+
+MAJOR=1
+
+rule cp
+  command = cp $in $out
+
+rule cpm
+  command = sed "s+@MAJOR@+$MAJOR+" $in > $out
+
+rule font
+  command = fontforge -c 'open("font/abc2svg.sfd").generate("abc2svg.ttf")';$
+   fontforge -c 'open("font/abc2svg.sfd").generate("abc2svg.woff")';$
+   fontforge -c 'open("font/abc2svg.sfd").generate("abc2svg.woff2")';$
+   echo '// abc2svg music font' > font.js;$
+   echo "var musicfont = 'url(\"data:application/octet-stream;base64,\\" >> font.js;$
+   base64 abc2svg.ttf | sed 's/$$/\\/' >> font.js;$
+   echo "\") format(\"truetype\")'" >> font.js
+
+rule jsc
+  command = if [ -e .fslckout ] && command -v fossil >/dev/null 2>&1; then $
+	v=`fossil describe`;$
+	d=`date -Idate`;$
+	v="abc2svg.version=\"$$v\";abc2svg.vdate=\"$$d\"";$
+   else $
+	v=`cat version.txt`;$
+   fi;$
+   cp core/license $out;$
+   head -qn1 $in >> $out;$
+   if [ "x$$NOMIN" = "x" ]; then $
+      if command -v jsmin >/dev/null 2>&1; then $
+	cat $in | jsmin >> $out;$
+	echo "" >> $out;$
+      else $
+	if command -v qjs >/dev/null 2>&1; then $
+	  cat $in | ./jsmin >> $out;$
+	else $
+	  cat $in | uglifyjs >> $out;$
+	fi;$
+     fi;$
+   else $
+	cat $in >> $out;$
+   fi;$
+   echo $$v >> $out
+
+rule jscu
+  command = cp core/license $out;$
+   head -qn1 $in >> $out;$
+   if [ "x$$NOMIN" = "x" ]; then $
+      if command -v jsmin >/dev/null 2>&1; then $
+	cat $in | jsmin >> $out;$
+	echo "" >> $out;$
+      else $
+	if command -v qjs >/dev/null 2>&1; then $
+	  cat $in | ./jsmin >> $out;$
+	else $
+	  cat $in | uglifyjs >> $out;$
+	fi;$
+      fi;$
+   else $
+	cat $in >> $out;$
+   fi
+
+rule edit
+  command = if [ "x$$NOMIN" = "x" ]; then $
+      if command -v jsmin >/dev/null 2>&1; then $
+	sed "s+@MAJOR@+$MAJOR+" $in | jsmin > $out;$
+      else $
+	sed "s+@MAJOR@+$MAJOR+" $in | uglifyjs > $out;$
+      fi;$
+   else $
+	sed "s+@MAJOR@+$MAJOR+" $in > $out;$
+   fi
+
+# generate all Scc1t2/n.js from sf2-Scc1t2/n.sf2
+rule sf
+  command = for f in sf2-Scc1t2/*.sf2; do $
+   instr=`basename $$f`;$
+   o=$${f#sf2-};$
+   o=$${o%.sf2}.js;$
+   if [ ! -r $$o -o $$f -nt $$o ]; then $
+   echo '// abc2svg sound font' > $$o;$
+   echo "abcsf2[$${instr%.sf2}] = '\\" >> $$o;$
+   base64 $$f | sed 's/$$/\\/' >> $$o;$
+   echo "'" >> $$o;$
+   fi;$
+   done
+
+build font: font | font/abc2svg.sfd
+build sf: sf | Scc1t2/
+
+build abc2svg-$MAJOR.js: jsc core/abc2svg.js core/deco.js core/draw.js $
+ font.js core/format.js core/front.js core/music.js core/parse.js core/subs.js $
+ core/svg.js core/tune.js core/lyrics.js core/gchord.js core/tail.js $
+ core/modules.js
+
+build ambitus-$MAJOR.js: jscu modules/ambitus.js
+build break-$MAJOR.js: jscu modules/break.js
+build capo-$MAJOR.js: jscu modules/capo.js
+build chordnames-$MAJOR.js: jscu modules/chordnames.js
+build clair-$MAJOR.js: jscu modules/clair.js
+build clip-$MAJOR.js: jscu modules/clip.js
+build combine-$MAJOR.js: jscu modules/combine.js
+build diag-$MAJOR.js: jscu modules/diag.js
+build equalbars-$MAJOR.js: jscu modules/equalbars.js
+build fit2box-$MAJOR.js: jscu modules/fit2box.js
+build gamelan-$MAJOR.js: jscu modules/gamelan.js
+build grid-$MAJOR.js: jscu modules/grid.js
+build grid2-$MAJOR.js: jscu modules/grid2.js
+build grid3-$MAJOR.js: jscu modules/grid3.js
+build jazzchord-$MAJOR.js: jscu modules/jazzchord.js
+build jianpu-$MAJOR.js: jscu modules/jianpu.js
+build mdnn-$MAJOR.js: jscu modules/mdnn.js
+build MIDI-$MAJOR.js: jscu modules/MIDI.js
+build nns-$MAJOR.js: jscu modules/nns.js
+build page-$MAJOR.js: jscu modules/page.js modules/strftime.js
+build pedline-$MAJOR.js: jscu modules/pedline.js
+build perc-$MAJOR.js: jscu modules/perc.js
+build psvg-$MAJOR.js: jscu modules/wps.js modules/psvg.js
+build roman-$MAJOR.js: jscu modules/roman.js
+build soloffs-$MAJOR.js: jscu modules/soloffs.js
+build sth-$MAJOR.js: jscu modules/sth.js
+build strtab-$MAJOR.js: jscu modules/strtab.js
+build swing-$MAJOR.js: jscu modules/swing.js
+build temper-$MAJOR.js: jscu modules/temper.js
+build tempo-$MAJOR.js: jscu modules/tempo.js
+build tropt-$MAJOR.js: jscu modules/tropt.js
+build tunhd-$MAJOR.js: jscu modules/tunhd.js
+
+build edit-$MAJOR.css: cp editor/edit.css
+
+build abcdoc-$MAJOR.js: jscu util/abcdoc.js
+build abcweb-$MAJOR.js: jscu util/abcweb.js
+build abcweb1-$MAJOR.js: jscu util/abcweb1.js
+build json-$MAJOR.js: jscu util/json.js
+build snd-$MAJOR.js: jscu util/play.js util/sndgen.js util/sndaud.js $
+ util/sf2-parser.js util/sndmid.js util/follow.js util/chord.js
+
+build edit-$MAJOR.xhtml: cpm editor/edit.xhtml
+build abckbd-$MAJOR.js: edit editor/abckbd.js
+build abckbd2-$MAJOR.js: edit editor/abckbd2.js
+build edit-$MAJOR.js: edit editor/edit.js
+
+build all: phony abc2svg-$MAJOR.js abcdoc-$MAJOR.js $
+ abcweb-$MAJOR.js abcweb1-$MAJOR.js $
+ snd-$MAJOR.js psvg-$MAJOR.js $
+ ambitus-$MAJOR.js break-$MAJOR.js capo-$MAJOR.js $
+ chordnames-$MAJOR.js clair-$MAJOR.js clip-$MAJOR.js combine-$MAJOR.js $
+ diag-$MAJOR.js equalbars-$MAJOR.js fit2box-$MAJOR.js gamelan-$MAJOR.js $
+ grid-$MAJOR.js grid2-$MAJOR.js grid3-$MAJOR.js jianpu-$MAJOR.js $
+ jazzchord-$MAJOR.js  mdnn-$MAJOR.js MIDI-$MAJOR.js $
+ nns-$MAJOR.js page-$MAJOR.js pedline-$MAJOR.js perc-$MAJOR.js psvg-$MAJOR.js $
+ roman-$MAJOR.js soloffs-$MAJOR.js sth-$MAJOR.js strtab-$MAJOR.js swing-$MAJOR.js $
+ temper-$MAJOR.js tempo-$MAJOR.js tropt-$MAJOR.js tunhd-$MAJOR.js $
+ edit-$MAJOR.css edit-$MAJOR.js $
+ edit-$MAJOR.xhtml abckbd-$MAJOR.js abckbd2-$MAJOR.js
+
+default all
+
+# fossil new release
+rule version
+  command = v=`fossil changes|wc -l`;$
+	if [ $$v -ne 0 ]; then $
+		echo "!! There are changes !!";$
+		exit 1;$
+	fi;$
+	v=`fossil describe`;$
+	if [ "$$out"="patch" ]; then $
+		v=`echo $$v|awk -F. -v OFS=. '{$$3 += 1; print}'`;$
+	else $
+		v=`echo $$v|awk -F. -v OFS=. '{$$2 += 1; $$3=0; print}'`;$
+	fi;$
+	d=`date -Idate`;$
+	echo "abc2svg.version=\"$$v\";abc2svg.vdate=\"$$d\"" > version.txt;$
+	fossil commit -m "New release $$v" -tag $$v;$
+	n=`tail -1 abc2svg-1.js|wc -c`;$
+	truncate -s -$$n abc2svg-1.js;$
+	cat version.txt >> abc2svg-1.js;$
+	r="abc2svg-$$v";$
+	ln -s . $$r;$
+	sed "s#^#$$r/#" dist_bin | pax -wj -x tar -f abc2svg.tar.bz2;$
+	rm -f abc2svg.zip;$
+	sed "s#^#$$r/#" dist_bin | zip -r abc2svg.zip -@;$
+	rm $$r;$
+	echo "Don't forget to upload abc2svg.tar.bz2 and abc2svg.zip"
+build minor: version
+build patch: version

@@ -1,0 +1,156 @@
+<!DOCTYPE HTML>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+    p, pre { margin-top: 6px; margin-bottom: 6px; }
+    li, ul { margin-left: 1%; }
+    li { margin-top: 1%}
+    ul { padding-left: 1%; }
+    h3 { margin: 2%;}
+    td { padding: 0px; }
+    .indent { margin-left: 5%; }
+    .inline { display: inline; }
+</style>
+</head><body>
+
+<div style="float:right; margin:10px; padding:5px; border:solid 1px">
+    <a href="index.html">more music software</a></div>
+<div style="width:100%">
+
+<h3>xml2abc</h3>
+<p><em>xml2abc</em> is a command line utility that translates MusicXML into ABC+ notation.
+</p>
+<p>Parts of MusicXML that lie beyond the scope of the ABC standard 2.1 are not translated.
+For example: specific positioning information, slurs spanning staves.
+</p>
+<p>The program translates all examples in the set from <a href="http://www.musicxml.com/music-in-musicxml/example-set/">MakeMusic</a>.
+The translated examples produce reasonable score when typeset with abcm2ps.
+In <a href="DebuMandSample.xhtml">Mandoline</a>, one of the samples,
+you can compare the output of xml2abc (via abcm2ps) with that of MuseScore 1.2.
+Another example from the set produces this score: <a href="SchbAvMaSample.xhtml">Ave_Maria</a> (Schubert).
+(see also the generated ABC of <a href="DebuMandSample_abc.html">Mandoline_abc</a> and <a href="SchbAvMaSample_abc.html">Ave_Maria_abc</a>)
+</p>
+<p>All non standard extensions of ABC supported by
+<a href="abc2xml.html#ext">abc2xml</a>
+are also supported by <em>xml2abc</em>. For instance, tablature
+and percussion scores can be translated from MusicXML into ABC and back to MusicXML,
+without significant loss of information.</p>
+<h3>Usage:</h3>
+<p>When you have Python installed:</p>
+<pre class="indent">> python xml2abc.py [-h] [-u] [-m] [-c C] [-d D] [-v V] [-n CPL] [-b BPL] [-o DIR] [-x] [-p FMT] [-t] [-s] file1 [file2 ...]</pre>
+<p>When you use the Win32 executable:</p>
+<pre class="indent">> xml2abc.exe [-h] [-u] [-m] [-c C] [-d D] [-v V] [-n CPL] [-b BPL] [-o DIR] [-x] [-p FMT] [-t] [-s] file1 [file2 ...]</pre>
+<p>Translates all .xml files (MusicXML) or compressed .mxl files in the file list
+to ABC-notation. Output goes to stdout unless the -o option is given. Wildcards in
+file names are expanded.
+</p>
+<a name="opts"></a><ul>
+<li>Option <b>-h</b> prints help message with explanation of the options.</li>
+<li>Option <b>-u</b> turns off repeat translation and unfolds simple repeats instead.</li>
+<li>Option <b>-m M</b> When <b>M</b>=1 only <em>%%MIDI program</em> commands are output. For a percussion voice
+also <em>%%MIDI channel</em> and <em>%%MIDI drummap</em> statements are added.
+When <b>M</b>=2 all supported midi commands are output:
+<em>%%MIDI channel</em>, <em>%%MIDI program</em>, <em>%%MIDI contol 7</em>, <em>%%MIDI control 10</em> and
+<em>%%MIDI drummap</em> for a percussion voice. The default is <b>M</b>=0, which outputs no midi commands.
+</li>
+<li>Option <b>-c C</b> sets the filter level of the credit filter. This filter tries to eliminate
+redundant T: fields. The level C goes from 0 (default) to 6 (no filtering). A higher level
+does less filtering. The default filters as much as possible and only includes the xml
+credit elements if no title of movement-title is found. Level 6 does no filtering and includes
+all xml credit elements as T: fields.</li>
+<li>Option <b>-d D</b> sets the unit length for the ABC output to L:1/<b>D</b>. This overrides the computation
+of the optimal unit length per voice.</li>
+<li>Option <b>-v V</b>. The default (V=0) translates volta backets in all voices. V=1 prevents abcm2ps to
+write volta brackets on all but the first voice. (A %%repbra 0 command is added to each voice that
+hides its volta's.) When V=2 abcm2ps only typesets volta brackets on the first voice <em>of each
+xml-part</em>. When V=3 the volta brackets are only translated for the first abc voice, which has the
+same effect on the output of abcm2ps as V=1, but the abc code is not suited for abc2midi.</li>
+<li>Option <b>-n CPL</b> sets the maximum line length for ABC output to <b>CPL</b> characters. The default is
+100 chars per line. An integer number of bars, at least one, is always output. How many bars fit into the
+maximum line length is calculated from the note line, not from the lyric lines.
+Line- and page breaks in MusicXML are translated to '$' after the previous barline [or volta number]</li>
+<li>Option <b>-b BPL</b> sets the number of bars per line. Every line of ABC will have <b>BPL</b>
+bars (measures). When both -n and -b options are given -b is ignored.</li>
+<li>Option <b>-o DIR</b> translates every .xml file to a separate .abc file with the same name
+into directory <b>DIR</b>. For example, <em>-o.</em> puts all abc files into the same directory where
+the input files reside.</li>
+<li>Option <b>-t</b> translates percussion (perc) and tablature (tab) staves to ABC code using
+<em>%%map</em> and <em>%%voicemap</em>. It also prepends a <em>%%beginsvg ... %%endsvg</em> section
+with definitions for noteheads.<br>
+For percussion only the following MusicXML noteheads are supported:
+<em>x</em>, <em>circle-x</em>, <em>square</em>, <em>triangle</em> and <em>diamond</em>.<br>
+The tablature translation can map one note (one ABC pitch) to at most 4 different strings (per voice).
+If you use more strings for one note (in one voice), it will reject those mappings. Mapping of
+one note to three different strings is abc2midi compatible.<br>
+See <a href="https://wim.vree.org/js2/tabDrumDoc.html">tutorial</a>
+for more explanation and examples.
+</li>
+<li>Option <b>-s</b> Shift note heads in a tab staff 3 units to the left. This will draw the note heads
+straight above the stems. However, ties and dots with seem shifted too much to the right. This option
+only takes effect when also <em>-t</em> is present.</li>
+<li>Option <b>-x</b> disables translation of xml line breaks. No abc score line breaks ($) will be output.</li>
+<li>Option <b>--v1</b> allocates all XML staff directions to the first voice of the staff. Normally a staff
+direction is allocated to the voice of the next note after the direction (if any).</li>
+<li>Option <b>--noped</b> disables translation of xml pedal elements.</li>
+<li>Option <b>-p FMT</b>, FMT=scale,pageheight,pagewidth,leftmargin,rightmargin,topmargin,botmargin. The
+specified pageformat parameters are included in the generated abc code as pseudo instructions (%%scale,
+%%pageheight etc.) For example: <em>-p 0.7,25,15,1.2,1.2,1.2,1.2</em> sets the scale to 0.7, the page height
+to 25 cm, the page width to 15 cm and all margins to 1.2 cm. After -p should follow 7 (floating point)
+numbers separated by comma's and without any spaces! Alle measures are in centimeter (cm). The scale
+value is the same as used by abcm2ps, i.e. a floating point number somewhere around 1.0</li>
+<li>Option <b>-pf</b> (this is option -p without number list) Enables the translation of xml page format
+specifications into abc page format instructions (%%pageheight etc).</li>
+<li>Option <b>-i</b> tells <em>xml2abc</em> to read XML data from standard input. When writing
+the an output file with option <b>-o</b> the name of the output file is <em>stdin.xml</em>.
+</li>
+<li>Option <b>--nbr</b> disables translation to broken rhythms.
+Normally xml2abc tries to write broken rythms whenever possible. This option disables that behaviour
+</li>
+<li>Option <b>--rbm</b> re-beams all measures.
+Only meant for files that completely lack any beaming.
+</li>
+<li>Option <b>--fin=N</b> selects the rule set for microtonal accidentals.
+Some well known score editors behave differently when microtonal accidentals
+are present in the score.
+<em>xml2abc</em> uses different translation rules, depending on which score editor was
+used to make the xml file
+When microtonal accidentals are present in the score, <em>xml2abc</em> 
+searches for the identification of the encoding software.
+The following encoders are recognized: <em>abc2xml</em>, <em>burak uyar</em>, <em>musescore</em> and <em>finale</em>.
+When no match is found <em>musescore</em> is assumed.
+With option --fin one can override the automatic detection:<br>
+<em>abc2xml</em>: --fin=0<br>
+<em>burak uyar</em>: --fin=1<br>
+<em>musescore</em>: --fin=2 (default)<br>
+<em>finale</em>: --fin=3<br>
+</li>
+<li>Option <b>--temp=N</b> selects the temperament for microtonal accidentals.
+When microtonal accidentals are present in the score a corresponfing tuning
+is aufomatically selected. Only EDO-53 and EDO-36 are implemented.
+EDO-36 is used for the up/down accidentals in MusicXML and EDO-53
+for the makam accidentals.
+When a mixture of these accidentals is detected, EDO-53 is selected
+and the up/down accidentals are mapped to the closest makam variant.<br>
+--temp=0 => only map up/down accidentals when they occur mixed with makam accidentals (default)<br>
+--temp=1 => always map up/down accidentals, even when not mixed with makam accidentals (i.e. a pure
+EDO-36 file)<br>
+--temp=2 => up/down accidentals are translated to fractional ABC accidentals, and can be
+mixed with (whole number) makam accidentals in ABC.
+For instance, &lt;natural-up> is translated to ^1/3 and &lt;sharp-down> to ^2/3,
+but &lt;quarter-sharp> is translated to ^1, and &lt;sharp> to ^4.
+</li>
+</ul>
+<h3>Download</h3>
+<p>The python script: <a href="xml2abc.py-173.zip">xml2abc.py-173.zip</a>
+(the <a href="xml2abc_changelog.html">change log</a>)
+</p><p>Stand alone win32 executable:
+<a href="xml2abc.exe-173.zip">xml2abc.exe-173.zip</a></p>
+<p>Blechtrottel.net has developed
+<a href="https://blechtrottel.net/en/abc2xmlgui.html"><em>abc2xmlGUI</em></a>,
+a graphical user interface for both <em>abc2xml</em> and <em>xml2abc</em>.</p>
+</div>
+
+<div style="float:right;"><i>bug reports, remarks to</i>:<img src="index_email.png" align="top"/></div>
+</html>
+    

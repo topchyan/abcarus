@@ -1,0 +1,52 @@
+#!/bin/sh
+# abc2svg with d8 (libv8 Google)
+progdir=`dirname $0`
+
+exec d8 -e "var args='$*', path='${progdir}/'
+
+// interpreter specific functions
+var abc2svg = {
+	print: function(str) {
+		print(str)
+	},
+	quit: function() {
+		quit(1)
+	},
+	readFile: function(fname) {
+		return read(fname)
+	}, // readfile()
+	loadjs: function(fn, relay, onerror) {
+		try {
+			load(fn[0] == '/' ? fn : (path + fn))
+			if (relay)
+				relay()
+		} catch(e) {
+			if (onerror)
+				onerror()
+			else
+				printErr('Cannot read file ' + fn)
+		}
+	} // loadjs()
+} // abc2svg
+
+load(path + 'abc2svg-1.js');
+
+// interpreter specific functions
+abc2svg.loadjs = function(fn, relay, onerror) {
+	try {
+		load(progdir + script)
+		if (relay)
+			relay()
+	} catch(e) {
+		if (onerror)
+			onerror()
+		else
+			print('Cannot read file ' + fn)
+	}
+}
+
+load(path + 'cmdline.js')
+
+// main
+	abc_cmd('abcv8', args.split(/\s+/), 'd8 (Google v8 shell)')
+"

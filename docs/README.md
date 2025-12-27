@@ -1,0 +1,39 @@
+# ABCarus Developer Documentation
+
+ABCarus is a desktop Electron application for editing and managing collections of music in ABC notation. It treats each tune (from `X:` to the next `X:`) as a separate unit, supports library-level navigation, and renders scores using abc2svg.
+
+This documentation is based on the current codebase and does not assume features that are not implemented.
+
+## What ABCarus is
+- A text-first ABC editor with a split view for notation rendering.
+- A library browser that scans folders for `.abc` files and indexes tunes.
+- A playback and print/export tool powered by abc2svg and soundfonts.
+
+## Intended use
+ABCarus is designed for users who maintain or study large collections of ABC files and need per-tune navigation, editing, and preview. The UX centers on tune-level operations (select, move, copy, delete) rather than full-file editing.
+
+## Quick start (development)
+- Install dependencies: `npm install`
+- Run the app: `npm run start`
+
+Scripts are defined in `package.json`.
+
+## Runtime dependencies
+- Electron (dev dependency in `package.json`).
+- Python 3 on PATH for MusicXML import/export (`third_party/abc2xml/abc2xml.py`, `third_party/xml2abc/xml2abc.py`).
+- `abc2abc` binary for transforms (bundled under `third_party/abcMIDI/bin/abc2abc` or available on PATH).
+- Soundfont data in `third_party/sf2/` for audio playback.
+
+## Key folders
+- `src/main/`: Electron main process (window, menus, IPC, file dialogs, scanning).
+- `src/preload.js`: Preload bridge exposing IPC APIs to the renderer.
+- `src/renderer/`: UI and feature logic (editor, library, rendering, playback).
+- `third_party/`: Bundled external tools and libraries (abc2svg, abcMIDI, xml2abc, abc2xml, soundfonts).
+- `assets/`: App icons.
+
+## Packaging/build
+No packaging or build scripts are defined beyond `npm run start`. Any production packaging workflow is not present in this repository.
+
+## Detailed docs
+- `docs/features.md`: End-user features and behaviors.
+- `docs/architecture.md`: Main/renderer responsibilities, IPC, and data flow.

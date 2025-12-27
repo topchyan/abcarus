@@ -1,0 +1,8 @@
+/* common CSS for the documentation */
+body {max-width:21cm}
+svg {display:block;background-color:white}
+code {font-size:1.2em;background-color:#aaeeee}
+pre {font-size:1.2em;background-color:#204060;color:white;
+	padding:2px 6px;margin:0 3px;display:inline-block}
+.source {display:inline-block;vertical-align:top}
+.nobrk {display:inline-block}

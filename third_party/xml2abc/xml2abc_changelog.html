@@ -1,0 +1,160 @@
+<!DOCTYPE HTML><html><head><meta charset="utf-8"></head>
+<body><pre>2025-10-31
+
+	* Revision: 173
+	- bug: option wev was missing in function vertaal()
+
+2025-10-26
+
+	* Revision: 172
+	- also translate slurs when they start or end in a grace sequence
+
+	* Revision: 171
+	- translate note types of grace notes
+	- for grace notes map types to abc durations respecting the fixed unit length
+	that is used by acb2svg: L=1/8 for single grace notes, L=1/16 for multiple
+	grace notes
+
+2025-10-20
+
+	* Revision: 170
+	- handle staff changes in sortMeasure and not in the main parse loop,
+	because in sortMeasure all concurrent voices/staves have already been parsed
+	and only then can staff changes reliably be detected.
+	- add xml staff- and voice number to the Note class
+	- add xml staff number to the Elem class
+	- new function elemToNewVoice() that alse inserts staff changes when needed in
+	addition to Note- or Elem- instances that are appended
+	- sortMeasure also deletes a staff change when present before an overlapping
+	rest when that rest is deleted
+
+2025-10-16
+
+	* Revision: 169
+	- new function emptyStaves() that creates an invisible rest in an otherwise
+	empty staff. Allows voices to switch to an empty staff. An empty staff
+	automatically sets option --wev.
+
+	* Revision: 168
+	-- corrected truth value test for element of ElementTree that caused a
+	deprecation warning (for python 3.13 and higher)
+	-- added translation of sound/instrument-change/score-instrument as used by
+	musescore
+	-- improved code for overlapping notes in one voice that changes these notes
+	into chords
+
+2025-04-25
+
+	* Revision: 167
+	- documentation updated
+
+2025-04-20
+
+	* Revision: 166
+	- better rebeam (for 5/8 and 7/8)
+	- new option: --nbr, do not use broken rhythms in ABC code generation
+	- bug rebeam: for a beam both current and previous note need to have a
+	duration &lt; 1/4
+	- add general option parameter to regression04/py
+
+2025-04-15
+
+	* Revision: 165
+	- bug: place initial key in the header if transposition/chromatic is a
+	multiple of 12. Otherwise, if chromatic transposition is different from a
+	multiple of 12, place the key in the current voice only and not in the
+	header.
+
+2025-04-13
+
+	* Revision: 164
+	- bug: also scan key-accidentals to determine the tuning
+	- include abc2xml in the search for software identification
+
+2025-04-09
+
+	* Revision: 163
+	- new option --rbm to re-beam all measures
+	- clean up: use a new measure data object for each measure and keep a
+	reference in array maatRecs
+
+2025-04-06
+
+	* Revision: 162
+	- For the burak encoder the absence of an accidemtal element seems to signal
+	a natural accidental when the particular pitch is altered in the key.
+	(except for grace notes that always seem to follow the key). This change is
+	provisional.
+
+2025-03-13
+
+	* Revision: 161
+	- added auto value (-1) to --fin and remover --nofin
+	- renamed edomix to edomap and reused edomix for fractional edo36 values
+	- new option --temp (0=auto choice edo: 12, 36 or 53, 1=force edo53 and map
+	edo36, 2=use fractional edo36 values when mixing edo 53 and 36
+	- only autodetect encoder when microtonal accidentals present
+	--fin=3 always show accidentals and ignore pitch-alter (finale)
+	--fin=2 use musescore rules for accidentals (musescore)
+	--fin=1 same as 2 but always use current alteration when no pitch-alter
+	(burak)
+	--fin=0 same as 2 but also honor microtonal pitch-alter values
+	--fin=-1 automatic detection of encoder if finale or burak, otherwise
+	musescore
+
+2025-03-09
+
+	* Revision: 160
+	- option --fin, when set pitch-alterations are ignored for microtonal
+	accidentals This seems to be the logic presently followed by finale and
+	musescore
+	- auto-detect musescore/finale and set --fin if detected
+	- option --nofin disables auto-detection
+
+2025-03-06
+
+	* Revision: 159
+	- when a tune uses %%MIDI temperamentequal 36, replace ^3 by ^ and _3 by _
+	(because 3*12/36 == 1)
+
+2025-02-17
+
+	* Revision: 158
+	- added a couple of regression test files with microtonal accidentals
+
+	* Revision: 157
+	- bug in return value of alt2acc when float alter value
+	- accept floating alter if +/-1.0, 0.0 or +/-0.5
+	- do not add natural (converted from alter) if no current alteration (or key
+	alteration)
+	- (test function) better option handling in regression04.py
+
+2025-02-16
+
+	* Revision: 156
+	- change internal representation of accidentals to the corresponding
+	MusicXML textstings. (mapping double-flat to flat-flat and the same for
+	sharp)
+	- recognize Edo36 accidentals (natural-up, sharp-down etc.) and translate them
+	to _4, _3, ... ^3, ^4 (flat-down, flat, .. sharp, sharp-up)
+	- new option "no36" to map Edo36 accidentals to Edo53: most up/down variants
+	are mapped to quarter-sharp and quarter-flat
+	- new functions acc2abc and alt2acc to support the new internal representation
+	of accidentals
+
+2025-02-10
+
+	* Revision: 155
+	- accidental type natural-up/down added
+	- proper error message when accidental type not supported
+	- also accept musicxml extension within .mxl files
+
+2025-02-05
+
+	* Revision: 154
+	- follow probable bug in Musescore: hide accidental when alteration is
+	defined in a key-step element, even if an explicit accidental element is
+	present. When the key is defined by a &lt;fifths&gt; element the accidental is not
+	hidden when the same alteration is in the key!
+
+</pre></body></html>

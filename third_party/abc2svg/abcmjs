@@ -1,0 +1,66 @@
+# abc2svg with a Mozilla JavaScript interpreter
+
+for c in js128 js115 js102 end; do
+	if [ $c = 'end' ]; then
+		echo "$0: could not find a javascript interpreter - abort"
+		exit 1
+	fi
+	if command -v $c >/dev/null 2>&1; then
+		break
+	fi
+done
+
+# search where are the abc2svg scripts
+p=$0
+if [ `dirname $p` = . ]; then
+	p=`which $p`
+fi
+if [ -L $p ]; then
+	p=`realpath $p`
+fi
+p=`dirname $p`
+
+exec $c -e "// interpreter specific functions
+var abc2svg = {
+    print: print,
+    printErr: printErr,
+    quit: function() {
+	quit(1)
+    },
+    readFile: function(fn) {
+	try {
+		return read(fn)
+	} catch(e) {
+	}
+	return null
+    },
+    loadjs: function(fn, relay, onerror) {
+	try {
+		load(fn[0] == '/' ? fn : (path + fn))
+		if (relay)
+			relay()
+	} catch(e) {
+		if (onerror)
+			onerror()
+		else
+			printErr('Cannot read file ' + fn)
+	}
+    } // loadjs()
+} // abc2svg
+
+    var	args = scriptArgs,
+	path = '${ABCPATH}'
+
+	if (path)
+		abc2svg.path = path.split(':')
+
+	path = '${p}/'		// path to the abc2svg scripts
+
+	console.log = printErr
+
+load(path + 'abc2svg-1.js')
+load(path + 'cmdline.js')
+
+// main
+abc_cmd('abcmjs', args, '${c}')
+" -- "$@"

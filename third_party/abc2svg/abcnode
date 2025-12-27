@@ -1,0 +1,75 @@
+:;# abc2svg with raw nodeJS
+
+# search where are the abc2svg scripts
+p=$0
+if [ `dirname $p` = . ]; then
+	p=`which $p`
+fi
+if [ -L $p ]; then
+	p=`realpath $p`
+fi
+p=`dirname $p`
+
+node - "$@" <<EOF
+    var	path='${p}/',
+	abc2svg = {}
+
+// interpreter specific functions
+abc2svg.print = function(str) {
+	process.stdout.write(str + '\n')
+}
+abc2svg.printErr = function(str) {
+	process.stderr.write(str + '\n')
+}
+abc2svg.quit = function() {
+	process.exit(1)
+}
+abc2svg.readFile = function(fname) {
+    var	fs = require("fs");
+
+	try {
+		return fs.readFileSync(fname).toString()
+	} catch(e) {
+	}
+	return null
+}
+
+abc2svg.get_mtime= function(fn) {
+    var	fs = require("fs")
+
+	return fs.statSync(fn).mtime
+}
+
+abc2svg.loadjs = function(fn, relay, onerror) {
+	try {
+		var geval = eval;
+		geval(abc2svg.readFile(path + fn))
+		if (relay)
+			relay()
+	} catch(e) {
+		if (onerror)
+			onerror()
+		else
+			abc2svg.printErr('Cannot read file ' + fn)
+	}
+}
+
+// main
+    var	args = process.argv,
+	i = '${ABCPATH}'
+
+	if (i)
+		abc2svg.path = i.split(':')
+
+	abc2svg.loadjs("abc2svg-1.js")
+	abc2svg.loadjs("cmdline.js")
+
+	global.Abc = Abc
+	global.abc2svg = abc2svg
+
+	global.user = user;		// (for modules/page.js)
+
+	args.shift()			// (remove 'node')
+	args.shift()			// (remove the '-')
+	abc_cmd("abcnode", args, "nodeJS")
+EOF

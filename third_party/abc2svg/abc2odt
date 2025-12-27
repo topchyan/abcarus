@@ -1,0 +1,77 @@
+#! /usr/bin/env node
+
+// abc2odt
+
+// define the system functions
+    var	sep = require('path').sep
+
+function usage() {
+	abc2svg.printErr('ABC to ODT translator with\
+ abc2svg-' + abc2svg.version + ' ' + abc2svg.vdate + '\n\
+Usage:\n\
+  abc2odt [options] ABC_file [[options] ABC_file]* [options] [-o output_file]\n\
+Arguments:\n\
+  options     ABC options (the last options are moved before the last file)\n\
+  ABC_file    ABC file\n\
+  output_file output file - default is "./abc.odt"')
+	abc2svg.quit()
+}
+
+// load the abc2svg core
+var m = require("abc2svg/abc2svg-1");
+global.abc2svg = m.abc2svg;
+global.Abc = m.Abc;
+
+// interpreter specific functions
+abc2svg.print = function(str) {
+	process.stdout.write(str + '\n')
+}
+abc2svg.printErr = function(str) {
+	process.stderr.write(str + '\n')
+}
+abc2svg.quit = function() {
+	process.exit(1)
+}
+abc2svg.readFile = function(fname) {
+    var	fs = require("fs")
+
+	return fs.readFileSync(fname).toString()
+}
+
+abc2svg.get_mtime = function(fn) {
+    var	fs = require("fs")
+
+	return fs.statSync(fn).mtime
+}
+
+abc2svg.loadjs = function(fn, relay, onerror) {
+	try {
+		var geval = eval;
+		geval(abc2svg.readFile(__dirname + sep + fn))
+		if (relay)
+			relay()
+	} catch(e) {
+		if (onerror)
+			onerror()
+		else
+			abc2svg.printErr('Cannot read file ' + fn)
+	}
+}
+
+// load the command line
+m = require("abc2svg/cmdline");
+global.abc = m.abc;
+global.user = m.user;
+global.abc_cmd = m.abc_cmd
+
+// load the ODT backend
+require("abc2svg/toodt");
+
+// main
+var args = process.argv
+if (!args[2])
+	usage();
+args.shift();
+args.shift()
+
+abc_cmd("abc2odt", args)

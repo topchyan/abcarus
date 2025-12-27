@@ -1,0 +1,5 @@
+dist
+.vscode
+scripts/local/
+third_party/python-runtime/
+node_modules/

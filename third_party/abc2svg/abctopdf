@@ -1,0 +1,331 @@
+# abctopdf
+# convert ABC to PDF using abc2svg and one of
+#	- a browser understanding --headless --print-to-pdf
+#		the name of which being in the environment variable 'BROWSER'
+#	- chrome-headless-shell or chrome
+#	- rsvg-convert (https://wiki.gnome.org/Projects/LibRsvg)
+#	- weasyprint (https://weasyprint.org/)
+#
+# Note: when rsvg-convert or weasyprint is used,
+#	this script forces A4 as the paper size.
+#	For an other size, change
+#		PH=29.7cm
+#
+# Copyright (C) 2019-2025 Jean-François Moine - License GPL3+
+
+# set the page height
+PH=29.7cm
+
+# set a browser
+if [ "x$BROWSER" = "x" ]; then
+	BROWSER=google-chrome
+fi
+
+if [ $# -eq 0 ]; then
+	cat << EOF
+ABC to PDF translator using abc2svg
+Usage:
+  abctopdf [options] ABC_file [[options] ABC_file] [options] [-o output_file]
+Arguments:
+  options     ABC options (the last options are moved before the last file)
+  ABC_file    ABC file
+  output_file output file - default is "./abc.pdf"
+EOF
+	exit 1
+fi
+
+# choose a abc2svg batch script with an available JS interpreter
+if [ ${0#./} != $0 ]; then
+	bdir="./"
+else
+	bdir=`dirname $0`
+	if [ $bdir != '.' ]; then
+		bdir="$bdir/"
+	else
+		bdir=''
+	fi
+fi
+# (sorted from fastest to slowest in ARM machines)
+for c in qjs jsc js128 js115 js102 d8 node end; do
+	if [ $c = 'end' ]; then
+		echo "$0: could not find a javascript interpreter - abort"
+		exit 1
+	fi
+	if command -v $c >/dev/null 2>&1; then
+		case $c in
+		(qjs) c=abcqjs;;
+		(jsc) c=abcjsc;;
+		(js24) c=abcmjs;;
+		(js52) c=abcmjs;;
+		(js60) c=abcmjs;;
+		(js78) c=abcmjs;;
+		(d8) c=abcv8;;
+		(node) c=abcnode;;
+		esac
+		if command -v $c >/dev/null 2>&1; then
+			abcscr=$c
+			break
+		fi
+		if command -v $bdir$c >/dev/null 2>&1; then
+			abcscr=$bdir$c
+			break
+		fi
+	fi
+done
+echo "Using $abcscr"
+
+# get the output file name (after '-o')
+# default name
+out='abc.pdf'
+n=0
+for a do
+	if [ "$a" = "-o" ]; then
+		n=1
+	elif [ $n -eq 1 ]; then
+		out=$a
+		n=0
+	else
+		set -- "$@" "$a"
+	fi
+	shift
+done
+
+# check if some chromium-based browser is available
+# (--headless does not work anymore with vivaldi - 2025-01-30)
+for c in "$BROWSER" chrome-headless-shell; do
+	if command -v $c >/dev/null 2>&1; then
+		echo "and $c"
+		command $abcscr "$@" > /tmp/o.html
+		$c --headless --print-to-pdf=$out --no-pdf-header-footer \
+			--no-sandbox --no-margins --disable-gpu \
+			/tmp/o.html
+		rm /tmp/o.html
+		exit 0
+	fi
+done
+
+# try rsvg-convert
+if command -v rsvg-convert >/dev/null 2>&1; then
+	echo "and rsvg-convert"
+
+	# build a ABC file (with JS script) to change the font and page definitions
+	# this solves the following problems:
+	# - the maintainer of librsvg does not want to handle the CSS shorthand 'font:'
+	# - rsvg-convert always gets the SVG images at 72ppi, ignoring the -p/-d values
+	# - the sets of SVG images per page must be converted to a set of one SVG per page
+	cat > /tmp/fix.abc << EOF
+%%pageheight $PH
+%%fullsvg 1
+%%musicfont abc2svg
+%%beginjs
+    var fix_out
+// install
+// - front-end
+	fix_out = user.img_out
+	user.img_out = function(p) {
+		fix_out(bug(p))
+	}
+// - back-end
+    var	page_h, page_out,
+	page_cl = "",
+	page_sty = ""
+
+	// get the style from the image and remove it from the block
+	function get_style(p) {
+	   var	i,
+		sty = p.match(/<style.*?>((.|\n)*?)<\/style>/)
+
+		if (!sty)
+			return p
+		sty = sty[1].split('\n')
+		if (!page_sty)
+			page_sty = '<style>\n</style>\n'
+		for (i = 0; i < sty.length; i++) {
+			if (page_sty.indexOf(sty[i]) < 0)
+				page_sty = page_sty.replace('</style>\n',
+						sty[i] + '\n</style>\n')
+		}
+		return p.replace(/<style(.|\n)*?\/style>\n/, '')
+	} // get_style()
+
+	// fix the problem about the text multi-coordinates in librsvg
+	function bug(p) {
+	    var	i, k, t, r, x, y, c, o,
+		j = 0
+
+		while (1) {
+			i = p.indexOf("<text x=", j)
+			if (i < 0)
+				return p
+			j = p.indexOf("</text", i)
+			t = p.slice(i, j)
+	
+			r = t.match(/x="([^"]+)"\s+y="([^"]+)"[^>]*>(.+)/)
+				// r[1] = x list, r[2] = y list, r[3] = characters
+			if (!r || r[1].indexOf(',') < 0)
+				continue
+			x = r[1].split(',')
+			y = r[2].split(',')
+			k = 0
+			o = '<text x="' + x[0] + '" y="' + y[0] + '">' + r[3][0]
+			while (++k < x.length)
+				o += '\n<tspan x="' + x[k] + '" y="' + y[k] + '">'
+					+ r[3][k] + '</tspan>'
+			p = p.replace(t, o)
+		}
+		// not reached
+	} //bug()
+
+	// low level output
+	abc2svg.page.user_out = function(p) {
+	   var	h, w,
+		cfmt = abc.cfmt()
+
+		switch (p.slice(0, 4)) {
+		case "<div":			// new page
+			page_h = 0
+			page_out = ""
+			break
+		case "<svg":			// SVG image
+			p = get_style(p)
+				.replace(/<rect[^>]+>/,'')	// remove %%bgcolor
+			if (!page_cl) {
+				h = p.match(/class=[^f]*(f[^" ]+)/)	// "
+				if (h)
+					page_cl = h[1]
+			}
+			if (page_h)
+				page_out += p
+					.replace(/<svg(.|\n)*?>/,
+						'<g transform="translate(0, ' +
+							page_h.toFixed(1) + ')">')
+					.replace('</svg>', '</g>\n')
+			else
+				page_out += p
+					.replace(/<\/?svg(.|\n)*?>/g, '')
+			page_h += Number(p.match(/height="([\d.]+)px"/)[1])
+			break
+		case "</di":			// end of page
+			w = cfmt.pagewidth
+			h = cfmt.pageheight
+			if (!page_cl)
+				page_cl = "music"	// old version
+			abc2svg.print('\
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1"\n\
+ xmlns:xlink="http://www.w3.org/1999/xlink"\n\
+ color="black" class="' + page_cl + '" stroke-width=".7"\n\
+ width="' +
+				w.toFixed(0) + 'px" height="' +
+				h.toFixed(0) + 'px" viewBox="0 0 ' +
+					w.toFixed(0) + ' ' +
+					h.toFixed(0) + '"' +
+				(cfmt.bgcolor ?
+					(' style="background-color: ' +
+						cfmt.bgcolor + '"') : '') +
+				'>\n' +
+				page_sty +
+				page_out + "</svg>")
+			break
+		default:
+			if (p.indexOf("</svg") >= 0) {
+				page_out += p.replace(/<\/svg>/, '')
+				if (page_h)
+					page_out += "</g>\n"
+			}
+			break
+		}
+	} // user_out()
+// for tests
+abc2svg.abort = function(e) {
+abc2svg.printErr('abort: '+e.message+'\n'+e.stack)
+abc2svg.quit()
+}
+%%endjs
+EOF
+
+	# purge /tmp
+	rm -f /tmp/abc*.svg
+
+	# generate a (HTML+SVG) file with a abc2svg batch script
+	# then, extract the SVG images (pages) to /tmp
+	n=0
+	command $abcscr /tmp/fix.abc "$@" | while read v; do
+		case "$v" in
+		"<svg"*)
+			n=$(($n+1))
+			fn="/tmp/abc$n.svg"
+			echo $v > $fn
+			;;
+		"</svg"*)
+			echo $v >> $fn
+			fn=
+			;;
+		"</body"*)
+			break;;
+		*)
+			if [ "X$fn" != "X" ]; then
+				echo $v >> $fn
+			fi
+			;;
+		esac
+	done
+
+	# convert the SVG images to PDF
+	if [ -f /tmp/abc1.svg ]; then
+		echo rsvg-convert -f pdf $(ls -v /tmp/abc*.svg) -o $out
+		rsvg-convert -f pdf $(ls -v /tmp/abc*.svg) -o $out
+	else
+		echo 'Errors during the generation'
+	fi
+
+	# cleanup
+	rm -f /tmp/abc*.svg /tmp/fix.abc
+	exit 0
+fi
+
+# try weasyprint
+if command -v weasyprint >/dev/null 2>&1; then
+	echo "and weasyprint"
+
+	rm -f /tmp/abc*.svg /tmp/abc.html
+
+# generate a (HTML+SVG) file
+# then, extract the SVG images (pages) to /tmp/ and build a file.html
+	touch /tmp/abc.html
+	n=0
+command $abcscr --pageheight $PH --fullsvg 1 --musicfont abc2svg "$@" | while read v; do
+	case "$v" in
+	"<svg"*)
+		n=$(($n+1))
+		fn="/tmp/abc$n.svg"
+		echo $v > $fn
+		echo "<img src=\"/tmp/abc${n}.svg\"/>" >> /tmp/abc.html
+		;;
+	"</svg"*)
+		echo $v >> $fn
+		fn=
+		;;
+	"<body>")
+		echo '<body bgcolor="white">' >> /tmp/abc.html
+		;;
+	"</body"*)
+		break;;
+	*)
+		if [ "X$fn" != "X" ]; then
+			echo $v >> $fn
+		else
+			echo $v >> /tmp/abc.html
+		fi
+		;;
+	esac
+done
+	echo '</body>' >> /tmp/abc.html
+
+echo weasyprint /tmp/abc.html $out
+	weasyprint /tmp/abc.html $out
+	rm -f /tmp/abc*.svg /tmp/abc.html
+	exit 0
+fi
+
+	echo "$0: no program found for SVG to PDF translation - abort"
+	exit 1

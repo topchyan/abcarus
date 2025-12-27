@@ -1,0 +1,106 @@
+/* edit.css - file used in the abc2svg editor */
+@page {margin:0}
+svg {display:block;background-color:#ffffff}
+.abcr {fill: #d00000; fill-opacity: 0; z-index: 15}
+@media screen {
+	body, html {height: 90%}
+	text, path {pointer-events: none}
+	svg {margin-left:auto;margin-right:0}
+	#dleft {
+		width: auto;
+		position: absolute; top: 0; bottom:0; left: 0;
+		z-index: 2;
+		background-color:#faf0e6;
+		overflow: auto;
+	}
+	#dleft:hover {z-index: 10 !important}
+	#nav {
+		position:relative;
+		padding: 0;
+		margin: 2px 0 0 2px;
+	}
+	.dropbutton {
+		float: left;
+		display:inline-block;
+		width: 90px;
+		text-align: center;
+	}
+	.dropbutton:hover { outline: solid; outline-width: 2px }
+	.dropbutton:hover > ul { display: block }
+	.droplinks {
+		list-style-type: none;
+		position: absolute;
+		min-width: 80px;
+		background-color: #e0e0e0;
+		display: none;
+		z-index: 20;
+		text-align: left;
+		padding: 0;
+		margin: 0;
+	}
+	.droplinks li:hover { outline: solid; outline-width: 2px }
+	.droplinks li { padding: 0 5px 0 5px; margin: 2px }
+	#dright {
+		width: 80%;
+		max-width: 840px;
+		position: absolute; top: 0; bottom:0; right:0;
+		z-index: 2;
+		background-color:#faf0e6;
+		overflow: auto
+	}
+	#dright:hover {z-index: 10 !important}
+	textarea {background-color:#ffffff}
+	.popup {
+		position: absolute; top: 0; right: 20px;
+		padding: 10px;
+		background-color:#e0e0e0;
+		border-radius: 5px;
+		visibility: hidden;
+		z-index:20;
+	}
+	.close {
+		position: absolute;
+		top: 10px;
+		right: 20px;
+		font-size: 20px;
+		font-weight: bold;
+		color: red;
+	}
+	#abckbd td {
+		border: 1px solid black;
+		padding: 0.5rem;
+		text-align: center;
+	}
+	#ctxMenu {
+		position:absolute;
+		display:none;
+		left:0px;
+		top:0px;
+		height:20px;
+		width:40px;
+		padding:0;
+		margin:0;
+		border:1px solid;
+		background-color:white;
+		font-weight:normal;
+		white-space:nowrap;
+		z-index:100;
+	}
+	#ctxMenu:hover > .droplinks {
+		display:block;
+	}
+	#ctxMenu:before {
+		content:attr(title);
+	}
+}
+@media print {
+	#dleft, #ctxMenu, .popup { display: none }
+	body {
+		margin:0; padding:0; border:0;
+		background-color: white;
+	}
+	#dright { margin:0; padding:0; border:0 }
+	.newpage { page-break-before: always }
+	.newpage:first-of-type { page-break-before: avoid }
+	.nobrk { page-break-inside: avoid }
+}

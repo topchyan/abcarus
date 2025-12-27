@@ -1,0 +1,146 @@
+# shell script to convert ABC tunes to MIDI files
+# using abc2svg and quickjs (https://bellard.org/quickjs/)
+
+# search where are the abc2svg scripts
+p=$0
+if [ `dirname $p` = . ]; then
+	p=`which $p`
+fi
+if [ -L $p ]; then
+	p=`realpath $p`
+fi
+p=`dirname $p`
+
+exec qjs --std -e '
+    var	i,
+	args = scriptArgs,
+	path = args.shift() + "/",	// the 1st argument is the script path
+	fn = "tune"			// default output (tune1.mid, tune2.mid...)
+
+// interpreter specific functions
+function load(fn) {
+	return std.loadScript(fn)
+}
+var abc2svg = {
+	print: print,
+	printErr: function(str) {
+		std.err.printf("%s\n", str)
+	},
+	quit: function() {
+		std.exit(1)
+	},
+	readFile: std.loadFile,
+	get_mtime: function(fn) {
+		return new Date(os.stat(fn)[0].mtime)
+	},
+	loadjs: function(fn, relay, onerror) {
+		try {
+			load(fn[0] == "/" ? fn : (path + fn))
+			if (relay)
+				relay()
+		} catch(e) {
+			if (onerror)
+				onerror()
+			else
+				abc2svg.printErr("Cannot read file " + fn +
+					"\n  " + e.name + ": " + e.message)
+			return
+		}
+	}, // loadjs()
+
+	// functions called from cmdline.js
+
+	abc_init: function(args) {	// do not load the tohtml.js backend
+	},
+
+	// function called at the end of the parsing
+	abc_end: function() {
+	    var	i, j, c, v, fno, f,
+		tunes = abc.tunes		// generated tunes
+
+		midigen()			// generate the MIDI files
+
+		// create the MIDI disk files
+		for (i = 0; i < args.length; i++) {
+			if (args[i] == "-o") {
+				fn = args[i + 1]
+				if (fn.slice(-4) == ".mid")
+					fn = fn.slice(0, -1)
+				break
+			}
+		}
+		for (i = 0; i < tunes.length; i++) {
+			if (tunes.length == 1)
+				fno = fn + ".mid"
+			else
+				fno = fn + tunes[i][2].X + ".mid"
+			j = 0
+			while ((j = fno.indexOf("%", j)) >= 0) {
+				c = fno[++j]
+				v = tunes[i][2][c]
+				if (v)
+					fno = fno.replace("%" + c, v)
+			}
+			f = std.open(fno, "w")
+			f.write(tunes[i][4].buffer, 0, tunes[i][4].length)
+			f.close()
+//trace
+abc2svg.printErr(" "+fno+" created, "+tunes[i][4].length+" bytes")
+		}
+	}, // abc_end()
+	abort: function(e) {
+		abc2svg.print(e.message + "\n*** Abort ***\n" + e.stack)
+		abc2svg.abc_end()
+		abc2svg.quit()
+	}
+} // abc2svg
+
+function usage() {
+	abc2svg.printErr("Convert ABC tunes into a set of MIDI files\n\
+Usage:\n\
+  abc2mid [options] ABC_file [-o output_file_name]\n\
+\n\
+The \"options\" are the same as the other abc2svg batch scripts.\n\
+The output files have a name starting with \"output_file_name\" and\n\
+ending with the X: value of the converted tune when they are many tunes\n\
+and a suffix \".mid\".\n\
+The argument \"output_file_name\" may also contain \"%\" characters\n\
+followed by the character of a ABC information field.")
+	abc2svg.quit()
+} // usage()
+
+// --- main ---
+
+	console.log = abc2svg.printErr
+
+	i = std.getenv("ABCPATH")
+	if (i)
+		abc2svg.path = i.split(":")
+
+	// get the output file name (-o fn)
+	i = args.length
+	while (--i >= 0) {
+		if (args[i] == "-h")
+			usage()
+		if (args[i] == "-o") {
+			fn = args[i + 1]
+			if (fn.slice(-4) == ".mid")
+				fn = fn.slice(0, -4)
+			args.splice(i, 2)
+			break
+		}
+	}
+	if (!args.length)
+		usage()
+
+	load(path + "abc2svg-1.js")	// abc2svg core
+	load(path + "cmdline.js")	// command line driver
+
+	load(path + "util/sndgen.js")	// sound generator
+	load(path + "util/chord.js")	// chord generator
+	load(path + "midigen.js")	// MIDI generator
+
+	// parse the ABC code
+	abc_cmd("abcqjs", args, "QuickJS")
+	// (at the end of generation, abc2svg.abc_end() is called) 
+' $p "$@"

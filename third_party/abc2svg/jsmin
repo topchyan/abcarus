@@ -1,0 +1,7 @@
+# shell script to minify JS files
+# using QuickJS (https://bellard.org/quickjs/)
+
+if [ ! -f jsmin-min.js ] || [ jsmin-min.js -ot jsmin.js ]; then
+	qjs --std jsmin.js < jsmin.js > jsmin-min.js
+fi
+exec qjs --std jsmin-min.js "$@"

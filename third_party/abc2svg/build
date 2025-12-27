@@ -1,0 +1,88 @@
+# simple shell script for building the abc2svg scripts
+
+MAJOR=1
+
+# use jsmin if available
+if command -v jsmin >/dev/null 2>&1; then
+# binary program
+gen() {
+ cat "$@" | jsmin
+ echo ""
+}
+elif command -v qjs >/dev/null 2>&1; then
+# script using QuickJS
+if [ ! -f jsmin-min.js ] || [ jsmin-min.js -ot jsmin.js ]; then
+	qjs --std jsmin.js < jsmin.js > jsmin-min.js
+fi
+gen() {
+ cat "$@" | qjs --std jsmin-min.js
+}
+else
+# no minify
+gen() {
+ cat "$@"
+}
+fi
+
+out=abc2svg-$MAJOR.js
+VERSION=`sed -e 's/^[^"]*"//' -e's/".*//' version.txt`
+DATE=`date -Idate`
+cp core/license $out
+gen core/abc2svg.js core/deco.js core/draw.js\
+ font.js core/format.js core/front.js core/music.js core/parse.js core/subs.js\
+ core/svg.js core/tune.js core/lyrics.js core/gchord.js core/tail.js\
+ core/modules.js >> $out
+ echo "abc2svg.version=\"$VERSION\";abc2svg.vdate=\"$DATE\"" >> $out
+
+out=mei2svg-$MAJOR.js
+cp core/license $out
+gen core/abc2svg.js core/deco.js core/draw.js\
+ font.js core/format.js core/front.js core/music.js core/parse.js core/subs.js\
+ core/svg.js core/tune.js core/lyrics.js core/gchord.js core/mei.js core/tail.js\
+ core/modules.js >> $out
+ echo "abc2svg.version=\"$VERSION\";abc2svg.vdate=\"$DATE\"" >> $out
+
+gen modules/ambitus.js > ambitus-$MAJOR.js
+gen modules/break.js > break-$MAJOR.js
+gen modules/capo.js > capo-$MAJOR.js
+gen modules/chordnames.js > chordnames-$MAJOR.js
+gen modules/clair.js > clair-$MAJOR.js
+gen modules/clip.js > clip-$MAJOR.js
+gen modules/combine.js > combine-$MAJOR.js
+gen modules/diag.js > diag-$MAJOR.js
+gen modules/equalbars.js > equalbars-$MAJOR.js
+gen modules/fit2box.js > fit2box-$MAJOR.js
+gen modules/gamelan.js > gamelan-$MAJOR.js
+gen modules/grid.js > grid-$MAJOR.js
+gen modules/grid2.js > grid2-$MAJOR.js
+gen modules/grid3.js > grid3-$MAJOR.js
+gen modules/jazzchord.js > jazzchord-$MAJOR.js
+gen modules/jianpu.js > jianpu-$MAJOR.js
+gen modules/mdnn.js > mdnn-$MAJOR.js
+gen modules/nns.js > nns-$MAJOR.js
+gen modules/MIDI.js > MIDI-$MAJOR.js
+gen modules/page.js modules/strftime.js > page-$MAJOR.js
+gen modules/pedline.js > pedline-$MAJOR.js
+gen modules/perc.js > perc-$MAJOR.js
+gen modules/wps.js modules/psvg.js > psvg-$MAJOR.js
+gen modules/roman.js > roman-$MAJOR.js
+gen modules/soloffs.js > soloffs-$MAJOR.js
+gen modules/sth.js > sth-$MAJOR.js
+gen modules/swing.js > swing-$MAJOR.js
+gen modules/strtab.js > strtab-$MAJOR.js
+gen modules/temper.js > temper-$MAJOR.js
+gen modules/tropt.js > tropt-$MAJOR.js
+gen modules/tunhd.js > tunhd-$MAJOR.js
+
+cp editor/edit.css edit-$MAJOR.css
+
+gen util/abcdoc.js > abcdoc-$MAJOR.js
+gen util/abcweb.js > abcweb-$MAJOR.js
+gen util/abcweb1.js > abcweb1-$MAJOR.js
+gen util/play.js util/sndgen.js util/sndaud.js util/sf2-parser.js\
+ util/sndmid.js util/follow.js util/chord.js > snd-$MAJOR.js
+
+sed "s+@MAJOR@+$MAJOR+" editor/edit.xhtml > edit-$MAJOR.xhtml
+sed "s+@MAJOR@+$MAJOR+" editor/abckbd.js > abckbd-$MAJOR.js
+sed "s+@MAJOR@+$MAJOR+" editor/abckbd2.js > abckbd2-$MAJOR.js
+sed "s+@MAJOR@+$MAJOR+" editor/edit.js > edit-$MAJOR.js

@@ -1,0 +1,47 @@
+# Third-Party Notices
+
+This project includes third-party software components.
+
+---
+
+## abc2svg
+
+ABCarus uses **abc2svg** for rendering and basic playback of ABC notation.
+
+- Project: abc2svg
+- Author: Jean-François Moine
+- License: GNU Lesser General Public License (LGPL)
+- Website: https://github.com/leesavide/abc2svg
+
+abc2svg is used as an external library.
+No modifications have been made to the abc2svg source code unless explicitly stated.
+
+---
+
+## CodeMirror
+
+ABCarus uses **CodeMirror** as the text editor component.
+
+- Project: CodeMirror
+- License: MIT License
+- Website: https://codemirror.net/
+
+---
+
+## Electron
+
+This application is built using Electron.
+
+- Project: Electron
+- License: MIT License
+- Website: https://www.electronjs.org/
+
+---
+
+## Node.js
+
+Electron includes Node.js.
+
+- Project: Node.js
+- License: MIT License
+- Website: https://nodejs.org/

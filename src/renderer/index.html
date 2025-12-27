@@ -1,0 +1,284 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  img-src 'self' data: blob:;
+  style-src 'self' 'unsafe-inline';
+  script-src 'self' 'unsafe-eval';
+  font-src 'self' data:;
+  connect-src 'self' data: blob: file:;
+  media-src 'self' data: blob: file:;
+">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ABCarus</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+
+<body>
+  <header>
+    <div class="title">
+      <button id="btnToggleLibrary" title="Toggle library (F2)">Library</button>
+      ABCarus
+    </div>
+    <div class="controls">
+      <button id="btnRestart" title="Start over (F4)">⏮</button>
+      <button id="btnPrevMeasure" title="Back one measure (F5)">⏪</button>
+      <button id="btnPlayPause" title="Play / Pause (F6)">▶</button>
+      <button id="btnNextMeasure" title="Forward one measure (F7)">⏩</button>
+      <button id="btnToggleFollow" title="Toggle playback follow">Follow</button>
+      <button id="btnToggleGlobals" title="Toggle global header">Globals</button>
+      <button id="btnResetLayout" title="Reset layout (F8)">Reset</button>
+    </div>
+  </header>
+
+  <main>
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-controls">
+          <div class="sidebar-control">
+            <div class="sidebar-label">Group by:</div>
+            <select id="groupBy">
+              <option value="file">File</option>
+              <option value="x">X (Reference)</option>
+              <option value="composer">C (Composer)</option>
+              <option value="meter">M (Meter)</option>
+              <option value="key">K (Key)</option>
+              <option value="unit">L (Unit Length)</option>
+              <option value="tempo">Q (Tempo)</option>
+              <option value="rhythm">R (Rhythm)</option>
+              <option value="source">S (Source)</option>
+              <option value="origin">O (Origin)</option>
+              <option value="group">G (Group)</option>
+            </select>
+          </div>
+          <div class="sidebar-control">
+            <div class="sidebar-label">Sort by:</div>
+            <select id="sortBy">
+              <option value="file_asc">File/Tune Asc</option>
+              <option value="file_desc">File/Tune Desc</option>
+              <option value="update_asc">Update Asc</option>
+              <option value="update_desc" selected>Update Desc</option>
+            </select>
+          </div>
+          <div class="sidebar-control sidebar-search">
+            <div class="sidebar-label">Search:</div>
+            <input id="librarySearch" type="text" placeholder="Title, composer, key…" />
+          </div>
+        </div>
+        <div class="sidebar-actions">
+          <button id="btnLibraryMenu" class="sidebar-action sidebar-menu" type="button" title="Library actions">⋯</button>
+          <div class="scan-status" id="scanStatus">Idle</div>
+        </div>
+      </div>
+      <div class="sidebar-body">
+        <div class="tree" id="libraryTree"></div>
+        <div class="sidebar-split" id="sidebarSplit" role="separator" aria-orientation="horizontal" tabindex="0"></div>
+        <div class="error-pane" id="errorPane" aria-label="Errors">
+          <div class="error-header">Errors</div>
+          <div class="error-list" id="errorList"></div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="divider" id="paneDivider" role="separator" aria-orientation="vertical" tabindex="0"></div>
+
+    <section class="pane right">
+      <div class="tune-meta">
+        <div id="tuneMeta">No tune selected.</div>
+        <div class="dirty-indicator" id="dirtyIndicator" aria-live="polite"></div>
+      </div>
+      <div class="file-context" id="fileContext">
+        <div class="file-context-label">File</div>
+        <select id="fileTuneSelect"></select>
+      </div>
+      <div class="file-header-panel" id="fileHeaderPanel">
+        <button id="fileHeaderToggle" class="file-header-title" type="button">File header</button>
+        <div id="fileHeaderEditor" class="file-header-editor" aria-label="File header"></div>
+        <div class="file-header-actions">
+          <button id="fileHeaderSave" type="button">Save Header</button>
+          <button id="fileHeaderReload" type="button">Reload</button>
+        </div>
+      </div>
+      <div class="right-split">
+        <div class="editor-pane">
+          <div id="abc-editor"></div>
+        </div>
+        <div class="split-divider" id="splitDivider" role="separator" aria-orientation="vertical" tabindex="0"></div>
+        <div class="render-pane">
+          <div id="out"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="taskbar">
+    <div id="status">Ready</div>
+    <div id="cursorStatus" class="cursor-status"></div>
+    <div id="bufferStatus" class="buffer-status" aria-live="polite"></div>
+  </footer>
+
+  <div class="modal" id="settingsModal" aria-hidden="true">
+    <div class="modal-card settings-card" role="dialog" aria-label="Settings">
+      <div class="modal-header">
+        <div class="modal-title">Settings</div>
+        <button class="modal-close" id="settingsClose" type="button">Close</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+          <button class="settings-tab active" data-settings-tab="main" role="tab" type="button">Main</button>
+          <button class="settings-tab" data-settings-tab="xml" role="tab" type="button">XML</button>
+          <button class="settings-tab" data-settings-tab="globals" role="tab" type="button">Globals</button>
+        </div>
+        <div class="settings-panels">
+          <div class="settings-panel active" data-settings-panel="main" role="tabpanel">
+            <div class="settings-group">
+              <div class="settings-title">Zoom</div>
+              <label class="settings-row">
+                <span>Score zoom (%)</span>
+                <input id="settingsRenderZoom" type="number" min="50" max="300" step="5" />
+              </label>
+              <label class="settings-row">
+                <span>Editor zoom (%)</span>
+                <input id="settingsEditorZoom" type="number" min="50" max="300" step="5" />
+              </label>
+            </div>
+            <div class="settings-group">
+              <div class="settings-title">Editor</div>
+              <label class="settings-row">
+                <span>Font family</span>
+                <input id="settingsFontFamily" type="text" />
+              </label>
+              <label class="settings-row">
+                <span>Font size</span>
+                <input id="settingsFontSize" type="number" min="8" max="32" />
+              </label>
+              <label class="settings-row">
+                <span>Bold notes</span>
+                <input id="settingsNotesBold" type="checkbox" />
+              </label>
+              <label class="settings-row">
+                <span>Bold inline lyrics</span>
+                <input id="settingsLyricsBold" type="checkbox" />
+              </label>
+            </div>
+            <div class="settings-group">
+              <div class="settings-title">Audio</div>
+              <label class="settings-row">
+                <span>Soundfont</span>
+                <select id="settingsSoundfont"></select>
+              </label>
+              <div class="settings-help">Select a soundfont from third_party/sf2.</div>
+            </div>
+          </div>
+          <div class="settings-panel" data-settings-panel="xml" role="tabpanel">
+            <div class="settings-group">
+              <div class="settings-title">XML switches</div>
+              <label class="settings-row">
+                <span>abc2xml</span>
+                <input id="settingsAbc2xmlArgs" type="text" placeholder="-x -y=value" />
+              </label>
+              <label class="settings-row">
+                <span>xml2abc</span>
+                <input id="settingsXml2abcArgs" type="text" placeholder="-x -y=value" />
+              </label>
+              <div class="settings-help">Space-separated flags passed to abc2xml and xml2abc.</div>
+            </div>
+          </div>
+          <div class="settings-panel" data-settings-panel="globals" role="tabpanel">
+            <div class="settings-group settings-group--globals">
+              <div class="settings-title">Global header</div>
+              <div class="settings-help">Prepended before file headers and tunes during render/playback.</div>
+              <label class="settings-row">
+                <span>Enable global header</span>
+                <input id="settingsGlobalHeaderEnabled" type="checkbox" />
+              </label>
+              <div id="settingsGlobalHeader" class="settings-editor" aria-label="Global header"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="settingsReset" type="button">Reset Defaults</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="findLibraryModal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-label="Find in Library">
+      <div class="modal-header">
+        <div class="modal-title">Find in Library</div>
+        <button class="modal-close" id="findLibraryClose" type="button">Close</button>
+      </div>
+      <div class="modal-body">
+        <label class="settings-row">
+          <span>Tag</span>
+          <select id="findLibraryTag">
+            <option value="X">X (Reference)</option>
+            <option value="T">T (Title)</option>
+            <option value="C">C (Composer)</option>
+            <option value="M">M (Meter)</option>
+            <option value="K">K (Key)</option>
+            <option value="L">L (Unit Length)</option>
+            <option value="Q">Q (Tempo)</option>
+            <option value="R">R (Rhythm)</option>
+            <option value="S">S (Source)</option>
+            <option value="O">O (Origin)</option>
+            <option value="G">G (Group)</option>
+          </select>
+        </label>
+        <label class="settings-row">
+          <span>Value</span>
+          <input id="findLibraryValue" type="text" />
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button id="findLibraryApply" type="button">Apply</button>
+        <button id="findLibraryClear" type="button">Clear Filter</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="moveTuneModal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-label="Move Tune">
+      <div class="modal-header">
+        <div class="modal-title">Move Tune</div>
+        <button class="modal-close" id="moveTuneClose" type="button">Close</button>
+      </div>
+      <div class="modal-body">
+        <label class="settings-row">
+          <span>Target file</span>
+          <select id="moveTuneTarget"></select>
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button id="moveTuneApply" type="button">Move</button>
+        <button id="moveTuneCancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="aboutModal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-label="About">
+      <div class="modal-header">
+        <div class="modal-title">About ABCarus</div>
+        <button class="modal-close" id="aboutClose" type="button">Close</button>
+      </div>
+      <div class="modal-body">
+        <pre id="aboutInfo" class="about-info"></pre>
+      </div>
+      <div class="modal-footer">
+        <button id="aboutCopy" type="button">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../../third_party/abc2svg/abc2svg-1.js"></script>
+  <script src="../../third_party/abc2svg/snd-1.js"></script>
+  <script type="module" src="./renderer.js"></script>
+
+</body>
+
+</html>

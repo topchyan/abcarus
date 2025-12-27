@@ -1,0 +1,155 @@
+<!DOCTYPE HTML><html><head><meta charset="utf-8"></head>
+<body><pre>2025-11-09
+
+	* Revision: 268
+	- add beam elements to grace notes when appropriate
+	- new function delElm keeps xml indentation when deleted element happens to be
+	the last one
+
+2025-11-08
+
+	* Revision: 267
+	- discard inlinefieds between two notes in detectBeamBreak
+	- remove now redundant ad-hoc replacement of 'I:staff ' in MusicXml.parse
+
+2025-11-02
+
+	* Revision: 266
+	- count number of grace notes, excluding &lt;chord/&gt; notes
+	- use grace attribute of the note instance (pObj) to record this number of
+	grace notes (in parse action doGrace())
+	- use the number of grace notes to set the fixed unit length (8 or 16) while
+	translating the duration (in function mkNote)
+
+	* Revision: 265
+	- bug: continuation is considered to add an extra space
+
+2025-10-06
+
+	* Revision: 264
+	- make the Res class compatible with python 2.7
+	- make regex b1 compatible with pythone 2.7
+	- replace \r\n with \n after decoding the input file
+	- set encoding of the ouput file/stream to utf-8 explcitly, to avoid cp1252
+	problems on Windows (for the compiled exe-version, that is now using
+	python3.12 internally)
+
+2025-10-04
+
+	* Revision: 263
+	- updated compilescript
+
+2025-10-03
+
+	* Revision: 262
+	- removed dependency on pyparsing
+	- added functions and classes for evaluating parsing expressions
+	- small adaptations of the ABC grammer
+
+	* Revision: 261
+	- corrected truth value tests for elements of ElementTree that caused
+	deprecation warnings (for python 3.13 and higher)
+
+2025-09-03
+
+	* Revision: 260
+	- use names defined the General MIDI standard (percussion included) when
+	creating &lt;instrument-name&gt; elements
+	- when an instrument (number) not in the GM-range use "no name"
+
+2025-04-25
+
+	* Revision: 259
+	- update documentation
+	- new function scanEdo scans all accidentals and sets the temperament to edo12
+	or edo53. The result can be overridden with %%MIDI tempermentequal 36
+	- translate fractional accidentals with denumerator 3 as up/down accidentals
+	(for files with accidentals from both edo36 and edo53, as created by xml2abc
+	--temp=2)
+
+2025-04-23
+
+	* Revision: 258
+	- this version also replaces ^8 and _8, for which no superscripted versions
+	exist, by notes with equivalent pitch, lowering or raising the nearest step
+	with one comma.
+
+	* Revision: 257
+	- new option --mus53 that replaces Arel-Ezgi accidentals by superscripted
+	normal ones. The superscriped accidentals appear to be played at the correct
+	pitch by musescore. Also, this option adds explicit notated accidentals to
+	each and every note that was altered, either by the key or by a previous
+	alteration in the same measure. This is necessary because musescore ignores
+	the normal accidental rules for all microtonal accidentals, whether
+	temporary or in the key.
+
+2025-04-15
+
+	* Revision: 256
+	- bug: chords or annotations with spaces caused beam break when between
+	beamed notes
+	- bug: do not sort explicit key alterations
+	- added makam abc files for edo36 and edo53 to the regression set
+
+2025-04-13
+
+	* Revision: 255
+	- seach for "%%MIDI termperamentequal nn" to determine the tuning
+	- change accTab to several tuning mappings
+	- MusicXml.edo variable stores the tuning identification
+	- change getAlter and getAcc to accommodate multiple tunings
+	- add abc2xml to software identification
+
+2025-03-06
+
+	* Revision: 254
+	- added global s.nid that holds the current ABC note for better error
+	messages
+	- changed global dicts into access functions: s.getAcc, s.getAlter with error
+	messages
+	- moved decTupAcc into classMusicXml for better error messages with s.nid
+	- included __ and ^^ in regex for alterations for K:
+
+2025-03-05
+
+	* Revision: 253
+	- small change in alterAction with respect to the effect of slashes
+	- removed redundant brackets from regex "altre" (in doFields, K:)
+
+2025-03-04
+
+	* Revision: 252
+	- new partial grammer for accidental list (for K:)
+	- new function decTupAcc() to decode parsed microtonal accidentals
+	- added microtonal accidentals to alterTab and accTab
+	- key alterations and temporary alterations are remembered as accidentals and
+	not als alterations (alter =&gt; acc in msreAlts and keyAlts)
+	- scan K: for microtonal accidentals with new partial grammer
+	- update generation of &lt;key&gt; element with explicit accidentals and alterations
+
+2025-03-02
+
+	* Revision: 251
+	- key alterations not reset on each voice when the header K: has no key
+
+2025-02-28
+
+	* Revision: 250
+	- add sharp, sharp-sharp, flat, flat-flat to accTab
+	- add corresponring accidentals _5, _9, ^4, ^9 to alterTab
+	- in function parse (): initialize attrmap ['K'] with pObj
+	- improve parsing of key field: allow key 'none', allow any word (except a
+	clef name) as mode for the tonic, but only valid mode names are translated
+
+2025-02-26
+
+	* Revision: 249
+	- added parsing grammer for K: (including microtonal accidentals)
+	- new function decTupAcc() to decode microtonal accidentals
+	- added definitions in alterTab and accTab
+	- changed representation in msreAlts and keyAlts: accidentals replace
+	alteration values
+	- changed key processing in doFields to deal with the new parse results of K:
+	- corrected the list of key-octave elements
+
+</pre></body></html>
