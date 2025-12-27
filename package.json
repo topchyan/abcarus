@@ -6,10 +6,15 @@
   "scripts": {
     "start": "electron .",
     "appimage": "bash scripts/build_appimage.sh",
-    "build:brand": "node scripts/build-brand-icons.mjs"
+    "build:brand": "node scripts/build-brand-icons.mjs",
+    "version:show": "node scripts/show-version.mjs",
+    "release:patch": "node scripts/release.mjs patch",
+    "release:minor": "node scripts/release.mjs minor",
+    "release:major": "node scripts/release.mjs major"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.0",
-    "electron": "^28.0.0"
+    "electron": "^28.0.0",
+    "semver": "^7.6.3"
   }
 }

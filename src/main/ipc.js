@@ -1,9 +1,7 @@
 const { convertFileToAbc, convertAbcToMusicXml, transformAbcWithAbc2abc } = require("./conversion");
 
 const os = require("os");
-const fs = require("fs");
-const path = require("path");
-const { execFileSync } = require("child_process");
+const { getVersionInfo } = require("../version");
 
 function registerIpcHandlers(ctx) {
   const {
@@ -278,29 +276,15 @@ function registerIpcHandlers(ctx) {
     }
   });
   ipcMain.handle("app:about", async () => {
-    let commit = "";
-    let buildDate = "";
-    if (process.env.ABCARUS_COMMIT) commit = String(process.env.ABCARUS_COMMIT);
-    if (process.env.ABCARUS_BUILD_DATE) buildDate = String(process.env.ABCARUS_BUILD_DATE);
-    if (!commit || !buildDate) {
-      try {
-        const appPath = app.getAppPath ? app.getAppPath() : process.cwd();
-        const gitDir = path.join(appPath, ".git");
-        if (fs.existsSync(gitDir)) {
-          if (!commit) {
-            commit = String(execFileSync("git", ["rev-parse", "HEAD"], { cwd: appPath })).trim();
-          }
-          if (!buildDate) {
-            buildDate = String(execFileSync("git", ["log", "-1", "--format=%cI"], { cwd: appPath })).trim();
-          }
-        }
-      } catch {}
-    }
+    const versionInfo = getVersionInfo();
+    const buildDate = process.env.ABCARUS_BUILD_DATE || "";
     return {
       appName: app.getName ? app.getName() : "ABCarus",
       appVersion: app.getVersion ? app.getVersion() : "",
-      commit,
-      buildDate,
+      commit: versionInfo.commit,
+      build: versionInfo.build,
+      channel: versionInfo.channel,
+      buildDate: String(buildDate),
       electron: process.versions.electron || "",
       electronBuildId: process.env.ELECTRON_BUILD_ID || "",
       chrome: process.versions.chrome || "",

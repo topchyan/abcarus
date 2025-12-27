@@ -2875,7 +2875,9 @@ function formatAboutInfo(info) {
   if (!info) return "No system info available.";
   return [
     `Version: ${info.appVersion || ""}`.trim(),
+    `Build: ${info.build || ""}`.trim(),
     `Commit: ${info.commit || ""}`.trim(),
+    `Channel: ${info.channel || ""}`.trim(),
     `Date: ${info.buildDate || ""}`.trim(),
     `Electron: ${info.electron || ""}`.trim(),
     `ElectronBuildId: ${info.electronBuildId || ""}`.trim(),

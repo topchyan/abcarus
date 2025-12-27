@@ -28,6 +28,12 @@ Playback and rendering are implemented to support reading and editing, not to re
 ABCarus is under active development.  
 Internal APIs, UI layout, and feature set may change.
 
+### Versioning & Releases
+
+- SemVer is used, with `package.json` as the source of truth.
+- Releases are tagged `vX.Y.Z` and documented in `CHANGELOG.md`.
+- See `docs/VERSIONING.md` and `docs/RELEASES.md`.
+
 ### Technology
 
 - Electron
