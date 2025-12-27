@@ -44,6 +44,20 @@ xml2abc is used as an external tool.
 
 ---
 
+## abcMIDI (abc2abc)
+
+ABCarus uses **abc2abc** (from the abcMIDI tools) for ABC transformations
+such as transpose and length scaling.
+
+- Project: abcMIDI (abc2abc)
+- Author: Seymour Schlein and contributors
+- License: GNU General Public License (GPL)
+- Website: https://abcmidi.sourceforge.io/
+
+abc2abc is invoked as an external tool.
+
+---
+
 ## CodeMirror
 
 ABCarus uses **CodeMirror** as the text editor component.
