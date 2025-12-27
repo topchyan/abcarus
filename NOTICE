@@ -50,9 +50,10 @@ ABCarus uses **abc2abc** (from the abcMIDI tools) for ABC transformations
 such as transpose and length scaling.
 
 - Project: abcMIDI (abc2abc)
-- Author: Seymour Schlein and contributors
-- License: GNU General Public License (GPL)
-- Website: https://abcmidi.sourceforge.io/
+- Authors: James Allwright; Seymour Shlien; contributors
+- License: GNU General Public License v2 or later (GPL-2.0-or-later)
+- Website: http://abc.sourceforge.net/abcMIDI/
+- Source notes: bundled abc2abc version 2.22 (doc/readme.txt)
 
 abc2abc is invoked as an external tool.
 
