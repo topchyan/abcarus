@@ -18,6 +18,32 @@ No modifications have been made to the abc2svg source code unless explicitly sta
 
 ---
 
+## abc2xml
+
+ABCarus includes **abc2xml** for converting ABC to MusicXML.
+
+- Project: abc2xml
+- Author: Willem G. Vree
+- License: GNU Lesser General Public License (LGPL)
+- Website: https://wim.vree.org/svgParse/abc2xml.html
+
+abc2xml is used as an external tool.
+
+---
+
+## xml2abc
+
+ABCarus includes **xml2abc** for converting MusicXML to ABC.
+
+- Project: xml2abc
+- Author: Willem G. Vree
+- License: GNU Lesser General Public License (LGPL)
+- Website: https://wim.vree.org/svgParse/xml2abc.html
+
+xml2abc is used as an external tool.
+
+---
+
 ## CodeMirror
 
 ABCarus uses **CodeMirror** as the text editor component.
