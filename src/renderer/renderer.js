@@ -4092,6 +4092,8 @@ let playbackIndexOffset = 0;
 let lastDrumPlaybackActive = false;
 let drumWarningShown = false;
 let followPlayback = true;
+let followVoiceId = null;
+let followVoiceIndex = null;
 
 function updatePlayButton() {
   if (!$btnPlayPause) return;
@@ -4227,6 +4229,14 @@ function ensurePlayer() {
       const fromInjected = editorLen && editorIdx >= editorLen;
       lastPlaybackIdx = i;
       if (!followPlayback || fromInjected) return;
+      if (followVoiceId || followVoiceIndex != null) {
+        const symbol = findSymbolAtOrBefore(i);
+        if (symbol && symbol.p_v) {
+          const sameId = followVoiceId && symbol.p_v.id === followVoiceId;
+          const sameIndex = followVoiceIndex != null && symbol.p_v.v === followVoiceIndex;
+          if (!sameId && !sameIndex) return;
+        }
+      }
       lastRenderIdx = editorIdx;
       const els = $out.querySelectorAll("._" + renderIdx + "_");
       for (const el of els) {
@@ -4283,6 +4293,16 @@ function buildPlaybackState(firstSymbol) {
   }
 
   return { startSymbol: firstSymbol, symbols, measures };
+}
+
+function setFollowVoiceFromPlayback() {
+  followVoiceId = null;
+  followVoiceIndex = null;
+  if (!playbackState || !playbackState.startSymbol) return;
+  const voice = playbackState.startSymbol.p_v;
+  if (!voice) return;
+  if (voice.id) followVoiceId = voice.id;
+  if (Number.isFinite(voice.v)) followVoiceIndex = voice.v;
 }
 
 function findSymbolAtOrBefore(idx) {
@@ -4932,6 +4952,7 @@ async function preparePlayback() {
   }
 
   playbackState = buildPlaybackState(tunes[0][0]);
+  setFollowVoiceFromPlayback();
   return p;
 }
 
