@@ -59,9 +59,9 @@ abc2abc is invoked as an external tool.
 
 ---
 
-## Python runtime (embedded)
+## Python runtime (release builds)
 
-ABCarus bundles a Python runtime for MusicXML import/export tools.
+ABCarus bundles a Python runtime for MusicXML import/export tools in release AppImage builds.
 
 - Project: Python
 - License: Python Software Foundation License (PSF)
@@ -72,19 +72,11 @@ ABCarus bundles a Python runtime for MusicXML import/export tools.
 
 ## SoundFonts (SF2)
 
-ABCarus ships several SF2 soundfonts for playback. Licensing varies by file.
-
-### Arachno SoundFont (Arachno_SoundFont_Version_1.0.sf2)
-- Copyright: © 2003–2010 Maxime Abbey
-- Website: http://www.arachnosoft.com
-- License: Not specified in bundle
-
-### FluidR3 GM (FluidR3_GM.sf2)
-- License: MIT License (as embedded in the SF2 metadata)
-- Website: https://github.com/FluidSynth/fluidsynth
+ABCarus ships one SF2 soundfont for playback. Licensing varies by file.
 
 ### TimGM6mb (TimGM6mb.sf2)
 - Author: Tim Brechbill
+- Website: https://timbrechbill.com/saxguru/
 - License: GNU General Public License (GPL)
 - Note: MuseScore 1.0 shipped with this soundfont
 

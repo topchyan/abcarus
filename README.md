@@ -13,8 +13,15 @@ See `docs/DISCLAIMER.md` and `CHANGELOG.md`.
 
 The application is designed for navigating, editing, and rendering large collections of ABC files. It treats each tune (from `X:` to the next `X:`) as an independent unit, rather than operating only at the file level. This makes it suitable for archival work, traditional repertoires, and structured study of notated music.
 
+### Development setup
+- Install dependencies: `npm install`
+- Ensure Python 3 is on your PATH (required for import/export tooling)
+
 ### Soundfonts
 ABCarus ships only one bundled soundfont (`TimGM6mb.sf2`). Additional soundfonts are optional and installed locally. See `docs/soundfonts.md`.
+
+### Release builds
+Release AppImage builds bundle a local Python runtime at build time. See `scripts/README.md` for the release workflow and tooling.
 
 ### Core features
 
@@ -66,9 +73,38 @@ abc2abc transforms require the `abc2abc` binary from the abcMIDI package to be i
 
 ### Platforms
 
-- Linux
-- macOS
-- Windows
+- Linux (actively developed and tested)
+- Windows (planned, not yet tested)
+- macOS (lowest priority; may not be implemented)
+
+### Credits
+
+Major third-party components used by ABCarus:
+
+- abc2svg — https://github.com/leesavide/abc2svg
+- abc2xml — https://wim.vree.org/svgParse/abc2xml.html
+- xml2abc — https://wim.vree.org/svgParse/xml2abc.html
+- abcMIDI (abc2abc) — http://abc.sourceforge.net/abcMIDI/
+- CodeMirror — https://codemirror.net/
+- Electron — https://www.electronjs.org/
+- Node.js — https://nodejs.org/
+- Python — https://www.python.org/
+- TimGM6mb.sf2 (soundfont) — https://timbrechbill.com/saxguru/
+
+See `NOTICE` for licenses and attribution details.
+
+### Inspiration
+
+Projects that inspired ABCarus:
+
+- EasyABC — https://sourceforge.net/projects/easyabc/
+- Michael Eskin's ABC Transcription Tools — https://michaeleskin.com/abctools/abc-transcription-tools.html
+- Jef Moine's abc2svg / txtmus — https://github.com/leesavide/abc2svg
+- Willem Vree (abc2xml / xml2abc) — https://wim.vree.org/svgParse/abc2xml.html
+- abcMIDI (Seymour Shlien, current maintainer) — http://abc.sourceforge.net/abcMIDI/
+- abc2js (Paul Rosen) — https://github.com/paulrosen/abcjs
+- AbcToSheet (Sergio Di Mico) — https://github.com/Serxio24/AbcToSheet
+- SymbTr research project — https://github.com/MTG/symbtr
 
 ### Licensing
 
