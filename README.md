@@ -99,11 +99,11 @@ Projects that inspired ABCarus:
 
 - EasyABC — https://sourceforge.net/projects/easyabc/
 - Michael Eskin's ABC Transcription Tools — https://michaeleskin.com/abctools/abc-transcription-tools.html
-- Jef Moine's abc2svg / txtmus — https://github.com/leesavide/abc2svg
-- Willem Vree (abc2xml / xml2abc) — https://wim.vree.org/svgParse/abc2xml.html
-- abcMIDI (Seymour Shlien, current maintainer) — http://abc.sourceforge.net/abcMIDI/
+- Jef Moine's abc2svg / txtmus — http://moinejf.free.fr/
+- Willem Vree (abc2xml / xml2abc) — https://wim.vree.org/
+- abcMIDI (Seymour Shlien, current maintainer) — https://abcmidi.sourceforge.io/
 - abc2js (Paul Rosen) — https://github.com/paulrosen/abcjs
-- AbcToSheet (Sergio Di Mico) — https://github.com/Serxio24/AbcToSheet
+- AbcToSheet (Sergio Di Mico) — https://abctosheet.my.to/
 - SymbTr research project — https://github.com/MTG/symbtr
 
 ### Licensing
