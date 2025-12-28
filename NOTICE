@@ -88,15 +88,10 @@ ABCarus ships several SF2 soundfonts for playback. Licensing varies by file.
 - License: MIT License (per embedded metadata; refers to "MuseScore_General-License.md")
 - Website: https://musescore.org/
 
-### FatBoy (FatBoy-v0.786.sf2)
-- License note: "Use it for whatever you want, just please don't sell the soundfont itself."
-- License: Not specified in bundle
-
-### Roland SOUNDCanvas SC-55 Up (Roland SOUNDCanvas SC-55 Up.sf2)
-- License: Not specified in bundle
-
 ### TimGM6mb (TimGM6mb.sf2)
-- License: Not specified in bundle
+- Author: Tim Brechbill
+- License: GNU General Public License (GPL)
+- Note: MuseScore 1.0 shipped with this soundfont
 
 If you need full attribution or exact licensing terms for any SF2 file, refer to
 the original distribution sources.
