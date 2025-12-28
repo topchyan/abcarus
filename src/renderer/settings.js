@@ -4,6 +4,12 @@ import {
   basicSetup,
   indentUnit,
 } from "../../third_party/codemirror/cm.js";
+import {
+  DRUM_INSTRUMENTS,
+  buildDefaultDrumVelocityMap,
+  clampVelocity,
+  DEFAULT_DRUM_VELOCITY,
+} from "./drums.js";
 
 const DEFAULT_SETTINGS = {
   renderZoom: 1,
@@ -17,7 +23,10 @@ const DEFAULT_SETTINGS = {
   globalHeaderText: "",
   globalHeaderEnabled: true,
   soundfontName: "TimGM6mb.sf2",
+  soundfontPaths: [],
   followPlayback: true,
+  drumVelocityMap: buildDefaultDrumVelocityMap(),
+  disclaimerSeen: false,
 };
 
 const ZOOM_STEP = 0.1;
@@ -37,6 +46,7 @@ export function initSettings(api) {
   const $settingsGlobalHeader = document.getElementById("settingsGlobalHeader");
   const $settingsGlobalHeaderEnabled = document.getElementById("settingsGlobalHeaderEnabled");
   const $settingsSoundfont = document.getElementById("settingsSoundfont");
+  const $settingsDrumMixer = document.getElementById("settingsDrumMixer");
   const $settingsTabs = Array.from(document.querySelectorAll("[data-settings-tab]"));
   const $settingsPanels = Array.from(document.querySelectorAll("[data-settings-panel]"));
   const $renderPane = document.querySelector(".render-pane");
@@ -49,6 +59,9 @@ export function initSettings(api) {
   let globalUpdateTimer = null;
   let soundfontOptionsLoaded = false;
   let soundfontOptionsLoading = null;
+  let drumVelocityMap = buildDefaultDrumVelocityMap();
+  const drumRowByPitch = new Map();
+  let drumUpdateTimer = null;
 
   function setGlobalHeaderValue(text) {
     if (!globalHeaderView) return;
@@ -60,6 +73,18 @@ export function initSettings(api) {
       changes: { from: 0, to: globalHeaderView.state.doc.length, insert: next },
     });
     suppressGlobalUpdate = false;
+  }
+
+  function normalizeDrumVelocityMap(map) {
+    const base = buildDefaultDrumVelocityMap();
+    if (map && typeof map === "object") {
+      for (const [key, value] of Object.entries(map)) {
+        const pitch = Number(key);
+        if (!Number.isFinite(pitch)) continue;
+        base[pitch] = clampVelocity(value);
+      }
+    }
+    return base;
   }
 
   function applySettings(settings) {
@@ -86,6 +111,8 @@ export function initSettings(api) {
     if ($settingsXml2abcArgs) $settingsXml2abcArgs.value = currentSettings.xml2abcArgs || "";
     if ($settingsGlobalHeaderEnabled) $settingsGlobalHeaderEnabled.checked = currentSettings.globalHeaderEnabled !== false;
     setGlobalHeaderValue(currentSettings.globalHeaderText || "");
+    drumVelocityMap = normalizeDrumVelocityMap(currentSettings.drumVelocityMap);
+    renderDrumMixer();
     if ($settingsSoundfont) {
       if (!soundfontOptionsLoaded) {
         loadSoundfontOptions();
@@ -133,6 +160,80 @@ export function initSettings(api) {
     if (!api || typeof api.updateSettings !== "function") return;
     const next = await api.updateSettings(patch);
     if (next) applySettings(next);
+  }
+
+  function updateDrumVelocity(pitch, value) {
+    drumVelocityMap = { ...drumVelocityMap, [pitch]: clampVelocity(value) };
+    if (drumUpdateTimer) clearTimeout(drumUpdateTimer);
+    drumUpdateTimer = setTimeout(() => {
+      updateSettings({ drumVelocityMap });
+    }, 200);
+  }
+
+  function renderDrumMixer() {
+    if (!$settingsDrumMixer) return;
+    if (!$settingsDrumMixer.hasChildNodes()) {
+      const table = document.createElement("table");
+      const thead = document.createElement("thead");
+      thead.innerHTML = "<tr><th>Pitch</th><th>Instrument</th><th>Velocity</th><th>Preview</th></tr>";
+      const tbody = document.createElement("tbody");
+      for (const item of DRUM_INSTRUMENTS) {
+        const row = document.createElement("tr");
+        const tdPitch = document.createElement("td");
+        tdPitch.className = "pitch";
+        tdPitch.textContent = String(item.pitch);
+        const tdName = document.createElement("td");
+        tdName.textContent = item.name;
+        const tdVelocity = document.createElement("td");
+        tdVelocity.className = "velocity";
+        const slider = document.createElement("input");
+        slider.type = "range";
+        slider.min = "0";
+        slider.max = "127";
+        slider.step = "1";
+        slider.value = String(drumVelocityMap[item.pitch] ?? DEFAULT_DRUM_VELOCITY);
+        const valueSpan = document.createElement("span");
+        valueSpan.className = "velocity-value";
+        valueSpan.textContent = String(slider.value);
+        slider.addEventListener("input", () => {
+          valueSpan.textContent = slider.value;
+        });
+        slider.addEventListener("change", () => {
+          updateDrumVelocity(item.pitch, slider.value);
+        });
+        tdVelocity.appendChild(slider);
+        tdVelocity.appendChild(valueSpan);
+        const tdPreview = document.createElement("td");
+        tdPreview.className = "preview";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = "Play";
+        button.addEventListener("click", () => {
+          const velocity = clampVelocity(slider.value);
+          document.dispatchEvent(new CustomEvent("drum:preview", {
+            detail: { pitch: item.pitch, velocity },
+          }));
+        });
+        tdPreview.appendChild(button);
+        row.appendChild(tdPitch);
+        row.appendChild(tdName);
+        row.appendChild(tdVelocity);
+        row.appendChild(tdPreview);
+        tbody.appendChild(row);
+        drumRowByPitch.set(item.pitch, { slider, valueSpan });
+      }
+      table.appendChild(thead);
+      table.appendChild(tbody);
+      $settingsDrumMixer.appendChild(table);
+    }
+
+    for (const item of DRUM_INSTRUMENTS) {
+      const row = drumRowByPitch.get(item.pitch);
+      if (!row) continue;
+      const value = drumVelocityMap[item.pitch] ?? DEFAULT_DRUM_VELOCITY;
+      row.slider.value = String(value);
+      row.valueSpan.textContent = String(value);
+    }
   }
 
   function openSettings() {

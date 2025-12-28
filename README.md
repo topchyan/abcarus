@@ -2,7 +2,19 @@
 
 ABCarus is a desktop application for working with music encoded in ABC notation.
 
+---
+⚠️ Status: Early-stage / pre-release
+
+ABCarus is functional but still under active development.
+Expect changes. Back up your data.
+---
+
+See `docs/DISCLAIMER.md` and `CHANGELOG.md`.
+
 The application is designed for navigating, editing, and rendering large collections of ABC files. It treats each tune (from `X:` to the next `X:`) as an independent unit, rather than operating only at the file level. This makes it suitable for archival work, traditional repertoires, and structured study of notated music.
+
+### Soundfonts
+ABCarus ships only one bundled soundfont (`TimGM6mb.sf2`). Additional soundfonts are optional and installed locally. See `docs/soundfonts.md`.
 
 ### Core features
 

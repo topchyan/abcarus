@@ -16,6 +16,12 @@ import {
 } from "../../third_party/codemirror/cm.js";
 import { initSettings } from "./settings.js";
 import { transformTranspose } from "./transpose.mjs";
+import {
+  buildDefaultDrumVelocityMap,
+  clampVelocity,
+  DEFAULT_DRUM_VELOCITY,
+  velocityToDynamic,
+} from "./drums.js";
 
 const $editorHost = document.getElementById("abc-editor");
 const $out = document.getElementById("out");
@@ -49,6 +55,10 @@ const $btnNextMeasure = document.getElementById("btnNextMeasure");
 const $btnResetLayout = document.getElementById("btnResetLayout");
 const $btnToggleFollow = document.getElementById("btnToggleFollow");
 const $btnToggleGlobals = document.getElementById("btnToggleGlobals");
+const $soundfontLabel = document.getElementById("soundfontLabel");
+const $soundfontSelect = document.getElementById("soundfontSelect");
+const $soundfontAdd = document.getElementById("soundfontAdd");
+const $soundfontRemove = document.getElementById("soundfontRemove");
 const $rightSplit = document.querySelector(".right-split");
 const $splitDivider = document.getElementById("splitDivider");
 const $errorPane = document.getElementById("errorPane");
@@ -71,6 +81,8 @@ const $aboutModal = document.getElementById("aboutModal");
 const $aboutClose = document.getElementById("aboutClose");
 const $aboutInfo = document.getElementById("aboutInfo");
 const $aboutCopy = document.getElementById("aboutCopy");
+const $disclaimerModal = document.getElementById("disclaimerModal");
+const $disclaimerOk = document.getElementById("disclaimerOk");
 
 const DEFAULT_ABC = "";
 const TEMPLATE_ABC = `X:1
@@ -105,6 +117,7 @@ const MIN_RIGHT_PANE_WIDTH = 220;
 const MIN_ERROR_PANE_HEIGHT = 120;
 const USE_ERROR_OVERLAY = true;
 let settingsController = null;
+let disclaimerShown = false;
 
 function buildAbcDecorations(state) {
   const builder = new RangeSetBuilder();
@@ -337,10 +350,14 @@ let globalHeaderLocalText = "";
 let globalHeaderUserText = "";
 let globalHeaderGlobalText = "";
 let soundfontName = "TimGM6mb.sf2";
+let soundfontSource = "abc2svg.sf2";
 let soundfontReadyName = null;
 let soundfontLoadPromise = null;
 let soundfontLoadTarget = null;
 let soundfontStatusTimer = null;
+const STREAMING_SF2 = new Set();
+let soundfontOptionsLoaded = false;
+let soundfontOptionsLoading = null;
 const fileContentCache = new Map();
 let activeTuneId = null;
 let activeTuneMeta = null;
@@ -877,8 +894,8 @@ function initEditor() {
     { key: "Mod-F5", run: (view) => moveLineSelection(view, -1) },
     { key: "Tab", run: insertIndent },
     { key: "F2", run: () => { toggleLibrary(); return true; } },
-    { key: "F6", run: () => { if ($btnPlayPause) $btnPlayPause.click(); return true; } },
-    { key: "F5", run: () => { startPlaybackAtMeasureOffset(-1); return true; } },
+    { key: "F5", run: () => { if ($btnPlayPause) $btnPlayPause.click(); return true; } },
+    { key: "F6", run: () => { startPlaybackAtMeasureOffset(-1); return true; } },
     { key: "F7", run: () => { startPlaybackAtMeasureOffset(1); return true; } },
     { key: "F4", run: () => { startPlaybackAtIndex(0); return true; } },
     { key: "F8", run: () => { resetLayout(); return true; } },
@@ -1504,7 +1521,11 @@ function createBlankDocument() {
 // debounce
 let t = null;
 
-function setStatus(s) { $status.textContent = s; }
+function setStatus(s) {
+  $status.textContent = s;
+  const loading = String(s || "").toLowerCase().startsWith("loading the sound font");
+  $status.classList.toggle("status-loading", loading);
+}
 
 function setBufferStatus(text) {
   if (!$bufferStatus) return;
@@ -1521,6 +1542,48 @@ function setSoundfontStatus(text, autoClearMs) {
       soundfontStatusTimer = null;
     }, autoClearMs);
   }
+}
+
+function setSoundfontCaption(text) {
+  if (!$soundfontLabel) return;
+  const next = text || "Soundfont:";
+  $soundfontLabel.textContent = next;
+  const isLoading = String(next).toLowerCase().includes("loading");
+  $soundfontLabel.classList.toggle("loading", isLoading);
+}
+
+function toFileUrl(filePath) {
+  const raw = String(filePath || "");
+  if (!raw) return "";
+  if (raw.startsWith("file://")) return raw;
+  if (/^[a-zA-Z]:\\/.test(raw)) {
+    return `file:///${raw.replace(/\\/g, "/")}`;
+  }
+  if (raw.startsWith("/")) return new URL(raw, window.location.href).href;
+  return raw;
+}
+
+function isSoundfontPath(value) {
+  const raw = String(value || "");
+  return raw.startsWith("file://") || raw.startsWith("/") || /^[a-zA-Z]:\\/.test(raw);
+}
+
+function getSoundfontLabel(name) {
+  const raw = String(name || "");
+  if (!raw) return "";
+  if (raw.startsWith("/") || /^[a-zA-Z]:\\/.test(raw)) {
+    if (window.api && typeof window.api.pathBasename === "function") {
+      return window.api.pathBasename(raw);
+    }
+    const parts = raw.split(/[\\/]/);
+    return parts[parts.length - 1] || raw;
+  }
+  return raw;
+}
+
+async function updateSoundfontLoadingStatus(name) {
+  if (soundfontLoadTarget !== name) return;
+  setSoundfontCaption("Loading...");
 }
 
 function setCursorStatus(line, col, offset, totalLines, totalChars) {
@@ -2680,7 +2743,6 @@ setLibraryVisible(true);
 // Preload soundfont in background to avoid first-play delay.
 (async () => {
   try {
-    setStatus("Loading soundfont…");
     await ensureSoundfontLoaded();
     setStatus("OK");
   } catch (e) {
@@ -2878,6 +2940,8 @@ function formatAboutInfo(info) {
     `Build: ${info.build || ""}`.trim(),
     `Commit: ${info.commit || ""}`.trim(),
     `Channel: ${info.channel || ""}`.trim(),
+    "Status: Early-stage release (functional, not yet guaranteed stable).",
+    "Disclaimer: docs/DISCLAIMER.md",
     `Date: ${info.buildDate || ""}`.trim(),
     `Electron: ${info.electron || ""}`.trim(),
     `ElectronBuildId: ${info.electronBuildId || ""}`.trim(),
@@ -2905,6 +2969,24 @@ function closeAbout() {
   if (!$aboutModal) return;
   $aboutModal.classList.remove("open");
   $aboutModal.setAttribute("aria-hidden", "true");
+}
+
+function showDisclaimerIfNeeded(settings) {
+  if (disclaimerShown) return;
+  if (!$disclaimerModal || !$disclaimerOk) return;
+  if (!settings || settings.disclaimerSeen) return;
+  disclaimerShown = true;
+  $disclaimerModal.classList.add("open");
+  $disclaimerModal.setAttribute("aria-hidden", "false");
+}
+
+async function dismissDisclaimer() {
+  if (!$disclaimerModal) return;
+  $disclaimerModal.classList.remove("open");
+  $disclaimerModal.setAttribute("aria-hidden", "true");
+  if (window.api && typeof window.api.updateSettings === "function") {
+    await window.api.updateSettings({ disclaimerSeen: true });
+  }
 }
 
 function gcd(a, b) {
@@ -3864,9 +3946,12 @@ if (window.api && typeof window.api.getSettings === "function") {
     if (settings) {
       setGlobalHeaderFromSettings(settings);
       setSoundfontFromSettings(settings);
+      setDrumVelocityFromSettings(settings);
       setFollowFromSettings(settings);
       updateGlobalHeaderToggle();
+      loadSoundfontSelectOptions();
       refreshHeaderLayers().catch(() => {});
+      showDisclaimerIfNeeded(settings);
     }
   }).catch(() => {});
 }
@@ -3876,9 +3961,12 @@ if (window.api && typeof window.api.onSettingsChanged === "function") {
     const prevSoundfont = soundfontName;
     setGlobalHeaderFromSettings(settings);
     setSoundfontFromSettings(settings);
+    setDrumVelocityFromSettings(settings);
     setFollowFromSettings(settings);
     updateGlobalHeaderToggle();
+    loadSoundfontSelectOptions();
     refreshHeaderLayers().catch(() => {});
+    showDisclaimerIfNeeded(settings);
     if (settings && prevHeader !== `${globalHeaderEnabled}|${globalHeaderText}`) renderNow();
     if (settings && prevSoundfont !== soundfontName) {
       resetSoundfontCache();
@@ -4051,6 +4139,12 @@ if ($aboutCopy) {
   });
 }
 
+if ($disclaimerOk) {
+  $disclaimerOk.addEventListener("click", () => {
+    dismissDisclaimer();
+  });
+}
+
 if ($fileHeaderSave) {
   $fileHeaderSave.addEventListener("click", async () => {
     const entry = getActiveFileEntry();
@@ -4092,10 +4186,12 @@ let resumeStartIdx = null;
 let playbackState = null;
 let playbackIndexOffset = 0;
 let lastDrumPlaybackActive = false;
-let drumWarningShown = false;
+let waitingForFirstNote = false;
+let isPreviewing = false;
 let followPlayback = true;
 let followVoiceId = null;
 let followVoiceIndex = null;
+let drumVelocityMap = buildDefaultDrumVelocityMap();
 
 function updatePlayButton() {
   if (!$btnPlayPause) return;
@@ -4107,6 +4203,8 @@ function resetPlaybackState() {
   suppressOnEnd = false;
   isPlaying = false;
   isPaused = false;
+  waitingForFirstNote = false;
+  isPreviewing = false;
   lastPlaybackIdx = null;
   lastRenderIdx = null;
   lastStartPlaybackIdx = 0;
@@ -4115,6 +4213,7 @@ function resetPlaybackState() {
   playbackIndexOffset = 0;
   clearNoteSelection();
   updatePlayButton();
+  setSoundfontCaption();
 }
 
 function highlightSourceAt(idx, on) {
@@ -4166,25 +4265,38 @@ function maybeScrollRenderToNote(el) {
 async function ensureSoundfontLoaded() {
   // уже загружен
   const desired = soundfontName || "TimGM6mb.sf2";
-  if (window.abc2svg && window.abc2svg.sf2 && soundfontReadyName === desired) return;
+  if (
+    soundfontReadyName === desired
+    && (soundfontSource !== "abc2svg.sf2" || (window.abc2svg && window.abc2svg.sf2))
+  ) return;
   if (soundfontLoadPromise && soundfontLoadTarget === desired) return soundfontLoadPromise;
-
-  if (!window.api || typeof window.api.readFileBase64 !== "function") {
-    throw new Error("preload API missing: window.api.readFileBase64");
-  }
 
   if (!window.abc2svg) window.abc2svg = {};
 
   const loadSoundfont = async (name) => {
-    const sf2Url = new URL(`../../third_party/sf2/${name}`, window.location.href).href;
+    const isPath = name.startsWith("/") || /^[a-zA-Z]:\\/.test(name) || name.startsWith("file://");
+    const sf2Url = isPath
+      ? toFileUrl(name)
+      : new URL(`../../third_party/sf2/${name}`, window.location.href).href;
+    if (isPath || STREAMING_SF2.has(name)) {
+      window.abc2svg.sf2 = null;
+      soundfontSource = sf2Url;
+      soundfontReadyName = name;
+      return;
+    }
+    if (!window.api || typeof window.api.readFileBase64 !== "function") {
+      throw new Error("preload API missing: window.api.readFileBase64");
+    }
     const b64 = await window.api.readFileBase64(sf2Url);
     if (!b64 || !b64.length) throw new Error("SF2 base64 is empty");
     window.abc2svg.sf2 = b64; // чистый base64 (как ты и хотел)
+    soundfontSource = "abc2svg.sf2";
     soundfontReadyName = name;
   };
 
   soundfontLoadTarget = desired;
-  setSoundfontStatus(`Loading soundfont: ${desired}`);
+  setSoundfontCaption("Loading...");
+  updateSoundfontLoadingStatus(desired);
   soundfontLoadPromise = (async () => {
     let ok = false;
     try {
@@ -4198,6 +4310,8 @@ async function ensureSoundfontLoaded() {
       soundfontLoadPromise = null;
       soundfontLoadTarget = null;
       if (ok) setSoundfontStatus("", 0);
+      if (!waitingForFirstNote) setSoundfontCaption();
+      if (ok && !isPlaying && !isPaused && !waitingForFirstNote) setStatus("OK");
     }
   })();
   return soundfontLoadPromise;
@@ -4213,8 +4327,13 @@ function ensurePlayer() {
   player = AbcPlay({
     onend: () => {
       if (suppressOnEnd) return;
+      if (isPreviewing) {
+        isPreviewing = false;
+        return;
+      }
       isPlaying = false;
       isPaused = false;
+      waitingForFirstNote = false;
       setStatus("OK");
       updatePlayButton();
       if (followPlayback && lastRenderIdx != null && editorView) {
@@ -4230,6 +4349,12 @@ function ensurePlayer() {
       const editorLen = editorView ? editorView.state.doc.length : 0;
       const fromInjected = editorLen && editorIdx >= editorLen;
       lastPlaybackIdx = i;
+      if (on && waitingForFirstNote) {
+        waitingForFirstNote = false;
+        setStatus("Playing…");
+        setSoundfontCaption();
+      }
+      if (isPreviewing) return;
       if (!followPlayback || fromInjected) return;
       if (followVoiceId || followVoiceIndex != null) {
         const symbol = findSymbolAtOrBefore(i);
@@ -4267,7 +4392,8 @@ function ensurePlayer() {
   if (typeof player.set_speed === "function") player.set_speed(1);
 
   // КЛЮЧ: говорим snd-1.js брать SF2 из window.abc2svg.sf2
-  if (typeof player.set_sfu === "function") player.set_sfu("abc2svg.sf2");
+  if (typeof player.set_sfu === "function") player.set_sfu(soundfontSource || "abc2svg.sf2");
+  try { sessionStorage.setItem("audio", "sf2"); } catch {}
 
   return player;
 }
@@ -4364,11 +4490,85 @@ function setSoundfontFromSettings(settings) {
   if (!settings || typeof settings !== "object") return;
   const next = String(settings.soundfontName || "");
   soundfontName = next || "TimGM6mb.sf2";
+  updateSoundfontSelectValue();
+}
+
+function setDrumVelocityFromSettings(settings) {
+  if (!settings || typeof settings !== "object") return;
+  const next = settings.drumVelocityMap;
+  const base = buildDefaultDrumVelocityMap();
+  if (next && typeof next === "object") {
+    for (const [key, value] of Object.entries(next)) {
+      const pitch = Number(key);
+      if (!Number.isFinite(pitch)) continue;
+      base[pitch] = clampVelocity(value);
+    }
+  }
+  drumVelocityMap = base;
+}
+
+function updateSoundfontSelectValue() {
+  if (!$soundfontSelect) return;
+  const current = soundfontName || "TimGM6mb.sf2";
+  if ($soundfontSelect.value !== current) $soundfontSelect.value = current;
+}
+
+async function loadSoundfontSelectOptions(force) {
+  if (!$soundfontSelect) return;
+  if (soundfontOptionsLoading && !force) return soundfontOptionsLoading;
+  if (force) {
+    soundfontOptionsLoading = null;
+    soundfontOptionsLoaded = false;
+  }
+  soundfontOptionsLoading = (async () => {
+    let fonts = [];
+    if (window.api && typeof window.api.listSoundfonts === "function") {
+      try {
+        const list = await window.api.listSoundfonts();
+        if (Array.isArray(list)) fonts = list;
+      } catch {}
+    }
+    const fallback = "TimGM6mb.sf2";
+    const current = soundfontName || fallback;
+    const normalize = (item) => {
+      if (!item) return null;
+      if (typeof item === "string") {
+        return { name: item, source: isSoundfontPath(item) ? "user" : "bundled" };
+      }
+      if (typeof item === "object" && item.name) {
+        return { name: String(item.name), source: item.source === "user" ? "user" : "bundled" };
+      }
+      return null;
+    };
+    let normalized = fonts.map(normalize).filter(Boolean);
+    if (current && !normalized.some((item) => item.name === current)) {
+      normalized.unshift({ name: current, source: isSoundfontPath(current) ? "user" : "bundled" });
+    }
+    if (!normalized.some((item) => item.name === fallback)) {
+      normalized.unshift({ name: fallback, source: "bundled" });
+    }
+    const seen = new Set();
+    $soundfontSelect.textContent = "";
+    for (const item of normalized) {
+      if (!item || !item.name || seen.has(item.name)) continue;
+      seen.add(item.name);
+      const option = document.createElement("option");
+      option.value = item.name;
+      const label = getSoundfontLabel(item.name);
+      const suffix = item.source === "user" ? " (user)" : " (bundled)";
+      option.textContent = `${label}${suffix}`;
+      $soundfontSelect.appendChild(option);
+    }
+    soundfontOptionsLoaded = true;
+    updateSoundfontSelectValue();
+  })();
+  return soundfontOptionsLoading;
 }
 
 function resetSoundfontCache() {
   if (window.abc2svg) window.abc2svg.sf2 = null;
   if (window.abcsf2 && Array.isArray(window.abcsf2)) window.abcsf2.length = 0;
+  soundfontSource = "abc2svg.sf2";
   soundfontReadyName = null;
   soundfontLoadPromise = null;
   soundfontLoadTarget = null;
@@ -4531,15 +4731,9 @@ function parseDrumPattern(pattern) {
 
 function matchBarToken(line, idx) {
   const chunk = line.slice(idx);
-  const tokens3 = [":|:", "||:", ":||"];
-  for (const token of tokens3) {
+  for (const token of BAR_SEP_SYMBOLS) {
     if (chunk.startsWith(token)) return { token, len: token.length };
   }
-  const tokens2 = ["::", "|:", ":|", "|]", "[|", "||"];
-  for (const token of tokens2) {
-    if (chunk.startsWith(token)) return { token, len: token.length };
-  }
-  if (chunk.startsWith("|")) return { token: "|", len: 1 };
   return null;
 }
 
@@ -4826,7 +5020,14 @@ function buildDrumVoiceText(info) {
           ? pitchList[token.hitIndex % pitchList.length]
           : 35;
         const note = pitchMap.get(pitch) || "C";
-        parts.push(`${note}${durText}`);
+        let velocity = null;
+        if (pattern.velocities && pattern.velocities.length) {
+          velocity = pattern.velocities[token.hitIndex % pattern.velocities.length];
+        } else {
+          velocity = drumVelocityMap[pitch] ?? DEFAULT_DRUM_VELOCITY;
+        }
+        const dyn = velocityToDynamic(velocity);
+        parts.push(`!${dyn}!${note}${durText}`);
       }
       barText = parts.join("");
       patternBarIndex += 1;
@@ -4888,6 +5089,47 @@ function injectDrumPlayback(text) {
   return { text: `${merged}${suffix}`, changed: true };
 }
 
+function injectGchordOn(text, insertAt) {
+  const lines = String(text || "").split(/\r\n|\n|\r/);
+  let hasGchordPattern = false;
+  let hasGchordToggle = false;
+  let inTextBlock = false;
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+    if (/^%%\s*begintext\b/i.test(trimmed)) {
+      inTextBlock = true;
+      continue;
+    }
+    if (/^%%\s*endtext\b/i.test(trimmed)) {
+      inTextBlock = false;
+      continue;
+    }
+    if (inTextBlock) continue;
+    if (/^%/.test(trimmed) && !/^%%/.test(trimmed)) continue;
+    if (/^%%MIDI\s+gchord(on|off)\b/i.test(trimmed)) {
+      hasGchordToggle = true;
+      continue;
+    }
+    if (/^%%MIDI\s+gchord\b/i.test(trimmed)) {
+      hasGchordPattern = true;
+    }
+  }
+
+  if (!hasGchordPattern || hasGchordToggle) {
+    return { text, changed: false, offsetDelta: 0 };
+  }
+
+  const safeInsertAt = Number.isFinite(insertAt) ? insertAt : 0;
+  let insertText = "%%MIDI gchordon\n";
+  if (safeInsertAt > 0 && text[safeInsertAt - 1] !== "\n") {
+    insertText = `\n${insertText}`;
+  }
+  const merged = `${text.slice(0, safeInsertAt)}${insertText}${text.slice(safeInsertAt)}`;
+  return { text: merged, changed: true, offsetDelta: insertText.length };
+}
+
 function getPlaybackPayload() {
   const tuneText = getEditorValue();
   const entry = getActiveFileEntry();
@@ -4895,8 +5137,15 @@ function getPlaybackPayload() {
   let payload = prefixPayload.text
     ? { text: `${prefixPayload.text}${tuneText}`, offset: prefixPayload.offset }
     : { text: tuneText, offset: 0 };
-  const injected = injectDrumPlayback(payload.text);
-  if (injected.changed) payload = { text: injected.text, offset: payload.offset };
+  const gchordInjected = injectGchordOn(payload.text, prefixPayload.offset || 0);
+  if (gchordInjected.changed) {
+    payload = {
+      text: gchordInjected.text,
+      offset: (payload.offset || 0) + (gchordInjected.offsetDelta || 0),
+    };
+  }
+  const drumInjected = injectDrumPlayback(payload.text);
+  if (drumInjected.changed) payload = { text: drumInjected.text, offset: payload.offset };
   return payload;
 }
 
@@ -4912,7 +5161,7 @@ async function preparePlayback() {
   clearErrors();
   await ensureSoundfontLoaded();
   const p = ensurePlayer();
-  if (typeof p.set_sfu === "function") p.set_sfu("abc2svg.sf2");
+  if (typeof p.set_sfu === "function") p.set_sfu(soundfontSource || "abc2svg.sf2");
   if (player && typeof player.stop === "function") {
     suppressOnEnd = true;
     player.stop();
@@ -4930,10 +5179,6 @@ async function preparePlayback() {
   };
   const abc = new AbcCtor(user);
   const playbackPayload = getPlaybackPayload();
-  if (lastDrumPlaybackActive && !drumWarningShown) {
-    setSoundfontStatus("Drums require a SF2 with percussion (e.g. Roland).", 6000);
-    drumWarningShown = true;
-  }
   if (window.__abcarusDebugDrums) {
     const lines = String(playbackPayload.text || "").split(/\r\n|\n|\r/);
     const drumLines = lines.filter((line) => /DRUM|drum|drummap|MIDI channel/i.test(line));
@@ -4972,7 +5217,7 @@ function startPlaybackFromPrepared(startIdx) {
   player.play(startSymbol, null, 0);
   isPlaying = true;
   isPaused = false;
-  setStatus("Playing…");
+  if (!waitingForFirstNote) setStatus("Playing…");
   updatePlayButton();
   setTimeout(() => {
     suppressOnEnd = false;
@@ -4982,6 +5227,10 @@ function startPlaybackFromPrepared(startIdx) {
 async function startPlaybackAtIndex(startIdx, isPlaybackIdx = false) {
   clearNoteSelection();
   stopPlaybackForRestart();
+  waitingForFirstNote = true;
+  const desired = soundfontName || "TimGM6mb.sf2";
+  setSoundfontCaption("Loading...");
+  updateSoundfontLoadingStatus(desired);
   await preparePlayback();
   const idx = Number.isFinite(startIdx)
     ? startIdx
@@ -4996,8 +5245,10 @@ function pausePlayback() {
   stopPlaybackForRestart();
   isPlaying = false;
   isPaused = true;
+  waitingForFirstNote = false;
   setStatus("Paused");
   updatePlayButton();
+  setSoundfontCaption();
   if (followPlayback && lastRenderIdx != null && editorView) {
     const max = editorView.state.doc.length;
     const idx = Math.max(0, Math.min(lastRenderIdx, max));
@@ -5019,6 +5270,53 @@ async function startPlaybackAtMeasureOffset(delta) {
   const target = playbackState.measures[targetIndex];
   const targetIdx = target && Number.isFinite(target.istart) ? target.istart : 0;
   startPlaybackFromPrepared(targetIdx);
+}
+
+async function playDrumPreview(pitch, velocity) {
+  const midiPitch = Number.isFinite(Number(pitch)) ? Number(pitch) : 35;
+  const dyn = velocityToDynamic(velocity);
+  try {
+    if (isPlaying || isPaused) {
+      stopPlaybackForRestart();
+      isPlaying = false;
+      isPaused = false;
+      waitingForFirstNote = false;
+      updatePlayButton();
+    }
+    isPreviewing = true;
+    await ensureSoundfontLoaded();
+    const p = ensurePlayer();
+    if (typeof p.set_sfu === "function") p.set_sfu(soundfontSource || "abc2svg.sf2");
+    try { sessionStorage.setItem("audio", "sf2"); } catch {}
+    if (typeof p.clear === "function") p.clear();
+    const AbcCtor = getAbcCtor();
+    const user = {
+      img_out: () => {},
+      err: (m) => logErr(m),
+      errmsg: (m) => logErr(m),
+      abcplay: p,
+    };
+    const abc = new AbcCtor(user);
+    const abcText = [
+      "X:1",
+      "L:1/4",
+      "M:4/4",
+      "K:C",
+      "V:DRUM clef=perc name=\"Drums\"",
+      "%%MIDI channel 10",
+      `%%MIDI drummap C, ${midiPitch}`,
+      `!${dyn}!C,`,
+      "",
+    ].join("\n");
+    abc.tosvg("drum_preview", abcText);
+    const tunes = abc.tunes || [];
+    if (!tunes.length) return;
+    p.add(tunes[0][0], tunes[0][1], tunes[0][3]);
+    p.play(tunes[0][0], null, 0);
+  } catch (e) {
+    logErr((e && e.stack) ? e.stack : String(e));
+    isPreviewing = false;
+  }
 }
 
 if ($btnPlayPause) {
@@ -5070,6 +5368,111 @@ if ($btnNextMeasure) {
     } catch (e) {
       logErr((e && e.stack) ? e.stack : String(e));
       setStatus("Error");
+    }
+  });
+}
+
+document.addEventListener("drum:preview", (event) => {
+  const detail = event && event.detail ? event.detail : {};
+  playDrumPreview(detail.pitch, detail.velocity);
+});
+
+if ($soundfontSelect) {
+  loadSoundfontSelectOptions();
+  $soundfontSelect.addEventListener("change", () => {
+    const next = $soundfontSelect.value || "TimGM6mb.sf2";
+    soundfontName = next;
+    resetSoundfontCache();
+    if (player && typeof player.stop === "function") {
+      suppressOnEnd = true;
+      player.stop();
+    }
+    player = null;
+    playbackState = null;
+    playbackIndexOffset = 0;
+    isPlaying = false;
+    isPaused = false;
+    waitingForFirstNote = false;
+    updatePlayButton();
+    setSoundfontCaption("Loading...");
+    updateSoundfontLoadingStatus(next);
+    ensureSoundfontLoaded().catch(() => setSoundfontStatus("Soundfont load failed", 5000));
+    if (window.api && typeof window.api.updateSettings === "function") {
+      window.api.updateSettings({ soundfontName: next }).catch(() => {});
+    }
+  });
+}
+
+if ($soundfontAdd) {
+  $soundfontAdd.addEventListener("click", async () => {
+    if (!window.api || typeof window.api.pickSoundfont !== "function") return;
+    try {
+      const picked = await window.api.pickSoundfont();
+      if (!picked) return;
+      if (!/\.sf2$/i.test(String(picked))) {
+        setStatus("Soundfont must be a .sf2 file.");
+        return;
+      }
+      if (window.api && typeof window.api.fileExists === "function") {
+        const exists = await window.api.fileExists(picked);
+        if (!exists) {
+          setStatus("Soundfont file not found.");
+          return;
+        }
+      }
+      let current = {};
+      if (typeof window.api.getSettings === "function") {
+        try {
+          current = await window.api.getSettings();
+        } catch {}
+      }
+      const existing = Array.isArray(current.soundfontPaths) ? current.soundfontPaths : [];
+      const nextPaths = existing.includes(picked) ? existing : [...existing, picked];
+      if (window.api && typeof window.api.updateSettings === "function") {
+        await window.api.updateSettings({ soundfontPaths: nextPaths, soundfontName: picked });
+      }
+      soundfontName = picked;
+      updateSoundfontSelectValue();
+      loadSoundfontSelectOptions(true);
+    } catch (e) {
+      logErr((e && e.stack) ? e.stack : String(e));
+    }
+  });
+}
+
+if ($soundfontRemove) {
+  $soundfontRemove.addEventListener("click", async () => {
+    const current = $soundfontSelect ? $soundfontSelect.value : "";
+    if (!current) return;
+    if (!isSoundfontPath(current)) {
+      setStatus("Bundled soundfonts cannot be removed.");
+      return;
+    }
+    const label = getSoundfontLabel(current);
+    if (window.api && typeof window.api.confirmRemoveSoundfont === "function") {
+      const ok = await window.api.confirmRemoveSoundfont(label);
+      if (!ok) return;
+    } else if (!window.confirm(`Remove "${label}" from the list?`)) {
+      return;
+    }
+    if (!window.api || typeof window.api.getSettings !== "function") return;
+    try {
+      const settings = await window.api.getSettings();
+      const existing = Array.isArray(settings.soundfontPaths) ? settings.soundfontPaths : [];
+      const nextPaths = existing.filter((item) => item !== current);
+      const fallback = "TimGM6mb.sf2";
+      const nextName = current === soundfontName ? fallback : soundfontName;
+      if (window.api && typeof window.api.updateSettings === "function") {
+        await window.api.updateSettings({
+          soundfontPaths: nextPaths,
+          soundfontName: nextName,
+        });
+      }
+      soundfontName = nextName;
+      updateSoundfontSelectValue();
+      loadSoundfontSelectOptions(true);
+    } catch (e) {
+      logErr((e && e.stack) ? e.stack : String(e));
     }
   });
 }

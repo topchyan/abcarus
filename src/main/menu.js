@@ -121,8 +121,8 @@ function buildMenuTemplate(appState, sendMenuAction) {
       label: "Play",
       submenu: [
         { label: "Start Over", accelerator: "F4", click: () => sendMenuAction("playStart") },
-        { label: "Step Back", accelerator: "F5", click: () => sendMenuAction("playPrev") },
-        { label: "Play / Pause", accelerator: "F6", click: () => sendMenuAction("playToggle") },
+        { label: "Play / Pause", accelerator: "F5", click: () => sendMenuAction("playToggle") },
+        { label: "Step Back", accelerator: "F6", click: () => sendMenuAction("playPrev") },
         { label: "Step Forward", accelerator: "F7", click: () => sendMenuAction("playNext") },
       ],
     },

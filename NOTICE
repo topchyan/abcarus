@@ -83,21 +83,10 @@ ABCarus ships several SF2 soundfonts for playback. Licensing varies by file.
 - License: MIT License (as embedded in the SF2 metadata)
 - Website: https://github.com/FluidSynth/fluidsynth
 
-### MuseScore General (MuseScore_General(v0.1.3).sf2)
-- Authors: Frank Wen, Michael Cowgill, S. Christian Collins
-- License: MIT License (per embedded metadata; refers to "MuseScore_General-License.md")
-- Website: https://musescore.org/
-
 ### TimGM6mb (TimGM6mb.sf2)
 - Author: Tim Brechbill
 - License: GNU General Public License (GPL)
 - Note: MuseScore 1.0 shipped with this soundfont
-
-### FreePats GM (FreePatsGM-20221026.sf2)
-- Author: Roberto (FreePats project)
-- License: GNU General Public License v3 or later, with special exception
-- Website: http://freepats.zenvoid.org/
-- License file: third_party/sf2/FreePatsGM-SF2-20221026/readme.txt
 
 If you need full attribution or exact licensing terms for any SF2 file, refer to
 the original distribution sources.

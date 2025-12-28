@@ -34,6 +34,9 @@ function getDefaultSettings() {
     globalHeaderText: "",
     globalHeaderEnabled: true,
     soundfontName: "TimGM6mb.sf2",
+    soundfontPaths: [],
+    drumVelocityMap: {},
+    disclaimerSeen: false,
   };
 }
 

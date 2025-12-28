@@ -24,9 +24,15 @@
       ABCarus
     </div>
     <div class="controls">
+      <label class="soundfont-control">
+        <span id="soundfontLabel">Soundfont:</span>
+        <select id="soundfontSelect" aria-label="Soundfont"></select>
+      </label>
+      <button id="soundfontAdd" title="Add soundfont">Add</button>
+      <button id="soundfontRemove" title="Remove soundfont">Remove</button>
       <button id="btnRestart" title="Start over (F4)">⏮</button>
-      <button id="btnPrevMeasure" title="Back one measure (F5)">⏪</button>
-      <button id="btnPlayPause" title="Play / Pause (F6)">▶</button>
+      <button id="btnPlayPause" title="Play / Pause (F5)">▶</button>
+      <button id="btnPrevMeasure" title="Back one measure (F6)">⏪</button>
       <button id="btnNextMeasure" title="Forward one measure (F7)">⏩</button>
       <button id="btnToggleFollow" title="Toggle playback follow">Follow</button>
       <button id="btnToggleGlobals" title="Toggle global header">Globals</button>
@@ -131,6 +137,7 @@
           <button class="settings-tab active" data-settings-tab="main" role="tab" type="button">Main</button>
           <button class="settings-tab" data-settings-tab="xml" role="tab" type="button">XML</button>
           <button class="settings-tab" data-settings-tab="globals" role="tab" type="button">Globals</button>
+          <button class="settings-tab" data-settings-tab="drums" role="tab" type="button">Drums</button>
         </div>
         <div class="settings-panels">
           <div class="settings-panel active" data-settings-panel="main" role="tabpanel">
@@ -164,14 +171,6 @@
                 <input id="settingsLyricsBold" type="checkbox" />
               </label>
             </div>
-            <div class="settings-group">
-              <div class="settings-title">Audio</div>
-              <label class="settings-row">
-                <span>Soundfont</span>
-                <select id="settingsSoundfont"></select>
-              </label>
-              <div class="settings-help">Select a soundfont from third_party/sf2.</div>
-            </div>
           </div>
           <div class="settings-panel" data-settings-panel="xml" role="tabpanel">
             <div class="settings-group">
@@ -196,6 +195,13 @@
                 <input id="settingsGlobalHeaderEnabled" type="checkbox" />
               </label>
               <div id="settingsGlobalHeader" class="settings-editor" aria-label="Global header"></div>
+            </div>
+          </div>
+          <div class="settings-panel" data-settings-panel="drums" role="tabpanel">
+            <div class="settings-group">
+              <div class="settings-title">Drum Mixer</div>
+              <div class="settings-help">Default velocities for GM drum pitches. Tune-specific velocities still apply.</div>
+              <div id="settingsDrumMixer" class="drum-mixer"></div>
             </div>
           </div>
         </div>
@@ -271,6 +277,20 @@
       </div>
       <div class="modal-footer">
         <button id="aboutCopy" type="button">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="disclaimerModal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-label="Early-stage release">
+      <div class="modal-header">
+        <div class="modal-title">Early-stage release</div>
+      </div>
+      <div class="modal-body">
+        <p>ABCarus is functional but still under active development. Expect changes and keep backups.</p>
+      </div>
+      <div class="modal-footer">
+        <button id="disclaimerOk" type="button">OK</button>
       </div>
     </div>
   </div>

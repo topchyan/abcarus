@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("dialog:confirm-overwrite", filePath),
   confirmAppendToFile: async (filePath) =>
     ipcRenderer.invoke("dialog:confirm-append", filePath),
+  confirmRemoveSoundfont: async (label) =>
+    ipcRenderer.invoke("dialog:confirm-remove-sf2", label),
   confirmDeleteTune: async (label) =>
     ipcRenderer.invoke("dialog:confirm-delete-tune", label),
   showSaveError: async (message) =>
@@ -45,6 +47,8 @@ contextBridge.exposeInMainWorld("api", {
   exportPdf: async (svgMarkup, suggestedName) =>
     ipcRenderer.invoke("print:pdf", svgMarkup, suggestedName),
   listSoundfonts: async () => ipcRenderer.invoke("sf2:list"),
+  pickSoundfont: async () => ipcRenderer.invoke("sf2:pick"),
+  getSoundfontInfo: async (name) => ipcRenderer.invoke("sf2:info", name),
   quitApplication: async () => ipcRenderer.invoke("app:quit"),
   getSettings: async () => ipcRenderer.invoke("settings:get"),
   updateSettings: async (patch) => ipcRenderer.invoke("settings:update", patch),

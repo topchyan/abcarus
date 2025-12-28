@@ -1,6 +1,7 @@
 const { convertFileToAbc, convertAbcToMusicXml, transformAbcWithAbc2abc } = require("./conversion");
 
 const os = require("os");
+const { fileURLToPath } = require("url");
 const { getVersionInfo } = require("../version");
 
 function registerIpcHandlers(ctx) {
@@ -48,6 +49,18 @@ function registerIpcHandlers(ctx) {
   ipcMain.handle("dialog:confirm-append", async (_e, filePath) =>
     confirmAppendToFile(filePath)
   );
+  ipcMain.handle("dialog:confirm-remove-sf2", async (_e, label) => {
+    const parent = ctx && typeof ctx.getDialogParent === "function" ? ctx.getDialogParent() : null;
+    const response = dialog.showMessageBoxSync(parent, {
+      type: "warning",
+      buttons: ["Remove", "Cancel"],
+      defaultId: 0,
+      cancelId: 1,
+      message: "Remove soundfont?",
+      detail: `Remove "${label}" from the list? This will not delete the file.`,
+    });
+    return response === 0;
+  });
   ipcMain.handle("dialog:confirm-delete-tune", async (_e, label) =>
     confirmDeleteTune(label)
   );
@@ -61,11 +74,60 @@ function registerIpcHandlers(ctx) {
     try {
       const sf2Dir = path.join(app.getAppPath(), "third_party", "sf2");
       const entries = await fs.promises.readdir(sf2Dir, { withFileTypes: true });
-      return entries
+      const bundled = entries
         .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".sf2"))
         .map((entry) => entry.name);
+      const settings = ctx && typeof ctx.getSettings === "function" ? ctx.getSettings() : {};
+      const extra = Array.isArray(settings.soundfontPaths) ? settings.soundfontPaths : [];
+      const extras = [];
+      for (const p of extra) {
+        try {
+          if (!p || typeof p !== "string") continue;
+          if (!p.toLowerCase().endsWith(".sf2")) continue;
+          const stat = await fs.promises.stat(p);
+          if (stat && stat.isFile()) extras.push(p);
+        } catch {}
+      }
+      return Array.from(new Set([...bundled, ...extras])).map((name) => ({
+        name,
+        source: bundled.includes(name) ? "bundled" : "user",
+      }));
     } catch {
       return [];
+    }
+  });
+  ipcMain.handle("sf2:pick", async () => {
+    const parent = ctx && typeof ctx.getDialogParent === "function" ? ctx.getDialogParent() : null;
+    const result = dialog.showOpenDialogSync(parent, {
+      modal: true,
+      properties: ["openFile"],
+      filters: [
+        { name: "SoundFont", extensions: ["sf2"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+    if (!result || !result.length) return null;
+    return result[0];
+  });
+  ipcMain.handle("sf2:info", async (_e, name) => {
+    try {
+      const raw = String(name || "");
+      let sf2Path = "";
+      if (raw.startsWith("file://")) {
+        sf2Path = fileURLToPath(raw);
+      } else if (path.isAbsolute(raw)) {
+        sf2Path = raw;
+      } else {
+        const safeName = path.basename(raw);
+        if (!safeName.toLowerCase().endsWith(".sf2")) return null;
+        sf2Path = path.join(app.getAppPath(), "third_party", "sf2", safeName);
+      }
+      if (!sf2Path.toLowerCase().endsWith(".sf2")) return null;
+      const stat = await fs.promises.stat(sf2Path);
+      if (!stat.isFile()) return null;
+      return { name: path.basename(sf2Path), size: stat.size };
+    } catch {
+      return null;
     }
   });
   ipcMain.handle("import:musicxml", async () => {

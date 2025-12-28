@@ -2,4 +2,8 @@ dist
 .vscode
 scripts/local/
 third_party/python-runtime/
+third_party/sf2/*.sf2
+!third_party/sf2/TimGM6mb.sf2
+third_party/sf2/*.7z
+third_party/sf2/FreePatsGM-SF2-20221026/
 node_modules/
