@@ -93,6 +93,11 @@ ABCarus ships several SF2 soundfonts for playback. Licensing varies by file.
 - License: GNU General Public License (GPL)
 - Note: MuseScore 1.0 shipped with this soundfont
 
+### FreePats GM (FreePatsGM-SF2-20221026.7z)
+- Distribution: archived soundfont bundle (not unpacked in repo)
+- License: Not specified in bundle
+- Website: https://freepats.zenvoid.org/sf2/
+
 If you need full attribution or exact licensing terms for any SF2 file, refer to
 the original distribution sources.
 
