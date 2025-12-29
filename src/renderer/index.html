@@ -92,16 +92,18 @@
     <div class="divider" id="paneDivider" role="separator" aria-orientation="vertical" tabindex="0"></div>
 
     <section class="pane right">
-      <div class="tune-meta">
-        <div id="tuneMeta">No tune selected.</div>
-        <div class="dirty-indicator" id="dirtyIndicator" aria-live="polite"></div>
-      </div>
-      <div class="file-context" id="fileContext">
-        <div class="file-context-label">File</div>
-        <select id="fileTuneSelect"></select>
+      <div class="file-meta-bar">
+        <div id="fileNameMeta">Untitled</div>
       </div>
       <div class="file-header-panel" id="fileHeaderPanel">
-        <button id="fileHeaderToggle" class="file-header-title" type="button">File header</button>
+        <div class="file-header-bar">
+          <button id="fileHeaderToggle" class="file-header-title" type="button">File header</button>
+          <select id="fileTuneSelect"></select>
+          <button id="scanErrorTunes" class="scan-error-button" type="button">Scan for errors</button>
+          <div class="file-header-meta">
+            <div class="dirty-indicator" id="dirtyIndicator" aria-live="polite"></div>
+          </div>
+        </div>
         <div id="fileHeaderEditor" class="file-header-editor" aria-label="File header"></div>
         <div class="file-header-actions">
           <button id="fileHeaderSave" type="button">Save Header</button>
@@ -125,6 +127,7 @@
     <div id="cursorStatus" class="cursor-status"></div>
     <div id="bufferStatus" class="buffer-status" aria-live="polite"></div>
   </footer>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <div class="modal" id="settingsModal" aria-hidden="true">
     <div class="modal-card settings-card" role="dialog" aria-label="Settings">

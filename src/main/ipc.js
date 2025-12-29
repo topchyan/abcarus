@@ -24,6 +24,9 @@ function registerIpcHandlers(ctx) {
     scanLibrary,
     parseSingleFile,
     withMainPrintMode,
+    printWithDialog,
+    previewPdf,
+    exportPdf,
     printViaPdf,
     getDialogParent,
     addRecentTune,
@@ -257,6 +260,7 @@ function registerIpcHandlers(ctx) {
   });
   ipcMain.handle("print:preview", async (_event, svgMarkup) => {
     if (!svgMarkup) return { ok: false, error: "No notation to print." };
+    if (typeof previewPdf === "function") return previewPdf(svgMarkup);
     const tmpName = `abc-preview-${Date.now()}.pdf`;
     const tmpPath = path.join(app.getPath("temp"), tmpName);
     const res = await withMainPrintMode(async (contents) => {
@@ -272,6 +276,7 @@ function registerIpcHandlers(ctx) {
     if (os.platform() === "linux") {
       return printViaPdf(svgMarkup);
     }
+    if (typeof printWithDialog === "function") return printWithDialog(svgMarkup);
     return withMainPrintMode((contents) =>
       new Promise((resolve) => {
         contents.print({ printBackground: true, silent: false }, (success, failureReason) => {
@@ -292,6 +297,7 @@ function registerIpcHandlers(ctx) {
       filters: [{ name: "PDF", extensions: ["pdf"] }],
     });
     if (!filePath) return { ok: false, error: "Canceled" };
+    if (typeof exportPdf === "function") return exportPdf(svgMarkup, filePath);
     return withMainPrintMode(async (contents) => {
       try {
         const pdfData = await contents.printToPDF({ printBackground: true, marginsType: 0 });

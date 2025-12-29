@@ -34,9 +34,7 @@ const $renderPane = document.querySelector(".render-pane");
 const $sidebar = document.querySelector(".sidebar");
 const $scanStatus = document.getElementById("scanStatus");
 const $libraryTree = document.getElementById("libraryTree");
-const $tuneMeta = document.getElementById("tuneMeta");
 const $dirtyIndicator = document.getElementById("dirtyIndicator");
-const $fileContext = document.getElementById("fileContext");
 const $fileTuneSelect = document.getElementById("fileTuneSelect");
 const $fileHeaderPanel = document.getElementById("fileHeaderPanel");
 const $fileHeaderToggle = document.getElementById("fileHeaderToggle");
@@ -63,7 +61,10 @@ const $rightSplit = document.querySelector(".right-split");
 const $splitDivider = document.getElementById("splitDivider");
 const $errorPane = document.getElementById("errorPane");
 const $errorList = document.getElementById("errorList");
+const $scanErrorTunes = document.getElementById("scanErrorTunes");
+const $fileNameMeta = document.getElementById("fileNameMeta");
 const $sidebarSplit = document.getElementById("sidebarSplit");
+const $toast = document.getElementById("toast");
 const $sidebarBody = document.querySelector(".sidebar-body");
 const $editorPane = document.querySelector(".editor-pane");
 const $findLibraryModal = document.getElementById("findLibraryModal");
@@ -339,6 +340,11 @@ let libraryIndex = null;
 let libraryFilter = null;
 let libraryFilterLabel = "";
 let libraryTextFilter = "";
+let tuneErrorFilter = false;
+let tuneErrorScanToken = 0;
+let tuneErrorScanInFlight = false;
+let suppressRecentEntries = false;
+let toastTimer = null;
 let errorLineOffset = 0;
 let measureErrorRanges = [];
 let measureErrorVersion = 0;
@@ -386,11 +392,60 @@ const GROUP_LABELS = {
 };
 
 function setScanStatus(text) {
-  if ($scanStatus) $scanStatus.textContent = text;
+  const value = String(text || "");
+  if (/^Done\b/i.test(value)) {
+    if ($scanStatus) $scanStatus.textContent = "";
+    setStatus(value);
+    return;
+  }
+  if ($scanStatus) $scanStatus.textContent = value;
+}
+
+function setLibraryErrorIndexForTune(tuneId, count) {
+  if (!tuneId) return;
+  if (count > 0) libraryErrorIndex.set(tuneId, count);
+  else libraryErrorIndex.delete(tuneId);
+  if (tuneErrorFilter && !tuneErrorScanInFlight) {
+    updateFileContext();
+  }
+}
+
+function clearErrorIndexForFile(entry) {
+  if (!entry || !entry.tunes) return;
+  for (const tune of entry.tunes) {
+    if (tune && tune.id) libraryErrorIndex.delete(tune.id);
+  }
+}
+
+function updateLibraryErrorIndexFromCurrentErrors() {
+  if (!activeTuneId) return;
+  let count = 0;
+  for (const entry of errorEntries) {
+    if (entry.tuneId === activeTuneId) count += entry.count || 1;
+  }
+  setLibraryErrorIndexForTune(activeTuneId, count);
+}
+
+function stripFileExtension(name) {
+  const value = String(name || "");
+  return value.replace(/\.[^.]+$/, "");
+}
+
+function setFileNameMeta(name) {
+  if (!$fileNameMeta) return;
+  $fileNameMeta.textContent = name || "Untitled";
+}
+
+function buildTuneMetaLabel(metadata) {
+  if (!metadata) return "Untitled";
+  const xPart = metadata.xNumber ? `X:${metadata.xNumber}` : "";
+  const title = metadata.title || "";
+  const label = `${xPart} ${title}`.trim();
+  return label || "Untitled";
 }
 
 function setTuneMetaText(text) {
-  if ($tuneMeta) $tuneMeta.textContent = text;
+  setBufferStatus(text || "");
 }
 
 function setDirtyIndicator(isDirty) {
@@ -423,7 +478,30 @@ function buildTuneSelectOptions(fileEntry) {
     $fileTuneSelect.disabled = true;
     return;
   }
-  const tunes = fileEntry.tunes.slice().sort((a, b) => (Number(a.xNumber) || 0) - (Number(b.xNumber) || 0));
+  const sourceTunes = fileEntry.tunes.slice().sort((a, b) => (Number(a.xNumber) || 0) - (Number(b.xNumber) || 0));
+  const tunes = tuneErrorFilter
+    ? sourceTunes.filter((tune) => libraryErrorIndex.has(tune.id))
+    : sourceTunes;
+  if (tuneErrorFilter && tuneErrorScanInFlight && !libraryErrorIndex.size) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "(Scanning errors…)";
+    option.disabled = true;
+    option.selected = true;
+    $fileTuneSelect.appendChild(option);
+    $fileTuneSelect.disabled = true;
+    return;
+  }
+  if (!tunes.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = tuneErrorFilter ? "(No error tunes)" : "(No tunes)";
+    option.disabled = true;
+    option.selected = true;
+    $fileTuneSelect.appendChild(option);
+    $fileTuneSelect.disabled = true;
+    return;
+  }
   for (const tune of tunes) {
     const option = document.createElement("option");
     option.value = tune.id;
@@ -434,18 +512,25 @@ function buildTuneSelectOptions(fileEntry) {
   }
   $fileTuneSelect.disabled = false;
   if (activeTuneId) $fileTuneSelect.value = activeTuneId;
+  if (!$fileTuneSelect.value) {
+    $fileTuneSelect.selectedIndex = 0;
+  }
 }
 
 function updateFileContext() {
-  if (!$fileContext) return;
   const entry = getActiveFileEntry();
   if (!entry) {
-    $fileContext.classList.remove("active");
-    if ($fileTuneSelect) $fileTuneSelect.textContent = "";
+    if ($fileTuneSelect) {
+      $fileTuneSelect.textContent = "";
+      $fileTuneSelect.disabled = true;
+    }
+    setScanErrorButtonVisibility(null);
+    setScanErrorButtonActive(false);
     return;
   }
-  $fileContext.classList.add("active");
   buildTuneSelectOptions(entry);
+  setScanErrorButtonVisibility(entry);
+  setScanErrorButtonActive(tuneErrorFilter);
 }
 
 function setHeaderEditorValue(text) {
@@ -706,6 +791,10 @@ function updateLibraryStatus() {
     setScanStatus(`Filter: ${libraryFilterLabel}`);
     return;
   }
+  if (tuneErrorFilter) {
+    if (!tuneErrorScanInFlight) setScanStatus("Filter: Error tunes");
+    return;
+  }
   if (libraryTextFilter) {
     setScanStatus(`Search: ${libraryTextFilter}`);
     return;
@@ -760,6 +849,7 @@ function applyLibraryTextFilter(files, query) {
   }
   return filtered;
 }
+
 
 function promptFindInLibrary() {
   if (!libraryIndex) {
@@ -967,7 +1057,7 @@ function initHeaderEditor() {
   });
 }
 
-function setActiveTuneText(text, metadata) {
+function setActiveTuneText(text, metadata, options = {}) {
   resetPlaybackState();
   suppressDirty = true;
   setEditorValue(text);
@@ -976,8 +1066,8 @@ function setActiveTuneText(text, metadata) {
     activeTuneMeta = { ...metadata };
     activeFilePath = metadata.path || null;
     refreshHeaderLayers().catch(() => {});
-    const metaText = `${metadata.basename}  X:${metadata.xNumber}  lines ${metadata.startLine}-${metadata.endLine}`;
-    setTuneMetaText(metaText);
+    setTuneMetaText(buildTuneMetaLabel(metadata));
+    setFileNameMeta(stripFileExtension(metadata.basename || ""));
     if (currentDoc) {
       currentDoc.path = metadata.path || null;
       currentDoc.content = text;
@@ -985,7 +1075,7 @@ function setActiveTuneText(text, metadata) {
     } else {
       currentDoc = { path: metadata.path || null, dirty: false, content: text };
     }
-    if (window.api && typeof window.api.addRecentTune === "function") {
+    if (!options.suppressRecent && !suppressRecentEntries && window.api && typeof window.api.addRecentTune === "function") {
       window.api.addRecentTune({
         path: metadata.path,
         basename: metadata.basename,
@@ -997,7 +1087,7 @@ function setActiveTuneText(text, metadata) {
         endOffset: metadata.endOffset,
       });
     }
-    if (window.api && typeof window.api.addRecentFile === "function") {
+    if (!options.suppressRecent && !suppressRecentEntries && window.api && typeof window.api.addRecentFile === "function") {
       window.api.addRecentFile({
         path: metadata.path,
         basename: metadata.basename,
@@ -1010,7 +1100,8 @@ function setActiveTuneText(text, metadata) {
     activeTuneId = null;
     activeFilePath = null;
     refreshHeaderLayers().catch(() => {});
-    setTuneMetaText("Untitled (default.abc)");
+    setTuneMetaText("Untitled");
+    setFileNameMeta("Untitled");
     if (currentDoc) {
       currentDoc.path = null;
       currentDoc.content = text || "";
@@ -1250,10 +1341,12 @@ function markActiveTuneButton(tuneId) {
   }
 }
 
-async function selectTune(tuneId) {
+async function selectTune(tuneId, options = {}) {
   if (!libraryIndex || !tuneId) return;
-  const ok = await ensureSafeToAbandonCurrentDoc("switching tunes");
-  if (!ok) return;
+  if (!options.skipConfirm) {
+    const ok = await ensureSafeToAbandonCurrentDoc("switching tunes");
+    if (!ok) return;
+  }
   let selected = null;
   let fileMeta = null;
 
@@ -1292,7 +1385,7 @@ async function selectTune(tuneId) {
     endLine: selected.endLine,
     startOffset: selected.startOffset,
     endOffset: selected.endOffset,
-  });
+  }, { suppressRecent: options.suppressRecent || false });
   setDirtyIndicator(false);
 }
 
@@ -1377,6 +1470,10 @@ async function refreshLibraryIndex() {
   }
   setScanStatus("Refreshing…");
   fileContentCache.clear();
+  libraryErrorIndex.clear();
+  if (libraryIndex && libraryIndex.root) {
+    setFileNameMeta(stripFileExtension(safeBasename(libraryIndex.root)));
+  }
   try {
     const result = await window.api.scanLibrary(libraryIndex.root);
     libraryIndex = result || { root: libraryIndex.root, files: [] };
@@ -1396,8 +1493,10 @@ async function loadLibraryFromFolder(folder) {
   if (!window.api || !folder) return;
   setScanStatus("Scanning…");
   fileContentCache.clear();
+  libraryErrorIndex.clear();
   activeTuneId = null;
   setTuneMetaText("No tune selected.");
+  setFileNameMeta(stripFileExtension(safeBasename(folder || "")));
   setEditorValue("");
 
   try {
@@ -1481,6 +1580,29 @@ if ($librarySearch) {
   });
 }
 
+if ($scanErrorTunes) {
+  $scanErrorTunes.addEventListener("click", () => {
+    if (tuneErrorScanInFlight) return;
+    const entry = getActiveFileEntry();
+    if (!entry) return;
+    if (tuneErrorFilter) {
+      tuneErrorFilter = false;
+      tuneErrorScanToken += 1;
+      buildTuneSelectOptions(entry);
+      setScanErrorButtonActive(false);
+      updateLibraryStatus();
+      return;
+    }
+    tuneErrorFilter = true;
+    tuneErrorScanToken += 1;
+    tuneErrorScanInFlight = true;
+    buildTuneSelectOptions(entry);
+    setScanErrorButtonActive(true);
+    scanActiveFileForTuneErrors(entry).catch(() => {});
+    updateLibraryStatus();
+  });
+}
+
 if ($btnLibraryMenu) {
   $btnLibraryMenu.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -1530,6 +1652,40 @@ function setStatus(s) {
 function setBufferStatus(text) {
   if (!$bufferStatus) return;
   $bufferStatus.textContent = text || "";
+}
+
+function showToast(message, durationMs = 4000) {
+  if (!$toast) return;
+  $toast.textContent = message || "";
+  $toast.classList.add("show");
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    $toast.classList.remove("show");
+    toastTimer = null;
+  }, durationMs);
+}
+
+function setScanErrorButtonState(isScanning) {
+  if (!$scanErrorTunes) return;
+  $scanErrorTunes.disabled = Boolean(isScanning);
+}
+
+function setScanErrorButtonActive(isActive) {
+  if (!$scanErrorTunes) return;
+  $scanErrorTunes.classList.toggle("toggle-active", Boolean(isActive));
+}
+
+function setScanErrorButtonVisibility(entry) {
+  if (!$scanErrorTunes) return;
+  const tuneCount = entry && Array.isArray(entry.tunes) ? entry.tunes.length : 0;
+  const shouldShow = tuneCount > 1;
+  $scanErrorTunes.style.display = shouldShow ? "" : "none";
+  if (!shouldShow) {
+    tuneErrorFilter = false;
+    tuneErrorScanInFlight = false;
+    setScanErrorButtonState(false);
+    setScanErrorButtonActive(false);
+  }
 }
 
 function setSoundfontStatus(text, autoClearMs) {
@@ -1937,6 +2093,8 @@ function alignBarsInEditor() {
 }
 
 const errorEntries = [];
+const errorEntryMap = new Map();
+const libraryErrorIndex = new Map();
 let lastNoteSelection = [];
 
 function showErrorsVisible(visible) {
@@ -1947,6 +2105,7 @@ function showErrorsVisible(visible) {
 
 function clearErrors() {
   errorEntries.length = 0;
+  errorEntryMap.clear();
   if ($errorList) $errorList.textContent = "";
   showErrorsVisible(false);
   measureErrorRenderRanges = [];
@@ -2355,12 +2514,95 @@ function findMeasureRangeAt(text, pos) {
   return { start: rangeStart, end: rangeEnd };
 }
 
-function addError(message, locOverride) {
+function buildErrorTuneLabel(meta) {
+  if (!meta) return "";
+  const xPart = meta.xNumber ? `X:${meta.xNumber}` : "";
+  const title = meta.title || "";
+  return `${xPart} ${title}`.trim() || meta.id || "";
+}
+
+function getErrorGroupKey(entry) {
+  if (entry && entry.tuneId) return entry.tuneId;
+  if (entry && entry.filePath) return entry.filePath;
+  return "general";
+}
+
+function getErrorGroupLabel(entry) {
+  if (!entry) return "General";
+  const basename = entry.fileBasename || (entry.filePath ? safeBasename(entry.filePath) : "");
+  const tuneLabel = entry.tuneLabel || "";
+  if (basename && tuneLabel) return `${basename} — ${tuneLabel}`;
+  if (basename) return basename;
+  if (tuneLabel) return tuneLabel;
+  return "General";
+}
+
+function renderErrorList() {
+  if (!$errorList) return;
+  $errorList.textContent = "";
+  if (!errorEntries.length) return;
+  const groups = new Map();
+  for (const entry of errorEntries) {
+    const key = getErrorGroupKey(entry);
+    if (!groups.has(key)) {
+      groups.set(key, { key, label: getErrorGroupLabel(entry), entries: [], count: 0 });
+    }
+    const group = groups.get(key);
+    group.entries.push(entry);
+    group.count += entry.count || 1;
+  }
+  for (const group of groups.values()) {
+    const details = document.createElement("details");
+    details.className = "error-group";
+    if (group.key === activeTuneId) details.open = true;
+    const summary = document.createElement("summary");
+    summary.className = "error-group-summary";
+    summary.textContent = `${group.label} (${group.count})`;
+    details.appendChild(summary);
+    for (const entry of group.entries) {
+      const item = document.createElement("div");
+      item.className = "error-item";
+      item.dataset.index = String(entry.index);
+      if (entry.loc) {
+        const loc = document.createElement("div");
+        loc.className = "error-loc";
+        loc.textContent = `Line ${entry.loc.line}, Col ${entry.loc.col}`;
+        item.appendChild(loc);
+      }
+      const msg = document.createElement("div");
+      msg.className = "error-msg";
+      msg.textContent = entry.count && entry.count > 1
+        ? `${entry.message} ×${entry.count}`
+        : entry.message;
+      item.appendChild(msg);
+      details.appendChild(item);
+    }
+    $errorList.appendChild(details);
+  }
+}
+
+function addError(message, locOverride, contextOverride) {
   const renderLoc = locOverride || parseErrorLocation(message);
+  const context = contextOverride || (activeTuneMeta ? {
+    tuneId: activeTuneMeta.id,
+    filePath: activeTuneMeta.path || null,
+    fileBasename: activeTuneMeta.basename || (activeTuneMeta.path ? safeBasename(activeTuneMeta.path) : ""),
+    tuneLabel: buildErrorTuneLabel(activeTuneMeta),
+    xNumber: activeTuneMeta.xNumber || "",
+    title: activeTuneMeta.title || "",
+  } : null);
   const entry = {
     message: String(message),
     loc: renderLoc ? { line: renderLoc.line, col: renderLoc.col } : null,
     renderLoc: renderLoc ? { line: renderLoc.line, col: renderLoc.col } : null,
+    tuneId: context ? context.tuneId || null : null,
+    filePath: context ? context.filePath || null : null,
+    fileBasename: context ? context.fileBasename || "" : "",
+    tuneLabel: context ? context.tuneLabel || "" : "",
+    xNumber: context ? context.xNumber || "" : "",
+    title: context ? context.title || "" : "",
+    count: 1,
+    index: -1,
   };
   if (entry.loc && errorLineOffset) {
     if (entry.loc.line <= errorLineOffset) {
@@ -2372,7 +2614,8 @@ function addError(message, locOverride) {
       };
     }
   }
-  if (entry.renderLoc && /Bad measure duration/i.test(entry.message) && isMeasureCheckEnabled()) {
+  const allowMeasureRange = !(context && context.skipMeasureRange);
+  if (allowMeasureRange && entry.renderLoc && /Bad measure duration/i.test(entry.message) && isMeasureCheckEnabled()) {
     const payload = lastRenderPayload || getRenderPayload();
     const renderText = payload && payload.text ? payload.text : getEditorValue();
     const renderOffset = payload && payload.offset ? payload.offset : 0;
@@ -2401,28 +2644,23 @@ function addError(message, locOverride) {
     }
   }
 
-  errorEntries.push(entry);
-  if ($errorList) {
-    const item = document.createElement("div");
-    item.className = "error-item";
-    item.dataset.index = String(errorEntries.length - 1);
-    if (entry.loc) {
-      const loc = document.createElement("div");
-      loc.className = "error-loc";
-      loc.textContent = `Line ${entry.loc.line}, Col ${entry.loc.col}`;
-      item.appendChild(loc);
-    }
-    const msg = document.createElement("div");
-    msg.className = "error-msg";
-    msg.textContent = entry.message;
-    item.appendChild(msg);
-    $errorList.appendChild(item);
+  const key = `${getErrorGroupKey(entry)}|${entry.message}|${entry.loc ? entry.loc.line : ""}|${entry.loc ? entry.loc.col : ""}`;
+  const existing = errorEntryMap.get(key);
+  if (existing) {
+    existing.count += 1;
+    renderErrorList();
+    showErrorsVisible(true);
+    return;
   }
+  entry.index = errorEntries.length;
+  errorEntries.push(entry);
+  errorEntryMap.set(key, entry);
+  renderErrorList();
   showErrorsVisible(true);
 }
 
-function logErr(m, loc) {
-  addError(m, loc);
+function logErr(m, loc, context) {
+  addError(m, loc, context);
 }
 
 function clearNoteSelection() {
@@ -2556,13 +2794,32 @@ function getCurrentNotationMarkup() {
   return markup;
 }
 
+function applyPrintDebugMarkup(markup) {
+  if (!markup) return markup;
+  if (window.__abcarusDebugPrintNoRaster) {
+    return `${markup}\n<!--abcarus:no-raster-->`;
+  }
+  return markup;
+}
+
+function getSongbookSuggestedBaseName() {
+  if (activeFilePath) {
+    const raw = safeBasename(activeFilePath).replace(/\.abc$/i, "");
+    return sanitizeFileBaseName(raw || "songbook");
+  }
+  return getSuggestedBaseName();
+}
+
 async function runPrintAction(type) {
   if (!window.api) return;
-  const svgMarkup = getCurrentNotationMarkup();
-  if (!svgMarkup) {
-    setStatus("No notation to print.");
+  setStatus("Rendering…");
+  const renderRes = await renderCurrentTuneSvgMarkupForPrint();
+  if (!renderRes.ok) {
+    setStatus("Error");
+    logErr(renderRes.error || "Unable to render.");
     return;
   }
+  const svgMarkup = applyPrintDebugMarkup(renderRes.svg);
   let res = null;
   if (type === "preview" && typeof window.api.printPreview === "function") {
     res = await window.api.printPreview(svgMarkup);
@@ -2573,6 +2830,391 @@ async function runPrintAction(type) {
   }
   if (res && res.ok) {
     setStatus("OK");
+    if (type === "pdf" && res.path) {
+      showToast(`Exported PDF: ${res.path}`);
+    }
+  } else if (res && res.error) {
+    setStatus("Error");
+    logErr(res.error);
+  }
+}
+
+function ensureOnePerPageDirective(text) {
+  const value = String(text || "");
+  if (/^%%\s*oneperpage\b/im.test(value)) return value;
+  const prefix = "%%oneperpage 1\n";
+  if (!value.trim()) return prefix;
+  if (value.startsWith("\ufeff")) {
+    return `\ufeff${prefix}${value.slice(1)}`;
+  }
+  return `${prefix}${value}`;
+}
+
+function ensureAbc2svgModulesReady(content) {
+  return new Promise((resolve) => {
+    if (!window.abc2svg || !window.abc2svg.modules || typeof window.abc2svg.modules.load !== "function") {
+      resolve(true);
+      return;
+    }
+    const done = window.abc2svg.modules.load(content, () => resolve(true), () => resolve(false));
+    if (done) resolve(true);
+  });
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function buildPrintTuneLabel(tune) {
+  if (!tune) return "Untitled";
+  const xPart = tune.xNumber ? `X:${tune.xNumber}` : "";
+  const title = tune.title || tune.preview || "";
+  return `${xPart} ${title}`.trim() || tune.id || "Untitled";
+}
+
+function buildPrintErrorCard(entry, tune, errors) {
+  if (!errors || !errors.length) return "";
+  const label = buildPrintTuneLabel(tune);
+  const basename = entry && entry.basename ? entry.basename : "Tune";
+  const seen = new Map();
+  for (const err of errors) {
+    const loc = err && err.loc ? `Line ${err.loc.line}, Col ${err.loc.col}` : "";
+    const msg = err && err.message ? err.message : "Unknown error";
+    const key = `${msg}|${loc}`;
+    seen.set(key, (seen.get(key) || 0) + 1);
+  }
+  const items = [];
+  for (const [key, count] of seen.entries()) {
+    const [msg, loc] = key.split("|");
+    const locText = loc ? `<div class="print-error-loc">${escapeHtml(loc)}</div>` : "";
+    const countText = count > 1 ? ` ×${count}` : "";
+    items.push(`<li>${locText}<div class="print-error-msg">${escapeHtml(msg)}${countText}</div></li>`);
+  }
+  return `
+    <div class="print-error-card">
+      <div class="print-error-title">${escapeHtml(basename)} — ${escapeHtml(label)}</div>
+      <ul class="print-error-list">
+        ${items.join("")}
+      </ul>
+    </div>
+  `;
+}
+
+function buildPrintErrorSummary(entry, items, totalTunes) {
+  if (!items || !items.length) return "";
+  const totalErrors = items.reduce((sum, item) => sum + item.count, 0);
+  const list = items.map((item) => {
+    const label = buildPrintTuneLabel(item.tune);
+    const countText = item.count > 1 ? ` (${item.count})` : "";
+    return `<li>${escapeHtml(label)}${countText}</li>`;
+  }).join("");
+  const basename = entry && entry.basename ? entry.basename : "Songbook";
+  return `
+    <div class="print-error-summary">
+      <div class="print-error-title">${escapeHtml(basename)} — Print Summary</div>
+      <div class="print-error-meta">Rendered ${totalTunes} tunes. ${items.length} tunes with issues (${totalErrors} errors).</div>
+      <ul class="print-error-list">
+        ${list}
+      </ul>
+    </div>
+  `;
+}
+
+async function scanActiveFileForTuneErrors(entry) {
+  if (!entry || !entry.path) return;
+  if (currentDoc && currentDoc.dirty) {
+    const choice = await confirmUnsavedChanges("scanning error tunes");
+    if (choice === "cancel") {
+      tuneErrorScanInFlight = false;
+      setScanErrorButtonState(false);
+      return;
+    }
+    if (choice === "save") {
+      const ok = await performSaveFlow();
+      if (!ok) {
+        tuneErrorScanInFlight = false;
+        setScanErrorButtonState(false);
+        return;
+      }
+    }
+  }
+  const token = ++tuneErrorScanToken;
+  tuneErrorScanInFlight = true;
+  setScanErrorButtonState(true);
+  clearErrorIndexForFile(entry);
+  const contentRes = await getFileContentCached(entry.path);
+  if (!contentRes.ok) {
+    tuneErrorScanInFlight = false;
+    setScanErrorButtonState(false);
+    return;
+  }
+  const tunes = entry.tunes || [];
+  setErrorLineOffsetFromHeader("");
+  const previousTuneId = activeTuneId;
+  const previousEditorScroll = editorView && editorView.scrollDOM ? editorView.scrollDOM.scrollTop : 0;
+  const previousRenderScroll = $renderPane ? $renderPane.scrollTop : 0;
+  suppressRecentEntries = true;
+  for (let i = 0; i < tunes.length; i += 1) {
+    if (!tuneErrorFilter || token !== tuneErrorScanToken) {
+      suppressRecentEntries = false;
+      tuneErrorScanInFlight = false;
+      setScanErrorButtonState(false);
+      return;
+    }
+    const tune = tunes[i];
+    if (!tune || !Number.isFinite(tune.startOffset) || !Number.isFinite(tune.endOffset)) {
+      setLibraryErrorIndexForTune(tune && tune.id ? tune.id : "", 0);
+      continue;
+    }
+    await selectTune(tune.id, { skipConfirm: true, suppressRecent: true });
+    const hasError = Boolean(libraryErrorIndex.has(tune.id));
+    setLibraryErrorIndexForTune(tune.id, hasError ? 1 : 0);
+    if (i % 10 === 0) {
+      setStatus(`Scanning error tunes… ${i + 1}/${tunes.length}`);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+  suppressRecentEntries = false;
+  let restoredTuneId = previousTuneId;
+  if (tuneErrorFilter) {
+    const firstErrorTune = tunes.find((tune) => tune && libraryErrorIndex.has(tune.id));
+    if (firstErrorTune && firstErrorTune.id) {
+      restoredTuneId = firstErrorTune.id;
+    }
+  }
+  if (restoredTuneId && restoredTuneId !== activeTuneId) {
+    await selectTune(restoredTuneId, { skipConfirm: true });
+  }
+  if (editorView && editorView.scrollDOM) editorView.scrollDOM.scrollTop = previousEditorScroll;
+  if ($renderPane) $renderPane.scrollTop = previousRenderScroll;
+  tuneErrorScanInFlight = false;
+  setScanErrorButtonState(false);
+  buildTuneSelectOptions(entry);
+  setStatus("OK");
+}
+
+async function renderAbcToSvgMarkup(abcText, options = {}) {
+  const errors = [];
+  try {
+    ensureAbc2svgLoader();
+    const normalized = normalizeHeaderNoneSpacing(abcText);
+    const sepStrip = stripSepForRender(normalized);
+    const renderText = sepStrip.text;
+    const noteSepFallback = sepStrip.replaced;
+    const ready = await ensureAbc2svgModulesReady(renderText);
+    if (!ready) return { ok: false, error: "ABC modules failed to load." };
+    const svgParts = [];
+    const context = options && options.errorContext ? options.errorContext : null;
+    const stopOnFirstError = Boolean(options && options.stopOnFirstError);
+    const noSvg = Boolean(options && options.noSvg);
+    const user = {
+      img_out: (s) => {
+        if (!noSvg) svgParts.push(s);
+      },
+      err: (msg) => {
+        const entry = { message: String(msg) };
+        errors.push(entry);
+        if (!options || !options.suppressGlobalErrors) logErr(msg, null, context);
+        if (stopOnFirstError) throw new Error(entry.message);
+      },
+      errmsg: (msg, line, col) => {
+        const loc = Number.isFinite(line) && Number.isFinite(col)
+          ? { line: line + 1, col: col + 1 }
+          : null;
+        const entry = { message: String(msg), loc };
+        errors.push(entry);
+        if (!options || !options.suppressGlobalErrors) logErr(msg, loc, context);
+        if (stopOnFirstError) throw new Error(entry.message);
+      },
+    };
+    const AbcCtor = getAbcCtor();
+    if (!AbcCtor) return { ok: false, error: "abc2svg constructor not found." };
+    const abc = new AbcCtor(user);
+    abc.tosvg("out", renderText);
+    if (window.abc2svg && typeof window.abc2svg.abc_end === "function") {
+      window.abc2svg.abc_end();
+    }
+    const svg = svgParts.join("");
+    if (noSvg) return { ok: true, svg: "", errors };
+    if (!svg.trim()) return { ok: false, error: "No SVG output produced.", svg, errors };
+    return { ok: true, svg, errors };
+  } catch (e) {
+    const message = (e && e.message) ? e.message : String(e);
+    if (stopOnFirstError) return { ok: false, error: message, errors };
+    return { ok: false, error: message };
+  }
+}
+
+async function renderCurrentTuneSvgMarkupForPrint() {
+  const payload = getRenderPayload();
+  const text = payload && payload.text ? payload.text : "";
+  if (!text.trim()) return { ok: false, error: "No notation to print." };
+  return renderAbcToSvgMarkup(text);
+}
+
+async function getFileContentCached(filePath) {
+  let content = fileContentCache.get(filePath);
+  if (content == null) {
+    const res = await readFile(filePath);
+    if (!res.ok) return res;
+    content = res.data;
+    fileContentCache.set(filePath, content);
+  }
+  return { ok: true, data: content };
+}
+
+async function renderPrintAllSvgMarkup(entry, content, options = {}) {
+  const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+  if (!entry || !entry.tunes || !entry.tunes.length) {
+    return { ok: false, error: "No tunes to print." };
+  }
+  const debug = Boolean(window.__abcarusDebugPrintAll);
+  const debugInfo = debug ? {
+    file: entry.path || "",
+    totalTunes: entry.tunes.length,
+    rendered: 0,
+    skipped: 0,
+    tunes: [],
+  } : null;
+  const parts = [];
+  const summary = [];
+  for (let i = 0; i < entry.tunes.length; i += 1) {
+    const tune = entry.tunes[i];
+    if (onProgress && (i % 5 === 0 || i === entry.tunes.length - 1)) {
+      onProgress(i + 1, entry.tunes.length);
+    }
+    if (!tune || !Number.isFinite(tune.startOffset) || !Number.isFinite(tune.endOffset)) {
+      if (debugInfo) debugInfo.skipped += 1;
+      continue;
+    }
+    const tuneText = String(content || "").slice(tune.startOffset, tune.endOffset);
+    if (!tuneText.trim()) {
+      if (debugInfo) debugInfo.skipped += 1;
+      continue;
+    }
+    const prefix = buildHeaderPrefix(entry.headerText || "", false, tuneText);
+    const block = prefix.text ? `${prefix.text}${tuneText}` : tuneText;
+    const meta = debugInfo ? {
+      id: tune.id,
+      xNumber: tune.xNumber,
+      title: tune.title || "",
+      startOffset: tune.startOffset,
+      endOffset: tune.endOffset,
+      hasX: /^\s*X:/.test(tuneText),
+      headerKeys: collectHeaderKeys(tuneText).size,
+      blockLength: block.length,
+    } : null;
+    const context = {
+      tuneId: tune.id,
+      filePath: entry.path || null,
+      fileBasename: entry.basename || "",
+      tuneLabel: buildPrintTuneLabel(tune),
+      xNumber: tune.xNumber || "",
+      title: tune.title || "",
+      skipMeasureRange: true,
+    };
+    setErrorLineOffsetFromHeader(prefix.text);
+    const res = await renderAbcToSvgMarkup(block, { errorContext: context });
+    const tuneErrors = res.errors ? res.errors.slice() : [];
+    if (!res.ok && res.error) {
+      tuneErrors.push({ message: res.error });
+      logErr(res.error, null, context);
+    }
+    const tuneMarkup = [];
+    if (res.svg && res.svg.trim()) {
+      tuneMarkup.push(res.svg.trim());
+    }
+    if (tuneErrors.length) {
+      tuneMarkup.push(buildPrintErrorCard(entry, tune, tuneErrors));
+      const uniqueKeys = new Set(tuneErrors.map((err) => {
+        const msg = err && err.message ? err.message : "Unknown error";
+        const loc = err && err.loc ? `Line ${err.loc.line}, Col ${err.loc.col}` : "";
+        return `${msg}|${loc}`;
+      }));
+      summary.push({ tune, count: uniqueKeys.size });
+      setLibraryErrorIndexForTune(tune.id, uniqueKeys.size);
+    } else {
+      setLibraryErrorIndexForTune(tune.id, 0);
+    }
+    if (tuneMarkup.length) {
+      parts.push(`<div class="print-tune">${tuneMarkup.join("\n")}</div>`);
+      if (debugInfo && meta) {
+        meta.svgLength = res.svg.length;
+        debugInfo.rendered += 1;
+        debugInfo.tunes.push(meta);
+      }
+    } else if (debugInfo && meta) {
+      meta.svgLength = 0;
+      debugInfo.tunes.push(meta);
+      debugInfo.skipped += 1;
+    }
+  }
+  setErrorLineOffsetFromHeader("");
+  if (!parts.length) return { ok: false, error: "No SVG output produced." };
+  const summaryMarkup = buildPrintErrorSummary(entry, summary, parts.length);
+  const svg = `${summaryMarkup}${parts.join("\n")}`;
+  if (debugInfo) {
+    debugInfo.svgParts = parts.length;
+    console.info("[print-all]", debugInfo);
+    window.__abcarusDebugPrintAllSvg = svg;
+  }
+  return { ok: true, svg };
+}
+
+async function runPrintAllAction(type) {
+  if (!window.api) return;
+  const entry = getActiveFileEntry();
+  if (!entry || !entry.path) {
+    setStatus("No active file to print.");
+    return;
+  }
+  if (currentDoc && currentDoc.dirty) {
+    const choice = await confirmUnsavedChanges("printing all tunes");
+    if (choice === "cancel") return;
+    if (choice === "save") {
+      const ok = await performSaveFlow();
+      if (!ok) return;
+    }
+  }
+
+  const contentRes = await getFileContentCached(entry.path);
+  if (!contentRes.ok) {
+    setStatus("Error");
+    logErr(contentRes.error || "Unable to read file.");
+    return;
+  }
+  setStatus("Rendering…");
+  const renderRes = await renderPrintAllSvgMarkup(entry, contentRes.data || "", {
+    onProgress: (current, total) => {
+      setStatus(`Rendering tunes… ${current}/${total}`);
+    },
+  });
+  if (!renderRes.ok) {
+    setStatus("Error");
+    logErr(renderRes.error || "Unable to render.");
+    return;
+  }
+  const svgMarkup = applyPrintDebugMarkup(renderRes.svg);
+
+  let res = null;
+  if (type === "preview" && typeof window.api.printPreview === "function") {
+    res = await window.api.printPreview(svgMarkup);
+  } else if (type === "print" && typeof window.api.printDialog === "function") {
+    res = await window.api.printDialog(svgMarkup);
+  } else if (type === "pdf" && typeof window.api.exportPdf === "function") {
+    res = await window.api.exportPdf(svgMarkup, getSongbookSuggestedBaseName());
+  }
+
+  if (res && res.ok) {
+    setStatus("OK");
+    if (type === "pdf" && res.path) {
+      showToast(`Exported PDF: ${res.path}`);
+    }
   } else if (res && res.error) {
     setStatus("Error");
     logErr(res.error);
@@ -2604,7 +3246,8 @@ function showEmptyState() {
   activeTuneMeta = null;
   activeTuneId = null;
   activeFilePath = null;
-  setTuneMetaText("Untitled (default.abc)");
+  setTuneMetaText("Untitled");
+  setFileNameMeta("Untitled");
   clearErrors();
   setStatus("Ready");
 }
@@ -2661,6 +3304,161 @@ function normalizeHeaderNoneSpacing(text) {
   return out.join("\n");
 }
 
+function stripSepForRender(text) {
+  const value = String(text || "");
+  const stripped = value.replace(/^[ \t]*%%sep\b.*$/gmi, "% %%sep disabled");
+  return { text: stripped, replaced: stripped !== value };
+}
+
+function normalizeBarToken(token) {
+  if (!token) return "";
+  if (
+    token.includes("|:") ||
+    token.includes(":|") ||
+    token.includes("|1") ||
+    token.includes("|2") ||
+    token.includes("[1") ||
+    token.includes("[2")
+  ) {
+    return "|";
+  }
+  return token;
+}
+
+function hasRepeatTokens(text) {
+  return /(\|\:|\:\||\|1|\|2|\[1|\[2)/.test(text);
+}
+
+function expandRepeatsInString(line) {
+  const value = String(line || "").trim();
+  if (!value || !hasRepeatTokens(value)) return line;
+  const bars = [];
+  let current = "";
+  let startToken = "";
+  let inQuote = false;
+  for (let i = 0; i < value.length; ) {
+    const ch = value[i];
+    if (ch === "\"") {
+      inQuote = !inQuote;
+      current += ch;
+      i += 1;
+      continue;
+    }
+    if (!inQuote) {
+      const token = matchBarToken(value, i);
+      if (token) {
+        bars.push({ startToken, content: current.trim() });
+        startToken = token.token;
+        current = "";
+        i += token.len;
+        continue;
+      }
+    }
+    current += ch;
+    i += 1;
+  }
+  if (current.trim() || startToken) {
+    bars.push({ startToken, content: current.trim() });
+  }
+  if (bars.length === 0) return line;
+
+  const out = [];
+  let repeatStart = null;
+  let firstEndStart = null;
+  let secondEndStart = null;
+
+  const emitBars = (slice) => {
+    for (const bar of slice) {
+      const token = normalizeBarToken(bar.startToken);
+      if (bar.content) out.push(`${token}${bar.content}`);
+      else if (token) out.push(token);
+    }
+  };
+
+  for (let i = 0; i < bars.length; i += 1) {
+    const token = bars[i].startToken || "";
+    if (token.includes("|:")) {
+      repeatStart = i;
+      continue;
+    }
+    if (repeatStart != null && (token.includes("|1") || token.includes("[1"))) {
+      firstEndStart = i;
+      continue;
+    }
+    if (repeatStart != null && (token.includes("|2") || token.includes("[2"))) {
+      secondEndStart = i;
+      continue;
+    }
+    if (repeatStart != null && token.includes(":|")) {
+      const repeatEnd = i;
+      if (firstEndStart != null && secondEndStart != null) {
+        const partA = bars.slice(repeatStart + 1, firstEndStart);
+        const partB = bars.slice(firstEndStart, secondEndStart);
+        const partC = bars.slice(secondEndStart, repeatEnd);
+        emitBars(partA);
+        emitBars(partB);
+        emitBars(partA);
+        emitBars(partC);
+      } else {
+        const part = bars.slice(repeatStart + 1, repeatEnd);
+        emitBars(part);
+        emitBars(part);
+      }
+      repeatStart = null;
+      firstEndStart = null;
+      secondEndStart = null;
+      continue;
+    }
+    if (repeatStart == null) {
+      emitBars([bars[i]]);
+    }
+  }
+
+  if (!out.length) {
+    emitBars(bars);
+  }
+  return out.join(" ");
+}
+
+function expandRepeatsForPlayback(text) {
+  if (!hasRepeatTokens(String(text || ""))) return text;
+  const lines = String(text || "").split(/\r\n|\n|\r/);
+  const out = [];
+  let buffer = [];
+  let inBody = false;
+
+  const flushBuffer = () => {
+    if (!buffer.length) return;
+    const expanded = expandRepeatsInString(buffer.join(" "));
+    out.push(expanded);
+    buffer = [];
+  };
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!inBody && /^K:/.test(trimmed)) {
+      flushBuffer();
+      out.push(rawLine);
+      inBody = true;
+      continue;
+    }
+    if (!inBody || /^%/.test(trimmed) || /^%%/.test(trimmed) || /^[Ww]:/.test(trimmed)
+      || (/^[A-Za-z]:/.test(trimmed) && !/^V:/.test(trimmed))) {
+      flushBuffer();
+      out.push(rawLine);
+      continue;
+    }
+    if (/^V:/.test(trimmed)) {
+      flushBuffer();
+      out.push(rawLine);
+      continue;
+    }
+    buffer.push(rawLine);
+  }
+  flushBuffer();
+  return out.join("\n");
+}
+
 function renderNow() {
   clearNoteSelection();
   clearErrors();
@@ -2668,10 +3466,14 @@ function renderNow() {
   const currentText = getEditorValue();
   if (!currentText.trim()) {
     setStatus("Ready");
+    updateLibraryErrorIndexFromCurrentErrors();
     return;
   }
   const renderPayload = getRenderPayload();
-  const renderText = normalizeHeaderNoneSpacing(renderPayload.text);
+  let renderText = normalizeHeaderNoneSpacing(renderPayload.text);
+  const sepStrip = stripSepForRender(renderText);
+  renderText = sepStrip.text;
+  const sepFallbackUsed = sepStrip.replaced;
   lastRenderPayload = {
     text: renderText,
     offset: renderPayload.offset || 0,
@@ -2686,48 +3488,60 @@ function renderNow() {
       return;
     }
 
-    const svgParts = [];
-    let abcInstance = null;
+    let attempts = 0;
+    while (attempts < 2) {
+      try {
+        const svgParts = [];
+        let abcInstance = null;
 
-    const user = {
-      img_out: (s) => svgParts.push(s),
-      err: (msg) => logErr(msg),
-      errmsg: (msg, line, col) => {
-        const loc = Number.isFinite(line) && Number.isFinite(col)
-          ? { line: line + 1, col: col + 1 }
-          : null;
-        logErr(msg, loc);
-      },
-      anno_stop: (type, start, stop, x, y, w, h) => {
-        if (!abcInstance) return;
-        if (type === "beam" || type === "slur" || type === "tuplet") return;
-        const cls = type === "bar" ? "bar-hl" : "note-hl";
-        abcInstance.out_svg(
-          '<rect class="' + cls + ' _' + start + '_" data-start="' + start + '" data-end="' + stop + '" x="'
-        );
-        abcInstance.out_sxsy(x, '" y="', y);
-        abcInstance.out_svg(
-          '" width="' + w.toFixed(2) + '" height="' + abcInstance.sh(h).toFixed(2) + '"/>\n'
-        );
-      },
-    };
+        const user = {
+          img_out: (s) => svgParts.push(s),
+          err: (msg) => logErr(msg),
+          errmsg: (msg, line, col) => {
+            const loc = Number.isFinite(line) && Number.isFinite(col)
+              ? { line: line + 1, col: col + 1 }
+              : null;
+            logErr(msg, loc);
+          },
+          anno_stop: (type, start, stop, x, y, w, h) => {
+            if (!abcInstance) return;
+            if (type === "beam" || type === "slur" || type === "tuplet") return;
+            const cls = type === "bar" ? "bar-hl" : "note-hl";
+            abcInstance.out_svg(
+              '<rect class="' + cls + ' _' + start + '_" data-start="' + start + '" data-end="' + stop + '" x="'
+            );
+            abcInstance.out_sxsy(x, '" y="', y);
+            abcInstance.out_svg(
+              '" width="' + w.toFixed(2) + '" height="' + abcInstance.sh(h).toFixed(2) + '"/>\n'
+            );
+          },
+        };
 
-    const AbcCtor = getAbcCtor();
-    if (!AbcCtor) throw new Error("abc2svg constructor not found. Check third_party/abc2svg scripts.");
+        const AbcCtor = getAbcCtor();
+        if (!AbcCtor) throw new Error("abc2svg constructor not found. Check third_party/abc2svg scripts.");
 
-    const abc = new AbcCtor(user);
-    abcInstance = abc;
-    abc.tosvg("out", renderText);
+        const abc = new AbcCtor(user);
+        abcInstance = abc;
+        abc.tosvg("out", renderText);
 
-    const svg = svgParts.join("");
-    if (!svg.trim()) throw new Error("No SVG output produced (see errors).");
-    $out.innerHTML = svg;
-    applyMeasureHighlights(renderPayload.offset || 0);
-    setStatus("OK");
-
+        const svg = svgParts.join("");
+        if (!svg.trim()) throw new Error("No SVG output produced (see errors).");
+        $out.innerHTML = svg;
+        applyMeasureHighlights(renderPayload.offset || 0);
+        if (sepFallbackUsed) {
+          setBufferStatus("Note: %%sep ignored for rendering.");
+        }
+        setStatus("OK");
+        updateLibraryErrorIndexFromCurrentErrors();
+        break;
+      } catch (e) {
+        throw e;
+      }
+    }
   } catch (e) {
     logErr((e && e.stack) ? e.stack : String(e));
     setStatus("Error");
+    updateLibraryErrorIndexFromCurrentErrors();
   }
 }
 
@@ -3458,8 +4272,8 @@ async function renameLibraryFile(oldPath, newPath) {
     } else {
       activeTuneId = `${newPath}::${activeTuneMeta.startOffset}`;
     }
-    const metaText = `${updatedFile.basename}  X:${activeTuneMeta.xNumber || ""}  lines ${activeTuneMeta.startLine}-${activeTuneMeta.endLine}`;
-    setTuneMetaText(metaText);
+    setTuneMetaText(buildTuneMetaLabel(activeTuneMeta));
+    setFileNameMeta(stripFileExtension(updatedFile.basename || ""));
     markActiveTuneButton(activeTuneId);
   }
 
@@ -3493,8 +4307,8 @@ async function saveFileHeaderText(filePath, headerText) {
     activeTuneId = `${filePath}::${activeTuneMeta.startOffset}`;
     markActiveTuneButton(activeTuneId);
     const label = updatedFile ? updatedFile.basename : safeBasename(filePath);
-    const metaText = `${label}  X:${activeTuneMeta.xNumber || ""}  lines ${activeTuneMeta.startLine}-${activeTuneMeta.endLine}`;
-    setTuneMetaText(metaText);
+    setTuneMetaText(buildTuneMetaLabel(activeTuneMeta));
+    setFileNameMeta(stripFileExtension(label || ""));
   }
 }
 
@@ -3885,8 +4699,10 @@ function wireMenuActions() {
       else if (actionType === "saveAs") await fileSaveAs();
       else if (actionType === "printPreview") await runPrintAction("preview");
       else if (actionType === "print") await runPrintAction("print");
+      else if (actionType === "printAll") await runPrintAllAction("print");
       else if (actionType === "exportMusicXml") await exportMusicXml();
       else if (actionType === "exportPdf") await runPrintAction("pdf");
+      else if (actionType === "exportPdfAll") await runPrintAllAction("pdf");
       else if (actionType === "close") await fileClose();
       else if (actionType === "quit") await appQuit();
       else if (actionType === "toggleLibrary") toggleLibrary();
@@ -4018,12 +4834,16 @@ requestAnimationFrame(() => {
 loadLastRecentEntry();
 
 if ($errorList) {
-  $errorList.addEventListener("click", (e) => {
+  $errorList.addEventListener("click", async (e) => {
     const item = e.target && e.target.closest ? e.target.closest(".error-item") : null;
     if (!item) return;
     const index = Number(item.dataset.index);
     const entry = Number.isFinite(index) ? errorEntries[index] : null;
-    if (entry && entry.loc) {
+    if (!entry) return;
+    if (entry.tuneId && entry.tuneId !== activeTuneId) {
+      await selectTune(entry.tuneId);
+    }
+    if (entry.loc) {
       setEditorSelectionAtLineCol(entry.loc.line, entry.loc.col);
     }
   });
@@ -4406,6 +5226,7 @@ function buildPlaybackState(firstSymbol) {
     if (arr.length && arr[arr.length - 1].istart === symbol.istart) return;
     arr.push({ istart: symbol.istart, symbol });
   };
+  const isPlayableSymbol = (symbol) => !!(symbol && Number.isFinite(symbol.dur) && symbol.dur > 0);
 
   let s = firstSymbol;
   let guard = 0;
@@ -4420,7 +5241,15 @@ function buildPlaybackState(firstSymbol) {
     guard += 1;
   }
 
-  return { startSymbol: firstSymbol, symbols, measures };
+  let startSymbol = firstSymbol;
+  if (!startSymbol || !Number.isFinite(startSymbol.istart)) {
+    startSymbol = symbols.length ? symbols[0].symbol : firstSymbol;
+  }
+  if (!isPlayableSymbol(startSymbol)) {
+    const playable = symbols.find((item) => isPlayableSymbol(item.symbol));
+    if (playable) startSymbol = playable.symbol;
+  }
+  return { startSymbol, symbols, measures };
 }
 
 function setFollowVoiceFromPlayback() {
@@ -4580,6 +5409,105 @@ function normalizeHeaderLayer(text) {
   return raw.replace(/[\r\n]+$/, "");
 }
 
+const SINGLETON_HEADER_FIELDS = new Set([
+  "K",
+  "M",
+  "L",
+  "Q",
+  "R",
+  "C",
+  "T",
+  "S",
+  "O",
+  "G",
+]);
+
+const SINGLETON_HEADER_DIRECTIVES = new Set([
+  "oneperpage",
+  "pagewidth",
+  "pageheight",
+  "staffwidth",
+  "scale",
+  "titlefont",
+  "subtitlefont",
+  "composerfont",
+  "partsfont",
+  "textfont",
+  "gchordfont",
+  "vocalfont",
+  "measurenb",
+  "landscape",
+  "papersize",
+  "leftmargin",
+  "rightmargin",
+  "topmargin",
+  "botmargin",
+  "staffsep",
+  "systemsep",
+  "stretchlast",
+  "stretchstaff",
+]);
+
+function getHeaderLineKey(line) {
+  const trimmed = String(line || "").trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("%")) {
+    if (!trimmed.startsWith("%%")) return null;
+    const match = trimmed.match(/^%%\s*([A-Za-z0-9_-]+)/);
+    if (!match) return null;
+    const name = match[1].toLowerCase();
+    if (!SINGLETON_HEADER_DIRECTIVES.has(name)) return null;
+    return `%%${name}`;
+  }
+  const fieldMatch = trimmed.match(/^([A-Za-z]):/);
+  if (!fieldMatch) return null;
+  const field = fieldMatch[1].toUpperCase();
+  if (!SINGLETON_HEADER_FIELDS.has(field)) return null;
+  return field;
+}
+
+function getHeaderSectionLines(text) {
+  const lines = String(text || "").split(/\r\n|\n|\r/);
+  const out = [];
+  let sawHeader = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const isBlank = trimmed === "";
+    const isHeader = /^[A-Za-z]:/.test(line) || /^%/.test(line);
+    if (isHeader) sawHeader = true;
+    if (sawHeader && isBlank) break;
+    if (!isHeader && !isBlank) break;
+    out.push(line);
+  }
+  return out;
+}
+
+function collectHeaderKeys(text) {
+  const keys = new Set();
+  const lines = getHeaderSectionLines(text);
+  for (const line of lines) {
+    const key = getHeaderLineKey(line);
+    if (key) keys.add(key);
+  }
+  return keys;
+}
+
+function dedupeHeaderLayers(layers, blockedKeys) {
+  const seen = new Set(blockedKeys || []);
+  const kept = layers.map(() => []);
+  for (let i = layers.length - 1; i >= 0; i -= 1) {
+    const layer = layers[i];
+    const lines = String(layer || "").split(/\r\n|\n|\r/);
+    for (const line of lines) {
+      const key = getHeaderLineKey(line);
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+      kept[i].push(line);
+    }
+  }
+  return kept.map((lines) => lines.join("\n")).filter((text) => text.trim());
+}
+
 async function loadHeaderLayer(path) {
   if (!path || !window.api || typeof window.api.readFile !== "function") return "";
   try {
@@ -4622,21 +5550,24 @@ async function refreshHeaderLayers() {
   if (next !== prev) renderNow();
 }
 
-function buildHeaderPrefix(entryHeader, includeCheckbars) {
+function buildHeaderPrefix(entryHeader, includeCheckbars, tuneText) {
   const parts = [];
+  const tuneHeaderKeys = tuneText ? collectHeaderKeys(tuneText) : new Set();
+  const layers = [];
   if (globalHeaderEnabled) {
     const globalHeaderRaw = normalizeHeaderLayer(globalHeaderGlobalText);
-    if (globalHeaderRaw) parts.push(globalHeaderRaw);
+    if (globalHeaderRaw) layers.push(globalHeaderRaw);
     const localHeaderRaw = normalizeHeaderLayer(globalHeaderLocalText);
-    if (localHeaderRaw) parts.push(localHeaderRaw);
+    if (localHeaderRaw) layers.push(localHeaderRaw);
     const userHeaderRaw = normalizeHeaderLayer(globalHeaderUserText);
-    if (userHeaderRaw) parts.push(userHeaderRaw);
+    if (userHeaderRaw) layers.push(userHeaderRaw);
     const legacyHeaderRaw = normalizeHeaderLayer(globalHeaderText);
-    if (legacyHeaderRaw) parts.push(legacyHeaderRaw);
+    if (legacyHeaderRaw) layers.push(legacyHeaderRaw);
   }
   const fileHeaderRaw = String(entryHeader || "");
-  if (fileHeaderRaw.trim()) parts.push(fileHeaderRaw.replace(/[\r\n]+$/, ""));
-  let header = parts.join("\n");
+  if (fileHeaderRaw.trim()) layers.push(fileHeaderRaw.replace(/[\r\n]+$/, ""));
+  const deduped = dedupeHeaderLayers(layers, tuneHeaderKeys);
+  let header = deduped.join("\n");
   if (includeCheckbars && isMeasureCheckEnabled()) {
     header = injectCheckbarsDirective(header);
   }
@@ -5020,14 +5951,7 @@ function buildDrumVoiceText(info) {
           ? pitchList[token.hitIndex % pitchList.length]
           : 35;
         const note = pitchMap.get(pitch) || "C";
-        let velocity = null;
-        if (pattern.velocities && pattern.velocities.length) {
-          velocity = pattern.velocities[token.hitIndex % pattern.velocities.length];
-        } else {
-          velocity = drumVelocityMap[pitch] ?? DEFAULT_DRUM_VELOCITY;
-        }
-        const dyn = velocityToDynamic(velocity);
-        parts.push(`!${dyn}!${note}${durText}`);
+        parts.push(`${note}${durText}`);
       }
       barText = parts.join("");
       patternBarIndex += 1;
@@ -5133,7 +6057,7 @@ function injectGchordOn(text, insertAt) {
 function getPlaybackPayload() {
   const tuneText = getEditorValue();
   const entry = getActiveFileEntry();
-  const prefixPayload = buildHeaderPrefix(entry ? entry.headerText : "", false);
+  const prefixPayload = buildHeaderPrefix(entry ? entry.headerText : "", false, tuneText);
   let payload = prefixPayload.text
     ? { text: `${prefixPayload.text}${tuneText}`, offset: prefixPayload.offset }
     : { text: tuneText, offset: 0 };
@@ -5146,13 +6070,19 @@ function getPlaybackPayload() {
   }
   const drumInjected = injectDrumPlayback(payload.text);
   if (drumInjected.changed) payload = { text: drumInjected.text, offset: payload.offset };
+  if (window.__abcarusPlaybackExpandRepeats === true) {
+    payload = {
+      text: expandRepeatsForPlayback(payload.text),
+      offset: payload.offset,
+    };
+  }
   return payload;
 }
 
 function getRenderPayload() {
   const tuneText = getEditorValue();
   const entry = getActiveFileEntry();
-  const prefixPayload = buildHeaderPrefix(entry ? entry.headerText : "", true);
+  const prefixPayload = buildHeaderPrefix(entry ? entry.headerText : "", true, tuneText);
   if (!prefixPayload.text) return { text: tuneText, offset: 0 };
   return { text: `${prefixPayload.text}${tuneText}`, offset: prefixPayload.offset };
 }
@@ -5186,6 +6116,10 @@ async function preparePlayback() {
     console.log("[abcarus] playback payload (drum lines):\n" + drumLines.join("\n"));
     console.log("[abcarus] playback payload (tail):\n" + tail.join("\n"));
   }
+  if (window.__abcarusDebugPlayback) {
+    const lines = String(playbackPayload.text || "").split(/\r\n|\n|\r/);
+    console.log("[abcarus] playback payload (head):\n" + lines.slice(0, 40).join("\n"));
+  }
   playbackIndexOffset = playbackPayload.offset || 0;
   setErrorLineOffsetFromHeader(playbackPayload.text.slice(0, playbackIndexOffset));
   const playbackText = normalizeHeaderNoneSpacing(playbackPayload.text);
@@ -5199,6 +6133,21 @@ async function preparePlayback() {
   }
 
   playbackState = buildPlaybackState(tunes[0][0]);
+  if (window.__abcarusDebugPlayback) {
+    const symPreview = playbackState.symbols.slice(0, 10).map((item) => {
+      const sym = item.symbol || {};
+      return {
+        istart: sym.istart,
+        time: sym.time,
+        bar_type: sym.bar_type,
+        type: sym.type || sym.sym || sym.name,
+      };
+    });
+    const measPreview = playbackState.measures.slice(0, 6).map((item) => item.istart);
+    console.log("[abcarus] playback symbols head:", symPreview);
+    console.log("[abcarus] playback measures head:", measPreview);
+    console.log("[abcarus] playback start:", playbackState.startSymbol && playbackState.startSymbol.istart);
+  }
   setFollowVoiceFromPlayback();
   return p;
 }
@@ -5208,13 +6157,24 @@ function startPlaybackFromPrepared(startIdx) {
     || (playbackState ? playbackState.startSymbol : null);
   if (!startSymbol) throw new Error("Playback start not found.");
 
-  lastStartPlaybackIdx = Number.isFinite(startSymbol.istart) ? startSymbol.istart : 0;
+  let start = startSymbol;
+  if (playbackState && playbackState.symbols.length) {
+    const isPlayable = (symbol) => !!(symbol && Number.isFinite(symbol.dur) && symbol.dur > 0);
+    if (!isPlayable(start)) {
+      const fallback = playbackState.symbols.find((item) =>
+        item.symbol && Number.isFinite(item.symbol.istart) && item.symbol.istart >= start.istart && isPlayable(item.symbol)
+      );
+      if (fallback) start = fallback.symbol;
+    }
+  }
+
+  lastStartPlaybackIdx = Number.isFinite(start.istart) ? start.istart : 0;
   lastPlaybackIdx = null;
   lastRenderIdx = null;
   resumeStartIdx = null;
   suppressOnEnd = true;
 
-  player.play(startSymbol, null, 0);
+  player.play(start, null, 0);
   isPlaying = true;
   isPaused = false;
   if (!waitingForFirstNote) setStatus("Playing…");
@@ -5331,7 +6291,7 @@ if ($btnPlayPause) {
         await startPlaybackAtIndex(idx, true);
         return;
       }
-      await startPlaybackAtIndex(null);
+      await startPlaybackAtIndex(0);
     } catch (e) {
       logErr((e && e.stack) ? e.stack : String(e));
       setStatus("Error");

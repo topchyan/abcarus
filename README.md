@@ -30,7 +30,9 @@ Release AppImage builds bundle a local Python runtime at build time. See `script
 - Navigation by files and tunes
 - Text-based editing of ABC notation
 - Visual rendering of notation
+- Print/export PDF for single tunes or full files
 - Basic playback for reference
+- Error scanning and grouped diagnostics
 
 ### Design goals
 
@@ -46,6 +48,11 @@ Playback and rendering are implemented to support reading and editing, not to re
 
 ABCarus is under active development.  
 Internal APIs, UI layout, and feature set may change.
+
+### Rendering notes
+
+- `%%sep` can trigger abc2svg errors in some scores. ABCarus currently ignores `%%sep` during rendering and logs a warning. Keep the original notation in your files.
+- Printing/exporting all tunes includes error summaries and inline error cards for tunes that fail to render.
 
 ### Versioning & Releases
 
@@ -81,7 +88,7 @@ abc2abc transforms require the `abc2abc` binary from the abcMIDI package to be i
 
 Major third-party components used by ABCarus:
 
-- abc2svg — https://github.com/leesavide/abc2svg
+- abc2svg — https://chiselapp.com/user/moinejf/repository/abc2svg/doc/trunk/README.md
 - abc2xml — https://wim.vree.org/svgParse/abc2xml.html
 - xml2abc — https://wim.vree.org/svgParse/xml2abc.html
 - abcMIDI (abc2abc) — http://abc.sourceforge.net/abcMIDI/
@@ -98,11 +105,11 @@ See `NOTICE` for licenses and attribution details.
 Projects that inspired ABCarus:
 
 - EasyABC — https://sourceforge.net/projects/easyabc/
-- Michael Eskin's ABC Transcription Tools — https://michaeleskin.com/abctools/abc-transcription-tools.html
+- Michael Eskin's ABC Transcription Tools — https://michaeleskin.com/abctools/abctools.html
 - Jef Moine's abc2svg / txtmus — http://moinejf.free.fr/
 - Willem Vree (abc2xml / xml2abc) — https://wim.vree.org/
-- abcMIDI (Seymour Shlien, current maintainer) — https://abcmidi.sourceforge.io/
-- abc2js (Paul Rosen) — https://github.com/paulrosen/abcjs
+- abcMIDI (James Allwright author, Seymour Shlien, current maintainer) — https://abcmidi.sourceforge.io/
+- abc2js (Paul Rosen) — https://www.abcjs.net/
 - AbcToSheet (Sergio Di Mico) — https://abctosheet.my.to/
 - SymbTr research project — https://github.com/MTG/symbtr
 

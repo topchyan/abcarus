@@ -307,6 +307,7 @@ async function getMusicFontBase64() {
 
 function injectFontIntoSvg(svgMarkup, fontBase64) {
   if (!fontBase64 || !svgMarkup) return svgMarkup || "";
+  const raw = String(svgMarkup);
   const fontCss = `@font-face {
   font-family: "music";
   src: url("data:font/ttf;base64,${fontBase64}") format("truetype");
@@ -314,14 +315,17 @@ function injectFontIntoSvg(svgMarkup, fontBase64) {
   font-style: normal;
 }
 .f3 { font-family: "music" !important; }`;
-  const cleaned = String(svgMarkup).replace(/@font-face\\s*\\{[^}]*\\}/g, "");
+  const cleaned = raw.replace(/@font-face\\s*\\{[^}]*\\}/g, "");
   return cleaned.replace(/<svg\\b([^>]*)>/g, (match, attrs) => {
     return `<svg${attrs}><style>${fontCss}</style>`;
   });
 }
 
 function buildPrintHtml(svgMarkup, fontBase64) {
-  const safeSvg = injectFontIntoSvg(svgMarkup || "", fontBase64);
+  const rawMarkup = String(svgMarkup || "");
+  const safeSvg = injectFontIntoSvg(rawMarkup, fontBase64);
+  const forceRaster = rawMarkup.includes("<!--abcarus:force-raster-->");
+  const skipRaster = rawMarkup.includes("<!--abcarus:no-raster-->") || !forceRaster;
   return `<!doctype html>
 <html>
   <head>
@@ -332,12 +336,51 @@ function buildPrintHtml(svgMarkup, fontBase64) {
       body { padding: 24px; font-family: sans-serif; }
       svg { width: 100%; height: auto; display: block; }
       img { width: 100%; height: auto; display: block; }
+      .print-tune { page-break-after: always; break-after: page; }
+      .print-tune:last-of-type { page-break-after: auto; break-after: auto; }
+      .print-error-summary,
+      .print-error-card {
+        border: 1px solid #e5b5b5;
+        background: #fff5f0;
+        color: #6b1c1c;
+        border-radius: 8px;
+        padding: 12px 14px;
+        margin: 0 0 14px;
+        font-size: 12px;
+      }
+      .print-error-title {
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      .print-error-meta {
+        margin-bottom: 8px;
+        color: #7a2a2a;
+      }
+      .print-error-list {
+        margin: 0;
+        padding-left: 16px;
+      }
+      .print-error-list li {
+        margin: 4px 0;
+      }
+      .print-error-loc {
+        font-size: 11px;
+        color: #8a4b4b;
+      }
+      .print-error-msg {
+        margin-top: 2px;
+      }
     </style>
   </head>
   <body>
     ${safeSvg}
     <script>
       (function () {
+        var skipRaster = ${skipRaster ? "true" : "false"};
+        if (skipRaster) {
+          window._rasterReadyPromise = Promise.resolve();
+          return;
+        }
         function waitForFonts() {
           if (!document.fonts || !document.fonts.load) return Promise.resolve();
           return Promise.all([
@@ -405,8 +448,10 @@ async function withPrintWindow(svgMarkup, action, options) {
   win.setMenu(null);
   const fontBase64 = await getMusicFontBase64().catch(() => null);
   const html = buildPrintHtml(svgMarkup, fontBase64);
-  const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-  await win.loadURL(dataUrl);
+  const tmpName = `abc-print-${Date.now()}.html`;
+  const tmpPath = path.join(app.getPath("temp"), tmpName);
+  await fs.promises.writeFile(tmpPath, html);
+  await win.loadFile(tmpPath);
   try {
     await win.webContents.executeJavaScript("window._rasterReadyPromise || Promise.resolve()", true);
   } catch {}
@@ -419,6 +464,7 @@ async function withPrintWindow(svgMarkup, action, options) {
     try {
       if (!win.isDestroyed()) win.destroy();
     } catch {}
+    fs.promises.unlink(tmpPath).catch(() => {});
   }, 750);
   return result;
 }
@@ -438,7 +484,7 @@ async function exportPdf(svgMarkup, filePath) {
   return withPrintWindow(svgMarkup, async (contents) => {
     const pdfData = await contents.printToPDF({ printBackground: true, marginsType: 0 });
     await fs.promises.writeFile(filePath, pdfData);
-    return { ok: true };
+    return { ok: true, path: filePath };
   }, { show: false });
 }
 
@@ -459,11 +505,11 @@ async function previewPdf(svgMarkup) {
 async function printViaPdf(svgMarkup) {
   const tmpName = `abc-print-${Date.now()}.pdf`;
   const tmpPath = path.join(app.getPath("temp"), tmpName);
-  const res = await withMainPrintMode(async (contents) => {
+  const res = await withPrintWindow(svgMarkup, async (contents) => {
     const pdfData = await contents.printToPDF({ printBackground: true, marginsType: 0 });
     await fs.promises.writeFile(tmpPath, pdfData);
     return { ok: true, path: tmpPath };
-  });
+  }, { show: false });
   if (res.ok && res.path) await shell.openPath(res.path);
   return res;
 }
@@ -579,6 +625,25 @@ function addRecentFolder(entry) {
   appState.recentFolders = appState.recentFolders.slice(0, 10);
   saveState();
   refreshMenu();
+}
+
+async function cleanupTempPrintFiles() {
+  const dir = app.getPath("temp");
+  let entries = [];
+  try {
+    entries = await fs.promises.readdir(dir);
+  } catch {
+    return;
+  }
+  const patterns = [
+    /^abc-print-\d+\.html$/,
+    /^abc-print-\d+\.pdf$/,
+    /^abc-preview-\d+\.pdf$/,
+  ];
+  const deletions = entries
+    .filter((name) => patterns.some((re) => re.test(name)))
+    .map((name) => fs.promises.unlink(path.join(dir, name)).catch(() => {}));
+  if (deletions.length) await Promise.all(deletions);
 }
 
 function splitLinesWithOffsets(content) {
@@ -872,6 +937,7 @@ app.whenReady().then(async () => {
   }
   await loadState();
   await migrateStatePaths();
+  cleanupTempPrintFiles().catch(() => {});
   createWindow();
   refreshMenu();
   app.on("activate", () => {
@@ -900,6 +966,9 @@ registerIpcHandlers({
   scanLibrary,
   parseSingleFile,
   withMainPrintMode,
+  printWithDialog,
+  previewPdf,
+  exportPdf,
   printViaPdf,
   getDialogParent,
   confirmAppendToFile,
