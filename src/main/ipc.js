@@ -6,8 +6,53 @@ const {
 } = require("./conversion");
 
 const os = require("os");
+const { execFile } = require("child_process");
 const { fileURLToPath } = require("url");
 const { getVersionInfo } = require("../version");
+
+async function readOsRelease(fs) {
+  try {
+    const raw = await fs.promises.readFile("/etc/os-release", "utf8");
+    const out = {};
+    for (const line of raw.split(/\r\n|\n|\r/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const idx = trimmed.indexOf("=");
+      if (idx <= 0) continue;
+      const key = trimmed.slice(0, idx).trim();
+      let value = trimmed.slice(idx + 1).trim();
+      value = value.replace(/^"/, "").replace(/"$/, "");
+      out[key] = value;
+    }
+    return {
+      prettyName: out.PRETTY_NAME || "",
+      name: out.NAME || "",
+      version: out.VERSION || "",
+      id: out.ID || "",
+      versionId: out.VERSION_ID || "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function execVersion(cmd, args) {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { timeout: 1200 }, (err, stdout, stderr) => {
+      if (err) return resolve("");
+      const text = String(stdout || stderr || "").trim();
+      resolve(text);
+    });
+  });
+}
+
+async function getPythonVersion() {
+  const python3 = await execVersion("python3", ["--version"]);
+  if (python3) return python3;
+  const python = await execVersion("python", ["--version"]);
+  if (python) return python;
+  return "";
+}
 
 function registerIpcHandlers(ctx) {
   const {
@@ -364,6 +409,9 @@ function registerIpcHandlers(ctx) {
   ipcMain.handle("app:about", async () => {
     const versionInfo = getVersionInfo();
     const buildDate = process.env.ABCARUS_BUILD_DATE || "";
+    const env = process.env || {};
+    const osReleaseInfo = await readOsRelease(ctx.fs);
+    const pythonVersion = await getPythonVersion();
     return {
       appName: app.getName ? app.getName() : "ABCarus",
       appVersion: app.getVersion ? app.getVersion() : "",
@@ -379,6 +427,20 @@ function registerIpcHandlers(ctx) {
       platform: process.platform || "",
       arch: process.arch || "",
       osRelease: os.release(),
+      distroPrettyName: osReleaseInfo ? osReleaseInfo.prettyName : "",
+      distroName: osReleaseInfo ? osReleaseInfo.name : "",
+      distroVersion: osReleaseInfo ? osReleaseInfo.version : "",
+      distroId: osReleaseInfo ? osReleaseInfo.id : "",
+      distroVersionId: osReleaseInfo ? osReleaseInfo.versionId : "",
+      desktop: String(env.XDG_CURRENT_DESKTOP || env.DESKTOP_SESSION || env.GDMSESSION || ""),
+      xdgCurrentDesktop: String(env.XDG_CURRENT_DESKTOP || ""),
+      desktopSession: String(env.DESKTOP_SESSION || ""),
+      sessionType: String(env.XDG_SESSION_TYPE || ""),
+      display: String(env.DISPLAY || ""),
+      waylandDisplay: String(env.WAYLAND_DISPLAY || ""),
+      lang: String(env.LANG || ""),
+      lcAll: String(env.LC_ALL || ""),
+      pythonVersion,
     };
   });
 }

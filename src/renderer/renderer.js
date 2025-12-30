@@ -113,6 +113,7 @@ let suppressDirty = false;
 let editorView = null;
 let headerEditorView = null;
 let headerCollapsed = true;
+let abandonFlowInProgress = false;
 
 const MIN_PANE_WIDTH = 220;
 const MIN_RIGHT_PANE_WIDTH = 220;
@@ -443,6 +444,14 @@ function stripFileExtension(name) {
 function setFileNameMeta(name) {
   if (!$fileNameMeta) return;
   $fileNameMeta.textContent = name || "Untitled";
+  updateWindowTitle();
+}
+
+function updateWindowTitle() {
+  const base = ($fileNameMeta && $fileNameMeta.textContent) ? $fileNameMeta.textContent : "Untitled";
+  const dirty = Boolean(currentDoc && currentDoc.dirty);
+  const suffix = dirty ? " *" : "";
+  document.title = `ABCarus — ${base}${suffix}`;
 }
 
 function buildTuneMetaLabel(metadata) {
@@ -467,6 +476,7 @@ function setDirtyIndicator(isDirty) {
     $dirtyIndicator.classList.remove("active");
   }
   updateLibraryDirtyState(isDirty);
+  updateWindowTitle();
 }
 
 function updateLibraryDirtyState(isDirty) {
@@ -1837,14 +1847,26 @@ if ($fileTuneSelect) {
 }
 
 if (window.api && typeof window.api.onLibraryProgress === "function") {
+  let scanStatusClearTimer = null;
   window.api.onLibraryProgress((payload) => {
     if (!payload) return;
     if (payload.phase === "discover") {
+      if (scanStatusClearTimer) {
+        clearTimeout(scanStatusClearTimer);
+        scanStatusClearTimer = null;
+      }
       setScanStatus(`Scanning… ${payload.filesFound || 0} files`);
     } else if (payload.phase === "parse") {
       const total = payload.total || 0;
       const index = payload.index || 0;
       setScanStatus(`Indexing… ${index}/${total}`);
+      if (total > 0 && index >= total) {
+        if (scanStatusClearTimer) clearTimeout(scanStatusClearTimer);
+        scanStatusClearTimer = setTimeout(() => {
+          scanStatusClearTimer = null;
+          setScanStatus("");
+        }, 600);
+      }
     }
   });
 }
@@ -3868,10 +3890,11 @@ initEditor();
 initHeaderEditor();
 setHeaderCollapsed(headerCollapsed);
 setCurrentDocument(createBlankDocument());
+updateWindowTitle();
 initPaneResizer();
 initRightPaneResizer();
 initSidebarResizer();
-setLibraryVisible(true);
+setLibraryVisible(false);
 
 // Preload soundfont in background to avoid first-play delay.
 (async () => {
@@ -4070,6 +4093,10 @@ async function openExternal(url) {
 
 function formatAboutInfo(info) {
   if (!info) return "No system info available.";
+  const osParts = [info.platform, info.arch, info.osRelease].filter(Boolean).join(" ").trim();
+  const distro = info.distroPrettyName
+    || [info.distroName, info.distroVersion].filter(Boolean).join(" ").trim()
+    || "";
   return [
     `Version: ${info.appVersion || ""}`.trim(),
     `Build: ${info.build || ""}`.trim(),
@@ -4083,9 +4110,22 @@ function formatAboutInfo(info) {
     `Chromium: ${info.chrome || ""}`.trim(),
     `Node.js: ${info.node || ""}`.trim(),
     `V8: ${info.v8 || ""}`.trim(),
-    `OS: ${[info.platform, info.arch, info.osRelease].filter(Boolean).join(" ")}`.trim(),
-  ].join("\n");
+    `OS: ${osParts}`.trim(),
+    distro ? `Distro: ${distro}` : "",
+    info.sessionType ? `Session: ${info.sessionType}` : "",
+    (info.xdgCurrentDesktop || info.desktopSession || info.desktop) ? `Desktop: ${info.xdgCurrentDesktop || info.desktopSession || info.desktop}` : "",
+    (info.waylandDisplay || info.display) ? `Display: ${(info.waylandDisplay ? `wayland:${info.waylandDisplay}` : "")}${(info.waylandDisplay && info.display) ? " " : ""}${(info.display ? `x11:${info.display}` : "")}` : "",
+    (info.lcAll || info.lang) ? `Locale: ${info.lcAll || info.lang}` : "",
+    info.pythonVersion ? `Python: ${info.pythonVersion}` : "",
+  ].filter(Boolean).join("\n");
 }
+
+let libraryListYieldedByThisOpen = false;
+document.addEventListener("library-modal:closed", () => {
+  if (!libraryListYieldedByThisOpen) return;
+  document.body.classList.remove("library-list-open");
+  libraryListYieldedByThisOpen = false;
+});
 
 async function openAbout() {
   if (!$aboutModal || !$aboutInfo) return;
@@ -4478,16 +4518,20 @@ function ensureCopyTitleInAbc(abcText) {
   return lines.join("\n");
 }
 
-async function ensureSafeToAbandonCurrentDoc(actionLabel) {
+async function confirmAbandonIfDirty(contextLabel) {
   if (!currentDoc) return true;
   if (!currentDoc.dirty) return true;
 
-  const choice = await confirmUnsavedChanges(actionLabel);
+  const choice = await confirmUnsavedChanges(contextLabel);
   if (choice === "cancel") return false;
   if (choice === "dont_save") return true;
 
   const ok = await performSaveFlow();
-  return ok;
+  return Boolean(ok);
+}
+
+async function ensureSafeToAbandonCurrentDoc(actionLabel) {
+  return confirmAbandonIfDirty(actionLabel);
 }
 
 async function performSaveFlow() {
@@ -4505,7 +4549,22 @@ async function performSaveFlow() {
     return false;
   }
 
-  return performAppendFlow();
+  if (currentDoc.path) {
+    const content = serializeDocument(currentDoc);
+    const res = await writeFile(currentDoc.path, content);
+    if (res.ok) {
+      fileContentCache.set(currentDoc.path, content);
+      currentDoc.dirty = false;
+      setDirtyIndicator(false);
+      setFileNameMeta(stripFileExtension(safeBasename(currentDoc.path)));
+      updateFileHeaderPanel();
+      return true;
+    }
+    await showSaveError(res.error || "Unable to save file.");
+    return false;
+  }
+
+  return performSaveAsFlow();
 }
 
 async function performSaveAsFlow() {
@@ -4550,9 +4609,11 @@ async function performSaveAsFlow() {
       });
     } else {
       updateUIFromDocument(currentDoc);
+      setFileNameMeta(stripFileExtension(safeBasename(filePath)));
       setTuneMetaText(safeBasename(filePath));
     }
     updateFileHeaderPanel();
+    setDirtyIndicator(false);
     return true;
   }
 
@@ -5014,11 +5075,36 @@ async function fileSaveAs() {
   await performSaveAsFlow();
 }
 
-async function fileClose() {
+async function requestCloseDocument() {
+  if (abandonFlowInProgress) return;
   if (!currentDoc) return;
-  const ok = await ensureSafeToAbandonCurrentDoc("closing this file");
-  if (!ok) return;
-  clearCurrentDocument();
+  abandonFlowInProgress = true;
+  try {
+    const ok = await confirmAbandonIfDirty("closing this file");
+    if (!ok) return;
+    clearCurrentDocument();
+    setDirtyIndicator(false);
+  } finally {
+    abandonFlowInProgress = false;
+  }
+}
+
+async function requestQuitApplication() {
+  if (abandonFlowInProgress) return;
+  abandonFlowInProgress = true;
+  try {
+    const ok = await confirmAbandonIfDirty("quitting");
+    if (!ok) return;
+    if (window.api && typeof window.api.quitApplication === "function") {
+      await window.api.quitApplication();
+    }
+  } finally {
+    abandonFlowInProgress = false;
+  }
+}
+
+async function fileClose() {
+  await requestCloseDocument();
 }
 
 async function exportMusicXml() {
@@ -5048,22 +5134,7 @@ async function exportMusicXml() {
 }
 
 async function appQuit() {
-  if (currentDoc && currentDoc.dirty) {
-    const choice = await confirmUnsavedChanges("quitting");
-    if (choice === "cancel") return;
-    if (choice === "dont_save") {
-      if (window.api && typeof window.api.quitApplication === "function") {
-        await window.api.quitApplication();
-      }
-      return;
-    }
-    const ok = await performSaveFlow();
-    if (!ok) return;
-  }
-
-  if (window.api && typeof window.api.quitApplication === "function") {
-    await window.api.quitApplication();
-  }
+  await requestQuitApplication();
 }
 
 function wireMenuActions() {
@@ -5078,14 +5149,64 @@ function wireMenuActions() {
       else if (actionType === "importMusicXml") await importMusicXml();
       else if (actionType === "save") await fileSave();
       else if (actionType === "saveAs") await fileSaveAs();
+      else if (actionType === "appendToActiveFile") await performAppendFlow();
       else if (actionType === "printPreview") await runPrintAction("preview");
       else if (actionType === "print") await runPrintAction("print");
       else if (actionType === "printAll") await runPrintAllAction("print");
       else if (actionType === "exportMusicXml") await exportMusicXml();
       else if (actionType === "exportPdf") await runPrintAction("pdf");
       else if (actionType === "exportPdfAll") await runPrintAllAction("pdf");
-      else if (actionType === "close") await fileClose();
-      else if (actionType === "quit") await appQuit();
+      else if (actionType === "close") await requestCloseDocument();
+      else if (actionType === "quit") await requestQuitApplication();
+      else if (actionType === "libraryList") {
+        if (!libraryIndex || !libraryIndex.root || !Array.isArray(libraryIndex.files) || !libraryIndex.files.length) {
+          setStatus("Load a library folder first.");
+          return;
+        }
+        if (!window.openLibraryModal) return;
+
+        const pad2 = (n) => String(n).padStart(2, "0");
+        const formatYmd = (ms) => {
+          const d = new Date(ms);
+          if (!Number.isFinite(d.getTime())) return "";
+          return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+        };
+
+        const rows = [];
+        for (const file of libraryIndex.files) {
+          const modified = file && file.updatedAtMs ? formatYmd(file.updatedAtMs) : "";
+          const filePath = file && file.path ? file.path : "";
+          const fileLabel = file && file.basename ? file.basename : safeBasename(filePath);
+          const tunes = file && Array.isArray(file.tunes) ? file.tunes : [];
+          for (const tune of tunes) {
+            const xNumber = tune && tune.xNumber != null ? tune.xNumber : "";
+            rows.push({
+              file: fileLabel,
+              filePath,
+              tuneId: tune && tune.id ? tune.id : "",
+              tuneNo: xNumber,
+              xNumber,
+              title: tune && (tune.title || tune.preview) ? (tune.title || tune.preview) : "",
+              composer: tune && tune.composer ? tune.composer : "",
+              origin: tune && tune.origin ? tune.origin : "",
+              group: tune && tune.group ? tune.group : "",
+              key: tune && tune.key ? tune.key : "",
+              meter: tune && tune.meter ? tune.meter : "",
+              tempo: tune && tune.tempo ? tune.tempo : "",
+              rhythm: tune && tune.rhythm ? tune.rhythm : "",
+              modified,
+            });
+          }
+        }
+
+        libraryListYieldedByThisOpen = false;
+        if (isLibraryVisible) {
+          document.body.classList.add("library-list-open");
+          libraryListYieldedByThisOpen = true;
+        }
+
+        window.openLibraryModal(rows);
+      }
       else if (actionType === "toggleLibrary") toggleLibrary();
       else if (actionType === "openRecentTune" && action && action.entry) {
         await openRecentTune(action.entry);
@@ -5133,7 +5254,7 @@ wireMenuActions();
 
 if (window.api && typeof window.api.onAppRequestQuit === "function") {
   window.api.onAppRequestQuit(() => {
-    appQuit();
+    requestQuitApplication();
   });
 }
 

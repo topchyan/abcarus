@@ -308,24 +308,26 @@
   <div id="libOverlay" class="lib-overlay" hidden>
     <div class="lib-modal" role="dialog" aria-modal="true" aria-label="Library">
       <div class="lib-header">
-        <div class="lib-title">Library</div>
-        <div class="lib-controls">
-          <label class="lib-label">
-            Quick filter
-            <input id="libFilter" class="lib-input" type="text" autocomplete="off" />
-          </label>
-          <button id="libClose" class="lib-btn">Close</button>
+        <div class="lib-header-top">
+          <div class="lib-title">Library</div>
+          <button id="libClose" class="lib-x" type="button" aria-label="Close">×</button>
+        </div>
+        <div class="lib-header-bottom">
+          <div class="lib-hint">Tip: double-click a row to open.</div>
+          <div class="lib-controls">
+            <label class="lib-label">
+              Quick filter
+              <input id="libFilter" class="lib-input" type="text" autocomplete="off" />
+            </label>
+            <button id="libOpen" class="lib-btn primary" type="button" disabled>Open</button>
+          </div>
         </div>
       </div>
       <div class="lib-body">
         <div id="libTable" class="lib-table"></div>
       </div>
       <div class="lib-footer">
-        <div class="lib-footer-left">
-          <div class="lib-hint">Enter / double-click: open. Esc: close.</div>
-          <div id="libStatus" class="lib-status" aria-live="polite"></div>
-        </div>
-        <button id="libOpen" class="lib-btn primary" disabled>Open</button>
+        <div id="libStatus" class="lib-status" aria-live="polite"></div>
       </div>
     </div>
   </div>

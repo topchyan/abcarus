@@ -2,9 +2,6 @@
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: 9999;
 }
 .lib-overlay[hidden]{
@@ -14,16 +11,28 @@
   width: 95vw;
   max-width: 1600px;
   height: 85vh;
+  max-height: 92vh;
+  min-width: 820px;
+  min-height: 420px;
   background: #fff;
   border-radius: 12px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  border: 1px solid #cfcfcf;
+  box-shadow: 0 18px 60px rgba(0,0,0,.35);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%,-50%);
 }
 .lib-header,.lib-footer{
   flex: 0 0 auto;
   padding: 12px 14px;
   border-bottom: 1px solid #ddd;
+}
+.lib-header{
+  background: #fbfbfb;
 }
 .lib-footer{
   border-bottom: none;
@@ -32,28 +41,37 @@
   align-items: center;
   justify-content: space-between;
 }
-.lib-footer-left{
-  display: grid;
-  gap: 4px;
-}
 .lib-status{
   font-size: 12px;
   color: #555;
   min-height: 16px;
 }
-.lib-title{ font-size: 18px; font-weight: 600; margin-bottom: 10px; }
-.lib-controls{ display: flex; gap: 12px; align-items: flex-end; }
+.lib-status.error{
+  color: #b00020;
+  font-weight: 600;
+}
+.lib-header-top{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.lib-header-bottom{
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 10px;
+}
+.lib-title{ font-size: 18px; font-weight: 600; margin: 0; }
+.lib-controls{ display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
 .lib-label{ font-size: 12px; color: #444; display: grid; gap: 4px; }
 .lib-input{ height: 30px; min-width: 360px; padding: 4px 8px; }
 .lib-btn{ height: 32px; padding: 0 12px; }
 .lib-btn.primary{ font-weight: 600; }
 .lib-body{ flex: 1 1 auto; min-height: 0; padding: 10px 14px; }
 .lib-table{ width: 100%; height: 100%; }
-.lib-hint.error{ color: #a40000; }
 .lib-hint{
-  flex: 1 1 auto;
-  min-width: 0;
-  margin-right: 12px;
   font-size: 12px;
   color: #555;
 }
@@ -61,6 +79,38 @@
   color: #b00020;
   font-weight: 600;
 }
+
+.lib-x{
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid #d0d0d0;
+  background: #fff;
+  color: #333;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.lib-x:hover{ background: #f3f3f3; }
+
+.lib-modal.lib-resizing,
+.lib-modal.lib-resizing *{
+  user-select: none !important;
+  cursor: default;
+}
+
+.lib-resize-handle{
+  position: absolute;
+  z-index: 20;
+}
+.lib-resize-handle.n{ top: -4px; left: 10px; right: 10px; height: 8px; cursor: ns-resize; }
+.lib-resize-handle.s{ bottom: -4px; left: 10px; right: 10px; height: 8px; cursor: ns-resize; }
+.lib-resize-handle.e{ right: -4px; top: 10px; bottom: 10px; width: 8px; cursor: ew-resize; }
+.lib-resize-handle.w{ left: -4px; top: 10px; bottom: 10px; width: 8px; cursor: ew-resize; }
+.lib-resize-handle.ne{ top: -4px; right: -4px; width: 14px; height: 14px; cursor: nesw-resize; }
+.lib-resize-handle.nw{ top: -4px; left: -4px; width: 14px; height: 14px; cursor: nwse-resize; }
+.lib-resize-handle.se{ bottom: -4px; right: -4px; width: 14px; height: 14px; cursor: nwse-resize; }
+.lib-resize-handle.sw{ bottom: -4px; left: -4px; width: 14px; height: 14px; cursor: nesw-resize; }
 
 .lib-modal .tabulator{
   border: 1px solid #e5e5e5;
@@ -70,4 +120,10 @@
 .lib-modal .tabulator .tabulator-cell.lib-tags-cell{
   white-space: normal;
   line-height: 1.2;
+}
+
+body.library-list-open #libraryTree{
+  pointer-events: none;
+  opacity: 0.25;
+  filter: grayscale(1);
 }

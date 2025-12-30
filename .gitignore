@@ -4,10 +4,11 @@ dist/
 # Editor settings
 .vscode/
 
-# Local-only scripts
+# Local-only scripts and logs
 scripts/local/
 deploy.sh
 scripts/generate-release-docs.mjs
+DEVLOG.md
 
 # Bundled Python runtime (release builds only)
 third_party/python-runtime/

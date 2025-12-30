@@ -5,8 +5,8 @@
   const $filter = document.getElementById("libFilter");
   const $close = document.getElementById("libClose");
   const $open = document.getElementById("libOpen");
-  const $hint = $overlay ? $overlay.querySelector(".lib-hint") : null;
-  const baseHintText = $hint ? String($hint.textContent || "") : "";
+  const $status = document.getElementById("libStatus");
+  const $modal = $overlay ? $overlay.querySelector(".lib-modal") : null;
 
   const STORAGE_TABLE_STATE_KEY = "abcarus.libraryModal.tableState.v1";
   const STORAGE_FILTER_KEY = "abcarus.libraryModal.filter.v1";
@@ -15,11 +15,13 @@
   let libTable = null;
   let selectedRowData = null;
   let tabulatorEventsBound = false;
-  let hintTimer = null;
+  let statusTimer = null;
   let saveStateTimer = null;
   let saveFilterTimer = null;
   let pendingFilterValue = null;
   let currentRowsCache = [];
+  let lastModalRect = null;
+  let redrawTimer = null;
 
   const DEFAULT_SORT = [{ column: "modified", dir: "desc" }];
   const DEFAULT_COLUMNS = [
@@ -27,41 +29,35 @@
     { title: "#", field: "tuneNo", width: 60, hozAlign: "right" },
     { title: "Title", field: "title", widthGrow: 5 },
     { title: "Composer", field: "composer", widthGrow: 2 },
+    { title: "Origin", field: "origin", widthGrow: 2 },
+    { title: "Group", field: "group", widthGrow: 2 },
     { title: "Key", field: "key", width: 80 },
     { title: "Meter", field: "meter", width: 80 },
+    { title: "Tempo", field: "tempo", width: 110 },
+    { title: "Rhythm", field: "rhythm", width: 120 },
     { title: "Modified", field: "modified", width: 110 },
-    {
-      title: "Tags",
-      field: "tags",
-      widthGrow: 1,
-      maxWidth: 260,
-      formatter: "textarea",
-      cssClass: "lib-tags-cell",
-    },
   ];
   const KNOWN_FIELDS = new Set(DEFAULT_COLUMNS.map((col) => col.field).filter(Boolean));
 
-  function setHintMessage(text, { isError = false, timeoutMs = 0 } = {}) {
-    if (!$hint) return;
-    if (hintTimer) {
-      clearTimeout(hintTimer);
-      hintTimer = null;
+  function setStatusMessage(text, { isError = false, timeoutMs = 0 } = {}) {
+    if (!$status) return;
+    if (statusTimer) {
+      clearTimeout(statusTimer);
+      statusTimer = null;
     }
-    $hint.textContent = String(text || "");
-    $hint.classList.toggle("error", Boolean(isError));
-    $hint.setAttribute("role", "status");
-    $hint.setAttribute("aria-live", "polite");
+    $status.textContent = String(text || "");
+    $status.classList.toggle("error", Boolean(isError));
     if (timeoutMs > 0) {
-      hintTimer = setTimeout(() => {
-        hintTimer = null;
-        $hint.textContent = baseHintText;
-        $hint.classList.remove("error");
+      statusTimer = setTimeout(() => {
+        statusTimer = null;
+        $status.textContent = "";
+        $status.classList.remove("error");
       }, timeoutMs);
     }
   }
 
-  function resetHint() {
-    setHintMessage(baseHintText, { isError: false, timeoutMs: 0 });
+  function resetStatus() {
+    setStatusMessage("", { isError: false, timeoutMs: 0 });
   }
 
   function readJsonStorage(key) {
@@ -80,16 +76,125 @@
     } catch {}
   }
 
-  function clearStorage(key) {
-    try {
-      localStorage.removeItem(key);
-    } catch {}
-  }
+    function clearStorage(key) {
+      try {
+        localStorage.removeItem(key);
+      } catch {}
+    }
 
-  function scheduleSaveTableState() {
-    if (!libTable) return;
-    if (saveStateTimer) clearTimeout(saveStateTimer);
-    saveStateTimer = setTimeout(() => {
+    function scheduleTableRedraw() {
+      if (redrawTimer) clearTimeout(redrawTimer);
+      redrawTimer = setTimeout(() => {
+        redrawTimer = null;
+        try {
+          if (libTable && typeof libTable.redraw === "function") libTable.redraw(true);
+        } catch {}
+      }, 60);
+    }
+
+    function applyModalRect(rect) {
+      if (!$modal || !rect) return;
+      $modal.style.transform = "none";
+      $modal.style.left = `${Math.round(rect.left)}px`;
+      $modal.style.top = `${Math.round(rect.top)}px`;
+      $modal.style.width = `${Math.round(rect.width)}px`;
+      $modal.style.height = `${Math.round(rect.height)}px`;
+    }
+
+    function clampModalRect(rect) {
+      const vw = window.innerWidth || 0;
+      const vh = window.innerHeight || 0;
+      const margin = 12;
+      const minW = 820;
+      const minH = 420;
+      const maxW = Math.max(minW, vw - margin * 2);
+      const maxH = Math.max(minH, vh - margin * 2);
+
+      let width = Math.max(minW, Math.min(maxW, rect.width));
+      let height = Math.max(minH, Math.min(maxH, rect.height));
+      let left = rect.left;
+      let top = rect.top;
+
+      left = Math.max(margin, Math.min(vw - margin - width, left));
+      top = Math.max(margin, Math.min(vh - margin - height, top));
+
+      return { left, top, width, height };
+    }
+
+    function ensureResizeHandles() {
+      if (!$modal) return;
+      if ($modal.querySelector(".lib-resize-handle")) return;
+
+      const dirs = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+      for (const dir of dirs) {
+        const handle = document.createElement("div");
+        handle.className = `lib-resize-handle ${dir}`;
+        handle.dataset.dir = dir;
+        handle.setAttribute("aria-hidden", "true");
+        $modal.appendChild(handle);
+      }
+
+      const onPointerDown = (e) => {
+        const target = e.target;
+        const dir = target && target.dataset ? target.dataset.dir : "";
+        if (!dir) return;
+        if (e.button != null && e.button !== 0) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const rect = $modal.getBoundingClientRect();
+        applyModalRect({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const start = $modal.getBoundingClientRect();
+
+        const move = (ev) => {
+          const dx = ev.clientX - startX;
+          const dy = ev.clientY - startY;
+          let left = start.left;
+          let top = start.top;
+          let width = start.width;
+          let height = start.height;
+
+          if (dir.includes("e")) width = start.width + dx;
+          if (dir.includes("s")) height = start.height + dy;
+          if (dir.includes("w")) {
+            width = start.width - dx;
+            left = start.left + dx;
+          }
+          if (dir.includes("n")) {
+            height = start.height - dy;
+            top = start.top + dy;
+          }
+
+          const clamped = clampModalRect({ left, top, width, height });
+          applyModalRect(clamped);
+          scheduleTableRedraw();
+        };
+
+        const up = () => {
+          window.removeEventListener("pointermove", move, true);
+          window.removeEventListener("pointerup", up, true);
+          $modal.classList.remove("lib-resizing");
+          const r = $modal.getBoundingClientRect();
+          lastModalRect = clampModalRect({ left: r.left, top: r.top, width: r.width, height: r.height });
+          scheduleTableRedraw();
+        };
+
+        $modal.classList.add("lib-resizing");
+        window.addEventListener("pointermove", move, true);
+        window.addEventListener("pointerup", up, true);
+      };
+
+      $modal.addEventListener("pointerdown", onPointerDown, true);
+    }
+
+    function scheduleSaveTableState() {
+      if (!libTable) return;
+      if (saveStateTimer) clearTimeout(saveStateTimer);
+      saveStateTimer = setTimeout(() => {
       saveStateTimer = null;
       const state = getCurrentTableState();
       if (state) writeJsonStorage(STORAGE_TABLE_STATE_KEY, state);
@@ -109,22 +214,22 @@
     return String(value == null ? "" : value).trim();
   }
 
-  function buildOpenSelection(rowData) {
-    const filePath = normalizeString(rowData && (rowData.filePath || rowData.file));
-    if (!filePath) {
-      setHintMessage("Missing file path", { isError: true, timeoutMs: 2500 });
-      return null;
-    }
+    function buildOpenSelection(rowData) {
+      const filePath = normalizeString(rowData && (rowData.filePath || rowData.file));
+      if (!filePath) {
+        setStatusMessage("Missing file path", { isError: true, timeoutMs: 2500 });
+        return null;
+      }
 
     const tuneId = normalizeString(rowData && rowData.tuneId);
     const tuneNoRaw = rowData && rowData.tuneNo != null ? normalizeString(rowData.tuneNo) : "";
     const xNumber = normalizeString(rowData && rowData.xNumber);
     const title = normalizeString(rowData && rowData.title);
 
-    if (!tuneId && !tuneNoRaw && !xNumber) {
-      setHintMessage("Missing tune id", { isError: true, timeoutMs: 2500 });
-      return null;
-    }
+      if (!tuneId && !tuneNoRaw && !xNumber) {
+        setStatusMessage("Missing tune id", { isError: true, timeoutMs: 2500 });
+        return null;
+      }
 
     const selection = { filePath };
     if (tuneId) selection.tuneId = tuneId;
@@ -149,14 +254,14 @@
     return { ok: false, error: (res && res.error) ? res.error : "Unable to open tune." };
   }
 
-  function buildSearchString(r) {
-    return `${r && r.file != null ? r.file : ""} ${r && r.tuneNo != null ? r.tuneNo : ""} ${r && r.title != null ? r.title : ""} ${r && r.composer != null ? r.composer : ""} ${r && r.key != null ? r.key : ""} ${r && r.meter != null ? r.meter : ""} ${r && r.modified != null ? r.modified : ""} ${r && r.tags != null ? r.tags : ""}`.toLowerCase();
-  }
+    function buildSearchString(r) {
+      return `${r && r.file != null ? r.file : ""} ${r && r.tuneNo != null ? r.tuneNo : ""} ${r && r.title != null ? r.title : ""} ${r && r.composer != null ? r.composer : ""} ${r && r.key != null ? r.key : ""} ${r && r.meter != null ? r.meter : ""} ${r && r.tempo != null ? r.tempo : ""} ${r && r.rhythm != null ? r.rhythm : ""} ${r && r.origin != null ? r.origin : ""} ${r && r.group != null ? r.group : ""} ${r && r.modified != null ? r.modified : ""}`.toLowerCase();
+    }
 
-  function getDemoLibraryRows() {
-    const rows = [];
-    const files = [
-      "my_compositions.abc",
+    function getDemoLibraryRows() {
+      const rows = [];
+      const files = [
+        "my_compositions.abc",
       "armenian_tunes.abc",
       "greek_book.abc",
       "irish_session.abc",
@@ -170,37 +275,45 @@
       "Anonymous",
       "Avetik",
     ];
-    const keys = ["Am", "Dm", "Gm", "C", "D", "Em", "F", "G", "Bb"];
-    const meters = ["2/4", "3/4", "4/4", "6/8", "7/8", "9/8", "10/8", "11/8"];
-    const tags = ["armenian", "greek", "dance", "slow", "wip", "session", "choral", "solo", "reel", "jig"];
+      const keys = ["Am", "Dm", "Gm", "C", "D", "Em", "F", "G", "Bb"];
+      const meters = ["2/4", "3/4", "4/4", "6/8", "7/8", "9/8", "10/8", "11/8"];
+      const rhythms = ["reel", "jig", "waltz", "karsilama", "kopanica", "semai", "hsum"];
+      const origins = ["Armenia", "Greece", "Ireland", "Macedonia", "Thrace", "West Armenia"];
+      const groups = ["session", "choral", "dance", "wip", "solo"];
+      const tempos = ["1/4=120", "1/4=180", "1/8=220", "1/4=60"];
 
-    const pad2 = (n) => String(n).padStart(2, "0");
-    const formatDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+      const pad2 = (n) => String(n).padStart(2, "0");
+      const formatDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
-    for (let i = 1; i <= 100; i += 1) {
-      const file = files[i % files.length];
-      const tuneNo = i;
-      const title = `Demo Tune ${i}`;
-      const composer = composers[i % composers.length];
-      const key = keys[i % keys.length];
-      const meter = meters[i % meters.length];
-      const modified = formatDate(new Date(Date.now() - (i * 24 * 60 * 60 * 1000)));
-      const tagA = tags[i % tags.length];
-      const tagB = tags[(i + 3) % tags.length];
-      rows.push({
-        file,
-        tuneNo,
-        title,
-        composer,
-        key,
-        meter,
-        modified,
-        tags: `${tagA}, ${tagB}`,
-      });
+      for (let i = 1; i <= 100; i += 1) {
+        const file = files[i % files.length];
+        const tuneNo = i;
+        const title = `Demo Tune ${i}`;
+        const composer = composers[i % composers.length];
+        const key = keys[i % keys.length];
+        const meter = meters[i % meters.length];
+        const modified = formatDate(new Date(Date.now() - (i * 24 * 60 * 60 * 1000)));
+        const origin = origins[i % origins.length];
+        const group = groups[i % groups.length];
+        const rhythm = rhythms[i % rhythms.length];
+        const tempo = tempos[i % tempos.length];
+        rows.push({
+          file,
+          tuneNo,
+          title,
+          composer,
+          origin,
+          group,
+          key,
+          meter,
+          tempo,
+          rhythm,
+          modified,
+        });
+      }
+
+      return rows;
     }
-
-    return rows;
-  }
 
   function formatDateYmd(ts) {
     const d = new Date(ts);
@@ -209,49 +322,11 @@
     return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
   }
 
+  // DEV-ONLY FALLBACK (disabled):
+  // The Library List must never infer a library root or rescan automatically.
+  // Keep this stub only as a reminder of what NOT to do.
   async function getRealLibraryRows() {
-    if (!window.api || typeof window.api.getLastRecent !== "function" || typeof window.api.scanLibrary !== "function") {
-      return null;
-    }
-    const last = await window.api.getLastRecent();
-    if (!last || !last.entry || !last.entry.path) return null;
-
-    const filePath = String(last.entry.path || "");
-    const rootDir = (window.api && typeof window.api.pathDirname === "function")
-      ? window.api.pathDirname(filePath)
-      : null;
-    if (!rootDir) return null;
-
-    const res = await window.api.scanLibrary(rootDir);
-    const files = res && Array.isArray(res.files) ? res.files : [];
-    const rows = [];
-
-    for (const file of files) {
-      const modified = file && file.updatedAtMs ? formatDateYmd(file.updatedAtMs) : "";
-      const fileLabel = (file && file.basename) ? file.basename : (file && file.path ? String(file.path).split(/[\\/]/).pop() : "");
-      const tunes = file && Array.isArray(file.tunes) ? file.tunes : [];
-      for (const tune of tunes) {
-        const tagParts = [];
-        if (tune && tune.rhythm) tagParts.push(`R:${tune.rhythm}`);
-        if (tune && tune.tempo) tagParts.push(`Q:${tune.tempo}`);
-        if (tune && tune.origin) tagParts.push(`O:${tune.origin}`);
-        if (tune && tune.group) tagParts.push(`G:${tune.group}`);
-        rows.push({
-          file: fileLabel,
-          filePath: file && file.path ? file.path : "",
-          tuneId: tune && tune.id ? tune.id : "",
-          tuneNo: tune && tune.xNumber != null ? tune.xNumber : "",
-          title: tune && (tune.title || tune.preview) ? (tune.title || tune.preview) : "",
-          composer: tune && tune.composer ? tune.composer : "",
-          key: tune && tune.key ? tune.key : "",
-          meter: tune && tune.meter ? tune.meter : "",
-          modified,
-          tags: tagParts.join(", "),
-        });
-      }
-    }
-
-    return rows;
+    return null;
   }
 
   function syncOpenButtonEnabled() {
@@ -259,11 +334,11 @@
     $open.disabled = !selectedRowData;
   }
 
-  function setSelectedRowData(data) {
-    selectedRowData = data || null;
-    syncOpenButtonEnabled();
-    resetHint();
-  }
+    function setSelectedRowData(data) {
+      selectedRowData = data || null;
+      syncOpenButtonEnabled();
+      resetStatus();
+    }
 
   function getVisibleRowCount() {
     if (!libTable) return 0;
@@ -406,7 +481,7 @@
         setSelectedRowData(null);
         const count = getVisibleRowCount();
         if (count === 0 && $filter && String($filter.value || "").trim()) {
-          setHintMessage("No results", { isError: false, timeoutMs: 2500 });
+          setStatusMessage("No results", { isError: false, timeoutMs: 2500 });
         }
       });
 
@@ -430,7 +505,7 @@
   function applyQuickFilter(query) {
     const q = String(query || "").trim().toLowerCase();
     if (!libTable) return;
-    resetHint();
+    resetStatus();
     setSelectedRowData(null);
     try { libTable.deselectRow(); } catch (_e) {}
     if (!q) {
@@ -446,15 +521,14 @@
     });
     const count = getVisibleRowCount();
     if (count === 0) {
-      setHintMessage("No results", { isError: false, timeoutMs: 2500 });
-      return;
+      setStatusMessage("No results", { isError: false, timeoutMs: 2500 });
     }
   }
 
   function clearFilterAndSelection() {
     if ($filter) $filter.value = "";
     pendingFilterValue = "";
-    resetHint();
+    resetStatus();
     setSelectedRowData(null);
     if (libTable) {
       try { libTable.deselectRow(); } catch (_e) {}
@@ -467,13 +541,16 @@
     if (!$overlay) return;
 
     setSelectedRowData(null);
-    resetHint();
+    resetStatus();
     $overlay.hidden = false;
+    ensureResizeHandles();
+    if (lastModalRect) applyModalRect(clampModalRect(lastModalRect));
+    document.dispatchEvent(new CustomEvent("library-modal:opened"));
 
     requestAnimationFrame(() => {
-      const fallback = Array.isArray(rows) ? rows : getDemoLibraryRows();
+      const providedRows = Array.isArray(rows) && rows.length ? rows : null;
       const hadTable = Boolean(libTable);
-      const table = ensureTabulator([]);
+      const table = ensureTabulator(providedRows || []);
       if (!table) return;
 
       applySavedTableState();
@@ -482,32 +559,37 @@
       const savedValue = savedFilter && typeof savedFilter.value === "string" ? savedFilter.value : "";
       pendingFilterValue = savedValue;
 
-      const load = hadTable ? table.setData([]) : null;
-      Promise.resolve(load).then(() => {
+      const finalizeOpen = () => {
         setSelectedRowData(null);
-        currentRowsCache = [];
         try { table.deselectRow(); } catch (_e) {}
         try { table.redraw(true); } catch (_e) {}
+        scheduleTableRedraw();
         if ($filter) $filter.focus();
-      }).catch((_e) => {
-        try { table.redraw(true); } catch (_e2) {}
-        if ($filter) $filter.focus();
-      });
+      };
 
-      Promise.resolve().then(async () => {
-        let realRows = null;
-        try {
-          realRows = await getRealLibraryRows();
-        } catch (e) {
-          console.warn("Library modal: unable to load real library rows, falling back to demo.", e);
+      if (providedRows) {
+        currentRowsCache = providedRows;
+        if (hadTable) {
+          Promise.resolve(table.setData(providedRows)).then(() => {
+            finalizeOpen();
+          }).catch(() => {
+            finalizeOpen();
+          });
+        } else {
+          finalizeOpen();
         }
-        const nextRows = (realRows && realRows.length) ? realRows : fallback;
-        await table.setData(nextRows);
-        setSelectedRowData(null);
-        currentRowsCache = nextRows;
-        try { table.deselectRow(); } catch (_e) {}
-        try { table.redraw(true); } catch (_e) {}
-      }).catch((_e) => {});
+        return;
+      }
+
+      // No library data provided: do not infer a library root or scan automatically.
+      // Renderer must be the single source of truth for library data.
+      currentRowsCache = [];
+      setStatusMessage("No library loaded.", { isError: false, timeoutMs: 0 });
+      if (hadTable) {
+        Promise.resolve(table.setData([])).then(() => finalizeOpen()).catch(() => finalizeOpen());
+      } else {
+        finalizeOpen();
+      }
     });
   }
 
@@ -515,7 +597,8 @@
     if (!$overlay) return;
     $overlay.hidden = true;
     setSelectedRowData(null);
-    resetHint();
+    resetStatus();
+    document.dispatchEvent(new CustomEvent("library-modal:closed"));
     if (libTable) {
       try { libTable.deselectRow(); } catch (_e) {}
     }
@@ -532,16 +615,16 @@
       return;
     }
     if (res && res.cancelled) {
-      setHintMessage("Open cancelled (unsaved changes)", { isError: false, timeoutMs: 2500 });
+      setStatusMessage("Open cancelled (unsaved changes)", { isError: false, timeoutMs: 2500 });
       return;
     }
     const msg = (res && res.error) ? String(res.error) : "Unable to open tune.";
     if (window.api && typeof window.api.showOpenError === "function") {
       await window.api.showOpenError(msg);
-      resetHint();
+      resetStatus();
       return;
     }
-    setHintMessage(msg, { isError: true, timeoutMs: 6000 });
+    setStatusMessage(msg, { isError: true, timeoutMs: 6000 });
   }
 
   if ($close) {
@@ -565,6 +648,7 @@
     const controls = $overlay.querySelector(".lib-controls");
     if (!controls) return;
     if (controls.querySelector("#libClear")) return;
+
     const btn = document.createElement("button");
     btn.id = "libClear";
     btn.type = "button";
@@ -584,7 +668,7 @@
     resetBtn.addEventListener("click", () => {
       clearStorage(STORAGE_TABLE_STATE_KEY);
       clearStorage(STORAGE_FILTER_KEY);
-      resetHint();
+      resetStatus();
       setSelectedRowData(null);
       if ($filter) $filter.value = "";
       pendingFilterValue = "";
@@ -601,19 +685,8 @@
   const onKeyDown = (e) => {
     const isOverlayOpen = $overlay && $overlay.hidden === false;
     const key = e.key;
-    const code = e.code;
-    const isCtrlOrCmd = e.ctrlKey || e.metaKey;
 
     if (!isOverlayOpen) {
-      const isHotkey = isCtrlOrCmd
-        && e.shiftKey
-        && !e.altKey
-        && (code === "KeyL" || key === "l" || key === "L");
-      if (isHotkey) {
-        e.preventDefault();
-        e.stopPropagation();
-        openLibraryModal();
-      }
       return;
     }
 
