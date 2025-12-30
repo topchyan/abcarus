@@ -86,10 +86,6 @@
 	      <div class="sidebar-body">
 	        <div class="tree" id="libraryTree"></div>
 	        <div class="sidebar-split" id="sidebarSplit" role="separator" aria-orientation="horizontal" tabindex="0"></div>
-	        <div class="error-pane" id="errorPane" aria-label="Errors">
-	          <div class="error-header">Errors</div>
-	          <div class="error-list" id="errorList"></div>
-        </div>
       </div>
     </aside>
 
@@ -101,9 +97,15 @@
       </div>
       <div class="file-header-panel" id="fileHeaderPanel">
         <div class="file-header-bar">
-          <button id="fileHeaderToggle" class="file-header-title" type="button">File header</button>
+          <button id="fileHeaderToggle" class="file-header-title header-state" type="button" title="No file header in this file.">
+            <span class="header-state-label">Header</span>
+            <span id="headerStateMarker" class="header-state-marker" aria-hidden="true">—</span>
+          </button>
           <select id="fileTuneSelect"></select>
           <button id="scanErrorTunes" class="scan-error-button" type="button">Scan for errors</button>
+          <button id="errorsIndicator" class="errors-indicator" type="button" aria-label="Errors" hidden disabled>
+            Errors: 0
+          </button>
           <div class="file-header-meta">
             <div class="dirty-indicator" id="dirtyIndicator" aria-live="polite"></div>
           </div>
@@ -126,15 +128,22 @@
     </section>
   </main>
 
-  <footer class="taskbar">
-    <div class="taskbar-left">
-      <div id="status">Ready</div>
-      <div id="toolStatus" class="tool-status" aria-live="polite"></div>
-    </div>
-    <div id="cursorStatus" class="cursor-status"></div>
-    <div id="bufferStatus" class="buffer-status" aria-live="polite"></div>
-	  </footer>
-	  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+	  <footer class="taskbar">
+	    <div class="taskbar-left">
+	      <div id="status">Ready</div>
+	      <div id="toolStatus" class="tool-status" aria-live="polite"></div>
+	    </div>
+	    <div id="cursorStatus" class="cursor-status"></div>
+	    <div id="bufferStatus" class="buffer-status" aria-live="polite"></div>
+		  </footer>
+		  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+		  <div id="errorsPopover" class="errors-popover hidden" role="dialog" aria-label="Errors list">
+		    <div class="errors-popover-header">
+		      <span id="errorsPopoverTitle">Errors</span>
+		    </div>
+		    <div id="errorsList" class="errors-list"></div>
+		  </div>
 
 	  <div class="modal" id="settingsModal" aria-hidden="true">
 	    <div class="modal-card settings-card" role="dialog" aria-label="Settings">

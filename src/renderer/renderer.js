@@ -66,6 +66,10 @@ const $scanErrorTunes = document.getElementById("scanErrorTunes");
 const $fileNameMeta = document.getElementById("fileNameMeta");
 const $sidebarSplit = document.getElementById("sidebarSplit");
 const $toast = document.getElementById("toast");
+const $errorsIndicator = document.getElementById("errorsIndicator");
+const $errorsPopover = document.getElementById("errorsPopover");
+const $errorsPopoverTitle = document.getElementById("errorsPopoverTitle");
+const $errorsListPopover = document.getElementById("errorsList");
 const $sidebarBody = document.querySelector(".sidebar-body");
 const $editorPane = document.querySelector(".editor-pane");
 const $findLibraryModal = document.getElementById("findLibraryModal");
@@ -85,6 +89,7 @@ const $aboutInfo = document.getElementById("aboutInfo");
 const $aboutCopy = document.getElementById("aboutCopy");
 const $disclaimerModal = document.getElementById("disclaimerModal");
 const $disclaimerOk = document.getElementById("disclaimerOk");
+const $headerStateMarker = document.getElementById("headerStateMarker");
 
 const DEFAULT_ABC = "";
 const TEMPLATE_ABC = `X:1
@@ -114,6 +119,12 @@ let editorView = null;
 let headerEditorView = null;
 let headerCollapsed = true;
 let abandonFlowInProgress = false;
+let headerDirty = false;
+let suppressHeaderDirty = false;
+let lastHeaderToastFilePath = null;
+let headerEditorFilePath = null;
+let lastErrors = [];
+let errorsPopoverOpen = false;
 
 const MIN_PANE_WIDTH = 220;
 const MIN_RIGHT_PANE_WIDTH = 220;
@@ -449,9 +460,11 @@ function setFileNameMeta(name) {
 
 function updateWindowTitle() {
   const base = ($fileNameMeta && $fileNameMeta.textContent) ? $fileNameMeta.textContent : "Untitled";
-  const dirty = Boolean(currentDoc && currentDoc.dirty);
-  const suffix = dirty ? " *" : "";
-  document.title = `ABCarus — ${base}${suffix}`;
+  const tuneDirty = Boolean(currentDoc && currentDoc.dirty);
+  const hasHeader = computeHeaderPresence() === "present";
+  const headerTag = hasHeader ? (headerDirty ? " [Header*]" : " [Header]") : "";
+  const tuneTag = tuneDirty ? " *" : "";
+  document.title = `ABCarus — ${base}${headerTag}${tuneTag}`;
 }
 
 function buildTuneMetaLabel(metadata) {
@@ -468,15 +481,64 @@ function setTuneMetaText(text) {
 
 function setDirtyIndicator(isDirty) {
   if (!$dirtyIndicator) return;
-  if (isDirty) {
-    $dirtyIndicator.textContent = "Unsaved";
+  const tuneDirty = Boolean(isDirty);
+  const hdrDirty = Boolean(headerDirty);
+  if (tuneDirty && hdrDirty) {
+    $dirtyIndicator.textContent = "Header+Tune: Unsaved";
+    $dirtyIndicator.classList.add("active");
+  } else if (hdrDirty) {
+    $dirtyIndicator.textContent = "Header: Unsaved";
+    $dirtyIndicator.classList.add("active");
+  } else if (tuneDirty) {
+    $dirtyIndicator.textContent = "Tune: Unsaved";
     $dirtyIndicator.classList.add("active");
   } else {
     $dirtyIndicator.textContent = "";
     $dirtyIndicator.classList.remove("active");
   }
-  updateLibraryDirtyState(isDirty);
+  updateLibraryDirtyState(tuneDirty || hdrDirty);
   updateWindowTitle();
+}
+
+function computeHeaderPresence() {
+  const entry = getActiveFileEntry();
+  if (!entry) return "none";
+  const currentHeader = getHeaderEditorValue();
+  const hasHeader = Boolean(String(currentHeader || "").trim());
+  if (hasHeader || headerDirty) return "present";
+  return "none";
+}
+
+function updateHeaderStateUI({ announce = false } = {}) {
+  const presence = computeHeaderPresence();
+  const state = (presence === "present")
+    ? (headerDirty ? "present_dirty" : "present_clean")
+    : "none";
+
+  if ($fileHeaderToggle) {
+    $fileHeaderToggle.classList.toggle("present", presence === "present");
+    $fileHeaderToggle.classList.toggle("dirty", Boolean(headerDirty));
+    if (state === "none") {
+      $fileHeaderToggle.title = "No file header in this file.";
+    } else if (state === "present_clean") {
+      $fileHeaderToggle.title = "File header present (affects rendering & playback).";
+    } else {
+      $fileHeaderToggle.title = "File header modified (unsaved) — affects rendering & playback.";
+    }
+  }
+  if ($headerStateMarker) {
+    $headerStateMarker.textContent = (state === "none") ? "—" : (state === "present_clean" ? "✓" : "✓*");
+  }
+
+  setDirtyIndicator(Boolean(currentDoc && currentDoc.dirty));
+
+  if (announce) {
+    if (!activeFilePath) return;
+    if (lastHeaderToastFilePath === activeFilePath) return;
+    lastHeaderToastFilePath = activeFilePath;
+    if (presence === "present") showToast("File header detected (affects rendering & playback).", 2600);
+    else showToast("No file header in this file.", 2600);
+  }
 }
 
 function updateLibraryDirtyState(isDirty) {
@@ -784,16 +846,23 @@ function updateFileHeaderPanel() {
   const entry = getActiveFileEntry();
   if (!entry) {
     $fileHeaderPanel.classList.remove("active");
-    if ($fileHeaderToggle) $fileHeaderToggle.classList.remove("has-header");
+    suppressHeaderDirty = true;
     setHeaderEditorValue("");
+    suppressHeaderDirty = false;
+    headerDirty = false;
+    headerEditorFilePath = null;
+    updateHeaderStateUI();
     return;
   }
   $fileHeaderPanel.classList.add("active");
-  setHeaderEditorValue(entry.headerText || "");
-  if ($fileHeaderToggle) {
-    const hasHeader = Boolean(String(entry.headerText || "").trim());
-    $fileHeaderToggle.classList.toggle("has-header", hasHeader);
+  if (headerEditorFilePath !== entry.path) {
+    suppressHeaderDirty = true;
+    setHeaderEditorValue(entry.headerText || "");
+    suppressHeaderDirty = false;
+    headerDirty = false;
+    headerEditorFilePath = entry.path || null;
   }
+  updateHeaderStateUI({ announce: true });
 }
 
 function findHeaderEndOffset(content) {
@@ -1159,11 +1228,24 @@ function initEditor() {
 
 function initHeaderEditor() {
   if (headerEditorView || !$fileHeaderEditor) return;
+  let headerRenderTimer = null;
+  const updateListener = EditorView.updateListener.of((update) => {
+    if (!update.docChanged) return;
+    if (suppressHeaderDirty) return;
+    headerDirty = true;
+    updateHeaderStateUI();
+    if (headerRenderTimer) clearTimeout(headerRenderTimer);
+    headerRenderTimer = setTimeout(() => {
+      headerRenderTimer = null;
+      renderNow();
+    }, 300);
+  });
   const state = EditorState.create({
     doc: "",
     extensions: [
       basicSetup,
       abcHighlight,
+      updateListener,
       EditorState.tabSize.of(2),
       indentUnit.of("  "),
     ],
@@ -1226,6 +1308,8 @@ function setActiveTuneText(text, metadata, options = {}) {
     }
     updateFileContext();
     setDirtyIndicator(false);
+    headerDirty = false;
+    updateHeaderStateUI();
   }
   updateFileHeaderPanel();
   renderNow();
@@ -1350,7 +1434,9 @@ function renderLibraryTree(files = null) {
       count.className = "tree-count";
       count.textContent = String(entry.tunes.length || 0);
       fileLabel.append(labelText, count);
-      fileLabel.addEventListener("click", () => {
+      fileLabel.addEventListener("click", (ev) => {
+        // Prevent accidental double-toggle when user double-clicks to load.
+        if (entry.isFile && ev && ev.detail && ev.detail > 1) return;
         if (entry.isFile) {
           activeFilePath = entry.id;
           if (collapsedFiles.has(entry.id)) collapsedFiles.delete(entry.id);
@@ -1360,6 +1446,12 @@ function renderLibraryTree(files = null) {
           else collapsedGroups.add(entry.id);
         }
         renderLibraryTree(sourceFiles);
+      });
+      fileLabel.addEventListener("dblclick", (ev) => {
+        if (!entry.isFile) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        requestLoadLibraryFile(entry.id).catch(() => {});
       });
       fileLabel.addEventListener("contextmenu", (ev) => {
         if (!entry.isFile) return;
@@ -1641,14 +1733,7 @@ async function openRecentFile(entry) {
   if (!entry || !entry.path) return;
   const ok = await ensureSafeToAbandonCurrentDoc("opening a recent file");
   if (!ok) return;
-  const dir = safeDirname(entry.path);
-  await loadLibraryFromFolder(dir);
-  if (libraryIndex && libraryIndex.files) {
-    const fileEntry = libraryIndex.files.find((f) => f.path === entry.path);
-    if (fileEntry && fileEntry.tunes && fileEntry.tunes.length) {
-      await selectTune(fileEntry.tunes[0].id);
-    }
-  }
+  await loadLibraryFileIntoEditor(entry.path);
 }
 
 async function openRecentFolder(entry) {
@@ -1749,9 +1834,89 @@ async function loadLibraryFromFolder(folder) {
   }
 }
 
+async function loadLibraryFileIntoEditor(filePath) {
+  if (!filePath) return { ok: false, error: "Missing file path." };
+  const resolveFromIndex = async () => {
+    if (!libraryIndex || !libraryIndex.files) return { ok: false };
+    const fileEntry = libraryIndex.files.find((f) => f.path === filePath) || null;
+    if (!fileEntry) return { ok: false };
+    if (fileEntry.tunes && fileEntry.tunes.length) {
+      await selectTune(fileEntry.tunes[0].id);
+      return { ok: true };
+    }
+    return { ok: false, error: `No tunes found in file: ${safeBasename(filePath)}` };
+  };
+
+  const inMemory = await resolveFromIndex();
+  if (inMemory.ok) return inMemory;
+
+  const dir = safeDirname(filePath);
+  await loadLibraryFromFolder(dir);
+  const afterLoad = await resolveFromIndex();
+  if (afterLoad.ok) return afterLoad;
+  return { ok: false, error: afterLoad.error || `File not found in library: ${safeBasename(filePath)}` };
+}
+
+async function requestLoadLibraryFile(filePath) {
+  if (!filePath) {
+    showToast("No file selected.", 2400);
+    return false;
+  }
+  const ok = await ensureSafeToAbandonCurrentDoc("loading another file");
+  if (!ok) return false;
+  try {
+    const res = await loadLibraryFileIntoEditor(filePath);
+    if (res && res.ok) return true;
+    const msg = res && res.error ? res.error : "Unable to load file.";
+    logErr(msg);
+    showToast(msg, 3000);
+    return false;
+  } catch (e) {
+    const msg = (e && e.message) ? e.message : String(e);
+    logErr(msg);
+    showToast("Unable to load file.", 3000);
+    return false;
+  }
+}
+
 if ($btnToggleLibrary) {
   $btnToggleLibrary.addEventListener("click", () => {
     toggleLibrary();
+  });
+}
+
+if ($errorsIndicator) {
+  $errorsIndicator.addEventListener("click", () => {
+    if ($errorsIndicator.disabled) return;
+    toggleErrorsPopover(!errorsPopoverOpen);
+  });
+}
+
+document.addEventListener("click", (e) => {
+  if (!errorsPopoverOpen) return;
+  const target = e.target;
+  if ($errorsPopover && $errorsPopover.contains(target)) return;
+  if ($errorsIndicator && $errorsIndicator.contains(target)) return;
+  toggleErrorsPopover(false);
+}, true);
+
+document.addEventListener("keydown", (e) => {
+  if (!errorsPopoverOpen) return;
+  if (e.key !== "Escape") return;
+  e.preventDefault();
+  e.stopPropagation();
+  toggleErrorsPopover(false);
+}, true);
+
+if ($errorsListPopover) {
+  $errorsListPopover.addEventListener("click", (e) => {
+    const row = e.target && e.target.closest ? e.target.closest(".errors-row") : null;
+    if (!row || !row.dataset) return;
+    const idx = Number(row.dataset.index);
+    const item = Number.isFinite(idx) ? lastErrors[idx] : null;
+    if (!item) return;
+    toggleErrorsPopover(false);
+    jumpToError(item).catch(() => {});
   });
 }
 
@@ -1812,6 +1977,7 @@ if ($scanErrorTunes) {
     if (tuneErrorScanInFlight) return;
     const entry = getActiveFileEntry();
     if (!entry) return;
+    clearErrors();
     if (tuneErrorFilter) {
       tuneErrorFilter = false;
       tuneErrorScanToken += 1;
@@ -1902,6 +2068,139 @@ function showToast(message, durationMs = 4000) {
     $toast.classList.remove("show");
     toastTimer = null;
   }, durationMs);
+}
+
+function normalizeErrors(entries) {
+  const out = [];
+  const list = Array.isArray(entries) ? entries : [];
+  for (const entry of list) {
+    if (!entry) continue;
+    const count = entry.count && entry.count > 1 ? entry.count : 1;
+    const msg = entry.message ? String(entry.message) : "Unknown error";
+    const message = count > 1 ? `${msg} ×${count}` : msg;
+    const tuneKey = entry.tuneId || entry.xNumber || "";
+    const tuneTitle = entry.tuneLabel || entry.title || "Untitled";
+    const loc = entry.loc ? { line: entry.loc.line, col: entry.loc.col } : null;
+    out.push({
+      tuneKey,
+      tuneId: entry.tuneId || null,
+      filePath: entry.filePath || null,
+      tuneTitle,
+      message,
+      source: "abc2svg",
+      loc,
+    });
+  }
+  return out;
+}
+
+function updateErrorsIndicatorAndPopover() {
+  const n = lastErrors.length;
+  if ($errorsIndicator) {
+    $errorsIndicator.textContent = `Errors: ${n}`;
+    $errorsIndicator.disabled = n === 0;
+    $errorsIndicator.hidden = n === 0;
+  }
+  if (errorsPopoverOpen && n === 0) {
+    toggleErrorsPopover(false);
+    return;
+  }
+  if (errorsPopoverOpen) {
+    renderErrorsPopoverList();
+    positionErrorsPopover();
+  }
+}
+
+function setScanErrors(errorsArray) {
+  lastErrors = normalizeErrors(errorsArray);
+  updateErrorsIndicatorAndPopover();
+}
+
+function renderErrorsPopoverList() {
+  if (!$errorsListPopover) return;
+  $errorsListPopover.textContent = "";
+  if (!lastErrors.length) return;
+  for (let i = 0; i < lastErrors.length; i += 1) {
+    const err = lastErrors[i];
+    const row = document.createElement("div");
+    row.className = "errors-row";
+    row.dataset.index = String(i);
+    const label = err.tuneTitle ? String(err.tuneTitle) : "Untitled";
+    const source = err.source ? ` (${err.source})` : "";
+    row.textContent = `${label} — ${err.message}${source}`;
+    $errorsListPopover.appendChild(row);
+  }
+  if ($errorsPopoverTitle) {
+    $errorsPopoverTitle.textContent = `Errors (${lastErrors.length})`;
+  }
+}
+
+function positionErrorsPopover() {
+  if (!$errorsPopover || !$errorsIndicator) return;
+  const rect = $errorsIndicator.getBoundingClientRect();
+  const pop = $errorsPopover;
+  const margin = 10;
+
+  pop.style.left = "0px";
+  pop.style.top = "0px";
+  pop.style.maxHeight = "min(320px, calc(100vh - 24px))";
+
+  const popRect = pop.getBoundingClientRect();
+  const vw = window.innerWidth || 0;
+  const vh = window.innerHeight || 0;
+
+  let left = rect.left;
+  left = Math.max(margin, Math.min(vw - margin - popRect.width, left));
+
+  let top = rect.top - popRect.height - 8;
+  if (top < margin) {
+    top = rect.bottom + 8;
+  }
+  top = Math.max(margin, Math.min(vh - margin - popRect.height, top));
+
+  pop.style.left = `${Math.round(left)}px`;
+  pop.style.top = `${Math.round(top)}px`;
+}
+
+function toggleErrorsPopover(open) {
+  const wantOpen = Boolean(open);
+  if (wantOpen && lastErrors.length === 0) return;
+  errorsPopoverOpen = wantOpen;
+  if (!$errorsPopover) return;
+  $errorsPopover.classList.toggle("hidden", !wantOpen);
+  if (wantOpen) {
+    renderErrorsPopoverList();
+    positionErrorsPopover();
+  }
+}
+
+async function jumpToError(errItem) {
+  if (!errItem) return;
+  const targetFilePath = errItem.filePath || null;
+  const targetTuneId = errItem.tuneId || null;
+  if (targetFilePath && targetTuneId && typeof window.openTuneFromLibrarySelection === "function") {
+    const res = await window.openTuneFromLibrarySelection({ filePath: targetFilePath, tuneId: targetTuneId });
+    if (!res || !res.ok) return;
+  } else if (targetTuneId) {
+    await selectTune(targetTuneId);
+  }
+
+  if (!editorView) return;
+  const doc = editorView.state.doc;
+  const loc = errItem.loc || null;
+  if (!loc || !Number.isFinite(loc.line)) {
+    editorView.focus();
+    return;
+  }
+  const lineNo = Math.max(1, Math.min(doc.lines, Number(loc.line)));
+  const line = doc.line(lineNo);
+  const col = Number.isFinite(loc.col) ? Math.max(1, Number(loc.col)) : 1;
+  const pos = Math.max(line.from, Math.min(line.to, line.from + col - 1));
+  editorView.dispatch({
+    selection: EditorSelection.cursor(pos),
+    scrollIntoView: true,
+  });
+  editorView.focus();
 }
 
 function renderToolStatus() {
@@ -2429,9 +2728,11 @@ const libraryErrorIndex = new Map();
 let lastNoteSelection = [];
 
 function showErrorsVisible(visible) {
-  if (!$sidebar || !$sidebarBody) return;
-  $sidebar.classList.toggle("has-errors", visible);
-  $sidebarBody.classList.toggle("errors-visible", visible);
+  // Errors are surfaced via the always-visible "Errors: N" indicator + popover.
+  // Keep the legacy sidebar errors pane inactive to avoid duplicate UX.
+  if ($sidebar) $sidebar.classList.remove("has-errors");
+  if ($sidebarBody) $sidebarBody.classList.remove("errors-visible");
+  void visible;
 }
 
 function clearErrors() {
@@ -2441,6 +2742,7 @@ function clearErrors() {
   showErrorsVisible(false);
   measureErrorRenderRanges = [];
   setMeasureErrorRanges([]);
+  setScanErrors([]);
 }
 
 let contextMenu = null;
@@ -2459,6 +2761,11 @@ function initContextMenu() {
     if (!target || !target.dataset) return;
     const action = target.dataset.action;
     const menuTarget = contextMenuTarget;
+    if (action === "loadFile" && menuTarget && menuTarget.type === "file") {
+      hideContextMenu();
+      await requestLoadLibraryFile(menuTarget.filePath);
+      return;
+    }
     if (action === "deleteTune" && menuTarget && menuTarget.type === "tune") {
       await deleteTuneById(menuTarget.tuneId);
       hideContextMenu();
@@ -2565,6 +2872,7 @@ function showContextMenuAt(x, y, target) {
     ]);
   } else if (target.type === "file") {
     buildContextMenuItems([
+      { label: "Load", action: "loadFile", disabled: !target.filePath },
       { label: "Paste Tune", action: "pasteTune", disabled: !clipboardTune },
       { label: "Refresh Library", action: "refreshLibrary" },
       { label: "Rename File…", action: "renameFile" },
@@ -2981,6 +3289,7 @@ function addError(message, locOverride, contextOverride) {
     existing.count += 1;
     renderErrorList();
     showErrorsVisible(true);
+    setScanErrors(errorEntries);
     return;
   }
   entry.index = errorEntries.length;
@@ -2988,6 +3297,7 @@ function addError(message, locOverride, contextOverride) {
   errorEntryMap.set(key, entry);
   renderErrorList();
   showErrorsVisible(true);
+  setScanErrors(errorEntries);
 }
 
 function logErr(m, loc, context) {
@@ -3338,6 +3648,7 @@ async function scanActiveFileForTuneErrors(entry) {
   tuneErrorScanInFlight = false;
   setScanErrorButtonState(false);
   buildTuneSelectOptions(entry);
+  setScanErrors(errorEntries);
   setStatus("OK");
 }
 
@@ -3440,7 +3751,8 @@ async function renderPrintAllSvgMarkup(entry, content, options = {}) {
       if (debugInfo) debugInfo.skipped += 1;
       continue;
     }
-    const prefix = buildHeaderPrefix(entry.headerText || "", false, tuneText);
+    const effectiveHeader = (entry && entry.path && entry.path === activeFilePath) ? getHeaderEditorValue() : (entry.headerText || "");
+    const prefix = buildHeaderPrefix(effectiveHeader, false, tuneText);
     const block = prefix.text ? `${prefix.text}${tuneText}` : tuneText;
     const meta = debugInfo ? {
       id: tune.id,
@@ -3587,10 +3899,13 @@ function showEmptyState() {
   activeTuneMeta = null;
   activeTuneId = null;
   activeFilePath = null;
+  headerDirty = false;
   setTuneMetaText("Untitled");
   setFileNameMeta("Untitled");
   clearErrors();
   setStatus("Ready");
+  updateFileHeaderPanel();
+  updateHeaderStateUI();
 }
 
 function getAbcCtor() {
@@ -3891,6 +4206,7 @@ initHeaderEditor();
 setHeaderCollapsed(headerCollapsed);
 setCurrentDocument(createBlankDocument());
 updateWindowTitle();
+updateHeaderStateUI();
 initPaneResizer();
 initRightPaneResizer();
 initSidebarResizer();
@@ -4519,12 +4835,19 @@ function ensureCopyTitleInAbc(abcText) {
 }
 
 async function confirmAbandonIfDirty(contextLabel) {
-  if (!currentDoc) return true;
-  if (!currentDoc.dirty) return true;
+  const tuneDirty = Boolean(currentDoc && currentDoc.dirty);
+  const hdrDirty = Boolean(headerDirty);
+  if (!tuneDirty && !hdrDirty) return true;
 
   const choice = await confirmUnsavedChanges(contextLabel);
   if (choice === "cancel") return false;
-  if (choice === "dont_save") return true;
+  if (choice === "dont_save") {
+    if (hdrDirty) {
+      showToast("Header changes are unsaved. Save or cancel.", 2600);
+      return false;
+    }
+    return true;
+  }
 
   const ok = await performSaveFlow();
   return Boolean(ok);
@@ -4536,6 +4859,19 @@ async function ensureSafeToAbandonCurrentDoc(actionLabel) {
 
 async function performSaveFlow() {
   if (!currentDoc) return false;
+
+  if (headerDirty && activeFilePath) {
+    try {
+      await saveFileHeaderText(activeFilePath, getHeaderEditorValue());
+      headerDirty = false;
+      updateHeaderStateUI();
+      setStatus("Header saved.");
+    } catch (e) {
+      await showSaveError(e && e.message ? e.message : String(e));
+      updateHeaderStateUI();
+      return false;
+    }
+  }
 
   if (activeTuneMeta && activeTuneMeta.path) {
     const res = await saveActiveTuneToSource();
@@ -5480,6 +5816,8 @@ if ($fileHeaderSave) {
     }
     try {
       await saveFileHeaderText(entry.path, getHeaderEditorValue());
+      headerDirty = false;
+      updateHeaderStateUI();
       setStatus("Header saved.");
     } catch (e) {
       await showSaveError(e && e.message ? e.message : String(e));
@@ -5489,12 +5827,18 @@ if ($fileHeaderSave) {
 
 if ($fileHeaderReload) {
   $fileHeaderReload.addEventListener("click", () => {
+    headerEditorFilePath = null;
+    headerDirty = false;
     updateFileHeaderPanel();
   });
 }
 
 if ($fileHeaderToggle) {
   $fileHeaderToggle.addEventListener("click", () => {
+    if (!getActiveFileEntry()) {
+      showToast("No library file loaded.", 2400);
+      return;
+    }
     toggleHeaderCollapsed();
   });
 }
@@ -5528,7 +5872,7 @@ let lastPreparedPlaybackKey = null;
 function getPlaybackSourceKey() {
   const tuneText = getEditorValue();
   const entry = getActiveFileEntry();
-  const prefixPayload = buildHeaderPrefix(entry ? entry.headerText : "", false, tuneText);
+  const prefixPayload = buildHeaderPrefix(entry ? getHeaderEditorValue() : "", false, tuneText);
   const baseText = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
   const repeatsFlag = window.__abcarusPlaybackExpandRepeats === true ? "exp:on" : "exp:off";
   return `${baseText}|||${prefixPayload.offset || 0}|||${repeatsFlag}`;
@@ -6612,7 +6956,7 @@ function injectGchordOn(text, insertAt) {
 function getPlaybackPayload() {
   const tuneText = getEditorValue();
   const entry = getActiveFileEntry();
-  const prefixPayload = buildHeaderPrefix(entry ? entry.headerText : "", false, tuneText);
+  const prefixPayload = buildHeaderPrefix(entry ? getHeaderEditorValue() : "", false, tuneText);
   const baseText = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
   const repeatsFlag = window.__abcarusPlaybackExpandRepeats === true ? "exp:on" : "exp:off";
   const sourceKey = `${baseText}|||${prefixPayload.offset || 0}|||${repeatsFlag}`;
@@ -6658,7 +7002,7 @@ function getPlaybackPayload() {
 function getRenderPayload() {
   const tuneText = getEditorValue();
   const entry = getActiveFileEntry();
-  const prefixPayload = buildHeaderPrefix(entry ? entry.headerText : "", true, tuneText);
+  const prefixPayload = buildHeaderPrefix(entry ? getHeaderEditorValue() : "", true, tuneText);
   if (!prefixPayload.text) return { text: tuneText, offset: 0 };
   return { text: `${prefixPayload.text}${tuneText}`, offset: prefixPayload.offset };
 }
