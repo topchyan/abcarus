@@ -9,6 +9,8 @@ scripts/local/
 deploy.sh
 scripts/generate-release-docs.mjs
 DEVLOG.md
+get_recents.sh
+recents.zip
 
 # Bundled Python runtime (release builds only)
 third_party/python-runtime/
