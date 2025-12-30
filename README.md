@@ -93,6 +93,7 @@ Major third-party components used by ABCarus:
 - xml2abc — https://wim.vree.org/svgParse/xml2abc.html
 - abcMIDI (abc2abc) — http://abc.sourceforge.net/abcMIDI/
 - CodeMirror — https://codemirror.net/
+- Tabulator — https://tabulator.info/
 - Electron — https://www.electronjs.org/
 - Node.js — https://nodejs.org/
 - Python — https://www.python.org/

@@ -95,6 +95,16 @@ ABCarus uses **CodeMirror** as the text editor component.
 
 ---
 
+## Tabulator
+
+ABCarus vendors **Tabulator** for tabular UI components.
+
+- Project: Tabulator
+- License: MIT License
+- Website: https://tabulator.info/
+
+---
+
 ## Electron
 
 This application is built using Electron.

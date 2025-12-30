@@ -74,10 +74,81 @@ async function transformAbcWithAbc2abc({ abcText, options }) {
   return transformWithAbc2abc({ executable, abcText, options });
 }
 
+async function checkConversionTools() {
+  const result = {
+    python: { ok: false, path: null, error: "", detail: "", code: "" },
+    abc2abc: { ok: false, path: null, error: "", detail: "", code: "" },
+    abc2xml: { ok: false, path: null, error: "", detail: "", code: "" },
+    xml2abc: { ok: false, path: null, error: "", detail: "", code: "" },
+  };
+
+  const thirdPartyRoot = resolveThirdPartyRoot();
+  const bundledAbc2abc = process.platform === "win32"
+    ? [path.join(thirdPartyRoot, "abcMIDI", "bin", "abc2abc.exe")]
+    : [path.join(thirdPartyRoot, "abcMIDI", "bin", "abc2abc")];
+  const systemAbc2abc = process.platform === "win32" ? ["abc2abc.exe", "abc2abc"] : ["abc2abc"];
+  const abc2abcCandidates = [...bundledAbc2abc, ...systemAbc2abc];
+
+  try {
+    const python = await resolvePythonExecutable();
+    result.python = { ok: true, path: python };
+  } catch (e) {
+    result.python = {
+      ok: false,
+      path: null,
+      error: e && e.message ? e.message : "Python not found.",
+      detail: e && e.detail ? e.detail : "",
+      code: e && e.code ? e.code : "",
+    };
+  }
+
+  try {
+    const exe = await resolveExecutable(abc2abcCandidates);
+    result.abc2abc = { ok: true, path: exe };
+  } catch (e) {
+    result.abc2abc = {
+      ok: false,
+      path: null,
+      error: e && e.message ? e.message : "abc2abc not found.",
+      detail: e && e.detail ? e.detail : "",
+      code: e && e.code ? e.code : "",
+    };
+  }
+
+  try {
+    const scriptPath = resolveScriptPath("abc2xml");
+    result.abc2xml = { ok: true, path: scriptPath };
+  } catch (e) {
+    result.abc2xml = {
+      ok: false,
+      path: null,
+      error: e && e.message ? e.message : "abc2xml not found.",
+      detail: e && e.detail ? e.detail : "",
+      code: e && e.code ? e.code : "",
+    };
+  }
+
+  try {
+    const scriptPath = resolveScriptPath("xml2abc");
+    result.xml2abc = { ok: true, path: scriptPath };
+  } catch (e) {
+    result.xml2abc = {
+      ok: false,
+      path: null,
+      error: e && e.message ? e.message : "xml2abc not found.",
+      detail: e && e.detail ? e.detail : "",
+      code: e && e.code ? e.code : "",
+    };
+  }
+
+  return result;
+}
+
 module.exports = {
   convertFileToAbc,
   convertAbcToMusicXml,
   transformAbcWithAbc2abc,
   resolveThirdPartyRoot,
   ConversionError,
+  checkConversionTools,
 };

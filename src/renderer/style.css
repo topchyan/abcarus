@@ -389,6 +389,7 @@ body.resizing * {
   overflow: auto;
   font-size: 13px;
   min-height: 0;
+  height: 100%;
 }
 
 .sidebar-body {
@@ -744,6 +745,11 @@ body.resizing-cols * {
   font-family: var(--editor-font-family);
 }
 
+.cm-selectionBackground {
+  background: rgba(76, 127, 255, 0.2);
+  border-bottom: 1px solid rgba(76, 127, 255, 0.6);
+}
+
 .cm-abc-header {
   color: #0b5aa7;
   font-weight: 500;
@@ -857,6 +863,28 @@ svg {
   align-items: center;
   gap: 10px;
   justify-content: space-between;
+}
+
+.taskbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tool-status {
+  font-size: 11px;
+  color: #7a4800;
+  background: #fff3d9;
+  padding: 2px 8px;
+  border-radius: 999px;
+  min-height: 18px;
+  display: none;
+  align-items: center;
+  border: 1px solid #f0c57a;
+}
+
+.tool-status.warn {
+  display: inline-flex;
 }
 
 .toast {

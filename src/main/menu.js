@@ -171,10 +171,13 @@ function buildMenuTemplate(appState, sendMenuAction) {
             {
               label: "Measures per Line",
               submenu: [
-                { label: "1", click: () => sendMenuAction({ type: "transformMeasures", value: 1 }) },
-                { label: "2", click: () => sendMenuAction({ type: "transformMeasures", value: 2 }) },
-                { label: "4", click: () => sendMenuAction({ type: "transformMeasures", value: 4 }) },
-                { label: "8", click: () => sendMenuAction({ type: "transformMeasures", value: 8 }) },
+                ...Array.from({ length: 9 }, (_value, index) => {
+                  const value = index + 1;
+                  return {
+                    label: String(value),
+                    click: () => sendMenuAction({ type: "transformMeasures", value }),
+                  };
+                }),
               ],
             },
           ],

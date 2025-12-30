@@ -15,6 +15,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ABCarus</title>
   <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="../../third_party/tabulator/tabulator.min.css" />
+  <link rel="stylesheet" href="./library_modal.css" />
 </head>
 
 <body>
@@ -65,26 +67,28 @@
             <select id="sortBy">
               <option value="file_asc">File/Tune Asc</option>
               <option value="file_desc">File/Tune Desc</option>
+              <option value="count_asc">Tune Count Asc</option>
+              <option value="count_desc">Tune Count Desc</option>
               <option value="update_asc">Update Asc</option>
               <option value="update_desc" selected>Update Desc</option>
             </select>
           </div>
-          <div class="sidebar-control sidebar-search">
-            <div class="sidebar-label">Search:</div>
-            <input id="librarySearch" type="text" placeholder="Title, composer, key…" />
-          </div>
-        </div>
-        <div class="sidebar-actions">
-          <button id="btnLibraryMenu" class="sidebar-action sidebar-menu" type="button" title="Library actions">⋯</button>
-          <div class="scan-status" id="scanStatus">Idle</div>
-        </div>
-      </div>
-      <div class="sidebar-body">
-        <div class="tree" id="libraryTree"></div>
-        <div class="sidebar-split" id="sidebarSplit" role="separator" aria-orientation="horizontal" tabindex="0"></div>
-        <div class="error-pane" id="errorPane" aria-label="Errors">
-          <div class="error-header">Errors</div>
-          <div class="error-list" id="errorList"></div>
+	          <div class="sidebar-control sidebar-search">
+	            <div class="sidebar-label">Search:</div>
+	            <input id="librarySearch" type="text" placeholder="Title, composer, key…" />
+	          </div>
+	        </div>
+	        <div class="sidebar-actions">
+	          <button id="btnLibraryMenu" class="sidebar-action sidebar-menu" type="button" title="Library actions">⋯</button>
+	          <div class="scan-status" id="scanStatus">Idle</div>
+	        </div>
+	      </div>
+	      <div class="sidebar-body">
+	        <div class="tree" id="libraryTree"></div>
+	        <div class="sidebar-split" id="sidebarSplit" role="separator" aria-orientation="horizontal" tabindex="0"></div>
+	        <div class="error-pane" id="errorPane" aria-label="Errors">
+	          <div class="error-header">Errors</div>
+	          <div class="error-list" id="errorList"></div>
         </div>
       </div>
     </aside>
@@ -123,16 +127,19 @@
   </main>
 
   <footer class="taskbar">
-    <div id="status">Ready</div>
+    <div class="taskbar-left">
+      <div id="status">Ready</div>
+      <div id="toolStatus" class="tool-status" aria-live="polite"></div>
+    </div>
     <div id="cursorStatus" class="cursor-status"></div>
     <div id="bufferStatus" class="buffer-status" aria-live="polite"></div>
-  </footer>
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+	  </footer>
+	  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <div class="modal" id="settingsModal" aria-hidden="true">
-    <div class="modal-card settings-card" role="dialog" aria-label="Settings">
-      <div class="modal-header">
-        <div class="modal-title">Settings</div>
+	  <div class="modal" id="settingsModal" aria-hidden="true">
+	    <div class="modal-card settings-card" role="dialog" aria-label="Settings">
+	      <div class="modal-header">
+	        <div class="modal-title">Settings</div>
         <button class="modal-close" id="settingsClose" type="button">Close</button>
       </div>
       <div class="modal-body">
@@ -298,9 +305,36 @@
     </div>
   </div>
 
+  <div id="libOverlay" class="lib-overlay" hidden>
+    <div class="lib-modal" role="dialog" aria-modal="true" aria-label="Library">
+      <div class="lib-header">
+        <div class="lib-title">Library</div>
+        <div class="lib-controls">
+          <label class="lib-label">
+            Quick filter
+            <input id="libFilter" class="lib-input" type="text" autocomplete="off" />
+          </label>
+          <button id="libClose" class="lib-btn">Close</button>
+        </div>
+      </div>
+      <div class="lib-body">
+        <div id="libTable" class="lib-table"></div>
+      </div>
+      <div class="lib-footer">
+        <div class="lib-footer-left">
+          <div class="lib-hint">Enter / double-click: open. Esc: close.</div>
+          <div id="libStatus" class="lib-status" aria-live="polite"></div>
+        </div>
+        <button id="libOpen" class="lib-btn primary" disabled>Open</button>
+      </div>
+    </div>
+  </div>
+
   <script src="../../third_party/abc2svg/abc2svg-1.js"></script>
   <script src="../../third_party/abc2svg/snd-1.js"></script>
+  <script src="../../third_party/tabulator/tabulator.min.js"></script>
   <script type="module" src="./renderer.js"></script>
+  <script src="./library_modal.js"></script>
 
 </body>
 

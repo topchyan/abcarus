@@ -766,12 +766,49 @@ function buildTunesFromContent(absPath, content) {
   return { tunes, headerText, headerEndOffset };
 }
 
+const parseCache = new Map();
+
+function getCachedParse(filePath, stat) {
+  if (!stat) return null;
+  const key = path.resolve(filePath);
+  const cached = parseCache.get(key);
+  if (!cached) return null;
+  if (cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) return cached.parsed;
+  return null;
+}
+
+function setCachedParse(filePath, stat, parsed) {
+  if (!stat || !parsed) return;
+  const key = path.resolve(filePath);
+  parseCache.set(key, {
+    mtimeMs: stat.mtimeMs,
+    size: stat.size,
+    parsed,
+  });
+}
+
 async function parseSingleFile(filePath, sender) {
-  let content = "";
   let stat = null;
+  let content = "";
   try {
-    content = await fs.promises.readFile(filePath, "utf8");
     stat = await fs.promises.stat(filePath);
+    const cached = getCachedParse(filePath, stat);
+    if (cached) {
+      return {
+        root: path.dirname(filePath),
+        files: [
+          {
+            path: filePath,
+            basename: path.basename(filePath),
+            updatedAtMs: stat && Number.isFinite(stat.mtimeMs) ? stat.mtimeMs : 0,
+            headerText: cached.headerText || "",
+            headerEndOffset: cached.headerEndOffset || 0,
+            tunes: cached.tunes,
+          },
+        ],
+      };
+    }
+    content = await fs.promises.readFile(filePath, "utf8");
   } catch (e) {
     if (sender) {
       sender.send("library:progress", {
@@ -785,6 +822,7 @@ async function parseSingleFile(filePath, sender) {
     return null;
   }
   const parsed = buildTunesFromContent(filePath, content);
+  setCachedParse(filePath, stat, parsed);
   return {
     root: path.dirname(filePath),
     files: [
@@ -838,11 +876,18 @@ async function scanLibrary(rootDir, sender) {
 
   for (let i = 0; i < abcFiles.length; i += 1) {
     const filePath = abcFiles[i];
-    let content = "";
     let stat = null;
+    let parsed = null;
     try {
-      content = await fs.promises.readFile(filePath, "utf8");
       stat = await fs.promises.stat(filePath);
+      const cached = getCachedParse(filePath, stat);
+      if (cached) {
+        parsed = cached;
+      } else {
+        const content = await fs.promises.readFile(filePath, "utf8");
+        parsed = buildTunesFromContent(filePath, content);
+        setCachedParse(filePath, stat, parsed);
+      }
     } catch (e) {
       if (sender) {
         sender.send("library:progress", {
@@ -855,7 +900,6 @@ async function scanLibrary(rootDir, sender) {
       }
       continue;
     }
-    const parsed = buildTunesFromContent(filePath, content);
     files.push({
       path: filePath,
       basename: path.basename(filePath),

@@ -6,6 +6,8 @@ dist/
 
 # Local-only scripts
 scripts/local/
+deploy.sh
+scripts/generate-release-docs.mjs
 
 # Bundled Python runtime (release builds only)
 third_party/python-runtime/

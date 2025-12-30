@@ -28,6 +28,7 @@ const $out = document.getElementById("out");
 const $status = document.getElementById("status");
 const $cursorStatus = document.getElementById("cursorStatus");
 const $bufferStatus = document.getElementById("bufferStatus");
+const $toolStatus = document.getElementById("toolStatus");
 const $main = document.querySelector("main");
 const $divider = document.getElementById("paneDivider");
 const $renderPane = document.querySelector(".render-pane");
@@ -117,6 +118,7 @@ const MIN_PANE_WIDTH = 220;
 const MIN_RIGHT_PANE_WIDTH = 220;
 const MIN_ERROR_PANE_HEIGHT = 120;
 const USE_ERROR_OVERLAY = true;
+const LIBRARY_SEARCH_DEBOUNCE_MS = 180;
 let settingsController = null;
 let disclaimerShown = false;
 
@@ -374,8 +376,15 @@ const collapsedFiles = new Set();
 const collapsedGroups = new Set();
 let groupMode = "file";
 let sortMode = "update_desc";
+let sortModeIsAuto = false;
+let toolHealth = null;
+let toolHealthError = "";
+let toolWarningShown = false;
+const groupSortPrefs = new Map();
 let renamingFilePath = null;
 let renameInFlight = false;
+let librarySearchTimer = null;
+let pendingLibrarySearch = "";
 
 const GROUP_LABELS = {
   file: "File",
@@ -633,6 +642,13 @@ function compareSortText(a, b) {
   return normalizeSortText(a).localeCompare(normalizeSortText(b), undefined, { numeric: true });
 }
 
+function getTuneSortValue(tune) {
+  if (!tune) return null;
+  const xNum = Number(tune.xNumber);
+  if (Number.isFinite(xNum)) return xNum;
+  return null;
+}
+
 function getFileLabel(file) {
   return (file && file.basename) ? file.basename : safeBasename(file && file.path ? file.path : "");
 }
@@ -648,6 +664,11 @@ function getTuneLabel(tune) {
   return "";
 }
 
+function getEntryTuneCount(entry) {
+  if (!entry || !entry.tunes) return 0;
+  return entry.tunes.length || 0;
+}
+
 function sortLibraryFiles(files) {
   const list = (files || []).map((file) => ({
     ...file,
@@ -658,10 +679,32 @@ function sortLibraryFiles(files) {
     list.sort((a, b) => ((a.updatedAtMs || 0) - (b.updatedAtMs || 0)) * dir);
     return list;
   }
-  list.sort((a, b) => compareSortText(getFileLabel(a), getFileLabel(b)) * dir);
+  if (sortMode.startsWith("count_")) {
+    list.sort((a, b) => {
+      const diff = (getEntryTuneCount(a) - getEntryTuneCount(b)) * dir;
+      if (diff) return diff;
+      return compareSortText(getFileLabel(a), getFileLabel(b)) * dir;
+    });
+  } else {
+    list.sort((a, b) => compareSortText(getFileLabel(a), getFileLabel(b)) * dir);
+  }
   for (const file of list) {
     if (file.tunes && file.tunes.length) {
-      file.tunes.sort((a, b) => compareSortText(getTuneLabel(a), getTuneLabel(b)) * dir);
+      if (groupMode === "file") {
+        const tuneDir = sortMode.startsWith("file_") ? dir : 1;
+        file.tunes.sort((a, b) => {
+          const aX = getTuneSortValue(a);
+          const bX = getTuneSortValue(b);
+          if (Number.isFinite(aX) && Number.isFinite(bX) && aX !== bX) {
+            return (aX - bX) * tuneDir;
+          }
+          if (Number.isFinite(aX) && !Number.isFinite(bX)) return -1 * tuneDir;
+          if (!Number.isFinite(aX) && Number.isFinite(bX)) return 1 * tuneDir;
+          return compareSortText(getTuneLabel(a), getTuneLabel(b)) * tuneDir;
+        });
+      } else {
+        file.tunes.sort((a, b) => compareSortText(getTuneLabel(a), getTuneLabel(b)) * dir);
+      }
     }
   }
   return list;
@@ -672,10 +715,34 @@ function sortGroupEntries(entries) {
   const dir = sortMode.endsWith("desc") ? -1 : 1;
   if (sortMode.startsWith("update_")) {
     list.sort((a, b) => ((a.updatedAtMs || 0) - (b.updatedAtMs || 0)) * dir);
+  } else if (sortMode.startsWith("count_")) {
+    list.sort((a, b) => {
+      const diff = (getEntryTuneCount(a) - getEntryTuneCount(b)) * dir;
+      if (diff) return diff;
+      return compareSortText(a.label, b.label) * dir;
+    });
   } else {
     list.sort((a, b) => compareSortText(a.label, b.label) * dir);
   }
   return list;
+}
+
+function setSortMode(mode, isAuto = false) {
+  sortMode = mode;
+  sortModeIsAuto = isAuto;
+  if ($sortBy) $sortBy.value = mode;
+}
+
+function maybeAutoSortForGroup(mode) {
+  if (mode === "file") {
+    if (sortModeIsAuto && sortMode.startsWith("count_")) {
+      setSortMode("file_desc", true);
+    }
+    return;
+  }
+  if (sortMode.startsWith("file_")) {
+    setSortMode("count_desc", true);
+  }
 }
 
 function getVisibleLibraryFiles() {
@@ -882,16 +949,55 @@ function openReplacePanel(view) {
   return true;
 }
 
-function insertIndent(view) {
-  const unit = view.state.facet(indentUnit);
-  const changes = [];
-  const ranges = [];
-  for (const range of view.state.selection.ranges) {
-    changes.push({ from: range.from, to: range.to, insert: unit });
-    const pos = range.from + unit.length;
-    ranges.push(EditorSelection.cursor(pos));
+function getSelectedLines(state) {
+  const lines = [];
+  const seen = new Set();
+  for (const range of state.selection.ranges) {
+    const fromLine = state.doc.lineAt(range.from);
+    const toLine = state.doc.lineAt(range.to);
+    const last = (range.to === toLine.from && range.to > range.from)
+      ? Math.max(fromLine.number, toLine.number - 1)
+      : toLine.number;
+    for (let lineNo = fromLine.number; lineNo <= last; lineNo += 1) {
+      const line = state.doc.line(lineNo);
+      if (seen.has(line.from)) continue;
+      seen.add(line.from);
+      lines.push(line);
+    }
   }
-  view.dispatch({ changes, selection: EditorSelection.create(ranges) });
+  return lines;
+}
+
+function indentSelectionMore(view) {
+  if (view.state.readOnly) return false;
+  const unit = view.state.facet(indentUnit);
+  const changes = getSelectedLines(view.state).map((line) => ({
+    from: line.from,
+    insert: unit,
+  }));
+  if (!changes.length) return false;
+  view.dispatch({ changes, userEvent: "input.indent" });
+  return true;
+}
+
+function indentSelectionLess(view) {
+  if (view.state.readOnly) return false;
+  const unit = view.state.facet(indentUnit);
+  const unitSize = unit.length;
+  const changes = [];
+  for (const line of getSelectedLines(view.state)) {
+    const match = /^[\t ]+/.exec(line.text);
+    if (!match) continue;
+    const prefix = match[0];
+    let remove = 0;
+    if (prefix.startsWith("\t")) remove = 1;
+    else remove = Math.min(prefix.length, unitSize);
+    if (remove > 0) {
+      changes.push({ from: line.from, to: line.from + remove, insert: "" });
+    }
+  }
+  if (!changes.length) return false;
+  view.dispatch({ changes, userEvent: "delete.dedent" });
   return true;
 }
 
@@ -982,7 +1088,8 @@ function initEditor() {
     { key: "Mod-F7", run: (view) => moveLineSelection(view, 1) },
     { key: "Ctrl-F5", run: (view) => moveLineSelection(view, -1) },
     { key: "Mod-F5", run: (view) => moveLineSelection(view, -1) },
-    { key: "Tab", run: insertIndent },
+    { key: "Tab", run: indentSelectionMore },
+    { key: "Shift-Tab", run: indentSelectionLess },
     { key: "F2", run: () => { toggleLibrary(); return true; } },
     { key: "F5", run: () => { if ($btnPlayPause) $btnPlayPause.click(); return true; } },
     { key: "F6", run: () => { startPlaybackAtMeasureOffset(-1); return true; } },
@@ -1180,6 +1287,7 @@ function buildGroupEntries(files, mode) {
 
 function renderLibraryTree(files = null) {
   if (!$libraryTree) return;
+  $libraryTree.style.display = "";
   $libraryTree.innerHTML = "";
   const sourceFiles = files || getVisibleLibraryFiles();
   const filteredFiles = libraryTextFilter
@@ -1306,22 +1414,22 @@ function renderLibraryTree(files = null) {
         const targetPath = entry.isFile
           ? entry.id
           : String(tune.id || "").split("::")[0];
-        if (targetPath) {
-          activeFilePath = targetPath;
-          renderLibraryTree(sourceFiles);
-        }
-        showContextMenuAt(ev.clientX, ev.clientY, { type: "tune", tuneId: tune.id });
-      });
+	        if (targetPath) {
+	          activeFilePath = targetPath;
+	          renderLibraryTree(sourceFiles);
+	        }
+	        showContextMenuAt(ev.clientX, ev.clientY, { type: "tune", tuneId: tune.id });
+	      });
       button.addEventListener("click", () => {
         const targetPath = entry.isFile
           ? entry.id
           : String(tune.id || "").split("::")[0];
-        if (targetPath) {
-          activeFilePath = targetPath;
-          renderLibraryTree(sourceFiles);
-        }
-        selectTune(tune.id);
-      });
+	        if (targetPath) {
+	          activeFilePath = targetPath;
+	          renderLibraryTree(sourceFiles);
+	        }
+	        selectTune(tune.id);
+	      });
       children.appendChild(button);
     }
 
@@ -1332,11 +1440,12 @@ function renderLibraryTree(files = null) {
 }
 
 function markActiveTuneButton(tuneId) {
-  if (!$libraryTree) return;
-  const buttons = $libraryTree.querySelectorAll(".tree-label");
-  for (const btn of buttons) {
-    if (btn.dataset && btn.dataset.tuneId) {
-      btn.classList.toggle("active", btn.dataset.tuneId === tuneId);
+  if ($libraryTree) {
+    const buttons = $libraryTree.querySelectorAll(".tree-label");
+    for (const btn of buttons) {
+      if (btn.dataset && btn.dataset.tuneId) {
+        btn.classList.toggle("active", btn.dataset.tuneId === tuneId);
+      }
     }
   }
 }
@@ -1345,7 +1454,7 @@ async function selectTune(tuneId, options = {}) {
   if (!libraryIndex || !tuneId) return;
   if (!options.skipConfirm) {
     const ok = await ensureSafeToAbandonCurrentDoc("switching tunes");
-    if (!ok) return;
+    if (!ok) return { ok: false, cancelled: true };
   }
   let selected = null;
   let fileMeta = null;
@@ -1359,22 +1468,22 @@ async function selectTune(tuneId, options = {}) {
     }
   }
 
-  if (!selected || !fileMeta) return;
-  activeTuneId = tuneId;
-  markActiveTuneButton(tuneId);
+  if (!selected || !fileMeta) return { ok: false, error: "Tune not found." };
 
   let content = fileContentCache.get(fileMeta.path);
   if (content == null) {
     const res = await readFile(fileMeta.path);
     if (!res.ok) {
       logErr(res.error || "Unable to read file.");
-      return;
+      return { ok: false, error: res.error || "Unable to read file." };
     }
     content = res.data;
     fileContentCache.set(fileMeta.path, content);
   }
 
   const tuneText = content.slice(selected.startOffset, selected.endOffset);
+  activeTuneId = tuneId;
+  markActiveTuneButton(tuneId);
   setActiveTuneText(tuneText, {
     id: selected.id,
     path: fileMeta.path,
@@ -1387,7 +1496,97 @@ async function selectTune(tuneId, options = {}) {
     endOffset: selected.endOffset,
   }, { suppressRecent: options.suppressRecent || false });
   setDirtyIndicator(false);
+  return { ok: true };
 }
+
+// Canonical Library Tree open entrypoint: `selectTune(tuneId)`.
+// This wrapper reuses the same loading/confirm logic for the modal.
+async function openTuneFromLibrarySelection(selection) {
+  if (!selection) {
+    const msg = "No selection.";
+    logErr(msg);
+    return { ok: false, error: msg };
+  }
+
+  const normalizeLibraryPath = (input) => {
+    let value = String(input || "").trim();
+    if (!value) return "";
+    value = value.replace(/\\/g, "/");
+    value = value.replace(/^\.\//, "");
+    value = value.replace(/\/{2,}/g, "/");
+    return value;
+  };
+
+  const filePath = selection.filePath || selection.path || null;
+  const tuneId = selection.tuneId || selection.id || null;
+  const tuneNo = selection.tuneNo != null ? String(selection.tuneNo) : null;
+  const xNumber = selection.xNumber != null ? String(selection.xNumber) : null;
+
+  if (!filePath) {
+    const msg = "Cannot open selection: missing file path (row may be demo data).";
+    logErr(msg);
+    return { ok: false, error: msg };
+  }
+  if (!tuneId && !tuneNo && !xNumber) {
+    const msg = "Cannot open selection: missing tune id/number.";
+    logErr(msg);
+    return { ok: false, error: msg };
+  }
+
+  const wantedPath = normalizeLibraryPath(filePath);
+
+  const ok = await ensureSafeToAbandonCurrentDoc("opening a library tune");
+  if (!ok) return { ok: false, cancelled: true };
+
+  const dir = safeDirname(filePath);
+  if (!dir) {
+    const msg = "Invalid file path.";
+    logErr(msg);
+    return { ok: false, error: msg };
+  }
+
+  const findFileEntry = () => {
+    if (!libraryIndex || !Array.isArray(libraryIndex.files)) return null;
+    return libraryIndex.files.find((f) => normalizeLibraryPath(f && f.path) === wantedPath) || null;
+  };
+
+  let fileEntry = findFileEntry();
+  if (!fileEntry) {
+    await loadLibraryFromFolder(dir);
+    if (!libraryIndex || !Array.isArray(libraryIndex.files)) {
+      const msg = "Library not loaded.";
+      logErr(msg);
+      return { ok: false, error: msg };
+    }
+    fileEntry = findFileEntry();
+  }
+  if (!fileEntry) {
+    const msg = `File not found in library: ${filePath}`;
+    logErr(msg);
+    return { ok: false, error: msg };
+  }
+
+  let tune = null;
+  if (tuneId) tune = (fileEntry.tunes || []).find((t) => t.id === tuneId) || null;
+  if (!tune && tuneNo) {
+    tune = (fileEntry.tunes || []).find((t) => String(t.xNumber || "") === tuneNo) || null;
+  }
+  if (!tune && xNumber) {
+    tune = (fileEntry.tunes || []).find((t) => String(t.xNumber || "") === xNumber) || null;
+  }
+  if (!tune) {
+    const msg = `Tune not found in file: ${safeBasename(filePath)}${tuneNo ? ` (X:${tuneNo})` : (xNumber ? ` (X:${xNumber})` : "")}`;
+    logErr(msg);
+    return { ok: false, error: msg };
+  }
+
+  const res = await selectTune(tune.id, { skipConfirm: true });
+  if (res && res.ok) return { ok: true };
+  if (res && res.cancelled) return { ok: false, cancelled: true };
+  return { ok: false, error: (res && res.error) ? res.error : "Unable to open tune." };
+}
+
+window.openTuneFromLibrarySelection = openTuneFromLibrarySelection;
 
 async function openRecentTune(entry) {
   if (!entry || !entry.path) return;
@@ -1477,15 +1676,15 @@ async function refreshLibraryIndex() {
   try {
     const result = await window.api.scanLibrary(libraryIndex.root);
     libraryIndex = result || { root: libraryIndex.root, files: [] };
-    if (libraryFilterLabel) {
-      clearLibraryFilter();
-    } else {
-      renderLibraryTree();
-      updateLibraryStatus();
-    }
-  } catch (e) {
-    setScanStatus("Refresh failed.");
-    logErr(e && e.message ? e.message : String(e));
+	    if (libraryFilterLabel) {
+	      clearLibraryFilter();
+	    } else {
+	      renderLibraryTree();
+	      updateLibraryStatus();
+	    }
+	  } catch (e) {
+	    setScanStatus("Refresh failed.");
+	    logErr(e && e.message ? e.message : String(e));
   }
 }
 
@@ -1497,7 +1696,15 @@ async function loadLibraryFromFolder(folder) {
   activeTuneId = null;
   setTuneMetaText("No tune selected.");
   setFileNameMeta(stripFileExtension(safeBasename(folder || "")));
+  suppressDirty = true;
   setEditorValue("");
+  suppressDirty = false;
+  if (currentDoc) {
+    currentDoc.path = null;
+    currentDoc.content = "";
+    currentDoc.dirty = false;
+  }
+  setDirtyIndicator(false);
 
   try {
     const result = await window.api.scanLibrary(folder);
@@ -1510,15 +1717,15 @@ async function loadLibraryFromFolder(folder) {
       for (const file of libraryIndex.files || []) {
         collapsedFiles.add(file.path);
       }
-    } else {
-      const groups = buildGroupEntries(libraryIndex.files || [], groupMode);
-      for (const group of groups) collapsedGroups.add(group.id);
-    }
-    renderLibraryTree();
-    let firstTuneId = null;
-    for (const file of libraryIndex.files || []) {
-      if (file.tunes && file.tunes.length) {
-        firstTuneId = file.tunes[0].id;
+	    } else {
+	      const groups = buildGroupEntries(libraryIndex.files || [], groupMode);
+	      for (const group of groups) collapsedGroups.add(group.id);
+	    }
+	    renderLibraryTree();
+	    let firstTuneId = null;
+	    for (const file of libraryIndex.files || []) {
+	      if (file.tunes && file.tunes.length) {
+	        firstTuneId = file.tunes[0].id;
         break;
       }
     }
@@ -1542,43 +1749,53 @@ if ($groupBy) {
   $groupBy.addEventListener("change", () => {
     groupMode = $groupBy.value || "file";
     collapsedGroups.clear();
-    if (libraryIndex && libraryIndex.files) {
-      if (groupMode === "file") {
-        collapsedFiles.clear();
-        for (const file of libraryIndex.files) collapsedFiles.add(file.path);
-      } else {
-        const groups = buildGroupEntries(libraryIndex.files, groupMode);
-        for (const group of groups) collapsedGroups.add(group.id);
-      }
-      renderLibraryTree();
+    const savedSort = groupSortPrefs.get(groupMode);
+    if (savedSort) {
+      setSortMode(savedSort, false);
+    } else {
+      maybeAutoSortForGroup(groupMode);
     }
-  });
-}
+	    if (libraryIndex && libraryIndex.files) {
+	      if (groupMode === "file") {
+	        collapsedFiles.clear();
+	        for (const file of libraryIndex.files) collapsedFiles.add(file.path);
+	      } else {
+	        const groups = buildGroupEntries(libraryIndex.files, groupMode);
+	        for (const group of groups) collapsedGroups.add(group.id);
+	      }
+	      renderLibraryTree();
+	    }
+	  });
+	}
 
 if ($sortBy) {
   if ($sortBy.value) sortMode = $sortBy.value;
-  $sortBy.addEventListener("change", () => {
-    sortMode = $sortBy.value || "update_desc";
-    renderLibraryTree();
-  });
-}
+	  $sortBy.addEventListener("change", () => {
+	    sortMode = $sortBy.value || "update_desc";
+	    sortModeIsAuto = false;
+	    groupSortPrefs.set(groupMode, sortMode);
+	    renderLibraryTree();
+	  });
+	}
 
 if ($librarySearch) {
   $librarySearch.addEventListener("input", () => {
-    libraryTextFilter = String($librarySearch.value || "").trim();
-    renderLibraryTree();
-    updateLibraryStatus();
+    scheduleLibrarySearch($librarySearch.value || "");
   });
   $librarySearch.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       libraryTextFilter = "";
       $librarySearch.value = "";
-      renderLibraryTree();
-      updateLibraryStatus();
-      e.preventDefault();
-    }
-  });
-}
+	      if (librarySearchTimer) {
+	        clearTimeout(librarySearchTimer);
+	        librarySearchTimer = null;
+	      }
+	      renderLibraryTree();
+	      updateLibraryStatus();
+	      e.preventDefault();
+	    }
+	  });
+	}
 
 if ($scanErrorTunes) {
   $scanErrorTunes.addEventListener("click", () => {
@@ -1665,9 +1882,101 @@ function showToast(message, durationMs = 4000) {
   }, durationMs);
 }
 
+function renderToolStatus() {
+  if (!$toolStatus) return;
+  const warnings = [];
+  const details = [];
+  if (toolHealth) {
+    const entries = [
+      ["abc2abc", "abc2abc"],
+      ["abc2xml", "abc2xml"],
+      ["xml2abc", "xml2abc"],
+      ["python", "Python"],
+    ];
+    for (const [key, label] of entries) {
+      const info = toolHealth[key];
+      if (!info || info.ok) continue;
+      const msg = info.error || info.detail || "Unavailable";
+      warnings.push(label);
+      details.push(`${label}: ${msg}`);
+    }
+  }
+
+  let text = "";
+  let title = "";
+  let shouldWarn = false;
+
+  if (toolHealthError) {
+    text = "Tool check failed";
+    title = toolHealthError;
+    shouldWarn = true;
+  } else if (warnings.length) {
+    text = `Missing tools: ${warnings.join(", ")}`;
+    title = details.join("\n");
+    shouldWarn = true;
+  }
+
+  if (!shouldWarn) {
+    $toolStatus.textContent = "";
+    $toolStatus.title = "";
+    $toolStatus.classList.remove("warn");
+    $toolStatus.style.display = "none";
+    return;
+  }
+
+  $toolStatus.textContent = text;
+  $toolStatus.title = title;
+  $toolStatus.classList.add("warn");
+  $toolStatus.style.display = "";
+  if (warnings.length && !toolWarningShown) {
+    showToast(text);
+    toolWarningShown = true;
+  }
+}
+
+async function checkExternalTools() {
+  if (!window.api || typeof window.api.checkConversionTools !== "function") return;
+  try {
+    const res = await window.api.checkConversionTools();
+    if (!res) {
+      toolHealthError = "Tool check failed.";
+      toolHealth = null;
+      renderToolStatus();
+      return;
+    }
+    if (!res.ok) {
+      toolHealthError = res.error || "Tool check failed.";
+      toolHealth = null;
+      renderToolStatus();
+      return;
+    }
+    toolHealthError = "";
+    toolHealth = res.tools || null;
+  } catch (e) {
+    toolHealth = null;
+    toolHealthError = (e && e.message) ? e.message : String(e);
+  }
+  renderToolStatus();
+}
+
 function setScanErrorButtonState(isScanning) {
   if (!$scanErrorTunes) return;
   $scanErrorTunes.disabled = Boolean(isScanning);
+}
+
+function applyLibrarySearch(value) {
+  libraryTextFilter = String(value || "").trim();
+  renderLibraryTree();
+  updateLibraryStatus();
+}
+
+function scheduleLibrarySearch(value) {
+  pendingLibrarySearch = value;
+  if (librarySearchTimer) clearTimeout(librarySearchTimer);
+  librarySearchTimer = setTimeout(() => {
+    librarySearchTimer = null;
+    applyLibrarySearch(pendingLibrarySearch);
+  }, LIBRARY_SEARCH_DEBOUNCE_MS);
 }
 
 function setScanErrorButtonActive(isActive) {
@@ -2704,6 +3013,18 @@ function highlightNoteAtIndex(idx) {
   if (chosen) maybeScrollRenderToNote(chosen);
 }
 
+function highlightRenderNoteAtIndex(renderIdx) {
+  if (!$out) return;
+  clearNoteSelection();
+  if (!Number.isFinite(renderIdx)) return;
+  const els = $out.querySelectorAll("._" + renderIdx + "_");
+  if (!els.length) return;
+  lastNoteSelection = Array.from(els);
+  for (const el of lastNoteSelection) el.classList.add("note-select");
+  const chosen = pickClosestNoteElement(lastNoteSelection);
+  if (chosen) maybeScrollRenderToNote(chosen);
+}
+
 function setEditorSelectionAt(idx) {
   if (!editorView || !Number.isFinite(idx)) return;
   const max = editorView.state.doc.length;
@@ -3130,7 +3451,6 @@ async function renderPrintAllSvgMarkup(entry, content, options = {}) {
       tuneMarkup.push(res.svg.trim());
     }
     if (tuneErrors.length) {
-      tuneMarkup.push(buildPrintErrorCard(entry, tune, tuneErrors));
       const uniqueKeys = new Set(tuneErrors.map((err) => {
         const msg = err && err.message ? err.message : "Unknown error";
         const loc = err && err.loc ? `Line ${err.loc.line}, Col ${err.loc.col}` : "";
@@ -3156,8 +3476,7 @@ async function renderPrintAllSvgMarkup(entry, content, options = {}) {
   }
   setErrorLineOffsetFromHeader("");
   if (!parts.length) return { ok: false, error: "No SVG output produced." };
-  const summaryMarkup = buildPrintErrorSummary(entry, summary, parts.length);
-  const svg = `${summaryMarkup}${parts.join("\n")}`;
+  const svg = parts.join("\n");
   if (debugInfo) {
     debugInfo.svgParts = parts.length;
     console.info("[print-all]", debugInfo);
@@ -3564,6 +3883,8 @@ setLibraryVisible(true);
     setStatus("Error");
   }
 })();
+
+checkExternalTools().catch(() => {});
 
 function serializeDocument(doc) {
   return doc.content;
@@ -3996,6 +4317,60 @@ function transformLengthScaling(text, mode) {
   return out.join("\n");
 }
 
+function normalizeMeasuresLineBreaks(text) {
+  const lines = String(text || "").split(/\r\n|\n|\r/);
+  const out = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    let line = lines[i];
+    const next = lines[i + 1];
+    const prev = out.length ? out[out.length - 1] : "";
+    const nextIsComment = next && /^\s*%/.test(next);
+    const prevIsComment = /^\s*%/.test(prev || "");
+    if (/^\s*%Error\b/i.test(line)) {
+      out.push("%");
+      continue;
+    }
+    if (next && /^\s*%/.test(next) && /\\\s*$/.test(line)) {
+      line = line.replace(/\\\s*$/, "");
+    }
+    if (line.trim() === "\\") {
+      out.push("%");
+      continue;
+    }
+    if (!line.trim() && (nextIsComment || prevIsComment)) {
+      out.push("%");
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
+function stripInlineCommentsForMeasures(text) {
+  const lines = String(text || "").split(/\r\n|\n|\r/);
+  const out = [];
+  for (const line of lines) {
+    let idx = -1;
+    for (let i = 0; i < line.length; i += 1) {
+      if (line[i] === "%" && line[i - 1] !== "\\") {
+        idx = i;
+        break;
+      }
+    }
+    if (idx === -1) {
+      out.push(line);
+      continue;
+    }
+    const before = line.slice(0, idx);
+    if (!before.trim()) {
+      out.push(line);
+      continue;
+    }
+    out.push(before.replace(/\s+$/, ""));
+  }
+  return out.join("\n");
+}
+
 async function applyAbc2abcTransform(options) {
   const abcText = getEditorValue();
   if (!abcText.trim()) {
@@ -4033,7 +4408,10 @@ async function applyAbc2abcTransform(options) {
   }
   if (!window.api || typeof window.api.runAbc2abc !== "function") return;
   setStatus("Running abc2abc…");
-  const res = await window.api.runAbc2abc(abcText, options);
+  const abcInput = options.measuresPerLine
+    ? stripInlineCommentsForMeasures(abcText)
+    : abcText;
+  const res = await window.api.runAbc2abc(abcInput, options);
   if (!res || res.canceled) {
     setStatus("Ready");
     return;
@@ -4045,7 +4423,10 @@ async function applyAbc2abcTransform(options) {
     await showSaveError(msg);
     return;
   }
-  applyTransformedText(res.abcText || "");
+  const transformed = options.measuresPerLine
+    ? normalizeMeasuresLineBreaks(res.abcText || "")
+    : (res.abcText || "");
+  applyTransformedText(transformed);
   if (res.warnings) logErr(`abc2abc warning: ${res.warnings}`);
   setStatus("OK");
 }
@@ -4846,6 +5227,10 @@ if ($errorList) {
     if (entry.loc) {
       setEditorSelectionAtLineCol(entry.loc.line, entry.loc.col);
     }
+    if (entry.renderLoc && lastRenderPayload && lastRenderPayload.text) {
+      const renderIdx = getTextIndexFromLoc(lastRenderPayload.text, entry.renderLoc);
+      if (Number.isFinite(renderIdx)) highlightRenderNoteAtIndex(renderIdx);
+    }
   });
 }
 
@@ -5012,6 +5397,21 @@ let followPlayback = true;
 let followVoiceId = null;
 let followVoiceIndex = null;
 let drumVelocityMap = buildDefaultDrumVelocityMap();
+let lastPlaybackMeta = null;
+let lastDrumInjectInput = null;
+let lastDrumInjectResult = null;
+let lastPlaybackPayloadCache = null;
+let lastSoundfontApplied = null;
+let lastPreparedPlaybackKey = null;
+
+function getPlaybackSourceKey() {
+  const tuneText = getEditorValue();
+  const entry = getActiveFileEntry();
+  const prefixPayload = buildHeaderPrefix(entry ? entry.headerText : "", false, tuneText);
+  const baseText = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
+  const repeatsFlag = window.__abcarusPlaybackExpandRepeats === true ? "exp:on" : "exp:off";
+  return `${baseText}|||${prefixPayload.offset || 0}|||${repeatsFlag}`;
+}
 
 function updatePlayButton() {
   if (!$btnPlayPause) return;
@@ -5137,6 +5537,16 @@ async function ensureSoundfontLoaded() {
   return soundfontLoadPromise;
 }
 
+async function ensureSoundfontReady() {
+  await ensureSoundfontLoaded();
+  const desired = soundfontSource || "abc2svg.sf2";
+  const p = ensurePlayer();
+  if (typeof p.set_sfu === "function" && desired !== lastSoundfontApplied) {
+    p.set_sfu(desired);
+    lastSoundfontApplied = desired;
+  }
+}
+
 function ensurePlayer() {
   if (player) return player;
 
@@ -5156,6 +5566,7 @@ function ensurePlayer() {
       waitingForFirstNote = false;
       setStatus("OK");
       updatePlayButton();
+      clearNoteSelection();
       if (followPlayback && lastRenderIdx != null && editorView) {
         editorView.dispatch({ selection: { anchor: lastRenderIdx, head: lastRenderIdx } });
       }
@@ -5287,6 +5698,7 @@ function stopPlaybackForRestart() {
     suppressOnEnd = true;
     player.stop();
   }
+  clearNoteSelection();
 }
 
 function setGlobalHeaderFromSettings(settings) {
@@ -5971,10 +6383,24 @@ function buildDrumVoiceText(info) {
 }
 
 function injectDrumPlayback(text) {
+  if (text === lastDrumInjectInput && lastDrumInjectResult) {
+    return lastDrumInjectResult;
+  }
   lastDrumPlaybackActive = false;
+  if (/^\s*V:\s*DRUM\b/im.test(text || "")) {
+    const res = { text, changed: false, insertAtLine: null, lineCount: 0 };
+    lastDrumInjectInput = text;
+    lastDrumInjectResult = res;
+    return res;
+  }
   const info = extractDrumPlaybackBars(text);
   const drumVoice = buildDrumVoiceText(info);
-  if (!drumVoice) return { text, changed: false };
+  if (!drumVoice) {
+    const res = { text, changed: false, insertAtLine: null, lineCount: 0 };
+    lastDrumInjectInput = text;
+    lastDrumInjectResult = res;
+    return res;
+  }
   lastDrumPlaybackActive = true;
   if (window.__abcarusDebugDrums) {
     console.log("[abcarus] drum voice:\n" + drumVoice);
@@ -6010,7 +6436,15 @@ function injectDrumPlayback(text) {
   lines.splice(insertAt, 0, ...drumLines);
   const merged = lines.join("\n");
   const suffix = merged.endsWith("\n") ? "" : "\n";
-  return { text: `${merged}${suffix}`, changed: true };
+  const res = {
+    text: `${merged}${suffix}`,
+    changed: true,
+    insertAtLine: insertAt + 1,
+    lineCount: drumLines.length,
+  };
+  lastDrumInjectInput = text;
+  lastDrumInjectResult = res;
+  return res;
 }
 
 function injectGchordOn(text, insertAt) {
@@ -6058,6 +6492,17 @@ function getPlaybackPayload() {
   const tuneText = getEditorValue();
   const entry = getActiveFileEntry();
   const prefixPayload = buildHeaderPrefix(entry ? entry.headerText : "", false, tuneText);
+  const baseText = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
+  const repeatsFlag = window.__abcarusPlaybackExpandRepeats === true ? "exp:on" : "exp:off";
+  const sourceKey = `${baseText}|||${prefixPayload.offset || 0}|||${repeatsFlag}`;
+  if (lastPlaybackPayloadCache && lastPlaybackPayloadCache.key === sourceKey) {
+    lastPlaybackMeta = lastPlaybackPayloadCache.meta
+      || { drumInsertAtLine: null, drumLineCount: 0 };
+    return {
+      text: lastPlaybackPayloadCache.text,
+      offset: lastPlaybackPayloadCache.offset,
+    };
+  }
   let payload = prefixPayload.text
     ? { text: `${prefixPayload.text}${tuneText}`, offset: prefixPayload.offset }
     : { text: tuneText, offset: 0 };
@@ -6070,12 +6515,22 @@ function getPlaybackPayload() {
   }
   const drumInjected = injectDrumPlayback(payload.text);
   if (drumInjected.changed) payload = { text: drumInjected.text, offset: payload.offset };
+  lastPlaybackMeta = drumInjected.changed
+    ? { drumInsertAtLine: drumInjected.insertAtLine, drumLineCount: drumInjected.lineCount }
+    : { drumInsertAtLine: null, drumLineCount: 0 };
   if (window.__abcarusPlaybackExpandRepeats === true) {
     payload = {
       text: expandRepeatsForPlayback(payload.text),
       offset: payload.offset,
     };
   }
+  lastPlaybackPayloadCache = {
+    key: sourceKey,
+    text: payload.text,
+    offset: payload.offset,
+    meta: lastPlaybackMeta,
+  };
+  lastPreparedPlaybackKey = sourceKey;
   return payload;
 }
 
@@ -6089,9 +6544,8 @@ function getRenderPayload() {
 
 async function preparePlayback() {
   clearErrors();
-  await ensureSoundfontLoaded();
+  await ensureSoundfontReady();
   const p = ensurePlayer();
-  if (typeof p.set_sfu === "function") p.set_sfu(soundfontSource || "abc2svg.sf2");
   if (player && typeof player.stop === "function") {
     suppressOnEnd = true;
     player.stop();
@@ -6101,10 +6555,35 @@ async function preparePlayback() {
   try { sessionStorage.setItem("audio", "sf2"); } catch {}
 
   const AbcCtor = getAbcCtor();
+  const logPlaybackErr = (message, line, col) => {
+    let loc = null;
+    if (Number.isFinite(line) && Number.isFinite(col)) {
+      loc = { line: line + 1, col: col + 1 };
+    } else {
+      loc = parseErrorLocation(message);
+    }
+    const drumStart = (lastPlaybackMeta && Number.isFinite(lastPlaybackMeta.drumInsertAtLine))
+      ? lastPlaybackMeta.drumInsertAtLine
+      : null;
+    const drumLines = (lastPlaybackMeta && Number.isFinite(lastPlaybackMeta.drumLineCount))
+      ? lastPlaybackMeta.drumLineCount
+      : 0;
+    const inDrumBlock = loc
+      && drumStart
+      && drumLines > 0
+      && loc.line >= drumStart
+      && loc.line < (drumStart + drumLines);
+    if (inDrumBlock) {
+      const cleaned = String(message || "").replace(/^\s*play:\d+:\d+\s*/i, "").trim();
+      logErr(cleaned || message, null, { skipMeasureRange: true });
+      return;
+    }
+    logErr(message, loc, { skipMeasureRange: true });
+  };
   const user = {
     img_out: () => {},
-    err: (m) => logErr(m),
-    errmsg: (m) => logErr(m),
+    err: (m) => logPlaybackErr(m),
+    errmsg: (m, line, col) => logPlaybackErr(m, line, col),
     abcplay: p,
   };
   const abc = new AbcCtor(user);
@@ -6186,12 +6665,19 @@ function startPlaybackFromPrepared(startIdx) {
 
 async function startPlaybackAtIndex(startIdx, isPlaybackIdx = false) {
   clearNoteSelection();
-  stopPlaybackForRestart();
+  const sourceKey = getPlaybackSourceKey();
+  const canReuse = playbackState && lastPreparedPlaybackKey && lastPreparedPlaybackKey === sourceKey && player;
   waitingForFirstNote = true;
-  const desired = soundfontName || "TimGM6mb.sf2";
-  setSoundfontCaption("Loading...");
-  updateSoundfontLoadingStatus(desired);
-  await preparePlayback();
+  if (!canReuse) {
+    stopPlaybackForRestart();
+    const desired = soundfontName || "TimGM6mb.sf2";
+    setSoundfontCaption("Loading...");
+    updateSoundfontLoadingStatus(desired);
+    await preparePlayback();
+  } else {
+    await ensureSoundfontReady();
+    stopPlaybackForRestart();
+  }
   const idx = Number.isFinite(startIdx)
     ? startIdx
     : (playbackState && playbackState.startSymbol ? playbackState.startSymbol.istart : 0);
@@ -6218,8 +6704,15 @@ function pausePlayback() {
 
 async function startPlaybackAtMeasureOffset(delta) {
   clearNoteSelection();
-  stopPlaybackForRestart();
-  await preparePlayback();
+  const sourceKey = getPlaybackSourceKey();
+  const canReuse = playbackState && lastPreparedPlaybackKey && lastPreparedPlaybackKey === sourceKey && player;
+  if (!canReuse) {
+    stopPlaybackForRestart();
+    await preparePlayback();
+  } else {
+    await ensureSoundfontReady();
+    stopPlaybackForRestart();
+  }
   if (!playbackState || !playbackState.measures.length) {
     startPlaybackFromPrepared(0);
     return;

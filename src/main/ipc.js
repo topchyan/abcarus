@@ -1,4 +1,9 @@
-const { convertFileToAbc, convertAbcToMusicXml, transformAbcWithAbc2abc } = require("./conversion");
+const {
+  convertFileToAbc,
+  convertAbcToMusicXml,
+  transformAbcWithAbc2abc,
+  checkConversionTools,
+} = require("./conversion");
 
 const os = require("os");
 const { fileURLToPath } = require("url");
@@ -204,6 +209,19 @@ function registerIpcHandlers(ctx) {
     try {
       const res = await transformAbcWithAbc2abc({ abcText, options: options || {} });
       return { ok: true, abcText: res.abcText, warnings: res.warnings || null };
+    } catch (e) {
+      return {
+        ok: false,
+        error: e && e.message ? e.message : String(e),
+        detail: e && e.detail ? e.detail : "",
+        code: e && e.code ? e.code : "",
+      };
+    }
+  });
+  ipcMain.handle("tools:check", async () => {
+    try {
+      const tools = await checkConversionTools();
+      return { ok: true, tools };
     } catch (e) {
       return {
         ok: false,
