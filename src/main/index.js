@@ -1,7 +1,7 @@
 // main.js
 const fs = require("fs");
 const path = require("path");
-const { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell, Menu } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell, Menu, screen } = require("electron");
 const { applyMenu } = require("./menu");
 const { registerIpcHandlers } = require("./ipc");
 const { resolveThirdPartyRoot } = require("./conversion");
@@ -15,6 +15,13 @@ const appState = {
   recentFolders: [],
   settings: null,
 };
+
+// Optional Linux portal file chooser, controlled via:
+// - env: `ABCARUS_USE_PORTAL=1` (preferred, effective immediately)
+// - setting: `usePortalFileDialogs` (best-effort; may depend on GTK/Electron behavior)
+if (process.platform === "linux" && process.env.ABCARUS_USE_PORTAL === "1") {
+  process.env.GTK_USE_PORTAL = "1";
+}
 
 function resolveAppIconPath() {
   const appRoot = app.getAppPath();
@@ -37,6 +44,10 @@ function getDefaultSettings() {
     soundfontPaths: [],
     drumVelocityMap: {},
     disclaimerSeen: false,
+    errorsEnabled: false,
+    // On Cinnamon/GTK, native file dialogs can appear off-screen; portal dialogs are more reliable.
+    usePortalFileDialogs: process.platform === "linux",
+    usePortalFileDialogsSetByUser: false,
   };
 }
 
@@ -66,6 +77,12 @@ async function loadState() {
           merged.renderZoom = data.settings.zoomFactor;
           merged.editorZoom = data.settings.zoomFactor;
         }
+        // Default portal dialogs ON for Linux unless explicitly set by the user.
+        if (process.platform === "linux" && merged.usePortalFileDialogsSetByUser !== true) {
+          merged.usePortalFileDialogs = true;
+        }
+        // Errors feature is intentionally session-only and defaults to off.
+        merged.errorsEnabled = false;
         appState.settings = merged;
       } else {
         appState.settings = getDefaultSettings();
@@ -151,53 +168,178 @@ async function saveState() {
   } catch {}
 }
 
-function focusMainWindow() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.show();
-  mainWindow.focus();
+function focusWindow(win) {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  try { win.setAlwaysOnTop(false); } catch {}
+  win.show();
+  win.focus();
 }
 
-function getDialogParent() {
+const DEBUG_DIALOGS = process.env.ABCARUS_DEBUG_DIALOGS === "1";
+
+function clampNumber(value, min, max) {
+  if (!Number.isFinite(value)) return min;
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return value;
+  return Math.max(min, Math.min(max, value));
+}
+
+function getWindowDebugSnapshot(win) {
+  if (!win || win.isDestroyed()) return null;
+  try {
+    const bounds = win.getBounds();
+    const isMaximized = win.isMaximized();
+    const isFullScreen = win.isFullScreen();
+    const center = {
+      x: Math.round(bounds.x + bounds.width / 2),
+      y: Math.round(bounds.y + bounds.height / 2),
+    };
+    const display = screen.getDisplayNearestPoint(center);
+    const workArea = display && display.workArea ? display.workArea : null;
+    return {
+      id: win.id,
+      bounds,
+      isMaximized,
+      isFullScreen,
+      workArea,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function ensureWindowOnScreen(win, reason) {
+  if (!win || win.isDestroyed()) return;
+  let bounds = null;
+  try { bounds = win.getBounds(); } catch {}
+  if (!bounds) return;
+
+  let isMaximized = false;
+  let isFullScreen = false;
+  try { isMaximized = win.isMaximized(); } catch {}
+  try { isFullScreen = win.isFullScreen(); } catch {}
+
+  const center = {
+    x: Math.round(bounds.x + bounds.width / 2),
+    y: Math.round(bounds.y + bounds.height / 2),
+  };
+  const display = screen.getDisplayNearestPoint(center);
+  const workArea = display && display.workArea ? display.workArea : null;
+  if (!workArea) return;
+
+  const minVisibleWidth = Math.min(bounds.width, workArea.width);
+  const minVisibleHeight = Math.min(bounds.height, workArea.height);
+  const maxX = workArea.x + workArea.width - minVisibleWidth;
+  const maxY = workArea.y + workArea.height - minVisibleHeight;
+
+  const outside =
+    bounds.x > workArea.x + workArea.width ||
+    bounds.x + bounds.width < workArea.x ||
+    bounds.y > workArea.y + workArea.height ||
+    bounds.y + bounds.height < workArea.y;
+
+  // Avoid moving maximized/fullscreen windows unless they are completely off-screen.
+  if (!outside && (isMaximized || isFullScreen)) return;
+
+  const nextX = outside
+    ? Math.round(workArea.x + (workArea.width - minVisibleWidth) / 2)
+    : clampNumber(bounds.x, workArea.x, maxX);
+  const nextY = outside
+    ? Math.round(workArea.y + (workArea.height - minVisibleHeight) / 2)
+    : clampNumber(bounds.y, workArea.y, maxY);
+
+  if (nextX === bounds.x && nextY === bounds.y) return;
+
+  if (DEBUG_DIALOGS) {
+    console.log("[dialogs]", reason || "normalize", {
+      before: bounds,
+      after: { ...bounds, x: nextX, y: nextY },
+      workArea,
+    });
+  }
+
+  try {
+    win.setBounds({ ...bounds, x: nextX, y: nextY });
+  } catch {}
+}
+
+function getDialogParent(senderOrEvent) {
+  try {
+    const focused = BrowserWindow.getFocusedWindow();
+    if (focused && !focused.isDestroyed()) return focused;
+  } catch {}
+  try {
+    const sender = senderOrEvent && senderOrEvent.sender ? senderOrEvent.sender : senderOrEvent;
+    if (sender) {
+      const win = BrowserWindow.fromWebContents(sender);
+      if (win && !win.isDestroyed()) return win;
+    }
+  } catch {}
   if (!mainWindow || mainWindow.isDestroyed()) return null;
   return mainWindow;
 }
 
-function showOpenDialog() {
-  focusMainWindow();
-  const parent = getDialogParent();
-  const result = dialog.showOpenDialogSync(parent, {
+function prepareDialogParent(senderOrEvent, reason) {
+  if (
+    process.platform === "linux" &&
+    (process.env.ABCARUS_USE_PORTAL === "1" || (appState.settings && appState.settings.usePortalFileDialogs))
+  ) {
+    process.env.GTK_USE_PORTAL = "1";
+  }
+  const parent = getDialogParent(senderOrEvent);
+  if (!parent || parent.isDestroyed()) return null;
+  if (DEBUG_DIALOGS) {
+    console.log("[dialogs] parent:before", {
+      reason: reason || "dialog",
+      portalEnv: process.platform === "linux" ? (process.env.GTK_USE_PORTAL || "") : "",
+      snapshot: getWindowDebugSnapshot(parent),
+    });
+  }
+  ensureWindowOnScreen(parent, reason || "dialog");
+  focusWindow(parent);
+  if (DEBUG_DIALOGS) {
+    console.log("[dialogs] parent:after", {
+      reason: reason || "dialog",
+      snapshot: getWindowDebugSnapshot(parent),
+    });
+  }
+  return parent;
+}
+
+function showOpenDialog(senderOrEvent) {
+  const parent = prepareDialogParent(senderOrEvent, "open-file");
+  return dialog.showOpenDialog(parent || undefined, {
     modal: true,
     properties: ["openFile"],
     filters: [
       { name: "ABC", extensions: ["abc"] },
       { name: "All Files", extensions: ["*"] },
     ],
+  }).then((result) => {
+    if (!result || result.canceled || !result.filePaths || !result.filePaths.length) return null;
+    return result.filePaths[0];
   });
-  if (!result || !result.length) return null;
-  return result[0];
 }
 
-function showOpenFolderDialog() {
-  focusMainWindow();
-  const parent = getDialogParent();
-  const result = dialog.showOpenDialogSync(parent, {
+function showOpenFolderDialog(senderOrEvent) {
+  const parent = prepareDialogParent(senderOrEvent, "open-folder");
+  return dialog.showOpenDialog(parent || undefined, {
     modal: true,
     properties: ["openDirectory"],
     defaultPath: appState.lastFolder || undefined,
+  }).then((result) => {
+    if (!result || result.canceled || !result.filePaths || !result.filePaths.length) return null;
+    appState.lastFolder = result.filePaths[0];
+    saveState();
+    return result.filePaths[0];
   });
-  if (!result || !result.length) return null;
-  appState.lastFolder = result[0];
-  saveState();
-  return result[0];
 }
 
-function showSaveDialog(suggestedName, suggestedDir) {
-  focusMainWindow();
-  const parent = getDialogParent();
+function showSaveDialog(suggestedName, suggestedDir, senderOrEvent) {
+  const parent = prepareDialogParent(senderOrEvent, "save-file");
   const defaultName = suggestedName || "Untitled.abc";
   const defaultPath = suggestedDir ? path.join(suggestedDir, defaultName) : defaultName;
-  const result = dialog.showSaveDialogSync(parent, {
+  return dialog.showSaveDialog(parent || undefined, {
     modal: true,
     title: "Save As",
     defaultPath,
@@ -205,14 +347,15 @@ function showSaveDialog(suggestedName, suggestedDir) {
       { name: "ABC", extensions: ["abc"] },
       { name: "All Files", extensions: ["*"] },
     ],
+  }).then((result) => {
+    if (!result || result.canceled) return null;
+    return result.filePath || null;
   });
-  return result || null;
 }
 
-function confirmUnsavedChanges(contextLabel) {
-  focusMainWindow();
-  const parent = getDialogParent();
-  const response = dialog.showMessageBoxSync(parent, {
+function confirmUnsavedChanges(contextLabel, senderOrEvent) {
+  const parent = prepareDialogParent(senderOrEvent, "confirm-unsaved");
+  const response = dialog.showMessageBoxSync(parent || undefined, {
     type: "warning",
     buttons: ["Save", "Don't Save", "Cancel"],
     defaultId: 0,
@@ -225,10 +368,9 @@ function confirmUnsavedChanges(contextLabel) {
   return "cancel";
 }
 
-function confirmOverwrite(filePath) {
-  focusMainWindow();
-  const parent = getDialogParent();
-  const response = dialog.showMessageBoxSync(parent, {
+function confirmOverwrite(filePath, senderOrEvent) {
+  const parent = prepareDialogParent(senderOrEvent, "confirm-overwrite");
+  const response = dialog.showMessageBoxSync(parent || undefined, {
     type: "warning",
     buttons: ["Replace", "Cancel"],
     defaultId: 0,
@@ -241,9 +383,8 @@ function confirmOverwrite(filePath) {
 }
 
 function confirmDeleteTune(label) {
-  focusMainWindow();
-  const parent = getDialogParent();
-  const response = dialog.showMessageBoxSync(parent, {
+  const parent = prepareDialogParent(null, "confirm-delete-tune");
+  const response = dialog.showMessageBoxSync(parent || undefined, {
     type: "warning",
     buttons: ["Delete", "Cancel"],
     defaultId: 1,
@@ -256,9 +397,8 @@ function confirmDeleteTune(label) {
 }
 
 function confirmAppendToFile(filePath) {
-  focusMainWindow();
-  const parent = getDialogParent();
-  const response = dialog.showMessageBoxSync(parent, {
+  const parent = prepareDialogParent(null, "confirm-append-to-file");
+  const response = dialog.showMessageBoxSync(parent || undefined, {
     type: "question",
     buttons: ["Append", "Cancel"],
     defaultId: 0,
@@ -271,8 +411,8 @@ function confirmAppendToFile(filePath) {
 }
 
 function showSaveError(message) {
-  const parent = getDialogParent();
-  dialog.showMessageBoxSync(parent, {
+  const parent = prepareDialogParent(null, "save-error");
+  dialog.showMessageBoxSync(parent || undefined, {
     type: "error",
     buttons: ["OK"],
     message: "Unable to save file.",
@@ -281,8 +421,8 @@ function showSaveError(message) {
 }
 
 function showOpenError(message) {
-  const parent = getDialogParent();
-  dialog.showMessageBoxSync(parent, {
+  const parent = prepareDialogParent(null, "open-error");
+  dialog.showMessageBoxSync(parent || undefined, {
     type: "error",
     buttons: ["OK"],
     message: "Unable to open file.",
@@ -564,7 +704,7 @@ function refreshMenu() {
 
 function clampZoom(value) {
   if (!Number.isFinite(value)) return 1;
-  return Math.min(3, Math.max(0.5, value));
+  return Math.min(8, Math.max(0.5, value));
 }
 
 function updateSettings(patch) {
@@ -574,6 +714,11 @@ function updateSettings(patch) {
   next.editorFontSize = Math.min(32, Math.max(8, Number(next.editorFontSize) || 13));
   next.editorNotesBold = Boolean(next.editorNotesBold);
   next.editorLyricsBold = Boolean(next.editorLyricsBold);
+  if (patch && Object.prototype.hasOwnProperty.call(patch, "usePortalFileDialogs")) {
+    next.usePortalFileDialogsSetByUser = true;
+  }
+  // Errors feature is intentionally session-only and always persisted as off.
+  next.errorsEnabled = false;
   appState.settings = next;
   saveState();
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -940,6 +1085,7 @@ function createWindow() {
   });
 
   mainWindow = win;
+  try { win.setAlwaysOnTop(false); } catch {}
   win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
   win.maximize();
   win.webContents.on("before-input-event", (event, input) => {
@@ -980,6 +1126,9 @@ app.whenReady().then(async () => {
     app.setAppUserModelId("com.abcarus.app");
   }
   await loadState();
+  if (process.platform === "linux" && appState.settings && appState.settings.usePortalFileDialogs) {
+    process.env.GTK_USE_PORTAL = "1";
+  }
   await migrateStatePaths();
   cleanupTempPrintFiles().catch(() => {});
   createWindow();
@@ -1015,6 +1164,7 @@ registerIpcHandlers({
   exportPdf,
   printViaPdf,
   getDialogParent,
+  prepareDialogParent,
   confirmAppendToFile,
   confirmDeleteTune,
   addRecentTune,

@@ -47,6 +47,13 @@ const $sortBy = document.getElementById("sortBy");
 const $librarySearch = document.getElementById("librarySearch");
 const $btnLibraryMenu = document.getElementById("btnLibraryMenu");
 const $btnToggleLibrary = document.getElementById("btnToggleLibrary");
+const $btnFileNew = document.getElementById("btnFileNew");
+const $btnFileOpen = document.getElementById("btnFileOpen");
+const $btnFileSave = document.getElementById("btnFileSave");
+const $btnFileClose = document.getElementById("btnFileClose");
+const $btnPlay = document.getElementById("btnPlay");
+const $btnPause = document.getElementById("btnPause");
+const $btnStop = document.getElementById("btnStop");
 const $btnPlayPause = document.getElementById("btnPlayPause");
 const $btnRestart = document.getElementById("btnRestart");
 const $btnPrevMeasure = document.getElementById("btnPrevMeasure");
@@ -54,6 +61,7 @@ const $btnNextMeasure = document.getElementById("btnNextMeasure");
 const $btnResetLayout = document.getElementById("btnResetLayout");
 const $btnToggleFollow = document.getElementById("btnToggleFollow");
 const $btnToggleGlobals = document.getElementById("btnToggleGlobals");
+const $btnToggleErrors = document.getElementById("btnToggleErrors");
 const $soundfontLabel = document.getElementById("soundfontLabel");
 const $soundfontSelect = document.getElementById("soundfontSelect");
 const $soundfontAdd = document.getElementById("soundfontAdd");
@@ -67,6 +75,7 @@ const $fileNameMeta = document.getElementById("fileNameMeta");
 const $sidebarSplit = document.getElementById("sidebarSplit");
 const $toast = document.getElementById("toast");
 const $errorsIndicator = document.getElementById("errorsIndicator");
+const $errorsFocusMessage = document.getElementById("errorsFocusMessage");
 const $errorsPopover = document.getElementById("errorsPopover");
 const $errorsPopoverTitle = document.getElementById("errorsPopoverTitle");
 const $errorsListPopover = document.getElementById("errorsList");
@@ -125,6 +134,485 @@ let lastHeaderToastFilePath = null;
 let headerEditorFilePath = null;
 let lastErrors = [];
 let errorsPopoverOpen = false;
+let isNewTuneDraft = false;
+
+// PlaybackRange must be initialized before initEditor() runs (selection listeners fire early).
+let playbackRange = {
+  startOffset: 0,
+  endOffset: null,
+  origin: "cursor",
+  loop: false,
+};
+let activePlaybackRange = null;
+let activePlaybackEndAbcOffset = null;
+var pendingPlaybackRangeOrigin = null;
+let suppressPlaybackRangeSelectionSync = false;
+let playbackStartArmed = false;
+let playbackRunId = 0;
+let lastTraceRunId = 0;
+let lastTracePlaybackIdx = null;
+let lastTraceTimestamp = null;
+let playbackTraceSeq = 0;
+let lastRhythmErrorSuggestion = null;
+let errorsEnabled = false;
+
+let errorActivationHighlightRange = null; // {from,to} editor offsets
+let errorActivationHighlightVersion = 0;
+let suppressErrorActivationClear = false;
+let lastSvgErrorActivationEls = [];
+let activeErrorHighlight = null; // {id, from, to, tuneId, filePath, message, messageKey, lastSvgRenderIdx}
+let activeErrorNavIndex = -1;
+let lastNoErrorsToastAtMs = 0;
+
+function normalizeErrorMessageForMatch(message) {
+  const msg = String(message || "").trim();
+  if (!msg) return "";
+  const withoutCount = msg.replace(/\s+×\s*\d+\s*$/i, "").trim();
+  // abc2svg errors often include location prefixes; match on the human-relevant tail.
+  const lower = withoutCount.toLowerCase();
+  const idxWarn = lower.lastIndexOf("warning:");
+  if (idxWarn !== -1) return withoutCount.slice(idxWarn + "warning:".length).trim().toLowerCase();
+  const idxErr = lower.lastIndexOf("error:");
+  if (idxErr !== -1) return withoutCount.slice(idxErr + "error:".length).trim().toLowerCase();
+  return lower;
+}
+
+function computeErrorId(entry) {
+  if (!entry) return "";
+  const tuneId = entry.tuneId || "";
+  const filePath = entry.filePath || "";
+  const messageKey = normalizeErrorMessageForMatch(entry.message || "");
+  const start = Number(entry.errorStartOffset);
+  const line = Number(entry.loc ? entry.loc.line : NaN);
+  const col = Number(entry.loc ? entry.loc.col : NaN);
+  const posKey = Number.isFinite(start)
+    ? `o${start}`
+    : (Number.isFinite(line) ? `l${line}c${Number.isFinite(col) ? col : 0}` : "na");
+  // Unique enough to distinguish multiple same-message errors in the same tune,
+  // while still allowing reconcileActiveErrorHighlightAfterRender() to re-anchor by message.
+  return `${tuneId}|${filePath}|${messageKey}|${posKey}`;
+}
+
+function getSortedErrorsForNav() {
+  const items = Array.isArray(lastErrors) ? lastErrors.slice() : [];
+  const withKeys = items.map((entry) => {
+    const tuneIdKey = String(entry && (entry.tuneId || entry.tuneKey) ? (entry.tuneId || entry.tuneKey) : "");
+    const start = Number(entry && entry.errorStartOffset);
+    const line = Number(entry && entry.loc ? entry.loc.line : NaN);
+    const col = Number(entry && entry.loc ? entry.loc.col : NaN);
+    const messageKey = normalizeErrorMessageForMatch(entry && entry.message ? entry.message : "");
+    const pos = Number.isFinite(start)
+      ? start
+      : (Number.isFinite(line) ? (line * 100000 + (Number.isFinite(col) ? col : 0)) : Number.POSITIVE_INFINITY);
+    return {
+      entry,
+      id: computeErrorId(entry),
+      tuneIdKey,
+      pos,
+      messageKey,
+    };
+  }).filter((x) => x.entry && x.id);
+
+  withKeys.sort((a, b) => {
+    if (a.tuneIdKey !== b.tuneIdKey) return a.tuneIdKey.localeCompare(b.tuneIdKey);
+    if (a.pos !== b.pos) return a.pos - b.pos;
+    if (a.messageKey !== b.messageKey) return a.messageKey.localeCompare(b.messageKey);
+    return a.id.localeCompare(b.id);
+  });
+  return withKeys;
+}
+
+function syncActiveErrorNavIndex(sortedItemsArg) {
+  const items = Array.isArray(sortedItemsArg) ? sortedItemsArg : getSortedErrorsForNav();
+  if (!items.length) {
+    activeErrorNavIndex = -1;
+    return;
+  }
+
+  if (activeErrorHighlight && activeErrorHighlight.id) {
+    const found = items.findIndex((x) => x.id === activeErrorHighlight.id);
+    if (found !== -1) {
+      activeErrorNavIndex = found;
+      return;
+    }
+
+    const targetPos = Number.isFinite(activeErrorHighlight.from) ? activeErrorHighlight.from : 0;
+    const targetTune = activeErrorHighlight.tuneId ? String(activeErrorHighlight.tuneId) : "";
+    let bestIdx = -1;
+    let bestDist = Infinity;
+
+    const consider = (x, idx) => {
+      const dist = Math.abs((Number.isFinite(x.pos) ? x.pos : targetPos) - targetPos);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = idx;
+      }
+    };
+
+    if (targetTune) {
+      for (let i = 0; i < items.length; i += 1) {
+        const it = items[i];
+        const tuneId = it.entry && it.entry.tuneId ? String(it.entry.tuneId) : "";
+        if (tuneId !== targetTune) continue;
+        consider(it, i);
+      }
+    }
+    if (bestIdx === -1) {
+      for (let i = 0; i < items.length; i += 1) consider(items[i], i);
+    }
+    if (bestIdx !== -1) activeErrorNavIndex = bestIdx;
+    return;
+  }
+
+  if (activeErrorNavIndex >= items.length) activeErrorNavIndex = items.length - 1;
+  if (activeErrorNavIndex < -1) activeErrorNavIndex = -1;
+}
+
+async function activateErrorByNav(delta) {
+  if (!errorsEnabled) return;
+  if (isPlaying || isPaused) {
+    showToast("Stop playback to navigate errors");
+    return;
+  }
+  const items = getSortedErrorsForNav();
+  if (!items.length) {
+    const now = Date.now();
+    if (!lastNoErrorsToastAtMs || now - lastNoErrorsToastAtMs > 2000) {
+      lastNoErrorsToastAtMs = now;
+      showToast("No errors");
+    }
+    return;
+  }
+
+  const step = delta >= 0 ? 1 : -1;
+  let nextIdx = activeErrorNavIndex;
+  if (!Number.isFinite(nextIdx) || nextIdx < 0) {
+    nextIdx = step > 0 ? 0 : items.length - 1;
+  } else {
+    nextIdx = (nextIdx + step + items.length) % items.length;
+  }
+
+  await jumpToError(items[nextIdx].entry);
+}
+
+function clearActiveErrorHighlight(reason) {
+  const allowed = new Set(["resolved", "abandon", "switch", "docReplaced"]);
+  if (!allowed.has(reason)) {
+    console.error("[abcarus] Error highlight cleared for disallowed reason:", reason);
+  }
+  const prev = activeErrorHighlight;
+  activeErrorHighlight = null;
+  activeErrorNavIndex = -1;
+  if (reason === "resolved" && prev && Array.isArray(lastErrors) && lastErrors.length) {
+    const items = getSortedErrorsForNav();
+    if (items.length) {
+      const targetPos = Number.isFinite(prev.from) ? prev.from : 0;
+      const targetTune = prev.tuneId ? String(prev.tuneId) : "";
+      let bestIdx = -1;
+      let bestDist = Infinity;
+      const consider = (x, idx) => {
+        const dist = Math.abs((Number.isFinite(x.pos) ? x.pos : targetPos) - targetPos);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestIdx = idx;
+        }
+      };
+      if (targetTune) {
+        for (let i = 0; i < items.length; i += 1) {
+          const it = items[i];
+          const tuneId = it.entry && it.entry.tuneId ? String(it.entry.tuneId) : "";
+          if (tuneId !== targetTune) continue;
+          consider(it, i);
+        }
+      }
+      if (bestIdx === -1) {
+        for (let i = 0; i < items.length; i += 1) consider(items[i], i);
+      }
+      if (bestIdx !== -1) activeErrorNavIndex = bestIdx;
+    }
+  }
+  errorActivationHighlightRange = null;
+  errorActivationHighlightVersion += 1;
+  clearSvgErrorActivationHighlight();
+  clearErrorFocusMessage();
+  if (!editorView) return;
+  suppressErrorActivationClear = true;
+  editorView.dispatch({
+    selection: editorView.state.selection,
+    scrollIntoView: false,
+  });
+  setTimeout(() => { suppressErrorActivationClear = false; }, 0);
+}
+
+function setActiveErrorHighlight(entry, from, to) {
+  if (!editorView) return;
+  const docLen = editorView.state.doc.length;
+  const a = Math.max(0, Math.min(Number(from), docLen));
+  const b = Math.max(a, Math.min(Number(to), docLen));
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return;
+
+  const id = computeErrorId(entry);
+  if (!id) return;
+
+  if (activeErrorHighlight && activeErrorHighlight.id !== id) {
+    clearActiveErrorHighlight("switch");
+  }
+
+  activeErrorHighlight = {
+    id,
+    from: a,
+    to: b,
+    tuneId: entry && entry.tuneId ? entry.tuneId : null,
+    filePath: entry && entry.filePath ? entry.filePath : null,
+    message: entry && entry.message ? entry.message : null,
+    messageKey: normalizeErrorMessageForMatch(entry && entry.message ? entry.message : ""),
+    lastSvgRenderIdx: null,
+  };
+  syncActiveErrorNavIndex();
+
+  errorActivationHighlightRange = { from: a, to: b };
+  errorActivationHighlightVersion += 1;
+  setErrorFocusMessage(entry, a);
+  if (errorsPopoverOpen) {
+    renderErrorsPopoverList();
+    positionErrorsPopover();
+  }
+}
+
+function clearErrorsFeatureState() {
+  toggleErrorsPopover(false);
+  clearActiveErrorHighlight("docReplaced");
+  tuneErrorFilter = false;
+  tuneErrorScanInFlight = false;
+  tuneErrorScanToken += 1;
+  setScanErrorButtonActive(false);
+  setScanErrorButtonState(false);
+  clearErrors();
+  // Ensure any "errors-only" filtering in the tune dropdown is cleared immediately.
+  updateFileContext();
+  // Leaving "Errors" mode should also leave looped error playback mode.
+  try {
+    setPlaybackRange({
+      startOffset: playbackRange.startOffset,
+      endOffset: playbackRange.endOffset,
+      origin: playbackRange.origin || "cursor",
+      loop: false,
+    });
+  } catch {}
+  updateLibraryStatus();
+  updateErrorsIndicatorAndPopover();
+}
+
+function updateErrorsFeatureUI() {
+  if ($btnToggleErrors) {
+    $btnToggleErrors.classList.toggle("toggle-active", Boolean(errorsEnabled));
+    $btnToggleErrors.textContent = "Errors";
+    $btnToggleErrors.setAttribute("aria-pressed", errorsEnabled ? "true" : "false");
+  }
+  if ($btnPrevMeasure) {
+    $btnPrevMeasure.hidden = !errorsEnabled;
+    $btnPrevMeasure.disabled = !errorsEnabled;
+  }
+  if ($btnNextMeasure) {
+    $btnNextMeasure.hidden = !errorsEnabled;
+    $btnNextMeasure.disabled = !errorsEnabled;
+  }
+  if ($scanErrorTunes) {
+    $scanErrorTunes.hidden = !errorsEnabled;
+    $scanErrorTunes.disabled = !errorsEnabled;
+  }
+  if ($errorsIndicator) {
+    if (!errorsEnabled) {
+      $errorsIndicator.hidden = true;
+      $errorsIndicator.disabled = true;
+    }
+  }
+  if ($errorsFocusMessage) {
+    if (!errorsEnabled) {
+      $errorsFocusMessage.hidden = true;
+      $errorsFocusMessage.textContent = "";
+    }
+  }
+}
+
+function setErrorsEnabled(next, { triggerRefresh = false } = {}) {
+  const enabled = Boolean(next);
+  if (enabled === errorsEnabled) {
+    updateErrorsFeatureUI();
+    return;
+  }
+  errorsEnabled = enabled;
+  if (!errorsEnabled) {
+    clearErrorsFeatureState();
+  } else {
+    // On enable: lightweight refresh so errors appear immediately.
+    if (triggerRefresh) {
+      refreshErrorsNow();
+    } else {
+      renderNow();
+    }
+  }
+  updateErrorsFeatureUI();
+}
+
+function buildErrorActivationDecorations(state) {
+  const r = errorActivationHighlightRange;
+  if (!r) return Decoration.none;
+  const max = state.doc.length;
+  const from = Math.max(0, Math.min(Number(r.from), max));
+  const to = Math.max(from, Math.min(Number(r.to), max));
+  if (to <= from) return Decoration.none;
+  return Decoration.set([Decoration.mark({ class: "cm-error-activation" }).range(from, to)]);
+}
+
+const errorActivationHighlightPlugin = ViewPlugin.fromClass(class {
+  constructor(view) {
+    this.version = errorActivationHighlightVersion;
+    this.decorations = buildErrorActivationDecorations(view.state);
+  }
+  update(update) {
+    if (update.docChanged && activeErrorHighlight && errorActivationHighlightRange) {
+      try {
+        const oldFrom = Number(errorActivationHighlightRange.from);
+        const oldTo = Number(errorActivationHighlightRange.to);
+        if (Number.isFinite(oldFrom) && Number.isFinite(oldTo) && oldTo > oldFrom) {
+          const mappedFrom = update.changes.mapPos(oldFrom, 1);
+          const mappedTo = update.changes.mapPos(oldTo, -1);
+          const max = update.state.doc.length;
+          const from = Math.max(0, Math.min(mappedFrom, max));
+          const to = Math.max(from, Math.min(mappedTo, max));
+          errorActivationHighlightRange = { from, to };
+          activeErrorHighlight.from = from;
+          activeErrorHighlight.to = to;
+        }
+      } catch {}
+    }
+    if (update.docChanged) {
+      try {
+        this.decorations = this.decorations.map(update.changes);
+      } catch {}
+    }
+    if (this.version !== errorActivationHighlightVersion) {
+      this.version = errorActivationHighlightVersion;
+      this.decorations = buildErrorActivationDecorations(update.state);
+    }
+  }
+}, {
+  decorations: (v) => v.decorations,
+});
+
+function clearSvgErrorActivationHighlight() {
+  for (const el of lastSvgErrorActivationEls) {
+    try { el.classList.remove("svg-error-activation"); } catch {}
+  }
+  lastSvgErrorActivationEls = [];
+}
+
+function highlightSvgAtEditorOffset(editorOffset) {
+  if (!$out || !$renderPane) return false;
+  if (!Number.isFinite(editorOffset)) return false;
+  const renderOffset = (lastRenderPayload && Number.isFinite(lastRenderPayload.offset))
+    ? lastRenderPayload.offset
+    : 0;
+  const renderIdx = editorOffset + renderOffset;
+
+  // Prefer measure-wide highlighting when possible (easier to spot than a single glyph).
+  if (editorView) {
+    try {
+      const editorText = editorView.state.doc.toString();
+      const measure = findMeasureRangeAt(editorText, editorOffset);
+      const barEls = measure ? Array.from($out.querySelectorAll(".bar-hl")) : [];
+      if (measure && barEls.length) {
+        const start = measure.start + renderOffset;
+        const end = measure.end + renderOffset;
+        const hits = barEls.filter((el) => {
+          const s = Number(el.dataset && el.dataset.start);
+          return Number.isFinite(s) && s >= start && s < end;
+        });
+        if (hits.length) {
+          clearSvgErrorActivationHighlight();
+          lastSvgErrorActivationEls = hits;
+          for (const el of lastSvgErrorActivationEls) {
+            try { el.classList.add("svg-error-activation"); } catch {}
+          }
+          const chosen = pickClosestNoteElement(lastSvgErrorActivationEls);
+          if (chosen) maybeScrollRenderToNote(chosen);
+          if (activeErrorHighlight && Number.isFinite(start)) {
+            activeErrorHighlight.lastSvgRenderIdx = start;
+          }
+          return true;
+        }
+      }
+    } catch {}
+  }
+
+  let els = $out.querySelectorAll("._" + renderIdx + "_");
+  if ((!els || !els.length) && Number.isFinite(renderIdx)) {
+    // Small, deterministic fallback: search backward for a nearby mapped glyph.
+    // This helps when the error points into a token but the SVG mapping only exists at the token start.
+    const maxBack = 200;
+    for (let d = 1; d <= maxBack; d += 1) {
+      const probe = renderIdx - d;
+      if (probe < 0) break;
+      els = $out.querySelectorAll("._" + probe + "_");
+      if (els && els.length) break;
+    }
+  }
+  if (!els || !els.length) return false;
+
+  clearSvgErrorActivationHighlight();
+  lastSvgErrorActivationEls = Array.from(els);
+  for (const el of lastSvgErrorActivationEls) {
+    try { el.classList.add("svg-error-activation"); } catch {}
+  }
+  const chosen = pickClosestNoteElement(lastSvgErrorActivationEls);
+  if (chosen) maybeScrollRenderToNote(chosen);
+  if (activeErrorHighlight && Number.isFinite(renderIdx)) {
+    activeErrorHighlight.lastSvgRenderIdx = renderIdx;
+  }
+  return true;
+}
+
+const debugLogBuffer = [];
+function recordDebugLog(level, args, stackOverride) {
+  const entry = {
+    ts: new Date().toISOString(),
+    level,
+    message: Array.isArray(args) ? args.map((a) => {
+      if (a instanceof Error) return a.stack || a.message || String(a);
+      try { return typeof a === "string" ? a : JSON.stringify(a); } catch { return String(a); }
+    }).join(" ") : String(args || ""),
+    stack: stackOverride || null,
+  };
+  debugLogBuffer.push(entry);
+  if (debugLogBuffer.length > 300) debugLogBuffer.splice(0, debugLogBuffer.length - 300);
+}
+
+(() => {
+  if (window.__abcarusConsoleWrapped) return;
+  window.__abcarusConsoleWrapped = true;
+  const origErr = console.error.bind(console);
+  const origWarn = console.warn.bind(console);
+  console.error = (...args) => {
+    try { recordDebugLog("error", args); } catch {}
+    origErr(...args);
+  };
+  console.warn = (...args) => {
+    try { recordDebugLog("warn", args); } catch {}
+    origWarn(...args);
+  };
+  window.addEventListener("error", (e) => {
+    try {
+      recordDebugLog("window.error", [e && e.message ? e.message : "Window error"], e && e.error ? (e.error.stack || e.error.message) : null);
+    } catch {}
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    try {
+      const reason = e && e.reason ? e.reason : null;
+      recordDebugLog("unhandledrejection", [reason && reason.message ? reason.message : String(reason || "Unhandled rejection")], reason && reason.stack ? reason.stack : null);
+    } catch {}
+  });
+})();
 
 const MIN_PANE_WIDTH = 220;
 const MIN_RIGHT_PANE_WIDTH = 220;
@@ -563,6 +1051,13 @@ function buildTuneSelectOptions(fileEntry) {
   const tunes = tuneErrorFilter
     ? sourceTunes.filter((tune) => libraryErrorIndex.has(tune.id))
     : sourceTunes;
+  if (isNewTuneDraft) {
+    const option = document.createElement("option");
+    option.value = "__new__";
+    option.textContent = "(New tune draft)";
+    option.selected = true;
+    $fileTuneSelect.appendChild(option);
+  }
   if (tuneErrorFilter && tuneErrorScanInFlight && !libraryErrorIndex.size) {
     const option = document.createElement("option");
     option.value = "";
@@ -592,8 +1087,8 @@ function buildTuneSelectOptions(fileEntry) {
     $fileTuneSelect.appendChild(option);
   }
   $fileTuneSelect.disabled = false;
-  if (activeTuneId) $fileTuneSelect.value = activeTuneId;
-  if (!$fileTuneSelect.value) {
+  if (!isNewTuneDraft && activeTuneId) $fileTuneSelect.value = activeTuneId;
+  if (!isNewTuneDraft && !$fileTuneSelect.value) {
     $fileTuneSelect.selectedIndex = 0;
   }
 }
@@ -616,6 +1111,10 @@ function updateFileContext() {
 
 function setHeaderEditorValue(text) {
   if (!headerEditorView) return;
+  if (text != null && typeof text !== "string") {
+    console.error("[abcarus] setHeaderEditorValue received non-string; dropped:", Object.prototype.toString.call(text));
+    return;
+  }
   const doc = headerEditorView.state.doc;
   headerEditorView.dispatch({
     changes: { from: 0, to: doc.length, insert: text || "" },
@@ -671,6 +1170,25 @@ const measureErrorPlugin = ViewPlugin.fromClass(class {
     this.decorations = buildMeasureErrorDecorations(view.state, measureErrorRanges);
   }
   update(update) {
+    if (update.docChanged) {
+      try {
+        this.decorations = this.decorations.map(update.changes);
+      } catch {}
+      if (measureErrorRanges && measureErrorRanges.length) {
+        try {
+          const max = update.state.doc.length;
+          const mapped = [];
+          for (const r of measureErrorRanges) {
+            const start = update.changes.mapPos(Number(r.start), 1);
+            const end = update.changes.mapPos(Number(r.end), -1);
+            const s = Math.max(0, Math.min(start, max));
+            const e = Math.max(s, Math.min(end, max));
+            if (e > s) mapped.push({ start: s, end: e });
+          }
+          measureErrorRanges = mapped;
+        } catch {}
+      }
+    }
     if (update.docChanged || update.selectionSet || this.version !== measureErrorVersion) {
       this.version = measureErrorVersion;
       this.decorations = buildMeasureErrorDecorations(update.state, measureErrorRanges);
@@ -1014,8 +1532,15 @@ function getEditorValue() {
   return editorView.state.doc.toString();
 }
 
+function openFindPanel(view) {
+  openSearchPanel(view);
+  applySearchPanelHints(view);
+  return true;
+}
+
 function openReplacePanel(view) {
   openSearchPanel(view);
+  applySearchPanelHints(view);
   setTimeout(() => {
     const panel = view.dom.querySelector(".cm-search");
     if (!panel) return;
@@ -1133,6 +1658,28 @@ function resetLayout() {
   resetRightPaneSplit();
 }
 
+function refreshErrorsNow() {
+  if (!errorsEnabled) {
+    showToast("Errors disabled");
+    return;
+  }
+  if (t) {
+    clearTimeout(t);
+    t = null;
+  }
+  renderNow();
+  if (tuneErrorFilter && !tuneErrorScanInFlight) {
+    const entry = getActiveFileEntry();
+    if (entry) {
+      tuneErrorScanToken += 1;
+      tuneErrorScanInFlight = true;
+      setScanErrorButtonActive(true);
+      scanActiveFileForTuneErrors(entry).catch(() => {});
+      updateLibraryStatus();
+    }
+  }
+}
+
 async function loadLastRecentEntry() {
   if (!window.api || typeof window.api.getLastRecent !== "function") return;
   const res = await window.api.getLastRecent();
@@ -1146,6 +1693,10 @@ async function loadLastRecentEntry() {
 
 function setEditorValue(text) {
   if (!editorView) return;
+  if (text != null && typeof text !== "string") {
+    console.error("[abcarus] setEditorValue received non-string; dropped:", Object.prototype.toString.call(text));
+    return;
+  }
   const doc = editorView.state.doc;
   editorView.dispatch({
     changes: { from: 0, to: doc.length, insert: text || "" },
@@ -1157,8 +1708,8 @@ function initEditor() {
   const customKeys = keymap.of([
     { key: "Ctrl-s", run: () => { fileSave(); return true; } },
     { key: "Mod-s", run: () => { fileSave(); return true; } },
-    { key: "Ctrl-f", run: openSearchPanel },
-    { key: "Mod-f", run: openSearchPanel },
+    { key: "Ctrl-f", run: openFindPanel },
+    { key: "Mod-f", run: openFindPanel },
     { key: "Ctrl-h", run: openReplacePanel },
     { key: "Mod-h", run: openReplacePanel },
     { key: "Ctrl-g", run: gotoLine },
@@ -1167,15 +1718,16 @@ function initEditor() {
     { key: "Mod-F7", run: (view) => moveLineSelection(view, 1) },
     { key: "Ctrl-F5", run: (view) => moveLineSelection(view, -1) },
     { key: "Mod-F5", run: (view) => moveLineSelection(view, -1) },
-    { key: "Tab", run: indentSelectionMore },
-    { key: "Shift-Tab", run: indentSelectionLess },
-    { key: "F2", run: () => { toggleLibrary(); return true; } },
-    { key: "F5", run: () => { if ($btnPlayPause) $btnPlayPause.click(); return true; } },
-    { key: "F6", run: () => { startPlaybackAtMeasureOffset(-1); return true; } },
-    { key: "F7", run: () => { startPlaybackAtMeasureOffset(1); return true; } },
-    { key: "F4", run: () => { startPlaybackAtIndex(0); return true; } },
-    { key: "F8", run: () => { resetLayout(); return true; } },
-  ]);
+	    { key: "Tab", run: indentSelectionMore },
+	    { key: "Shift-Tab", run: indentSelectionLess },
+	    { key: "F2", run: () => { toggleLibrary(); return true; } },
+	    { key: "F5", run: () => { transportTogglePlayPause(); return true; } },
+	    { key: "F6", run: () => { activateErrorByNav(-1); return true; } },
+	    { key: "F7", run: () => { activateErrorByNav(1); return true; } },
+	    { key: "F4", run: () => { startPlaybackAtIndex(0); return true; } },
+	    { key: "F8", run: () => { resetLayout(); return true; } },
+	    { key: "F9", run: () => { refreshErrorsNow(); return true; } },
+	  ]);
   const updateListener = EditorView.updateListener.of((update) => {
     if (update.docChanged) {
       if (!suppressDirty && currentDoc) {
@@ -1189,6 +1741,13 @@ function initEditor() {
     if (update.selectionSet && !isPlaying) {
       const idx = update.state.selection.main.anchor;
       highlightNoteAtIndex(idx);
+      if (!suppressPlaybackRangeSelectionSync) {
+        const origin = pendingPlaybackRangeOrigin || "cursor";
+        pendingPlaybackRangeOrigin = null;
+        updatePlaybackRangeFromSelection(update.state.selection, origin);
+      } else {
+        pendingPlaybackRangeOrigin = null;
+      }
     }
     if (update.selectionSet || update.docChanged) {
       const pos = update.state.selection.main.head;
@@ -1208,6 +1767,7 @@ function initEditor() {
       basicSetup,
       abcHighlight,
       measureErrorPlugin,
+      errorActivationHighlightPlugin,
       updateListener,
       customKeys,
       foldService.of(foldBeginTextBlocks),
@@ -1219,11 +1779,105 @@ function initEditor() {
     state,
     parent: $editorHost,
   });
+
+  // Clear the active error highlight only on an explicit user click outside the highlight range.
+  // This avoids accidental clearing from programmatic selection changes (follow playback, jump, etc.).
+  editorView.dom.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    if (suppressErrorActivationClear) return;
+    if (!activeErrorHighlight) return;
+    if (!Number.isFinite(activeErrorHighlight.from) || !Number.isFinite(activeErrorHighlight.to)) return;
+    const pos = editorView.posAtCoords({ x: e.clientX, y: e.clientY });
+    if (pos == null) return;
+    const inside = pos >= activeErrorHighlight.from && pos <= activeErrorHighlight.to;
+    if (!inside) clearActiveErrorHighlight("abandon");
+  }, true);
+
   editorView.dom.addEventListener("contextmenu", (ev) => {
     ev.preventDefault();
     showContextMenuAt(ev.clientX, ev.clientY, { type: "editor" });
   });
   setCursorStatus(1, 1, 1, state.doc.lines, state.doc.length);
+}
+
+function initSearchPanelShortcuts() {
+  const findButtonByLabel = (panel, label) => {
+    if (!panel) return null;
+    const buttons = Array.from(panel.querySelectorAll("button"));
+    const want = String(label || "").trim().toLowerCase();
+    return buttons.find((btn) => String(btn.textContent || "").trim().toLowerCase() === want) || null;
+  };
+
+  const triggerPanelAction = (panel, action) => {
+    const btn = findButtonByLabel(panel, action);
+    if (!btn) return false;
+    btn.click();
+    return true;
+  };
+
+  document.addEventListener("keydown", (e) => {
+    const activeEl = document.activeElement;
+    const panel = activeEl && activeEl.closest ? activeEl.closest(".cm-search") : null;
+    if (!panel) return;
+
+    const key = e.key;
+    const isEnter = key === "Enter";
+    const isF3 = key === "F3";
+    const ctrl = e.ctrlKey || e.metaKey;
+    const shift = e.shiftKey;
+    const alt = e.altKey;
+
+    // Enter / Shift+Enter: next/previous match (standard behavior in many editors).
+    if (isEnter && !ctrl && !alt) {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerPanelAction(panel, shift ? "previous" : "next");
+      return;
+    }
+
+    // F3 / Shift+F3: next/previous match (common desktop shortcut).
+    if (isF3 && !ctrl && !alt) {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerPanelAction(panel, shift ? "previous" : "next");
+      return;
+    }
+
+    // Ctrl+Enter: replace (when replace UI is present).
+    if (isEnter && ctrl && !alt && !shift) {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerPanelAction(panel, "replace");
+      return;
+    }
+
+    // Ctrl+Shift+Enter OR Alt+Enter: replace all (avoid Ctrl+A which is "select all" in inputs).
+    if (isEnter && ((ctrl && shift) || alt)) {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerPanelAction(panel, "replace all");
+    }
+  }, true);
+}
+
+function applySearchPanelHints(view) {
+  if (!view) return;
+  setTimeout(() => {
+    const panel = view.dom.querySelector(".cm-search");
+    if (!panel) return;
+    try {
+      const next = panel.querySelector("button[name='next']");
+      if (next) next.title = "Next (Enter / F3)";
+      const prev = panel.querySelector("button[name='prev']");
+      if (prev) prev.title = "Previous (Shift+Enter / Shift+F3)";
+      const all = panel.querySelector("button[name='select']");
+      if (all) all.title = "Select all matches";
+      const replaceBtn = panel.querySelector("button[name='replace']");
+      if (replaceBtn) replaceBtn.title = "Replace (Ctrl+Enter)";
+      const replaceAllBtn = panel.querySelector("button[name='replaceAll']");
+      if (replaceAllBtn) replaceAllBtn.title = "Replace all (Ctrl+Shift+Enter / Alt+Enter)";
+    } catch {}
+  }, 0);
 }
 
 function initHeaderEditor() {
@@ -1257,6 +1911,8 @@ function initHeaderEditor() {
 }
 
 function setActiveTuneText(text, metadata, options = {}) {
+  if (activeErrorHighlight) clearActiveErrorHighlight("docReplaced");
+  isNewTuneDraft = false;
   resetPlaybackState();
   suppressDirty = true;
   setEditorValue(text);
@@ -1298,6 +1954,7 @@ function setActiveTuneText(text, metadata, options = {}) {
     activeTuneMeta = null;
     activeTuneId = null;
     activeFilePath = null;
+    isNewTuneDraft = false;
     refreshHeaderLayers().catch(() => {});
     setTuneMetaText("Untitled");
     setFileNameMeta("Untitled");
@@ -1305,6 +1962,8 @@ function setActiveTuneText(text, metadata, options = {}) {
       currentDoc.path = null;
       currentDoc.content = text || "";
       currentDoc.dirty = false;
+    } else {
+      currentDoc = { path: null, dirty: false, content: text || "" };
     }
     updateFileContext();
     setDirtyIndicator(false);
@@ -1747,7 +2406,7 @@ async function scanAndLoadLibrary() {
   if (!window.api) return;
   const ok = await ensureSafeToAbandonCurrentDoc("opening a folder");
   if (!ok) return;
-  const folder = await window.api.showOpenFolderDialog();
+  const folder = await showOpenFolderDialog();
   if (!folder) return;
 
   await loadLibraryFromFolder(folder);
@@ -1881,7 +2540,7 @@ async function requestLoadLibraryFile(filePath) {
 
 if ($btnToggleLibrary) {
   $btnToggleLibrary.addEventListener("click", () => {
-    toggleLibrary();
+    openLibraryListFromCurrentLibraryIndex();
   });
 }
 
@@ -1974,6 +2633,10 @@ if ($librarySearch) {
 
 if ($scanErrorTunes) {
   $scanErrorTunes.addEventListener("click", () => {
+    if (!errorsEnabled) {
+      showToast("Errors disabled");
+      return;
+    }
     if (tuneErrorScanInFlight) return;
     const entry = getActiveFileEntry();
     if (!entry) return;
@@ -2005,9 +2668,32 @@ if ($btnLibraryMenu) {
   });
 }
 
+if ($btnFileNew) {
+  $btnFileNew.addEventListener("click", async () => {
+    try { await fileNew(); } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
+  });
+}
+if ($btnFileOpen) {
+  $btnFileOpen.addEventListener("click", async () => {
+    try { await fileOpen(); } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
+  });
+}
+if ($btnFileSave) {
+  $btnFileSave.addEventListener("click", async () => {
+    try { await fileSave(); } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
+  });
+}
+if ($btnFileClose) {
+  $btnFileClose.addEventListener("click", async () => {
+    try { await fileClose(); } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
+  });
+}
+
 if ($fileTuneSelect) {
   $fileTuneSelect.addEventListener("change", () => {
     const tuneId = $fileTuneSelect.value;
+    if (tuneId === "__new__") return;
+    if (isNewTuneDraft) isNewTuneDraft = false;
     if (tuneId) selectTune(tuneId);
   });
 }
@@ -2059,6 +2745,111 @@ function setBufferStatus(text) {
   $bufferStatus.textContent = text || "";
 }
 
+function formatDefaultLenText(defaultLen) {
+  if (defaultLen === "mcm_default") return "mcm_default";
+  if (!Number.isFinite(defaultLen)) return "?";
+  const inv = Math.round(1 / defaultLen);
+  if (Number.isFinite(inv) && inv > 0) return `1/${inv}`;
+  return String(defaultLen);
+}
+
+function parseMeterParts(abc) {
+  const match = String(abc || "").match(/^M:\s*(\d+)\s*\/\s*(\d+)/m);
+  if (!match) return null;
+  const num = Number(match[1]);
+  const den = Number(match[2]);
+  if (!Number.isFinite(num) || !Number.isFinite(den) || num <= 0 || den <= 0) return null;
+  return { num, den };
+}
+
+function formatMeterInfo(abc) {
+  const parts = parseMeterParts(abc);
+  if (!parts) return { text: "M: (unknown)", expectedWhole: null, expectedUnits: null };
+  const expectedWhole = parts.num / parts.den;
+  const beatsText = `${parts.num}×1/${parts.den}`;
+  const compoundText = (parts.den === 8 && parts.num > 3 && parts.num % 3 === 0)
+    ? `; compound: ${parts.num / 3}×3/8`
+    : "";
+  return {
+    text: `M:${parts.num}/${parts.den} (beats: ${beatsText}${compoundText})`,
+    expectedWhole,
+  };
+}
+
+function computeMeasureStatsAt(editorText, anchorOffset) {
+  if (!editorText || !Number.isFinite(anchorOffset)) return null;
+  const range = findMeasureRangeAt(editorText, anchorOffset);
+  if (!range) return null;
+  const defaultLen = getDefaultLen(editorText);
+  const metre = getMetre(editorText);
+  const meterInfo = formatMeterInfo(editorText);
+  const slice = editorText.slice(range.start, range.end);
+  const actualWhole = getBarLength(slice, defaultLen, metre);
+  const expectedWhole = meterInfo.expectedWhole;
+
+  let actualUnits = null;
+  let expectedUnits = null;
+  if (defaultLen !== "mcm_default" && Number.isFinite(defaultLen) && defaultLen > 0) {
+    actualUnits = Number.isFinite(actualWhole) ? actualWhole / defaultLen : null;
+    expectedUnits = Number.isFinite(expectedWhole) ? expectedWhole / defaultLen : null;
+  }
+
+  return {
+    meterInfo,
+    defaultLen,
+    range,
+    actualWhole,
+    expectedWhole,
+    actualUnits,
+    expectedUnits,
+  };
+}
+
+function setErrorFocusMessage(entry, from) {
+  if (!$errorsFocusMessage) return;
+  if (!editorView) return;
+  const navItems = getSortedErrorsForNav();
+  const navId = computeErrorId(entry);
+  const navIdx = navId ? navItems.findIndex((x) => x.id === navId) : -1;
+  const navPrefix = (navIdx !== -1 && navItems.length) ? `${navIdx + 1}/${navItems.length} ` : "";
+
+  const text = editorView.state.doc.toString();
+  const parts = parseMeterParts(text);
+  const stats = computeMeasureStatsAt(text, from);
+
+  let msg = entry && entry.message ? String(entry.message) : "";
+  // Strip abc2svg location prefixes like "out:35:67 Error:" and any X:... wrapper.
+  msg = msg.replace(/^\s*\w+:\d+:\d+\s+/i, "").trim();
+  msg = msg.replace(/^\s*(warning|error)\s*:\s*/i, "").trim();
+  msg = msg.replace(/^\s*X:\s*\d+\s+[^:]*:\s*/i, "").trim();
+  msg = msg.replace(/\s+\(abc2svg\)\s*$/i, "").trim();
+
+  let out = "";
+  if (parts && stats && Number.isFinite(stats.actualWhole)) {
+    const expectedBeats = parts.num;
+    const actualBeats = stats.actualWhole * parts.den;
+    const diff = actualBeats - expectedBeats;
+    if (Number.isFinite(diff) && Math.abs(diff) >= 0.01) {
+      out = `Beats: ${actualBeats.toFixed(2)} (expected ${expectedBeats}, Δ ${diff.toFixed(2)})`;
+    }
+  }
+  if (msg) {
+    out = out ? `${out} — ${msg}` : msg;
+  }
+
+  const final = out ? `${navPrefix}${out}`.trim() : "";
+  $errorsFocusMessage.textContent = final;
+  $errorsFocusMessage.hidden = !final;
+  $errorsFocusMessage.title = msg || "";
+}
+
+function clearErrorFocusMessage() {
+  if (!$errorsFocusMessage) return;
+  $errorsFocusMessage.textContent = "";
+  $errorsFocusMessage.hidden = true;
+  $errorsFocusMessage.title = "";
+}
+
 function showToast(message, durationMs = 4000) {
   if (!$toast) return;
   $toast.textContent = message || "";
@@ -2081,6 +2872,9 @@ function normalizeErrors(entries) {
     const tuneKey = entry.tuneId || entry.xNumber || "";
     const tuneTitle = entry.tuneLabel || entry.title || "Untitled";
     const loc = entry.loc ? { line: entry.loc.line, col: entry.loc.col } : null;
+    const measureRange = entry.measureRange && Number.isFinite(entry.measureRange.start) && Number.isFinite(entry.measureRange.end)
+      ? { start: entry.measureRange.start, end: entry.measureRange.end }
+      : null;
     out.push({
       tuneKey,
       tuneId: entry.tuneId || null,
@@ -2089,12 +2883,28 @@ function normalizeErrors(entries) {
       message,
       source: "abc2svg",
       loc,
+      measureRange,
+      errorStartOffset: measureRange ? measureRange.start : null,
+      errorEndOffset: measureRange ? measureRange.end : null,
     });
   }
   return out;
 }
 
 function updateErrorsIndicatorAndPopover() {
+  if (!errorsEnabled) {
+    if ($errorsIndicator) {
+      $errorsIndicator.textContent = "Errors: 0";
+      $errorsIndicator.disabled = true;
+      $errorsIndicator.hidden = true;
+    }
+    if ($errorsFocusMessage) {
+      $errorsFocusMessage.textContent = "";
+      $errorsFocusMessage.hidden = true;
+    }
+    if (errorsPopoverOpen) toggleErrorsPopover(false);
+    return;
+  }
   const n = lastErrors.length;
   if ($errorsIndicator) {
     $errorsIndicator.textContent = `Errors: ${n}`;
@@ -2114,16 +2924,78 @@ function updateErrorsIndicatorAndPopover() {
 function setScanErrors(errorsArray) {
   lastErrors = normalizeErrors(errorsArray);
   updateErrorsIndicatorAndPopover();
+  syncActiveErrorNavIndex();
+}
+
+function reconcileActiveErrorHighlightAfterRender({ renderSucceeded = false } = {}) {
+  if (!activeErrorHighlight || !editorView) return;
+  if (!Array.isArray(errorEntries) || !errorEntries.length) {
+    // Only clear when we know a render completed and produced no errors.
+    if (renderSucceeded) {
+      clearActiveErrorHighlight("resolved");
+    }
+    return;
+  }
+  const candidates = errorEntries.filter((e) => {
+    if (!e) return false;
+    if (activeErrorHighlight.tuneId && e.tuneId && e.tuneId !== activeErrorHighlight.tuneId) return false;
+    if (activeErrorHighlight.filePath && e.filePath && e.filePath !== activeErrorHighlight.filePath) return false;
+    return normalizeErrorMessageForMatch(e.message || "") === String(activeErrorHighlight.messageKey || "");
+  });
+  if (!candidates.length) {
+    clearActiveErrorHighlight("resolved");
+    return;
+  }
+
+  const toRange = (entry) => {
+    if (entry.measureRange && Number.isFinite(entry.measureRange.start) && Number.isFinite(entry.measureRange.end) && entry.measureRange.end > entry.measureRange.start) {
+      return { from: entry.measureRange.start, to: entry.measureRange.end };
+    }
+    if (entry.loc && Number.isFinite(entry.loc.line)) {
+      const pos = getEditorIndexFromLoc(entry.loc);
+      if (Number.isFinite(pos)) {
+        const max = editorView.state.doc.length;
+        return { from: pos, to: Math.min(pos + 1, max) };
+      }
+    }
+    return null;
+  };
+
+  let best = null;
+  let bestDist = Infinity;
+  for (const c of candidates) {
+    const r = toRange(c);
+    if (!r) continue;
+    const dist = Math.abs(r.from - activeErrorHighlight.from);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = { entry: c, range: r };
+    }
+  }
+  if (!best) return;
+
+  const from = Number(best.range.from);
+  const to = Number(best.range.to);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return;
+  if (from !== activeErrorHighlight.from || to !== activeErrorHighlight.to) {
+    setActiveErrorHighlight(best.entry, from, to);
+    highlightSvgAtEditorOffset(from);
+  } else {
+    setErrorFocusMessage(best.entry, from);
+  }
 }
 
 function renderErrorsPopoverList() {
   if (!$errorsListPopover) return;
   $errorsListPopover.textContent = "";
   if (!lastErrors.length) return;
+  const activeId = activeErrorHighlight && activeErrorHighlight.id ? String(activeErrorHighlight.id) : "";
   for (let i = 0; i < lastErrors.length; i += 1) {
     const err = lastErrors[i];
     const row = document.createElement("div");
     row.className = "errors-row";
+    const rowId = computeErrorId(err);
+    if (rowId && activeId && rowId === activeId) row.classList.add("active");
     row.dataset.index = String(i);
     const label = err.tuneTitle ? String(err.tuneTitle) : "Untitled";
     const source = err.source ? ` (${err.source})` : "";
@@ -2176,6 +3048,10 @@ function toggleErrorsPopover(open) {
 
 async function jumpToError(errItem) {
   if (!errItem) return;
+  if (!errorsEnabled) {
+    showToast("Errors disabled");
+    return;
+  }
   const targetFilePath = errItem.filePath || null;
   const targetTuneId = errItem.tuneId || null;
   if (targetFilePath && targetTuneId && typeof window.openTuneFromLibrarySelection === "function") {
@@ -2187,20 +3063,175 @@ async function jumpToError(errItem) {
 
   if (!editorView) return;
   const doc = editorView.state.doc;
-  const loc = errItem.loc || null;
-  if (!loc || !Number.isFinite(loc.line)) {
-    editorView.focus();
+  const docLen = doc.length;
+  let errorStartOffset = Number(errItem.errorStartOffset);
+  let errorEndOffset = Number(errItem.errorEndOffset);
+  if (!Number.isFinite(errorStartOffset) || !Number.isFinite(errorEndOffset) || errorEndOffset <= errorStartOffset) {
+    // Fallback for errors that don't have measureRange: use line/col location if available.
+    const loc = errItem.loc || null;
+    if (loc && Number.isFinite(loc.line)) {
+      const lineNo = Math.max(1, Math.min(doc.lines, Number(loc.line)));
+      const line = doc.line(lineNo);
+      const col = Number.isFinite(loc.col) ? Math.max(1, Number(loc.col)) : 1;
+      const pos = Math.max(line.from, Math.min(line.to, line.from + col - 1));
+      errorStartOffset = pos;
+      errorEndOffset = Math.max(
+        Math.min(line.to, pos + 16),
+        Math.min(pos + 1, docLen)
+      );
+    }
+  }
+  if (!Number.isFinite(errorStartOffset) || !Number.isFinite(errorEndOffset) || errorEndOffset <= errorStartOffset) {
+    console.error("[abcarus] Error activation missing/invalid offsets:", {
+      errorStartOffset: errItem.errorStartOffset,
+      errorEndOffset: errItem.errorEndOffset,
+      loc: errItem.loc || null,
+    });
     return;
   }
-  const lineNo = Math.max(1, Math.min(doc.lines, Number(loc.line)));
-  const line = doc.line(lineNo);
-  const col = Number.isFinite(loc.col) ? Math.max(1, Number(loc.col)) : 1;
-  const pos = Math.max(line.from, Math.min(line.to, line.from + col - 1));
+  if (errorStartOffset < 0 || errorEndOffset > docLen) {
+    console.error("[abcarus] Error activation offsets out of bounds:", { errorStartOffset, errorEndOffset, docLen });
+    return;
+  }
+  pendingPlaybackRangeOrigin = "error";
+  setActiveErrorHighlight(errItem, errorStartOffset, errorEndOffset);
+  suppressErrorActivationClear = true;
+  const effects = [];
+  if (typeof EditorView.scrollIntoView === "function") {
+    try {
+      effects.push(EditorView.scrollIntoView(errorStartOffset, { y: "center" }));
+    } catch {}
+  }
   editorView.dispatch({
-    selection: EditorSelection.cursor(pos),
+    selection: EditorSelection.cursor(errorStartOffset),
+    effects,
     scrollIntoView: true,
   });
+  setTimeout(() => { suppressErrorActivationClear = false; }, 0);
   editorView.focus();
+
+  // Best-effort: scroll notation to the same location.
+  if (!highlightSvgAtEditorOffset(errorStartOffset)) {
+    requestAnimationFrame(() => { highlightSvgAtEditorOffset(errorStartOffset); });
+  }
+
+  const msg = String(errItem.message || "");
+  if (/bad measure duration/i.test(msg)) {
+    applyPlaybackRangeFromError({ ...errItem, errorStartOffset, errorEndOffset });
+  }
+}
+
+function suggestPlaybackRangeForRhythmError(errItem) {
+  if (!editorView || !errItem) return null;
+  const docLen = editorView.state.doc.length;
+  const start = Number(errItem.errorStartOffset);
+  const end = Number(errItem.errorEndOffset);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  if (start < 0 || end < 0 || start > docLen || end > docLen || end <= start) return null;
+
+  const coverageOk = (suggestedStart, suggestedEnd, method) => {
+    const ok = suggestedStart <= start && suggestedEnd >= end && suggestedStart < suggestedEnd;
+    if (!ok) {
+      console.error(
+        "[abcarus] Rhythm error PlaybackRange coverage failed:",
+        { method, errorStart: start, errorEnd: end, suggestedStart, suggestedEnd }
+      );
+    }
+    return ok;
+  };
+
+  const src = editorView.state.doc.toString();
+  const base = findMeasureRangeAt(src, Math.max(0, Math.min(docLen - 1, start)));
+  if (!base) {
+    const pad = 240;
+    const windowStart = Math.max(0, start - pad);
+    const windowEnd = Math.min(docLen, end + pad);
+    let suggestedStart = windowStart;
+    let suggestedEnd = windowEnd;
+
+    const startProbe = Math.max(windowStart, Math.min(docLen, start));
+    const startSlice = src.slice(windowStart, Math.min(docLen, startProbe + 1));
+    const barStartLocal = startSlice.lastIndexOf("|");
+    if (barStartLocal !== -1) {
+      suggestedStart = windowStart + barStartLocal;
+    } else {
+      const nlStartLocal = startSlice.lastIndexOf("\n");
+      if (nlStartLocal !== -1) suggestedStart = windowStart + nlStartLocal;
+    }
+
+    const endProbe = Math.max(0, Math.min(docLen, end));
+    const endSlice = src.slice(endProbe, windowEnd);
+    const barEndLocal = endSlice.indexOf("|");
+    if (barEndLocal !== -1) {
+      suggestedEnd = Math.min(docLen, endProbe + barEndLocal);
+    } else {
+      const nlEndLocal = endSlice.indexOf("\n");
+      if (nlEndLocal !== -1) suggestedEnd = Math.min(docLen, endProbe + nlEndLocal);
+    }
+
+    suggestedStart = Math.max(0, Math.min(suggestedStart, docLen));
+    suggestedEnd = Math.max(0, Math.min(suggestedEnd, docLen));
+    if (suggestedEnd <= suggestedStart) {
+      suggestedStart = windowStart;
+      suggestedEnd = windowEnd;
+    }
+    if (!coverageOk(suggestedStart, suggestedEnd, "fallback")) return null;
+    return {
+      startOffset: suggestedStart,
+      endOffset: suggestedEnd,
+      origin: "error",
+      loop: true,
+      suggestedMethod: "fallback",
+    };
+  }
+
+  const prev = base.start > 0 ? findMeasureRangeAt(src, base.start - 1) : null;
+  const next = base.end < docLen ? findMeasureRangeAt(src, base.end + 1) : null;
+
+  const startOffset = Math.min(prev ? prev.start : base.start, base.start);
+  const endOffset = Math.max(next ? next.end : base.end, base.end);
+  if (!coverageOk(startOffset, endOffset, "measure")) return null;
+  return {
+    startOffset,
+    endOffset,
+    origin: "error",
+    loop: true,
+    suggestedMethod: "measure",
+  };
+}
+
+function applyPlaybackRangeFromError(errItem) {
+  try {
+    if (!errorsEnabled) return;
+    if (isPlaying) return;
+    const suggested = suggestPlaybackRangeForRhythmError(errItem);
+    if (!suggested) return;
+    lastRhythmErrorSuggestion = {
+      at: new Date().toISOString(),
+      tuneId: errItem && errItem.tuneId ? errItem.tuneId : null,
+      filePath: errItem && errItem.filePath ? errItem.filePath : null,
+      message: errItem && errItem.message ? errItem.message : null,
+      errorStartOffset: errItem && Number.isFinite(errItem.errorStartOffset) ? errItem.errorStartOffset : null,
+      errorEndOffset: errItem && Number.isFinite(errItem.errorEndOffset) ? errItem.errorEndOffset : null,
+      startOffset: suggested.startOffset,
+      endOffset: suggested.endOffset,
+      origin: "error",
+      loop: true,
+      suggestedMethod: suggested.suggestedMethod || null,
+    };
+    setPlaybackRange({
+      startOffset: suggested.startOffset,
+      endOffset: suggested.endOffset,
+      origin: "error",
+      loop: true,
+    });
+    suppressPlaybackRangeSelectionSync = true;
+    setEditorSelectionAt(suggested.startOffset);
+  } catch (e) {
+    console.error("[abcarus] Failed to apply PlaybackRange from error:", (e && e.message) ? e.message : String(e));
+  } finally {
+    suppressPlaybackRangeSelectionSync = false;
+  }
 }
 
 function renderToolStatus() {
@@ -2302,7 +3333,11 @@ function scheduleLibrarySearch(value) {
 
 function setScanErrorButtonActive(isActive) {
   if (!$scanErrorTunes) return;
-  $scanErrorTunes.classList.toggle("toggle-active", Boolean(isActive));
+  const active = Boolean(isActive);
+  $scanErrorTunes.classList.toggle("toggle-active", active);
+  if ($fileTuneSelect) {
+    $fileTuneSelect.classList.toggle("error-filter-active", active);
+  }
 }
 
 function setScanErrorButtonVisibility(entry) {
@@ -2736,6 +3771,16 @@ function showErrorsVisible(visible) {
 }
 
 function clearErrors() {
+  if (!errorsEnabled) {
+    errorEntries.length = 0;
+    errorEntryMap.clear();
+    if ($errorList) $errorList.textContent = "";
+    showErrorsVisible(false);
+    measureErrorRenderRanges = [];
+    setMeasureErrorRanges([]);
+    setScanErrors([]);
+    return;
+  }
   errorEntries.length = 0;
   errorEntryMap.clear();
   if ($errorList) $errorList.textContent = "";
@@ -3221,6 +4266,7 @@ function renderErrorList() {
 }
 
 function addError(message, locOverride, contextOverride) {
+  if (!errorsEnabled) return;
   const renderLoc = locOverride || parseErrorLocation(message);
   const context = contextOverride || (activeTuneMeta ? {
     tuneId: activeTuneMeta.id,
@@ -3301,6 +4347,7 @@ function addError(message, locOverride, contextOverride) {
 }
 
 function logErr(m, loc, context) {
+  if (!errorsEnabled) return;
   addError(m, loc, context);
 }
 
@@ -3579,6 +4626,7 @@ function buildPrintErrorSummary(entry, items, totalTunes) {
 }
 
 async function scanActiveFileForTuneErrors(entry) {
+  if (!errorsEnabled) return;
   if (!entry || !entry.path) return;
   if (currentDoc && currentDoc.dirty) {
     const choice = await confirmUnsavedChanges("scanning error tunes");
@@ -3960,6 +5008,15 @@ function normalizeHeaderNoneSpacing(text) {
   return out.join("\n");
 }
 
+function assertCleanAbcText(text, originLabel) {
+  const src = String(text || "");
+  if (src.includes("[object Object]")) {
+    console.error(`[abcarus] ABC text corruption detected (${originLabel || "unknown"}): contains "[object Object]"`);
+    return false;
+  }
+  return true;
+}
+
 function stripSepForRender(text) {
   const value = String(text || "");
   const stripped = value.replace(/^[ \t]*%%sep\b.*$/gmi, "% %%sep disabled");
@@ -4123,9 +5180,16 @@ function renderNow() {
   if (!currentText.trim()) {
     setStatus("Ready");
     updateLibraryErrorIndexFromCurrentErrors();
+    reconcileActiveErrorHighlightAfterRender({ renderSucceeded: true });
     return;
   }
   const renderPayload = getRenderPayload();
+  if (!assertCleanAbcText(renderPayload.text, "renderNow")) {
+    logErr("ABC text corruption detected (render).");
+    setStatus("Error");
+    updateLibraryErrorIndexFromCurrentErrors();
+    return;
+  }
   let renderText = normalizeHeaderNoneSpacing(renderPayload.text);
   const sepStrip = stripSepForRender(renderText);
   renderText = sepStrip.text;
@@ -4184,11 +5248,20 @@ function renderNow() {
         if (!svg.trim()) throw new Error("No SVG output produced (see errors).");
         $out.innerHTML = svg;
         applyMeasureHighlights(renderPayload.offset || 0);
+        // Keep notation synced to the editor selection (especially after edits re-render the SVG).
+        if (editorView) {
+          const anchor = editorView.state.selection.main.anchor;
+          highlightNoteAtIndex(anchor);
+          if (errorActivationHighlightRange && Number.isFinite(errorActivationHighlightRange.from)) {
+            highlightSvgAtEditorOffset(errorActivationHighlightRange.from);
+          }
+        }
         if (sepFallbackUsed) {
           setBufferStatus("Note: %%sep ignored for rendering.");
         }
         setStatus("OK");
         updateLibraryErrorIndexFromCurrentErrors();
+        reconcileActiveErrorHighlightAfterRender({ renderSucceeded: true });
         break;
       } catch (e) {
         throw e;
@@ -4198,10 +5271,12 @@ function renderNow() {
     logErr((e && e.stack) ? e.stack : String(e));
     setStatus("Error");
     updateLibraryErrorIndexFromCurrentErrors();
+    reconcileActiveErrorHighlightAfterRender({ renderSucceeded: false });
   }
 }
 
 initEditor();
+initSearchPanelShortcuts();
 initHeaderEditor();
 setHeaderCollapsed(headerCollapsed);
 setCurrentDocument(createBlankDocument());
@@ -4265,6 +5340,16 @@ async function showOpenDialog() {
 async function showSaveDialog(suggestedName, suggestedDir) {
   if (!window.api || typeof window.api.showSaveDialog !== "function") return null;
   return window.api.showSaveDialog(suggestedName, suggestedDir);
+}
+
+async function showOpenFolderDialog() {
+  if (!window.api || typeof window.api.showOpenFolderDialog !== "function") return null;
+  return window.api.showOpenFolderDialog();
+}
+
+async function mkdirp(dirPath) {
+  if (!window.api || typeof window.api.mkdirp !== "function") return { ok: false, error: "API missing" };
+  return window.api.mkdirp(dirPath);
 }
 
 async function writeFile(filePath, data) {
@@ -4407,6 +5492,198 @@ async function openExternal(url) {
   if (res && res.error) logErr(res.error);
 }
 
+function nowCompactStamp() {
+  const d = new Date();
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const y = d.getFullYear();
+  const m = pad2(d.getMonth() + 1);
+  const day = pad2(d.getDate());
+  const hh = pad2(d.getHours());
+  const mm = pad2(d.getMinutes());
+  const ss = pad2(d.getSeconds());
+  return `${y}${m}${day}-${hh}${mm}${ss}`;
+}
+
+function safeString(value, maxLen = 250000) {
+  const s = String(value == null ? "" : value);
+  if (s.length <= maxLen) return s;
+  return `${s.slice(0, maxLen)}\n\n…(truncated ${s.length - maxLen} chars)…`;
+}
+
+function safeJsonStringify(value) {
+  const seen = new WeakSet();
+  return JSON.stringify(
+    value,
+    (k, v) => {
+      if (typeof v === "object" && v) {
+        if (seen.has(v)) return "[Circular]";
+        seen.add(v);
+      }
+      if (typeof v === "string" && v.length > 250000) return safeString(v);
+      return v;
+    },
+    2
+  );
+}
+
+async function buildDebugDumpSnapshot() {
+  let aboutInfo = null;
+  if (window.api && typeof window.api.getAboutInfo === "function") {
+    try { aboutInfo = await window.api.getAboutInfo(); } catch {}
+  }
+
+  const playbackDebug = (window.__abcarusPlaybackDebug && typeof window.__abcarusPlaybackDebug === "object")
+    ? window.__abcarusPlaybackDebug
+    : null;
+
+  const playbackPayload = (() => {
+    try {
+      if (lastPlaybackPayloadCache && lastPlaybackPayloadCache.text) {
+        return {
+          text: safeString(lastPlaybackPayloadCache.text, 350000),
+          offset: lastPlaybackPayloadCache.offset || 0,
+          cached: true,
+        };
+      }
+      const p = getPlaybackPayload();
+      return {
+        text: safeString(p && p.text ? p.text : "", 350000),
+        offset: p && p.offset ? p.offset : 0,
+        cached: false,
+      };
+    } catch (e) {
+      return { error: (e && e.message) ? e.message : String(e) };
+    }
+  })();
+
+  return {
+    kind: "abcarus-debug-dump",
+    createdAt: new Date().toISOString(),
+    about: aboutInfo,
+    debugLog: debugLogBuffer.slice(),
+    selection: editorView ? {
+      anchor: editorView.state.selection.main.anchor,
+      head: editorView.state.selection.main.head,
+    } : null,
+    document: {
+      currentDocPath: currentDoc ? (currentDoc.path || null) : null,
+      currentDocDirty: currentDoc ? Boolean(currentDoc.dirty) : null,
+      activeTuneMeta: activeTuneMeta ? {
+        id: activeTuneMeta.id || null,
+        path: activeTuneMeta.path || null,
+        basename: activeTuneMeta.basename || null,
+        xNumber: activeTuneMeta.xNumber || null,
+        title: activeTuneMeta.title || null,
+        startOffset: activeTuneMeta.startOffset || null,
+        endOffset: activeTuneMeta.endOffset || null,
+        startLine: activeTuneMeta.startLine || null,
+        endLine: activeTuneMeta.endLine || null,
+      } : null,
+      header: {
+        presence: (typeof computeHeaderPresence === "function") ? computeHeaderPresence() : null,
+        dirty: Boolean(headerDirty),
+        collapsed: Boolean(headerCollapsed),
+      },
+      editorText: safeString(getEditorValue(), 350000),
+      headerText: safeString(getHeaderEditorValue(), 250000),
+    },
+    playback: {
+      isPlaying: Boolean(isPlaying),
+      isPaused: Boolean(isPaused),
+      waitingForFirstNote: Boolean(waitingForFirstNote),
+      followPlayback: Boolean(followPlayback),
+      followVoiceId,
+      followVoiceIndex,
+      soundfontName: soundfontName || null,
+      soundfontSource: soundfontSource || null,
+      playbackIndexOffset,
+      playbackRange: clonePlaybackRange(playbackRange),
+      activePlaybackRange: activePlaybackRange ? clonePlaybackRange(activePlaybackRange) : null,
+      activePlaybackEndAbcOffset,
+      payload: playbackPayload,
+      debugState: playbackDebug && typeof playbackDebug.getState === "function" ? playbackDebug.getState() : null,
+      timeline: playbackDebug && typeof playbackDebug.getTimeline === "function" ? playbackDebug.getTimeline() : null,
+      trace: playbackDebug && typeof playbackDebug.getTrace === "function" ? playbackDebug.getTrace() : playbackNoteTrace.slice(),
+      lastRhythmErrorSuggestion,
+    },
+    render: {
+      lastRenderPayload: lastRenderPayload ? {
+        offset: lastRenderPayload.offset || 0,
+        text: lastRenderPayload.text ? safeString(lastRenderPayload.text, 350000) : "",
+      } : null,
+    },
+    errors: {
+      count: Array.isArray(errorEntries) ? errorEntries.length : null,
+      activeHighlight: activeErrorHighlight ? {
+        id: activeErrorHighlight.id,
+        from: activeErrorHighlight.from,
+        to: activeErrorHighlight.to,
+        tuneId: activeErrorHighlight.tuneId,
+        filePath: activeErrorHighlight.filePath,
+        message: activeErrorHighlight.message,
+        messageKey: activeErrorHighlight.messageKey,
+        lastSvgRenderIdx: activeErrorHighlight.lastSvgRenderIdx,
+      } : null,
+      entries: Array.isArray(errorEntries)
+        ? errorEntries.slice(0, 200).map((e) => ({
+          message: e.message,
+          loc: e.loc || null,
+          tuneId: e.tuneId || null,
+          filePath: e.filePath || null,
+          xNumber: e.xNumber || null,
+          title: e.title || null,
+          count: e.count || 1,
+        }))
+        : null,
+    },
+  };
+}
+
+async function dumpDebugToFile(filePathArg) {
+  try {
+    const suggested = `abcarus-debug-${nowCompactStamp()}.json`;
+    let suggestedDir = "";
+    try {
+      const href = String(window.location && window.location.href ? window.location.href : "");
+      if (href.startsWith("file://") && window.api && typeof window.api.pathDirname === "function" && typeof window.api.pathJoin === "function") {
+        const p = decodeURIComponent(new URL(href).pathname || "");
+        if (p.includes("/src/renderer/")) {
+          const rendererDir = window.api.pathDirname(p);
+          const srcDir = window.api.pathDirname(rendererDir);
+          const rootDir = window.api.pathDirname(srcDir);
+          suggestedDir = window.api.pathJoin(rootDir, "debug_dumps");
+        }
+      }
+    } catch {}
+    if (!suggestedDir) {
+      suggestedDir = activeTuneMeta && activeTuneMeta.path ? safeDirname(activeTuneMeta.path) : "";
+    }
+    if (suggestedDir) {
+      const res = await mkdirp(suggestedDir);
+      if (!res || !res.ok) {
+        suggestedDir = activeTuneMeta && activeTuneMeta.path ? safeDirname(activeTuneMeta.path) : "";
+      }
+    }
+    const filePath = filePathArg || (await showSaveDialog(suggested, suggestedDir));
+    if (!filePath) return { ok: false, cancelled: true };
+    const snapshot = await buildDebugDumpSnapshot();
+    const json = safeJsonStringify(snapshot);
+    const res = await writeFile(filePath, json);
+    if (!res || !res.ok) {
+      await showSaveError((res && res.error) ? res.error : "Unable to write debug dump.");
+      return { ok: false, error: (res && res.error) ? res.error : "Unable to write debug dump." };
+    }
+    showToast(`Saved debug dump: ${safeBasename(filePath)}`, 3000);
+    return { ok: true, path: filePath };
+  } catch (e) {
+    const msg = (e && e.message) ? e.message : String(e);
+    await showSaveError(msg);
+    return { ok: false, error: msg };
+  }
+}
+
+window.dumpDebugToFile = dumpDebugToFile;
+
 function formatAboutInfo(info) {
   if (!info) return "No system info available.";
   const osParts = [info.platform, info.arch, info.osRelease].filter(Boolean).join(" ").trim();
@@ -4442,6 +5719,57 @@ document.addEventListener("library-modal:closed", () => {
   document.body.classList.remove("library-list-open");
   libraryListYieldedByThisOpen = false;
 });
+
+function openLibraryListFromCurrentLibraryIndex() {
+  if (!libraryIndex || !libraryIndex.root || !Array.isArray(libraryIndex.files) || !libraryIndex.files.length) {
+    setStatus("Load a library folder first.");
+    return false;
+  }
+  if (!window.openLibraryModal) return false;
+
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const formatYmd = (ms) => {
+    const d = new Date(ms);
+    if (!Number.isFinite(d.getTime())) return "";
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  };
+
+  const rows = [];
+  for (const file of libraryIndex.files) {
+    const modified = file && file.updatedAtMs ? formatYmd(file.updatedAtMs) : "";
+    const filePath = file && file.path ? file.path : "";
+    const fileLabel = file && file.basename ? file.basename : safeBasename(filePath);
+    const tunes = file && Array.isArray(file.tunes) ? file.tunes : [];
+    for (const tune of tunes) {
+      const xNumber = tune && tune.xNumber != null ? tune.xNumber : "";
+      rows.push({
+        file: fileLabel,
+        filePath,
+        tuneId: tune && tune.id ? tune.id : "",
+        tuneNo: xNumber,
+        xNumber,
+        title: tune && (tune.title || tune.preview) ? (tune.title || tune.preview) : "",
+        composer: tune && tune.composer ? tune.composer : "",
+        origin: tune && tune.origin ? tune.origin : "",
+        group: tune && tune.group ? tune.group : "",
+        key: tune && tune.key ? tune.key : "",
+        meter: tune && tune.meter ? tune.meter : "",
+        tempo: tune && tune.tempo ? tune.tempo : "",
+        rhythm: tune && tune.rhythm ? tune.rhythm : "",
+        modified,
+      });
+    }
+  }
+
+  libraryListYieldedByThisOpen = false;
+  if (isLibraryVisible) {
+    document.body.classList.add("library-list-open");
+    libraryListYieldedByThisOpen = true;
+  }
+
+  window.openLibraryModal(rows);
+  return true;
+}
 
 async function openAbout() {
   if (!$aboutModal || !$aboutInfo) return;
@@ -4911,11 +6239,6 @@ async function performSaveAsFlow() {
   const filePath = await showSaveDialog(suggestedName, suggestedDir);
   if (!filePath) return false;
 
-  if (await fileExists(filePath)) {
-    const ow = await confirmOverwrite(filePath);
-    if (ow !== "replace") return false;
-  }
-
   const res = await writeFile(filePath, serializeDocument(currentDoc));
   if (res.ok) {
     const content = serializeDocument(currentDoc);
@@ -5339,7 +6662,78 @@ async function fileNewFromTemplate() {
   const ok = await ensureSafeToAbandonCurrentDoc("creating a new file");
   if (!ok) return;
   setActiveTuneText(TEMPLATE_ABC, null);
+  if (currentDoc) currentDoc.dirty = true;
+  setDirtyIndicator(true);
+}
+
+function buildNewTuneDraftTemplate(nextX) {
+  const x = Number.isFinite(Number(nextX)) ? Number(nextX) : "";
+  const xLine = x ? `X:${x}` : "X:";
+  return [
+    xLine,
+    "T:",
+    "C:",
+    "M:4/4",
+    "L:1/8",
+    "Q:1/4=120",
+    "K:C",
+    "",
+  ].join("\n");
+}
+
+function setNewTuneDraftInActiveFile(text, { filePath, basename, xNumber } = {}) {
+  if (!editorView) return;
+  if (!filePath) return;
+  if (activeErrorHighlight) clearActiveErrorHighlight("docReplaced");
+  resetPlaybackState();
+
+  suppressDirty = true;
+  setEditorValue(text);
+  suppressDirty = false;
+
+  isNewTuneDraft = true;
+  activeTuneMeta = null;
+  activeTuneId = null;
+  activeFilePath = filePath;
+
+  refreshHeaderLayers().catch(() => {});
+  const label = xNumber ? `New tune (X:${xNumber})` : "New tune";
+  setTuneMetaText(label);
+  setFileNameMeta(stripFileExtension(basename || safeBasename(filePath)));
+
+  if (currentDoc) {
+    currentDoc.path = null;
+    currentDoc.content = text || "";
+    currentDoc.dirty = false;
+  }
+  updateFileContext();
   setDirtyIndicator(false);
+  updateFileHeaderPanel();
+  renderNow();
+}
+
+async function fileNewTune() {
+  const entry = getActiveFileEntry();
+  if (!entry || !entry.path) {
+    showToast("Load a library file first.", 2400);
+    return;
+  }
+  const ok = await ensureSafeToAbandonCurrentDoc("creating a new tune");
+  if (!ok) return;
+
+  let nextX = "";
+  try {
+    const res = await getFileContentCached(entry.path);
+    if (res && res.ok) nextX = getNextXNumber(res.data || "");
+  } catch {}
+
+  const template = buildNewTuneDraftTemplate(nextX);
+  setNewTuneDraftInActiveFile(template, {
+    filePath: entry.path,
+    basename: entry.basename || safeBasename(entry.path),
+    xNumber: nextX,
+  });
+  showToast("New tune draft (use Append to Active File to save into this file).", 2600);
 }
 
 async function fileOpen() {
@@ -5479,6 +6873,7 @@ function wireMenuActions() {
     try {
       const actionType = typeof action === "string" ? action : action && action.type;
       if (actionType === "new") await fileNew();
+      else if (actionType === "newTune") await fileNewTune();
       else if (actionType === "newFromTemplate") await fileNewFromTemplate();
       else if (actionType === "open") await fileOpen();
       else if (actionType === "openFolder") await scanAndLoadLibrary();
@@ -5495,53 +6890,7 @@ function wireMenuActions() {
       else if (actionType === "close") await requestCloseDocument();
       else if (actionType === "quit") await requestQuitApplication();
       else if (actionType === "libraryList") {
-        if (!libraryIndex || !libraryIndex.root || !Array.isArray(libraryIndex.files) || !libraryIndex.files.length) {
-          setStatus("Load a library folder first.");
-          return;
-        }
-        if (!window.openLibraryModal) return;
-
-        const pad2 = (n) => String(n).padStart(2, "0");
-        const formatYmd = (ms) => {
-          const d = new Date(ms);
-          if (!Number.isFinite(d.getTime())) return "";
-          return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-        };
-
-        const rows = [];
-        for (const file of libraryIndex.files) {
-          const modified = file && file.updatedAtMs ? formatYmd(file.updatedAtMs) : "";
-          const filePath = file && file.path ? file.path : "";
-          const fileLabel = file && file.basename ? file.basename : safeBasename(filePath);
-          const tunes = file && Array.isArray(file.tunes) ? file.tunes : [];
-          for (const tune of tunes) {
-            const xNumber = tune && tune.xNumber != null ? tune.xNumber : "";
-            rows.push({
-              file: fileLabel,
-              filePath,
-              tuneId: tune && tune.id ? tune.id : "",
-              tuneNo: xNumber,
-              xNumber,
-              title: tune && (tune.title || tune.preview) ? (tune.title || tune.preview) : "",
-              composer: tune && tune.composer ? tune.composer : "",
-              origin: tune && tune.origin ? tune.origin : "",
-              group: tune && tune.group ? tune.group : "",
-              key: tune && tune.key ? tune.key : "",
-              meter: tune && tune.meter ? tune.meter : "",
-              tempo: tune && tune.tempo ? tune.tempo : "",
-              rhythm: tune && tune.rhythm ? tune.rhythm : "",
-              modified,
-            });
-          }
-        }
-
-        libraryListYieldedByThisOpen = false;
-        if (isLibraryVisible) {
-          document.body.classList.add("library-list-open");
-          libraryListYieldedByThisOpen = true;
-        }
-
-        window.openLibraryModal(rows);
+        openLibraryListFromCurrentLibraryIndex();
       }
       else if (actionType === "toggleLibrary") toggleLibrary();
       else if (actionType === "openRecentTune" && action && action.entry) {
@@ -5553,14 +6902,14 @@ function wireMenuActions() {
       else if (actionType === "openRecentFolder" && action && action.entry) {
         await openRecentFolder(action.entry);
       }
-      else if (actionType === "find" && editorView) openSearchPanel(editorView);
+      else if (actionType === "find" && editorView) openFindPanel(editorView);
       else if (actionType === "replace" && editorView) openReplacePanel(editorView);
       else if (actionType === "gotoLine" && editorView) gotoLine(editorView);
       else if (actionType === "findLibrary") promptFindInLibrary();
       else if (actionType === "clearLibraryFilter") clearLibraryFilter();
       else if (actionType === "playStart") await startPlaybackAtIndex(0);
       else if (actionType === "playPrev") await startPlaybackAtMeasureOffset(-1);
-      else if (actionType === "playToggle") { if ($btnPlayPause) $btnPlayPause.click(); }
+      else if (actionType === "playToggle") { await transportTogglePlayPause(); }
       else if (actionType === "playNext") await startPlaybackAtMeasureOffset(1);
       else if (actionType === "resetLayout") resetLayout();
       else if (actionType === "helpGuide") await openExternal("https://abcplus.sourceforge.net/abcplus_en.pdf");
@@ -5575,9 +6924,14 @@ function wireMenuActions() {
       }
       else if (actionType === "alignBars") alignBarsInEditor();
       else if (actionType === "settings" && settingsController) settingsController.openSettings();
-      else if (actionType === "zoomIn" && settingsController) settingsController.zoomIn();
-      else if (actionType === "zoomOut" && settingsController) settingsController.zoomOut();
-      else if (actionType === "zoomReset" && settingsController) settingsController.zoomReset();
+      else if (actionType === "zoomIn" && settingsController) { if (!shouldIgnoreMenuZoomAction()) settingsController.zoomIn(); }
+      else if (actionType === "zoomOut" && settingsController) { if (!shouldIgnoreMenuZoomAction()) settingsController.zoomOut(); }
+      else if (actionType === "zoomReset" && settingsController) {
+        if (!shouldIgnoreMenuZoomAction()) {
+          settingsController.zoomReset();
+          requestAnimationFrame(() => centerRenderPaneOnCurrentAnchor());
+        }
+      }
       else if (actionType === "toggleFileHeader") toggleHeaderCollapsed();
     } catch (e) {
       logErr((e && e.stack) ? e.stack : String(e));
@@ -5603,6 +6957,7 @@ if (window.api && typeof window.api.getSettings === "function") {
       setDrumVelocityFromSettings(settings);
       setFollowFromSettings(settings);
       updateGlobalHeaderToggle();
+      updateErrorsFeatureUI();
       loadSoundfontSelectOptions();
       refreshHeaderLayers().catch(() => {});
       showDisclaimerIfNeeded(settings);
@@ -5618,6 +6973,7 @@ if (window.api && typeof window.api.onSettingsChanged === "function") {
     setDrumVelocityFromSettings(settings);
     setFollowFromSettings(settings);
     updateGlobalHeaderToggle();
+    updateErrorsFeatureUI();
     loadSoundfontSelectOptions();
     refreshHeaderLayers().catch(() => {});
     showDisclaimerIfNeeded(settings);
@@ -5647,6 +7003,74 @@ if ($renderPane && settingsController) {
   });
 }
 
+let lastZoomShortcutAtMs = 0;
+function markZoomShortcut() {
+  lastZoomShortcutAtMs = Date.now();
+}
+function shouldIgnoreMenuZoomAction() {
+  return Date.now() - lastZoomShortcutAtMs < 150;
+}
+
+function centerRenderPaneOnCurrentAnchor() {
+  if (!$out || !$renderPane || !editorView) return;
+  const editorOffset = (activeErrorHighlight && Number.isFinite(activeErrorHighlight.from))
+    ? activeErrorHighlight.from
+    : editorView.state.selection.main.anchor;
+  const renderOffset = (lastRenderPayload && Number.isFinite(lastRenderPayload.offset))
+    ? lastRenderPayload.offset
+    : 0;
+  const renderIdx = Number(editorOffset) + renderOffset;
+  if (!Number.isFinite(renderIdx)) return;
+  let els = $out.querySelectorAll("._" + renderIdx + "_");
+  if ((!els || !els.length) && Number.isFinite(renderIdx)) {
+    const maxBack = 200;
+    for (let d = 1; d <= maxBack; d += 1) {
+      const probe = renderIdx - d;
+      if (probe < 0) break;
+      els = $out.querySelectorAll("._" + probe + "_");
+      if (els && els.length) break;
+    }
+  }
+  if (!els || !els.length) return;
+  const chosen = pickClosestNoteElement(Array.from(els));
+  if (!chosen) return;
+  const containerRect = $renderPane.getBoundingClientRect();
+  const targetRect = chosen.getBoundingClientRect();
+  const centerTop = targetRect.top - containerRect.top + $renderPane.scrollTop - ($renderPane.clientHeight / 2) + (targetRect.height / 2);
+  const centerLeft = targetRect.left - containerRect.left + $renderPane.scrollLeft - ($renderPane.clientWidth / 2) + (targetRect.width / 2);
+  $renderPane.scrollTop = Math.max(0, centerTop);
+  $renderPane.scrollLeft = Math.max(0, centerLeft);
+}
+
+// Prevent Chromium page-zoom shortcuts fighting the app's render/editor zoom.
+document.addEventListener("keydown", (e) => {
+  if (!settingsController) return;
+  const mod = e.ctrlKey || e.metaKey;
+  if (!mod || e.altKey) return;
+  const key = String(e.key || "");
+  const target = e.target;
+  const tag = target && target.tagName ? String(target.tagName).toLowerCase() : "";
+  if (tag === "input" || tag === "textarea") return;
+
+  const isZoomIn = key === "+" || (key === "=" && e.shiftKey);
+  const isZoomOut = key === "-" || key === "_";
+  const isZoomReset = key === "0";
+  if (!isZoomIn && !isZoomOut && !isZoomReset) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  markZoomShortcut();
+
+  // Keyboard zoom is primarily intended for the notation pane.
+  settingsController.setActivePane("render");
+  if (isZoomIn) settingsController.zoomIn();
+  else if (isZoomOut) settingsController.zoomOut();
+  else {
+    settingsController.zoomReset();
+    requestAnimationFrame(() => centerRenderPaneOnCurrentAnchor());
+  }
+}, true);
+
 document.addEventListener("wheel", (e) => {
   if (!settingsController) return;
   if (!e.ctrlKey && !e.metaKey) return;
@@ -5661,6 +7085,22 @@ document.addEventListener("keydown", (e) => {
   if (String(e.key || "").toLowerCase() !== "h") return;
   e.preventDefault();
   toggleHeaderCollapsed();
+});
+
+// Hidden debug shortcut:
+// - Cmd/Ctrl+Alt+Shift+D dumps a debug JSON snapshot
+// - Cmd/Ctrl+Shift+F9 dumps a debug JSON snapshot (avoids Alt+Shift conflicts on some DEs)
+document.addEventListener("keydown", (e) => {
+  const key = String(e.key || "").toLowerCase();
+  const mod = e.ctrlKey || e.metaKey;
+  const isDumpChord = (mod && e.altKey && e.shiftKey && key === "d")
+    || (mod && e.shiftKey && !e.altKey && key === "f9");
+  if (!isDumpChord) return;
+  const target = e.target;
+  const tag = target && target.tagName ? String(target.tagName).toLowerCase() : "";
+  if (tag === "input" || tag === "textarea") return;
+  e.preventDefault();
+  dumpDebugToFile().catch(() => {});
 });
 
 initContextMenu();
@@ -5705,7 +7145,14 @@ if ($out) {
       const editorStart = Math.max(0, start - renderOffset);
       const editorEndRaw = Number.isFinite(end) && end > start ? end : start + 1;
       const editorEnd = Math.max(editorStart, editorEndRaw - renderOffset);
+      pendingPlaybackRangeOrigin = "svg";
       setEditorSelectionRange(editorStart, editorEnd);
+      setPlaybackRange({
+        startOffset: editorStart,
+        endOffset: editorEnd,
+        origin: "svg",
+        loop: playbackRange.loop,
+      });
     }
   });
 }
@@ -5868,6 +7315,89 @@ let lastDrumInjectResult = null;
 let lastPlaybackPayloadCache = null;
 let lastSoundfontApplied = null;
 let lastPreparedPlaybackKey = null;
+let playbackNoteTrace = [];
+
+function playbackGuardError(message) {
+  console.error(`[abcarus][playback-range] ${message}`);
+}
+
+function stopPlaybackFromGuard(message) {
+  playbackGuardError(message);
+  if (player && (isPlaying || isPaused) && typeof player.stop === "function") {
+    suppressOnEnd = true;
+    try { player.stop(); } catch {}
+  }
+  isPlaying = false;
+  isPaused = false;
+  waitingForFirstNote = false;
+  resumeStartIdx = null;
+  activePlaybackRange = null;
+  activePlaybackEndAbcOffset = null;
+  playbackStartArmed = false;
+  setStatus("OK");
+  updatePlayButton();
+  clearNoteSelection();
+}
+
+function clonePlaybackRange(r) {
+  if (!r || typeof r !== "object") {
+    return { startOffset: 0, endOffset: null, origin: "cursor", loop: false };
+  }
+  return {
+    startOffset: Number(r.startOffset) || 0,
+    endOffset: (r.endOffset == null) ? null : Number(r.endOffset),
+    origin: r.origin || "cursor",
+    loop: Boolean(r.loop),
+  };
+}
+
+function setPlaybackRange(next) {
+  const nextRange = clonePlaybackRange(next);
+
+  if (isPlaying) {
+    if (activePlaybackRange && activePlaybackRange.loop && nextRange.startOffset !== activePlaybackRange.startOffset) {
+      stopPlaybackFromGuard("Looping PlaybackRange.startOffset mutated during playback.");
+      return;
+    }
+    playbackGuardError("PlaybackRange updated while playing; change deferred until stop.");
+    return;
+  }
+
+  playbackRange = nextRange;
+}
+
+function updatePlaybackRangeFromSelection(selection, origin) {
+  if (!selection || !editorView) return;
+  if (isPlaying) return;
+  // While an error anchor is active, keep the error-derived PlaybackRange stable and loopable.
+  // The user can move the cursor to fix the error without losing the loop range.
+  if (activeErrorHighlight && playbackRange && playbackRange.origin === "error" && playbackRange.loop) return;
+  const max = editorView.state.doc.length;
+  const main = selection.main || null;
+  if (!main) return;
+
+  const anchor = Math.max(0, Math.min(Number(main.anchor) || 0, max));
+  const head = Math.max(0, Math.min(Number(main.head) || 0, max));
+  const start = Math.min(anchor, head);
+  const end = Math.max(anchor, head);
+  const isRange = end > start;
+
+  setPlaybackRange({
+    startOffset: start,
+    endOffset: isRange ? end : null,
+    origin: origin || (isRange ? "selection" : "cursor"),
+    loop: Boolean(activeErrorHighlight && playbackRange.loop),
+  });
+}
+
+function appendPlaybackTrace(evt) {
+  if (!evt) return;
+  playbackNoteTrace.push(evt);
+  const max = 2000;
+  if (playbackNoteTrace.length > max) {
+    playbackNoteTrace = playbackNoteTrace.slice(playbackNoteTrace.length - max);
+  }
+}
 
 function getPlaybackSourceKey() {
   const tuneText = getEditorValue();
@@ -5879,8 +7409,47 @@ function getPlaybackSourceKey() {
 }
 
 function updatePlayButton() {
-  if (!$btnPlayPause) return;
-  $btnPlayPause.textContent = isPlaying ? "⏸" : "▶";
+  if ($btnPlay) {
+    $btnPlay.classList.toggle("active", Boolean(isPlaying));
+    $btnPlay.disabled = false;
+  }
+  if ($btnPause) {
+    $btnPause.classList.toggle("active", Boolean(isPaused));
+    $btnPause.disabled = !(isPlaying || isPaused);
+  }
+  if ($btnStop) {
+    $btnStop.disabled = !(isPlaying || isPaused || waitingForFirstNote);
+  }
+  if ($btnPlayPause) {
+    $btnPlayPause.classList.toggle("active", Boolean(isPlaying || isPaused));
+    $btnPlayPause.disabled = false;
+    if (isPlaying) $btnPlayPause.textContent = "Pause";
+    else if (isPaused) $btnPlayPause.textContent = "Resume";
+    else $btnPlayPause.textContent = "Play";
+  }
+}
+
+async function transportTogglePlayPause() {
+  if (isPlaying) {
+    pausePlayback();
+    return;
+  }
+  await startPlaybackFromRange();
+}
+
+async function transportPlay() {
+  if (isPlaying) return;
+  await startPlaybackFromRange();
+}
+
+async function transportPause() {
+  if (isPlaying) {
+    pausePlayback();
+    return;
+  }
+  if (isPaused) {
+    await startPlaybackFromRange();
+  }
 }
 
 function resetPlaybackState() {
@@ -5896,6 +7465,9 @@ function resetPlaybackState() {
   resumeStartIdx = null;
   playbackState = null;
   playbackIndexOffset = 0;
+  activePlaybackRange = null;
+  activePlaybackEndAbcOffset = null;
+  playbackStartArmed = false;
   clearNoteSelection();
   updatePlayButton();
   setSoundfontCaption();
@@ -5937,13 +7509,22 @@ function maybeScrollRenderToNote(el) {
   const containerRect = $renderPane.getBoundingClientRect();
   const targetRect = el.getBoundingClientRect();
   const offsetTop = targetRect.top - containerRect.top + $renderPane.scrollTop;
+  const offsetLeft = targetRect.left - containerRect.left + $renderPane.scrollLeft;
   const viewTop = $renderPane.scrollTop;
   const viewBottom = viewTop + $renderPane.clientHeight;
+  const viewLeft = $renderPane.scrollLeft;
+  const viewRight = viewLeft + $renderPane.clientWidth;
   const linePad = Math.max(80, targetRect.height * 8);
   if (offsetTop < viewTop + linePad) {
     $renderPane.scrollTop = Math.max(0, offsetTop - linePad);
   } else if (offsetTop > viewBottom - linePad) {
     $renderPane.scrollTop = Math.max(0, offsetTop - $renderPane.clientHeight + linePad);
+  }
+  const colPad = Math.max(80, targetRect.width * 8);
+  if (offsetLeft < viewLeft + colPad) {
+    $renderPane.scrollLeft = Math.max(0, offsetLeft - colPad);
+  } else if (offsetLeft > viewRight - colPad) {
+    $renderPane.scrollLeft = Math.max(0, offsetLeft - $renderPane.clientWidth + colPad);
   }
 }
 
@@ -6026,14 +7607,32 @@ function ensurePlayer() {
         isPreviewing = false;
         return;
       }
+      const shouldLoop = Boolean(activePlaybackRange && activePlaybackRange.loop);
       isPlaying = false;
       isPaused = false;
       waitingForFirstNote = false;
       setStatus("OK");
       updatePlayButton();
       clearNoteSelection();
+      if (!shouldLoop) {
+        resumeStartIdx = null;
+        activePlaybackRange = null;
+        activePlaybackEndAbcOffset = null;
+        playbackStartArmed = false;
+      }
       if (followPlayback && lastRenderIdx != null && editorView) {
-        editorView.dispatch({ selection: { anchor: lastRenderIdx, head: lastRenderIdx } });
+        // When looping, keep the visual follow-cursor without mutating PlaybackRange (loop invariance).
+        suppressPlaybackRangeSelectionSync = true;
+        try {
+          editorView.dispatch({ selection: { anchor: lastRenderIdx, head: lastRenderIdx } });
+        } finally {
+          suppressPlaybackRangeSelectionSync = false;
+        }
+      }
+      if (shouldLoop) {
+        queueMicrotask(() => {
+          startPlaybackFromRange(activePlaybackRange).catch(() => {});
+        });
       }
     },
     onnote: (i, on) => {
@@ -6041,16 +7640,84 @@ function ensurePlayer() {
       const renderOffset = (lastRenderPayload && Number.isFinite(lastRenderPayload.offset))
         ? lastRenderPayload.offset
         : 0;
-      const renderIdx = editorIdx + renderOffset;
-      const editorLen = editorView ? editorView.state.doc.length : 0;
-      const fromInjected = editorLen && editorIdx >= editorLen;
-      lastPlaybackIdx = i;
+        const renderIdx = editorIdx + renderOffset;
+        const editorLen = editorView ? editorView.state.doc.length : 0;
+        const fromInjected = editorLen && editorIdx >= editorLen;
+        lastPlaybackIdx = i;
       if (on && waitingForFirstNote) {
         waitingForFirstNote = false;
         setStatus("Playing…");
         setSoundfontCaption();
       }
       if (isPreviewing) return;
+      if (
+        on
+        && activePlaybackEndAbcOffset != null
+        && Number.isFinite(activePlaybackEndAbcOffset)
+        && i >= activePlaybackEndAbcOffset
+      ) {
+        stopPlaybackForRestart();
+        isPlaying = false;
+        isPaused = false;
+        waitingForFirstNote = false;
+        setStatus("OK");
+        updatePlayButton();
+        clearNoteSelection();
+        if (activePlaybackRange && activePlaybackRange.loop) {
+          queueMicrotask(() => {
+            startPlaybackFromRange(activePlaybackRange).catch(() => {});
+          });
+        } else {
+          resumeStartIdx = null;
+          activePlaybackRange = null;
+          activePlaybackEndAbcOffset = null;
+          playbackStartArmed = false;
+        }
+        return;
+      }
+      if (on && !fromInjected) {
+        const timestamp = typeof performance !== "undefined" ? performance.now() : Date.now();
+        const seq = (playbackTraceSeq += 1);
+        if (lastTraceRunId !== playbackRunId) {
+          stopPlaybackFromGuard("Trace run id mismatch.");
+          return;
+        }
+        if (activePlaybackRange && activePlaybackRange.loop && playbackRange.startOffset !== activePlaybackRange.startOffset) {
+          stopPlaybackFromGuard("Loop invariance violated: PlaybackRange.startOffset mutated.");
+          return;
+        }
+        if (lastTracePlaybackIdx != null && seq < lastTracePlaybackIdx) {
+          stopPlaybackFromGuard("Trace playbackIdx is not monotonic.");
+          return;
+        }
+        if (lastTraceTimestamp != null && timestamp < lastTraceTimestamp) {
+          stopPlaybackFromGuard("Trace timestamp is decreasing.");
+          return;
+        }
+        if (activePlaybackRange && activePlaybackRange.endOffset != null) {
+          const endAbc = Number(activePlaybackRange.endOffset) + playbackIndexOffset;
+          if (Number.isFinite(endAbc) && i > endAbc) {
+            stopPlaybackFromGuard("End offset violated: note beyond endOffset was emitted.");
+            return;
+          }
+        }
+        lastTracePlaybackIdx = seq;
+        lastTraceTimestamp = timestamp;
+        const currentEditorOffset = toEditorOffset(i);
+        const rangeStartEditorOffset = activePlaybackRange ? activePlaybackRange.startOffset : playbackRange.startOffset;
+        appendPlaybackTrace({
+          rangeStartOffset: rangeStartEditorOffset,
+          currentAbcOffset: Number.isFinite(currentEditorOffset) ? currentEditorOffset : editorIdx,
+          rangeStartEditorOffset,
+          currentEditorOffset: Number.isFinite(currentEditorOffset) ? currentEditorOffset : editorIdx,
+          currentIstart: i,
+          origin: activePlaybackRange ? activePlaybackRange.origin : playbackRange.origin,
+          playbackIdx: seq,
+          editorIdx: Number.isFinite(currentEditorOffset) ? currentEditorOffset : editorIdx,
+          timestamp,
+          atMs: timestamp,
+        });
+      }
       if (!followPlayback || fromInjected) return;
       if (followVoiceId || followVoiceIndex != null) {
         const symbol = findSymbolAtOrBefore(i);
@@ -6097,12 +7764,14 @@ function ensurePlayer() {
 function buildPlaybackState(firstSymbol) {
   const symbols = [];
   const measures = [];
+  const barIstarts = [];
   const pushUnique = (arr, symbol) => {
     if (!symbol || !Number.isFinite(symbol.istart)) return;
     if (arr.length && arr[arr.length - 1].istart === symbol.istart) return;
     arr.push({ istart: symbol.istart, symbol });
   };
   const isPlayableSymbol = (symbol) => !!(symbol && Number.isFinite(symbol.dur) && symbol.dur > 0);
+  const isBarLikeSymbol = (symbol) => !!(symbol && (symbol.bar_type || symbol.type === 14));
 
   let s = firstSymbol;
   let guard = 0;
@@ -6112,10 +7781,25 @@ function buildPlaybackState(firstSymbol) {
 
   while (s && guard < 200000) {
     pushUnique(symbols, s);
-    if (s.bar_type && s.ts_next) pushUnique(measures, s.ts_next);
+    if (isBarLikeSymbol(s) && s.ts_next) {
+      pushUnique(measures, s.ts_next);
+      barIstarts.push(s.istart);
+    }
     s = s.ts_next;
     guard += 1;
   }
+
+  const symbolIstarts = symbols.map((item) => item.istart);
+  const measureIstarts = measures.map((item) => item.istart);
+  const timeline = symbols.map((item) => {
+    const sym = item.symbol;
+    return {
+      istart: item.istart,
+      time: Number.isFinite(sym && sym.time) ? sym.time : null,
+      dur: Number.isFinite(sym && sym.dur) ? sym.dur : null,
+      type: Number.isFinite(sym && sym.type) ? sym.type : null,
+    };
+  });
 
   let startSymbol = firstSymbol;
   if (!startSymbol || !Number.isFinite(startSymbol.istart)) {
@@ -6125,7 +7809,15 @@ function buildPlaybackState(firstSymbol) {
     const playable = symbols.find((item) => isPlayableSymbol(item.symbol));
     if (playable) startSymbol = playable.symbol;
   }
-  return { startSymbol, symbols, measures };
+  return {
+    startSymbol,
+    symbols,
+    measures,
+    symbolIstarts,
+    measureIstarts,
+    barIstarts,
+    timeline,
+  };
 }
 
 function setFollowVoiceFromPlayback() {
@@ -6140,22 +7832,62 @@ function setFollowVoiceFromPlayback() {
 
 function findSymbolAtOrBefore(idx) {
   if (!playbackState || !playbackState.symbols.length) return null;
-  let chosen = playbackState.symbols[0].symbol;
-  for (const item of playbackState.symbols) {
-    if (item.istart <= idx) chosen = item.symbol;
-    else break;
+  const list = playbackState.symbolIstarts || [];
+  let lo = 0;
+  let hi = list.length - 1;
+  let best = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const v = list[mid];
+    if (v <= idx) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
   }
-  return chosen;
+  const item = playbackState.symbols[best];
+  return item ? item.symbol : null;
+}
+
+function findSymbolAtOrAfter(idx) {
+  if (!playbackState || !playbackState.symbols.length) return null;
+  const list = playbackState.symbolIstarts || [];
+  if (!list.length) return null;
+  let lo = 0;
+  let hi = list.length - 1;
+  let best = list.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const v = list[mid];
+    if (v >= idx) {
+      best = mid;
+      hi = mid - 1;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  const item = playbackState.symbols[best];
+  return item ? item.symbol : null;
 }
 
 function findMeasureIndex(idx) {
   if (!playbackState || !playbackState.measures.length) return 0;
-  let current = 0;
-  for (let i = 0; i < playbackState.measures.length; i += 1) {
-    if (playbackState.measures[i].istart <= idx) current = i;
-    else break;
+  const list = playbackState.measureIstarts || [];
+  let lo = 0;
+  let hi = list.length - 1;
+  let best = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const v = list[mid];
+    if (v <= idx) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
   }
-  return current;
+  return best;
 }
 
 function stopPlaybackForRestart() {
@@ -6164,6 +7896,50 @@ function stopPlaybackForRestart() {
     player.stop();
   }
   clearNoteSelection();
+}
+
+function stopPlaybackTransport() {
+  if (player && (isPlaying || isPaused || waitingForFirstNote) && typeof player.stop === "function") {
+    suppressOnEnd = true;
+    try { player.stop(); } catch {}
+  }
+  isPlaying = false;
+  isPaused = false;
+  waitingForFirstNote = false;
+  resumeStartIdx = null;
+  activePlaybackRange = null;
+  activePlaybackEndAbcOffset = null;
+  playbackStartArmed = false;
+  setStatus("OK");
+  updatePlayButton();
+  clearNoteSelection();
+  setSoundfontCaption();
+
+  // After an explicit Stop, reset the playhead back to the start (like a classic transport).
+  // The user can then move the cursor/selection to choose a new start location.
+  try {
+    setPlaybackRange({ startOffset: 0, endOffset: null, origin: "cursor", loop: false });
+    if (editorView) {
+      suppressPlaybackRangeSelectionSync = true;
+      try {
+        editorView.dispatch({ selection: { anchor: 0, head: 0 } });
+      } finally {
+        suppressPlaybackRangeSelectionSync = false;
+      }
+    }
+  } catch {}
+}
+
+function toDerivedOffset(editorOffset) {
+  const raw = Number(editorOffset);
+  if (!Number.isFinite(raw)) return null;
+  return raw + (playbackIndexOffset || 0);
+}
+
+function toEditorOffset(derivedOffset) {
+  const raw = Number(derivedOffset);
+  if (!Number.isFinite(raw)) return null;
+  return Math.max(0, raw - (playbackIndexOffset || 0));
 }
 
 function setGlobalHeaderFromSettings(settings) {
@@ -6176,13 +7952,15 @@ function setGlobalHeaderFromSettings(settings) {
 function updateGlobalHeaderToggle() {
   if (!$btnToggleGlobals) return;
   $btnToggleGlobals.classList.toggle("toggle-active", globalHeaderEnabled);
-  $btnToggleGlobals.textContent = globalHeaderEnabled ? "Globals" : "Globals Off";
+  $btnToggleGlobals.textContent = "Globals";
+  $btnToggleGlobals.setAttribute("aria-pressed", globalHeaderEnabled ? "true" : "false");
 }
 
 function updateFollowToggle() {
   if (!$btnToggleFollow) return;
   $btnToggleFollow.classList.toggle("toggle-active", followPlayback);
-  $btnToggleFollow.textContent = followPlayback ? "Follow" : "Follow Off";
+  $btnToggleFollow.textContent = "Follow";
+  $btnToggleFollow.setAttribute("aria-pressed", followPlayback ? "true" : "false");
 }
 
 function setFollowFromSettings(settings) {
@@ -6281,7 +8059,12 @@ function resetSoundfontCache() {
 }
 
 function normalizeHeaderLayer(text) {
-  const raw = String(text || "");
+  if (text == null) return "";
+  if (typeof text !== "string") {
+    console.error("[abcarus] header layer is not a string; dropped:", Object.prototype.toString.call(text));
+    return "";
+  }
+  const raw = text;
   if (!raw.trim()) return "";
   return raw.replace(/[\r\n]+$/, "");
 }
@@ -6386,10 +8169,11 @@ function dedupeHeaderLayers(layers, blockedKeys) {
 }
 
 async function loadHeaderLayer(path) {
-  if (!path || !window.api || typeof window.api.readFile !== "function") return "";
+  if (!path) return "";
   try {
-    const data = await window.api.readFile(path);
-    return normalizeHeaderLayer(data);
+    const res = await readFile(path);
+    if (!res || !res.ok) return "";
+    return normalizeHeaderLayer(res.data);
   } catch {
     return "";
   }
@@ -6996,6 +8780,7 @@ function getPlaybackPayload() {
     meta: lastPlaybackMeta,
   };
   lastPreparedPlaybackKey = sourceKey;
+  assertCleanAbcText(payload.text, "playback payload");
   return payload;
 }
 
@@ -7004,7 +8789,9 @@ function getRenderPayload() {
   const entry = getActiveFileEntry();
   const prefixPayload = buildHeaderPrefix(entry ? getHeaderEditorValue() : "", true, tuneText);
   if (!prefixPayload.text) return { text: tuneText, offset: 0 };
-  return { text: `${prefixPayload.text}${tuneText}`, offset: prefixPayload.offset };
+  const out = { text: `${prefixPayload.text}${tuneText}`, offset: prefixPayload.offset };
+  assertCleanAbcText(out.text, "render payload");
+  return out;
 }
 
 async function preparePlayback() {
@@ -7053,6 +8840,9 @@ async function preparePlayback() {
   };
   const abc = new AbcCtor(user);
   const playbackPayload = getPlaybackPayload();
+  if (!assertCleanAbcText(playbackPayload.text, "preparePlayback")) {
+    throw new Error("ABC text corruption detected (playback).");
+  }
   if (window.__abcarusDebugDrums) {
     const lines = String(playbackPayload.text || "").split(/\r\n|\n|\r/);
     const drumLines = lines.filter((line) => /DRUM|drum|drummap|MIDI channel/i.test(line));
@@ -7077,6 +8867,21 @@ async function preparePlayback() {
   }
 
   playbackState = buildPlaybackState(tunes[0][0]);
+  playbackNoteTrace = [];
+  window.__abcarusPlaybackDebug = {
+    getState: () => ({
+      preparedKey: lastPreparedPlaybackKey,
+      playbackIndexOffset,
+      startIstart: playbackState && playbackState.startSymbol ? playbackState.startSymbol.istart : null,
+      measures: playbackState ? playbackState.measures.length : 0,
+      symbols: playbackState ? playbackState.symbols.length : 0,
+      bars: playbackState && playbackState.barIstarts ? playbackState.barIstarts.length : 0,
+    }),
+    getPlaybackRange: () => clonePlaybackRange(playbackRange),
+    getTimeline: () => (playbackState ? playbackState.timeline : []),
+    getTrace: () => playbackNoteTrace.slice(),
+    clearTrace: () => { playbackNoteTrace = []; },
+  };
   if (window.__abcarusDebugPlayback) {
     const symPreview = playbackState.symbols.slice(0, 10).map((item) => {
       const sym = item.symbol || {};
@@ -7097,8 +8902,11 @@ async function preparePlayback() {
 }
 
 function startPlaybackFromPrepared(startIdx) {
-  const startSymbol = findSymbolAtOrBefore(startIdx)
-    || (playbackState ? playbackState.startSymbol : null);
+  if (!playbackStartArmed) {
+    stopPlaybackFromGuard("Playback start invoked outside startPlaybackFromRange().");
+    return;
+  }
+  const startSymbol = findSymbolAtOrAfter(startIdx);
   if (!startSymbol) throw new Error("Playback start not found.");
 
   let start = startSymbol;
@@ -7128,7 +8936,32 @@ function startPlaybackFromPrepared(startIdx) {
   }, 0);
 }
 
-async function startPlaybackAtIndex(startIdx, isPlaybackIdx = false) {
+function resolvePlaybackEndAbcOffset(range, startAbcOffset) {
+  if (!range || range.endOffset == null) return null;
+  const endOffset = Number(range.endOffset);
+  if (!Number.isFinite(endOffset)) return null;
+  const endAbcOffset = endOffset + playbackIndexOffset;
+  if (!Number.isFinite(endAbcOffset) || endAbcOffset <= startAbcOffset) return null;
+  const sym = findSymbolAtOrAfter(endAbcOffset);
+  if (!sym || !Number.isFinite(sym.istart)) return null;
+  return sym.istart;
+}
+
+async function startPlaybackFromRange(rangeOverride) {
+  if (!editorView) return;
+  const range = clonePlaybackRange(rangeOverride || playbackRange);
+  const max = editorView.state.doc.length;
+  if (!Number.isFinite(range.startOffset) || range.startOffset < 0 || range.startOffset > max) {
+    showToast("Playback range start is invalid.", 2600);
+    return;
+  }
+
+  // Guard: only one active PlaybackRange at a time.
+  if (activePlaybackRange && isPlaying) {
+    stopPlaybackFromGuard("Second PlaybackRange attempted to become active while playing.");
+    return;
+  }
+
   clearNoteSelection();
   const sourceKey = getPlaybackSourceKey();
   const canReuse = playbackState && lastPreparedPlaybackKey && lastPreparedPlaybackKey === sourceKey && player;
@@ -7143,11 +8976,53 @@ async function startPlaybackAtIndex(startIdx, isPlaybackIdx = false) {
     await ensureSoundfontReady();
     stopPlaybackForRestart();
   }
-  const idx = Number.isFinite(startIdx)
-    ? startIdx
-    : (playbackState && playbackState.startSymbol ? playbackState.startSymbol.istart : 0);
-  const playbackIdx = isPlaybackIdx ? idx : (idx + playbackIndexOffset);
-  startPlaybackFromPrepared(playbackIdx);
+
+  const startAbcOffset = toDerivedOffset(range.startOffset);
+  if (!Number.isFinite(startAbcOffset)) {
+    showToast("Playback range start is invalid.", 2600);
+    return;
+  }
+  const startSym = findSymbolAtOrAfter(startAbcOffset);
+  if (!startSym || !Number.isFinite(startSym.istart)) {
+    showToast("Playback start is not mappable.", 2600);
+    waitingForFirstNote = false;
+    return;
+  }
+
+  // Guard: ensure we map startOffset deterministically (no fallback mapping).
+  if (startSym.istart < startAbcOffset) {
+    stopPlaybackFromGuard("PlaybackRange.startOffset mapped to a symbol before startOffset.");
+    return;
+  }
+
+  // Switch semantics guard (Option B): playbackRange changes while playing are deferred; we also freeze loop start.
+  activePlaybackRange = range;
+  activePlaybackEndAbcOffset = (range.endOffset == null) ? null : (Number(range.endOffset) + playbackIndexOffset);
+  if (activePlaybackEndAbcOffset != null && !Number.isFinite(activePlaybackEndAbcOffset)) activePlaybackEndAbcOffset = null;
+  if (activePlaybackEndAbcOffset != null && activePlaybackEndAbcOffset <= startSym.istart) activePlaybackEndAbcOffset = null;
+
+  playbackRunId += 1;
+  lastTraceRunId = playbackRunId;
+  lastTracePlaybackIdx = null;
+  lastTraceTimestamp = null;
+  playbackTraceSeq = 0;
+
+  playbackStartArmed = true;
+  startPlaybackFromPrepared(startSym.istart);
+  playbackStartArmed = false;
+}
+
+async function startPlaybackAtIndex(startIdx) {
+  if (!editorView) return;
+  const max = editorView.state.doc.length;
+  const next = Number.isFinite(startIdx) ? Math.max(0, Math.min(startIdx, max)) : 0;
+  setPlaybackRange({
+    startOffset: next,
+    endOffset: null,
+    origin: "cursor",
+    loop: playbackRange.loop,
+  });
+  await startPlaybackFromRange();
 }
 
 function pausePlayback() {
@@ -7160,6 +9035,14 @@ function pausePlayback() {
   setStatus("Paused");
   updatePlayButton();
   setSoundfontCaption();
+  if (Number.isFinite(lastRenderIdx)) {
+    setPlaybackRange({
+      startOffset: lastRenderIdx,
+      endOffset: null,
+      origin: "cursor",
+      loop: playbackRange.loop,
+    });
+  }
   if (followPlayback && lastRenderIdx != null && editorView) {
     const max = editorView.state.doc.length;
     const idx = Math.max(0, Math.min(lastRenderIdx, max));
@@ -7179,7 +9062,13 @@ async function startPlaybackAtMeasureOffset(delta) {
     stopPlaybackForRestart();
   }
   if (!playbackState || !playbackState.measures.length) {
-    startPlaybackFromPrepared(0);
+    setPlaybackRange({
+      startOffset: 0,
+      endOffset: null,
+      origin: "cursor",
+      loop: playbackRange.loop,
+    });
+    await startPlaybackFromRange();
     return;
   }
   const baseIdx = Number.isFinite(lastPlaybackIdx) ? lastPlaybackIdx : lastStartPlaybackIdx;
@@ -7187,7 +9076,14 @@ async function startPlaybackAtMeasureOffset(delta) {
   const targetIndex = Math.max(0, Math.min(playbackState.measures.length - 1, current + delta));
   const target = playbackState.measures[targetIndex];
   const targetIdx = target && Number.isFinite(target.istart) ? target.istart : 0;
-  startPlaybackFromPrepared(targetIdx);
+  const editorStart = Math.max(0, targetIdx - playbackIndexOffset);
+  setPlaybackRange({
+    startOffset: editorStart,
+    endOffset: null,
+    origin: "cursor",
+    loop: playbackRange.loop,
+  });
+  await startPlaybackFromRange();
 }
 
 async function playDrumPreview(pitch, velocity) {
@@ -7245,15 +9141,42 @@ if ($btnPlayPause) {
         return;
       }
       if (isPaused) {
-        const idx = Number.isFinite(resumeStartIdx) ? resumeStartIdx : lastStartPlaybackIdx;
-        await startPlaybackAtIndex(idx, true);
+        await startPlaybackFromRange();
         return;
       }
-      await startPlaybackAtIndex(0);
+      await startPlaybackFromRange();
     } catch (e) {
       logErr((e && e.stack) ? e.stack : String(e));
       setStatus("Error");
     }
+  });
+}
+
+if ($btnPlay) {
+  $btnPlay.addEventListener("click", async () => {
+    try {
+      await transportPlay();
+    } catch (e) {
+      logErr((e && e.stack) ? e.stack : String(e));
+      setStatus("Error");
+    }
+  });
+}
+
+if ($btnPause) {
+  $btnPause.addEventListener("click", async () => {
+    try {
+      await transportPause();
+    } catch (e) {
+      logErr((e && e.stack) ? e.stack : String(e));
+      setStatus("Error");
+    }
+  });
+}
+
+if ($btnStop) {
+  $btnStop.addEventListener("click", () => {
+    stopPlaybackTransport();
   });
 }
 
@@ -7271,7 +9194,7 @@ if ($btnRestart) {
 if ($btnPrevMeasure) {
   $btnPrevMeasure.addEventListener("click", async () => {
     try {
-      await startPlaybackAtMeasureOffset(-1);
+      await activateErrorByNav(-1);
     } catch (e) {
       logErr((e && e.stack) ? e.stack : String(e));
       setStatus("Error");
@@ -7282,7 +9205,7 @@ if ($btnPrevMeasure) {
 if ($btnNextMeasure) {
   $btnNextMeasure.addEventListener("click", async () => {
     try {
-      await startPlaybackAtMeasureOffset(1);
+      await activateErrorByNav(1);
     } catch (e) {
       logErr((e && e.stack) ? e.stack : String(e));
       setStatus("Error");
@@ -7323,8 +9246,8 @@ if ($soundfontSelect) {
 
 if ($soundfontAdd) {
   $soundfontAdd.addEventListener("click", async () => {
-    if (!window.api || typeof window.api.pickSoundfont !== "function") return;
     try {
+      if (!window.api || typeof window.api.pickSoundfont !== "function") return;
       const picked = await window.api.pickSoundfont();
       if (!picked) return;
       if (!/\.sf2$/i.test(String(picked))) {
@@ -7409,6 +9332,21 @@ if ($btnToggleFollow) {
     }
     followPlayback = !followPlayback;
     updateFollowToggle();
+  });
+}
+
+if ($btnToggleErrors) {
+  $btnToggleErrors.addEventListener("click", async () => {
+    const next = !errorsEnabled;
+    if (!next) {
+      if (window.api && typeof window.api.updateSettings === "function") {
+        window.api.updateSettings({ errorsEnabled: false }).catch(() => {});
+      }
+      setErrorsEnabled(false, { triggerRefresh: false });
+      return;
+    }
+    // Enabling errors is session-only (not persisted).
+    setErrorsEnabled(true, { triggerRefresh: true });
   });
 }
 

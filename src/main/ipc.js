@@ -79,6 +79,7 @@ function registerIpcHandlers(ctx) {
     exportPdf,
     printViaPdf,
     getDialogParent,
+    prepareDialogParent,
     addRecentTune,
     addRecentFile,
     addRecentFolder,
@@ -88,23 +89,31 @@ function registerIpcHandlers(ctx) {
     getLastRecent,
   } = ctx;
 
-  ipcMain.handle("dialog:open", async () => showOpenDialog());
-  ipcMain.handle("dialog:open-folder", async () => showOpenFolderDialog());
-  ipcMain.handle("dialog:save", async (_e, suggestedName, suggestedDir) =>
-    showSaveDialog(suggestedName, suggestedDir)
+  const getParentForDialog = (event, reason) => {
+    try {
+      if (typeof prepareDialogParent === "function") return prepareDialogParent(event, reason);
+      if (typeof getDialogParent === "function") return getDialogParent(event);
+    } catch {}
+    return null;
+  };
+
+  ipcMain.handle("dialog:open", async (event) => await showOpenDialog(event));
+  ipcMain.handle("dialog:open-folder", async (event) => await showOpenFolderDialog(event));
+  ipcMain.handle("dialog:save", async (event, suggestedName, suggestedDir) =>
+    await showSaveDialog(suggestedName, suggestedDir, event)
   );
-  ipcMain.handle("dialog:confirm-unsaved", async (_e, contextLabel) =>
-    confirmUnsavedChanges(contextLabel)
+  ipcMain.handle("dialog:confirm-unsaved", async (event, contextLabel) =>
+    confirmUnsavedChanges(contextLabel, event)
   );
-  ipcMain.handle("dialog:confirm-overwrite", async (_e, filePath) =>
-    confirmOverwrite(filePath)
+  ipcMain.handle("dialog:confirm-overwrite", async (event, filePath) =>
+    confirmOverwrite(filePath, event)
   );
   ipcMain.handle("dialog:confirm-append", async (_e, filePath) =>
     confirmAppendToFile(filePath)
   );
-  ipcMain.handle("dialog:confirm-remove-sf2", async (_e, label) => {
-    const parent = ctx && typeof ctx.getDialogParent === "function" ? ctx.getDialogParent() : null;
-    const response = dialog.showMessageBoxSync(parent, {
+  ipcMain.handle("dialog:confirm-remove-sf2", async (event, label) => {
+    const parent = getParentForDialog(event, "confirm-remove-sf2");
+    const response = dialog.showMessageBoxSync(parent || undefined, {
       type: "warning",
       buttons: ["Remove", "Cancel"],
       defaultId: 0,
@@ -149,9 +158,9 @@ function registerIpcHandlers(ctx) {
       return [];
     }
   });
-  ipcMain.handle("sf2:pick", async () => {
-    const parent = ctx && typeof ctx.getDialogParent === "function" ? ctx.getDialogParent() : null;
-    const result = dialog.showOpenDialogSync(parent, {
+  ipcMain.handle("sf2:pick", async (event) => {
+    const parent = getParentForDialog(event, "sf2:pick");
+    const result = dialog.showOpenDialogSync(parent || undefined, {
       modal: true,
       properties: ["openFile"],
       filters: [
@@ -183,8 +192,9 @@ function registerIpcHandlers(ctx) {
       return null;
     }
   });
-  ipcMain.handle("import:musicxml", async () => {
-    const result = dialog.showOpenDialogSync(getDialogParent(), {
+  ipcMain.handle("import:musicxml", async (event) => {
+    const parent = getParentForDialog(event, "import:musicxml");
+    const result = dialog.showOpenDialogSync(parent || undefined, {
       modal: true,
       properties: ["openFile"],
       filters: [
@@ -217,14 +227,15 @@ function registerIpcHandlers(ctx) {
       };
     }
   });
-  ipcMain.handle("export:musicxml", async (_event, abcText, suggestedName) => {
+  ipcMain.handle("export:musicxml", async (event, abcText, suggestedName) => {
     if (!abcText || !String(abcText).trim()) {
       return { ok: false, error: "No notation to export." };
     }
     const safeName = suggestedName && String(suggestedName).trim()
       ? String(suggestedName).trim()
       : "tune";
-    const filePath = dialog.showSaveDialogSync(getDialogParent(), {
+    const parent = getParentForDialog(event, "export:musicxml");
+    const filePath = dialog.showSaveDialogSync(parent || undefined, {
       title: "Export MusicXML",
       defaultPath: `${safeName}.musicxml`,
       filters: [
@@ -312,6 +323,14 @@ function registerIpcHandlers(ctx) {
       return false;
     }
   });
+  ipcMain.handle("file:mkdirp", async (_e, dirPath) => {
+    try {
+      await fs.promises.mkdir(String(dirPath || ""), { recursive: true });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
   ipcMain.handle("library:scan", async (event, rootDir) => {
     if (!rootDir) return { root: "", files: [] };
     return scanLibrary(rootDir, event.sender);
@@ -349,12 +368,13 @@ function registerIpcHandlers(ctx) {
       })
     );
   });
-  ipcMain.handle("print:pdf", async (_event, svgMarkup, suggestedName) => {
+  ipcMain.handle("print:pdf", async (event, svgMarkup, suggestedName) => {
     if (!svgMarkup) return { ok: false, error: "No notation to export." };
     const safeName = suggestedName && String(suggestedName).trim()
       ? String(suggestedName).trim()
       : "tune";
-    const filePath = dialog.showSaveDialogSync(getDialogParent(), {
+    const parent = getParentForDialog(event, "print:pdf");
+    const filePath = dialog.showSaveDialogSync(parent || undefined, {
       title: "Export PDF",
       defaultPath: `${safeName}.pdf`,
       filters: [{ name: "PDF", extensions: ["pdf"] }],

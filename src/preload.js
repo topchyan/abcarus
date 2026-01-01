@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld("api", {
   writeFile: async (filePath, data) => ipcRenderer.invoke("file:write", filePath, data),
   renameFile: async (oldPath, newPath) => ipcRenderer.invoke("file:rename", oldPath, newPath),
   fileExists: async (filePath) => ipcRenderer.invoke("file:exists", filePath),
+  mkdirp: async (dirPath) => ipcRenderer.invoke("file:mkdirp", dirPath),
   scanLibrary: async (rootDir) => ipcRenderer.invoke("library:scan", rootDir),
   parseLibraryFile: async (filePath) => ipcRenderer.invoke("library:parse-file", filePath),
   addRecentTune: async (entry) => ipcRenderer.invoke("recent:add", entry),

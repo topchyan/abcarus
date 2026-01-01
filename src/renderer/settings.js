@@ -27,6 +27,7 @@ const DEFAULT_SETTINGS = {
   followPlayback: true,
   drumVelocityMap: buildDefaultDrumVelocityMap(),
   disclaimerSeen: false,
+  usePortalFileDialogs: true,
 };
 
 const ZOOM_STEP = 0.1;
@@ -46,6 +47,7 @@ export function initSettings(api) {
   const $settingsGlobalHeader = document.getElementById("settingsGlobalHeader");
   const $settingsGlobalHeaderEnabled = document.getElementById("settingsGlobalHeaderEnabled");
   const $settingsSoundfont = document.getElementById("settingsSoundfont");
+  const $settingsUsePortalFileDialogs = document.getElementById("settingsUsePortalFileDialogs");
   const $settingsDrumMixer = document.getElementById("settingsDrumMixer");
   const $settingsTabs = Array.from(document.querySelectorAll("[data-settings-tab]"));
   const $settingsPanels = Array.from(document.querySelectorAll("[data-settings-panel]"));
@@ -110,6 +112,7 @@ export function initSettings(api) {
     if ($settingsAbc2xmlArgs) $settingsAbc2xmlArgs.value = currentSettings.abc2xmlArgs || "";
     if ($settingsXml2abcArgs) $settingsXml2abcArgs.value = currentSettings.xml2abcArgs || "";
     if ($settingsGlobalHeaderEnabled) $settingsGlobalHeaderEnabled.checked = currentSettings.globalHeaderEnabled !== false;
+    if ($settingsUsePortalFileDialogs) $settingsUsePortalFileDialogs.checked = currentSettings.usePortalFileDialogs !== false;
     setGlobalHeaderValue(currentSettings.globalHeaderText || "");
     drumVelocityMap = normalizeDrumVelocityMap(currentSettings.drumVelocityMap);
     renderDrumMixer();
@@ -168,6 +171,12 @@ export function initSettings(api) {
     drumUpdateTimer = setTimeout(() => {
       updateSettings({ drumVelocityMap });
     }, 200);
+  }
+
+  if ($settingsUsePortalFileDialogs) {
+    $settingsUsePortalFileDialogs.addEventListener("change", () => {
+      updateSettings({ usePortalFileDialogs: $settingsUsePortalFileDialogs.checked }).catch(() => {});
+    });
   }
 
   function renderDrumMixer() {

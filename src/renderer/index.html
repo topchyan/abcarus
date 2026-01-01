@@ -21,23 +21,29 @@
 
 <body>
   <header>
-    <div class="title">
-      <button id="btnToggleLibrary" title="Toggle library (F2)">Library</button>
-      ABCarus
-    </div>
     <div class="controls">
+      <button id="btnToggleLibrary" title="Library list (Ctrl+Shift+L)">Library</button>
+      <div class="controls-sep" aria-hidden="true"></div>
+      <button id="btnFileNew" type="button" title="New file (Ctrl+N)">New File</button>
+      <button id="btnFileOpen" type="button" title="Open (Ctrl+O)">Open</button>
+      <button id="btnFileSave" type="button" title="Save (Ctrl+S)">Save</button>
+      <button id="btnFileClose" type="button" title="Close file (Ctrl+W)">Close</button>
+      <div class="toolbar-sep" aria-hidden="true"></div>
+      <button id="btnPlayPause" type="button" title="Play / Pause (F5)">Play</button>
+      <button id="btnStop" type="button" title="Stop (Esc)">Stop</button>
+      <div class="toolbar-sep" aria-hidden="true"></div>
+      <button id="btnToggleErrors" type="button" title="Toggle errors features">Errors</button>
+      <button id="btnToggleFollow" type="button" title="Toggle playback follow">Follow</button>
+      <button id="btnToggleGlobals" type="button" title="Toggle global header">Globals</button>
+    </div>
+    <div class="right-controls">
       <label class="soundfont-control">
         <span id="soundfontLabel">Soundfont:</span>
         <select id="soundfontSelect" aria-label="Soundfont"></select>
       </label>
       <button id="soundfontAdd" title="Add soundfont">Add</button>
       <button id="soundfontRemove" title="Remove soundfont">Remove</button>
-      <button id="btnRestart" title="Start over (F4)">⏮</button>
-      <button id="btnPlayPause" title="Play / Pause (F5)">▶</button>
-      <button id="btnPrevMeasure" title="Back one measure (F6)">⏪</button>
-      <button id="btnNextMeasure" title="Forward one measure (F7)">⏩</button>
-      <button id="btnToggleFollow" title="Toggle playback follow">Follow</button>
-      <button id="btnToggleGlobals" title="Toggle global header">Globals</button>
+      <div class="controls-sep" aria-hidden="true"></div>
       <button id="btnResetLayout" title="Reset layout (F8)">Reset</button>
     </div>
   </header>
@@ -102,10 +108,11 @@
             <span id="headerStateMarker" class="header-state-marker" aria-hidden="true">—</span>
           </button>
           <select id="fileTuneSelect"></select>
-          <button id="scanErrorTunes" class="scan-error-button" type="button">Scan for errors</button>
+          <button id="scanErrorTunes" class="scan-error-button" type="button" hidden>Scan for errors</button>
           <button id="errorsIndicator" class="errors-indicator" type="button" aria-label="Errors" hidden disabled>
             Errors: 0
           </button>
+          <span id="errorsFocusMessage" class="errors-focus-message" hidden></span>
           <div class="file-header-meta">
             <div class="dirty-indicator" id="dirtyIndicator" aria-live="polite"></div>
           </div>
@@ -138,15 +145,15 @@
 		  </footer>
 		  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-		  <div id="errorsPopover" class="errors-popover hidden" role="dialog" aria-label="Errors list">
-		    <div class="errors-popover-header">
-		      <span id="errorsPopoverTitle">Errors</span>
-		    </div>
-		    <div id="errorsList" class="errors-list"></div>
-		  </div>
-
-	  <div class="modal" id="settingsModal" aria-hidden="true">
-	    <div class="modal-card settings-card" role="dialog" aria-label="Settings">
+			  <div id="errorsPopover" class="errors-popover hidden" role="dialog" aria-label="Errors list">
+			    <div class="errors-popover-header">
+			      <span id="errorsPopoverTitle">Errors</span>
+			    </div>
+			    <div id="errorsList" class="errors-list"></div>
+			  </div>
+	
+		  <div class="modal" id="settingsModal" aria-hidden="true">
+		    <div class="modal-card settings-card" role="dialog" aria-label="Settings">
 	      <div class="modal-header">
 	        <div class="modal-title">Settings</div>
         <button class="modal-close" id="settingsClose" type="button">Close</button>
@@ -164,11 +171,11 @@
               <div class="settings-title">Zoom</div>
               <label class="settings-row">
                 <span>Score zoom (%)</span>
-                <input id="settingsRenderZoom" type="number" min="50" max="300" step="5" />
+                <input id="settingsRenderZoom" type="number" min="50" max="800" step="5" />
               </label>
               <label class="settings-row">
                 <span>Editor zoom (%)</span>
-                <input id="settingsEditorZoom" type="number" min="50" max="300" step="5" />
+                <input id="settingsEditorZoom" type="number" min="50" max="800" step="5" />
               </label>
             </div>
             <div class="settings-group">
@@ -189,6 +196,14 @@
                 <span>Bold inline lyrics</span>
                 <input id="settingsLyricsBold" type="checkbox" />
               </label>
+            </div>
+            <div class="settings-group">
+              <div class="settings-title">Dialogs</div>
+              <label class="settings-row">
+                <span>Use portal file dialogs (Linux)</span>
+                <input id="settingsUsePortalFileDialogs" type="checkbox" />
+              </label>
+              <div class="settings-help">Improves Open/Save dialog placement on some Linux desktops.</div>
             </div>
           </div>
           <div class="settings-panel" data-settings-panel="xml" role="tabpanel">

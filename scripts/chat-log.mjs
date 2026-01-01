@@ -5,7 +5,11 @@ import path from "node:path";
 function usage(exitCode = 1) {
   const msg = [
     "Usage:",
-    "  node scripts/chat-log.mjs -m \"message\" [--notes \"optional notes\"]",
+    "  node scripts/chat-log.mjs [DEVLOG.md] -m \"message\" [--notes \"optional notes\"]",
+    "  node scripts/chat-log.mjs --file DEVLOG.md -m \"message\" [--notes \"optional notes\"]",
+    "",
+    "Notes:",
+    "  - If -m/--message is omitted and stdin is a TTY, the script will prompt.",
     "",
     "Appends a new entry to DEVLOG.md with the current git state (branch/HEAD/status/diffstat).",
   ].join("\n");
@@ -14,15 +18,28 @@ function usage(exitCode = 1) {
 }
 
 function parseArgs(argv) {
-  const out = { message: "", notes: "" };
+  const out = { message: "", notes: "", file: "" };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === "-m" || a === "--message") out.message = String(argv[i + 1] || ""), i += 1;
     else if (a === "--notes") out.notes = String(argv[i + 1] || ""), i += 1;
+    else if (a === "--file") out.file = String(argv[i + 1] || ""), i += 1;
     else if (a === "-h" || a === "--help") usage(0);
+    else if (a.startsWith("-")) usage(1);
+    else if (!out.file) out.file = String(a || "");
+    else usage(1);
   }
   out.message = out.message.trim();
   out.notes = out.notes.trim();
+  out.file = (out.file || "DEVLOG.md").trim();
+  if (!out.file) out.file = "DEVLOG.md";
+  if (!out.message) {
+    if (process.stdin.isTTY) {
+      process.stderr.write("Message: ");
+      const buf = fs.readFileSync(0, "utf8");
+      out.message = String(buf || "").trim();
+    }
+  }
   if (!out.message) usage(1);
   return out;
 }
@@ -76,7 +93,9 @@ const entry = [
   "",
 ].join("\n");
 
-const devlogPath = path.join(process.cwd(), "DEVLOG.md");
+const devlogPath = path.isAbsolute(args.file)
+  ? args.file
+  : path.join(process.cwd(), args.file);
 if (!fs.existsSync(devlogPath)) {
   fs.writeFileSync(
     devlogPath,
@@ -86,4 +105,3 @@ if (!fs.existsSync(devlogPath)) {
 }
 fs.appendFileSync(devlogPath, entry, "utf8");
 process.stdout.write(`Appended entry to ${devlogPath}\n`);
-

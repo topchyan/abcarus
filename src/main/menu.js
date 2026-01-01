@@ -32,11 +32,16 @@ function buildMenuTemplate(appState, sendMenuAction) {
     {
       label: "File",
       submenu: [
-        { label: "New", accelerator: "CmdOrCtrl+N", click: () => sendMenuAction("new") },
+        { label: "New File", accelerator: "CmdOrCtrl+N", click: () => sendMenuAction("new") },
         {
-          label: "New from Template",
+          label: "New Tune From Template",
           accelerator: "CmdOrCtrl+Shift+N",
           click: () => sendMenuAction("newFromTemplate"),
+        },
+        {
+          label: "New Tune (Draft in Active File)",
+          accelerator: "CmdOrCtrl+Alt+N",
+          click: () => sendMenuAction("newTune"),
         },
         { label: "Open", accelerator: "CmdOrCtrl+O", click: () => sendMenuAction("open") },
         {
@@ -93,14 +98,6 @@ function buildMenuTemplate(appState, sendMenuAction) {
         { label: "Find…", accelerator: "CmdOrCtrl+F", click: () => sendMenuAction("find") },
         { label: "Replace…", accelerator: "CmdOrCtrl+H", click: () => sendMenuAction("replace") },
         { label: "Go to Line…", accelerator: "CmdOrCtrl+G", click: () => sendMenuAction("gotoLine") },
-        { type: "separator" },
-        {
-          label: "Find ABC",
-          submenu: [
-            { label: "Find in Library…", click: () => sendMenuAction("findLibrary") },
-            { label: "Clear Library Filter", click: () => sendMenuAction("clearLibraryFilter") },
-          ],
-        },
         { type: "separator" },
         { role: "cut" },
         { role: "copy" },
