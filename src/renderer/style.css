@@ -34,6 +34,21 @@ body {
   flex-direction: column;
 }
 
+body.raw-mode #fileNameMeta::after {
+  content: "  [RAW]";
+  color: #b45309;
+  font-weight: 700;
+}
+
+body.raw-mode .right-split {
+  grid-template-columns: 1fr;
+}
+
+body.raw-mode .split-divider,
+body.raw-mode .render-pane {
+  display: none;
+}
+
 header {
   display: flex;
   justify-content: space-between;

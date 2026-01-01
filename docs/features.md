@@ -21,12 +21,12 @@ This document describes features implemented in the current codebase. Paths refe
 
 ## File operations
 Implemented file actions are routed through the main process via IPC:
-- New / New from Template / Open / Open Folder / Save / Close (`src/main/menu.js`, `src/renderer/renderer.js`).
+- New / New from Template / Open / Open Folder / Save / Save As / Close (`src/main/menu.js`, `src/renderer/renderer.js`).
 - Save behavior depends on context:
   - If a tune loaded from a file is active, saving replaces that tune in the source file (`saveActiveTuneToSource` in `src/renderer/renderer.js`).
   - If no file-backed tune is active, saving appends the tune to the currently selected library file and assigns a new `X:` number (`performAppendFlow` in `src/renderer/renderer.js`).
   - If no target file is selected in the library, saving shows an error.
-- "Save As" is implemented in the renderer but there is no menu entry wiring it up (`performSaveAsFlow` exists, but `src/main/menu.js` has no Save As item).
+- "Save As" is implemented and wired in the app menu (`performSaveAsFlow` in `src/renderer/renderer.js`, menu in `src/main/menu.js`).
 - Unsaved changes prompt users before destructive actions (`confirmUnsavedChanges` via IPC).
 
 ## Library editing actions
@@ -45,14 +45,15 @@ The library tree supports per-tune file operations:
 ## Playback (audio)
 - Playback uses `snd-1.js` from abc2svg and a soundfont file loaded via the preload API (`ensureSoundfontLoaded` in `src/renderer/renderer.js`).
 - Player state tracks current position and supports:
-  - Start over (F4), previous/next measure (F5/F7), play/pause (F6).
+  - Start over (F4) and play/pause (F5) (`src/main/menu.js`, `src/renderer/renderer.js`).
+  - Previous/next measure via the Play menu (`src/main/menu.js`).
 - Playback highlights notes in both the rendered SVG and editor.
 
 ## Transformations
 Transform actions rely on `abc2abc` (`src/main/conversion/backends/abc2abc.js`):
 - Transpose up/down one semitone.
 - Double/half note lengths.
-- Set measures per line (1, 2, 4, 8).
+- Set measures per line (1–9).
 - A separate "Align Bars" tool realigns bars in the editor text (`alignBarsInEditor`).
 
 ## Import / export

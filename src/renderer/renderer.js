@@ -51,6 +51,7 @@ const $btnFileNew = document.getElementById("btnFileNew");
 const $btnFileOpen = document.getElementById("btnFileOpen");
 const $btnFileSave = document.getElementById("btnFileSave");
 const $btnFileClose = document.getElementById("btnFileClose");
+const $btnToggleRaw = document.getElementById("btnToggleRaw");
 const $btnPlay = document.getElementById("btnPlay");
 const $btnPause = document.getElementById("btnPause");
 const $btnStop = document.getElementById("btnStop");
@@ -135,6 +136,10 @@ let headerEditorFilePath = null;
 let lastErrors = [];
 let errorsPopoverOpen = false;
 let isNewTuneDraft = false;
+let rawMode = false;
+let rawModeFilePath = null;
+let rawModeHeaderEndOffset = 0;
+let rawModeOriginalTuneId = null;
 
 // PlaybackRange must be initialized before initEditor() runs (selection listeners fire early).
 let playbackRange = {
@@ -743,6 +748,10 @@ let lastEditorWidth = 320;
 
 function setRightPaneSizes(leftWidth) {
   if (!$rightSplit || !$splitDivider || !$renderPane || !$editorPane) return;
+  if (rawMode) {
+    $rightSplit.style.gridTemplateColumns = "1fr";
+    return;
+  }
   const total = $rightSplit.clientWidth;
   const dividerWidth = $splitDivider.offsetWidth || 6;
   const min = Math.min(MIN_RIGHT_PANE_WIDTH, Math.max(0, (total - dividerWidth) / 2));
@@ -778,6 +787,10 @@ function initRightPaneResizer() {
   });
 
   window.addEventListener("resize", () => {
+    if (rawMode) {
+      if ($rightSplit) $rightSplit.style.gridTemplateColumns = "1fr";
+      return;
+    }
     setRightPaneSizes(lastEditorWidth || MIN_RIGHT_PANE_WIDTH);
   });
 }
@@ -971,6 +984,24 @@ function setDirtyIndicator(isDirty) {
   if (!$dirtyIndicator) return;
   const tuneDirty = Boolean(isDirty);
   const hdrDirty = Boolean(headerDirty);
+  if (rawMode) {
+    if (tuneDirty && hdrDirty) {
+      $dirtyIndicator.textContent = "Header+File: Unsaved";
+      $dirtyIndicator.classList.add("active");
+    } else if (hdrDirty) {
+      $dirtyIndicator.textContent = "Header: Unsaved";
+      $dirtyIndicator.classList.add("active");
+    } else if (tuneDirty) {
+      $dirtyIndicator.textContent = "File: Unsaved";
+      $dirtyIndicator.classList.add("active");
+    } else {
+      $dirtyIndicator.textContent = "";
+      $dirtyIndicator.classList.remove("active");
+    }
+    updateLibraryDirtyState(tuneDirty || hdrDirty);
+    updateWindowTitle();
+    return;
+  }
   if (tuneDirty && hdrDirty) {
     $dirtyIndicator.textContent = "Header+Tune: Unsaved";
     $dirtyIndicator.classList.add("active");
@@ -1107,6 +1138,40 @@ function updateFileContext() {
   buildTuneSelectOptions(entry);
   setScanErrorButtonVisibility(entry);
   setScanErrorButtonActive(tuneErrorFilter);
+}
+
+function getNavigableTuneIdsFromFileSelect() {
+  if (!$fileTuneSelect || $fileTuneSelect.disabled) return [];
+  const ids = [];
+  for (const opt of Array.from($fileTuneSelect.options || [])) {
+    if (!opt || opt.disabled) continue;
+    const value = opt.value != null ? String(opt.value) : "";
+    if (!value || value === "__new__") continue;
+    ids.push(value);
+  }
+  return ids;
+}
+
+async function navigateTuneByDelta(delta) {
+  const ids = getNavigableTuneIdsFromFileSelect();
+  if (!ids.length) {
+    showToast(tuneErrorFilter ? "No error tunes in selection." : "No tunes to navigate.", 2000);
+    return;
+  }
+  const current = activeTuneId || ($fileTuneSelect && $fileTuneSelect.value ? String($fileTuneSelect.value) : "");
+  const currentIdx = current ? ids.indexOf(current) : -1;
+  const startIdx = currentIdx >= 0 ? currentIdx : (delta > 0 ? 0 : ids.length - 1);
+  const nextIdx = Math.max(0, Math.min(ids.length - 1, startIdx + delta));
+  const nextId = ids[nextIdx];
+  if (!nextId) return;
+  if (currentIdx === nextIdx) return;
+  if (rawMode) {
+    if ($fileTuneSelect) $fileTuneSelect.value = nextId;
+    setActiveTuneInRaw(nextId);
+    scrollToTuneInRaw(nextId);
+    return;
+  }
+  await selectTune(nextId);
 }
 
 function setHeaderEditorValue(text) {
@@ -1659,6 +1724,10 @@ function resetLayout() {
 }
 
 function refreshErrorsNow() {
+  if (rawMode) {
+    showToast("Raw mode: switch to tune mode for errors.", 2200);
+    return;
+  }
   if (!errorsEnabled) {
     showToast("Errors disabled");
     return;
@@ -1703,6 +1772,248 @@ function setEditorValue(text) {
   });
 }
 
+function setRawModeUI(enabled) {
+  rawMode = Boolean(enabled);
+  document.body.classList.toggle("raw-mode", rawMode);
+  if ($btnToggleRaw) $btnToggleRaw.classList.toggle("toggle-active", rawMode);
+  if ($rightSplit) {
+    if (rawMode) {
+      $rightSplit.style.gridTemplateColumns = "1fr";
+    } else {
+      setRightPaneSizes(lastEditorWidth || MIN_RIGHT_PANE_WIDTH);
+    }
+  }
+  const disablePlayback = rawMode;
+  if ($btnPlayPause) $btnPlayPause.disabled = disablePlayback;
+  if ($btnStop) $btnStop.disabled = disablePlayback;
+  if ($btnToggleFollow) $btnToggleFollow.disabled = disablePlayback;
+  if ($btnToggleErrors) $btnToggleErrors.disabled = rawMode;
+  if ($scanErrorTunes) $scanErrorTunes.disabled = rawMode;
+  if ($errorsIndicator) $errorsIndicator.disabled = rawMode;
+}
+
+function buildRawFileText({ headerText, bodyText }) {
+  let header = String(headerText || "");
+  const body = String(bodyText || "");
+  if (header && !/[\r\n]$/.test(header) && /^\s*X:/.test(body)) {
+    header += "\n";
+  }
+  return header ? header + body : body;
+}
+
+async function performRawSaveFlow() {
+  const filePath = rawModeFilePath || (currentDoc && currentDoc.path) || activeFilePath;
+  if (!filePath) {
+    await showSaveError("No file path available for raw save.");
+    return false;
+  }
+  const preferred = (activeTuneMeta && activeTuneMeta.path === filePath)
+    ? { xNumber: activeTuneMeta.xNumber || "", indexInFile: activeTuneMeta.indexInFile || 0 }
+    : { xNumber: "", indexInFile: 0 };
+  const headerText = getHeaderEditorValue();
+  const bodyText = getEditorValue();
+  const fullText = buildRawFileText({ headerText, bodyText });
+  const res = await writeFile(filePath, fullText);
+  if (!res || !res.ok) {
+    await showSaveError((res && res.error) ? res.error : "Unable to save file.");
+    return false;
+  }
+  fileContentCache.set(filePath, fullText);
+  headerDirty = false;
+  updateHeaderStateUI();
+  if (currentDoc) {
+    currentDoc.path = filePath;
+    currentDoc.content = bodyText;
+    currentDoc.dirty = false;
+  }
+  setDirtyIndicator(false);
+  const updatedFile = await refreshLibraryFile(filePath, { force: true });
+  if (updatedFile && Number.isFinite(updatedFile.headerEndOffset)) {
+    rawModeHeaderEndOffset = Number(updatedFile.headerEndOffset) || 0;
+  }
+  if (rawMode) {
+    const entry = updatedFile || (libraryIndex && libraryIndex.files
+      ? libraryIndex.files.find((f) => f.path === filePath)
+      : null);
+    const tunes = entry && entry.tunes ? entry.tunes : [];
+    if (tunes.length) {
+      let next = null;
+      if (!next && Number.isFinite(Number(preferred.indexInFile)) && Number(preferred.indexInFile) > 0) {
+        next = tunes[Math.min(tunes.length - 1, Math.max(0, Number(preferred.indexInFile) - 1))];
+      }
+      if (!next && preferred.xNumber) {
+        next = tunes.find((t) => String(t.xNumber || "") === String(preferred.xNumber));
+      }
+      if (!next) next = tunes[0];
+      if (next && next.id) {
+        if ($fileTuneSelect) $fileTuneSelect.value = next.id;
+        setActiveTuneInRaw(next.id);
+      }
+    }
+  }
+  setStatus("File saved.");
+  return true;
+}
+
+function scrollToPosInEditor(pos, { y = "start" } = {}) {
+  if (!editorView) return;
+  const docLen = editorView.state.doc.length;
+  const safePos = Math.max(0, Math.min(Number(pos) || 0, docLen));
+  const effects = [];
+  if (typeof EditorView.scrollIntoView === "function") {
+    try {
+      effects.push(EditorView.scrollIntoView(safePos, { y }));
+    } catch {}
+  }
+  editorView.dispatch({
+    selection: EditorSelection.cursor(safePos),
+    effects,
+    scrollIntoView: true,
+  });
+}
+
+function setActiveTuneInRaw(tuneId) {
+  if (!tuneId) return;
+  const res = findTuneById(tuneId);
+  if (!res) return;
+  activeTuneId = tuneId;
+  activeTuneMeta = {
+    id: res.tune.id,
+    path: res.file.path,
+    basename: res.file.basename,
+    indexInFile: res.tune.indexInFile,
+    xNumber: res.tune.xNumber,
+    title: res.tune.title || "",
+    composer: res.tune.composer || "",
+    key: res.tune.key || "",
+    startLine: res.tune.startLine,
+    endLine: res.tune.endLine,
+    startOffset: res.tune.startOffset,
+    endOffset: res.tune.endOffset,
+  };
+  markActiveTuneButton(activeTuneId);
+  setTuneMetaText(buildTuneMetaLabel(activeTuneMeta));
+}
+
+function scrollToTuneInRaw(tuneId) {
+  const res = findTuneById(tuneId);
+  if (!res) return;
+  const bodyStart = Number(rawModeHeaderEndOffset) || 0;
+  const pos = Math.max(0, Number(res.tune.startOffset) - bodyStart);
+  scrollToPosInEditor(pos, { y: "start" });
+}
+
+async function enterRawMode() {
+  const filePath = (activeTuneMeta && activeTuneMeta.path)
+    ? activeTuneMeta.path
+    : (activeFilePath || (currentDoc && currentDoc.path) || null);
+  if (!filePath) {
+    showToast("No active file to open in raw mode.", 2200);
+    return;
+  }
+  const ok = await ensureSafeToAbandonCurrentDoc("switching to raw mode");
+  if (!ok) return;
+
+  try { stopPlaybackTransport(); } catch {}
+
+  const readRes = await readFile(filePath);
+  if (!readRes || !readRes.ok) {
+    await showOpenError((readRes && readRes.error) ? readRes.error : "Unable to read file.");
+    return;
+  }
+
+  activeFilePath = filePath;
+  fileContentCache.set(filePath, readRes.data || "");
+  const updatedFile = await refreshLibraryFile(filePath, { force: true });
+  const entry = updatedFile || getActiveFileEntry();
+  const headerEndOffset = entry && Number.isFinite(entry.headerEndOffset) ? Number(entry.headerEndOffset) : findHeaderEndOffset(readRes.data || "");
+  const bodyText = String(readRes.data || "").slice(headerEndOffset);
+
+  rawModeFilePath = filePath;
+  rawModeHeaderEndOffset = headerEndOffset;
+  rawModeOriginalTuneId = activeTuneId;
+
+  suppressDirty = true;
+  setEditorValue(bodyText);
+  suppressDirty = false;
+  if (currentDoc) {
+    currentDoc.path = filePath;
+    currentDoc.content = bodyText;
+    currentDoc.dirty = false;
+  }
+  setRawModeUI(true);
+  updateFileHeaderPanel();
+  setDirtyIndicator(false);
+  if (rawModeOriginalTuneId) {
+    setActiveTuneInRaw(rawModeOriginalTuneId);
+    scrollToTuneInRaw(rawModeOriginalTuneId);
+  }
+  setStatus("Raw mode.");
+}
+
+async function exitRawMode() {
+  if (!rawMode) return;
+  const fileDirty = Boolean(currentDoc && currentDoc.dirty);
+  const hdrDirty = Boolean(headerDirty);
+  if (fileDirty || hdrDirty) {
+    const choice = await confirmUnsavedChanges("leaving raw mode");
+    if (choice === "cancel") return;
+    if (choice === "save") {
+      const saved = await performRawSaveFlow();
+      if (!saved) return;
+    } else if (choice === "dont_save") {
+      headerEditorFilePath = null;
+      headerDirty = false;
+      if (currentDoc) currentDoc.dirty = false;
+      updateFileHeaderPanel();
+      setDirtyIndicator(false);
+    }
+  }
+  setRawModeUI(false);
+  const tuneToRestore = activeTuneId || rawModeOriginalTuneId;
+  rawModeFilePath = null;
+  rawModeHeaderEndOffset = 0;
+  rawModeOriginalTuneId = null;
+  if (tuneToRestore) {
+    const res = await selectTune(tuneToRestore, { skipConfirm: true });
+    if (!res || !res.ok) {
+      const entry = getActiveFileEntry();
+      const firstId = entry && entry.tunes && entry.tunes[0] ? entry.tunes[0].id : null;
+      if (firstId) await selectTune(firstId, { skipConfirm: true });
+    }
+  } else {
+    const entry = getActiveFileEntry();
+    const firstId = entry && entry.tunes && entry.tunes[0] ? entry.tunes[0].id : null;
+    if (firstId) await selectTune(firstId, { skipConfirm: true });
+  }
+  setStatus("Ready");
+}
+
+async function leaveRawModeForAction(contextLabel) {
+  if (!rawMode) return true;
+  const fileDirty = Boolean(currentDoc && currentDoc.dirty);
+  const hdrDirty = Boolean(headerDirty);
+  if (fileDirty || hdrDirty) {
+    const choice = await confirmUnsavedChanges(contextLabel || "continuing");
+    if (choice === "cancel") return false;
+    if (choice === "save") {
+      const saved = await performRawSaveFlow();
+      if (!saved) return false;
+    } else if (choice === "dont_save") {
+      headerEditorFilePath = null;
+      headerDirty = false;
+      if (currentDoc) currentDoc.dirty = false;
+      updateFileHeaderPanel();
+      setDirtyIndicator(false);
+    }
+  }
+  setRawModeUI(false);
+  rawModeFilePath = null;
+  rawModeHeaderEndOffset = 0;
+  rawModeOriginalTuneId = null;
+  return true;
+}
+
 function initEditor() {
   if (editorView || !$editorHost) return;
   const customKeys = keymap.of([
@@ -1721,10 +2032,10 @@ function initEditor() {
 	    { key: "Tab", run: indentSelectionMore },
 	    { key: "Shift-Tab", run: indentSelectionLess },
 	    { key: "F2", run: () => { toggleLibrary(); return true; } },
-	    { key: "F5", run: () => { transportTogglePlayPause(); return true; } },
-	    { key: "F6", run: () => { activateErrorByNav(-1); return true; } },
-	    { key: "F7", run: () => { activateErrorByNav(1); return true; } },
-	    { key: "F4", run: () => { startPlaybackAtIndex(0); return true; } },
+	    { key: "F5", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to play.", 2200); return true; } transportTogglePlayPause(); return true; } },
+	    { key: "F6", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to navigate errors.", 2200); return true; } activateErrorByNav(-1); return true; } },
+	    { key: "F7", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to navigate errors.", 2200); return true; } activateErrorByNav(1); return true; } },
+	    { key: "F4", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to play.", 2200); return true; } startPlaybackAtIndex(0); return true; } },
 	    { key: "F8", run: () => { resetLayout(); return true; } },
 	    { key: "F9", run: () => { refreshErrorsNow(); return true; } },
 	  ]);
@@ -1735,10 +2046,12 @@ function initEditor() {
         currentDoc.dirty = true;
         setDirtyIndicator(true);
       }
-      if (t) clearTimeout(t);
-      t = setTimeout(renderNow, 400);
+      if (!rawMode) {
+        if (t) clearTimeout(t);
+        t = setTimeout(renderNow, 400);
+      }
     }
-    if (update.selectionSet && !isPlaying) {
+    if (!rawMode && update.selectionSet && !isPlaying) {
       const idx = update.state.selection.main.anchor;
       highlightNoteAtIndex(idx);
       if (!suppressPlaybackRangeSelectionSync) {
@@ -2188,6 +2501,12 @@ function renderLibraryTree(files = null) {
 	        if (targetPath) {
 	          activeFilePath = targetPath;
 	          renderLibraryTree(sourceFiles);
+	        }
+	        if (rawMode) {
+	          if ($fileTuneSelect) $fileTuneSelect.value = tune.id;
+	          setActiveTuneInRaw(tune.id);
+	          scrollToTuneInRaw(tune.id);
+	          return;
 	        }
 	        selectTune(tune.id);
 	      });
@@ -2670,12 +2989,24 @@ if ($btnLibraryMenu) {
 
 if ($btnFileNew) {
   $btnFileNew.addEventListener("click", async () => {
-    try { await fileNew(); } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
+    try {
+      if (rawMode) {
+        const ok = await leaveRawModeForAction("creating a new file");
+        if (!ok) return;
+      }
+      await fileNew();
+    } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
   });
 }
 if ($btnFileOpen) {
   $btnFileOpen.addEventListener("click", async () => {
-    try { await fileOpen(); } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
+    try {
+      if (rawMode) {
+        const ok = await leaveRawModeForAction("opening a file");
+        if (!ok) return;
+      }
+      await fileOpen();
+    } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
   });
 }
 if ($btnFileSave) {
@@ -2688,13 +3019,30 @@ if ($btnFileClose) {
     try { await fileClose(); } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
   });
 }
+if ($btnToggleRaw) {
+  $btnToggleRaw.addEventListener("click", async () => {
+    try {
+      if (rawMode) await exitRawMode();
+      else await enterRawMode();
+    } catch (e) {
+      logErr((e && e.stack) ? e.stack : String(e));
+      setStatus("Error");
+    }
+  });
+}
 
 if ($fileTuneSelect) {
   $fileTuneSelect.addEventListener("change", () => {
     const tuneId = $fileTuneSelect.value;
     if (tuneId === "__new__") return;
     if (isNewTuneDraft) isNewTuneDraft = false;
-    if (tuneId) selectTune(tuneId);
+    if (!tuneId) return;
+    if (rawMode) {
+      setActiveTuneInRaw(tuneId);
+      scrollToTuneInRaw(tuneId);
+      return;
+    }
+    selectTune(tuneId);
   });
 }
 
@@ -3859,6 +4207,16 @@ function initContextMenu() {
       hideContextMenu();
       return;
     }
+    if (action === "renumberXInFile" && menuTarget) {
+      const filePath = menuTarget.type === "file"
+        ? menuTarget.filePath
+        : (menuTarget.type === "tune" && menuTarget.tuneId ? String(menuTarget.tuneId).split("::")[0] : null);
+      if (filePath) {
+        await renumberXInActiveFile(filePath);
+      }
+      hideContextMenu();
+      return;
+    }
     if (action === "moveTune" && menuTarget && menuTarget.type === "tune") {
       openMoveTuneModal(menuTarget.tuneId);
       hideContextMenu();
@@ -3913,6 +4271,7 @@ function showContextMenuAt(x, y, target) {
       { label: "Duplicate Tune", action: "duplicateTune" },
       { label: "Cut Tune", action: "cutTune" },
       { label: "Move to…", action: "moveTune" },
+      { label: "Renumber X (File)…", action: "renumberXInFile" },
       { label: "Delete Tune…", action: "deleteTune", danger: true },
     ]);
   } else if (target.type === "file") {
@@ -3921,6 +4280,7 @@ function showContextMenuAt(x, y, target) {
       { label: "Paste Tune", action: "pasteTune", disabled: !clipboardTune },
       { label: "Refresh Library", action: "refreshLibrary" },
       { label: "Rename File…", action: "renameFile" },
+      { label: "Renumber X…", action: "renumberXInFile", disabled: !target.filePath },
     ]);
   } else if (target.type === "library") {
     buildContextMenuItems([
@@ -4936,10 +5296,14 @@ function updateUIFromDocument(doc) {
   suppressDirty = true;
   setEditorValue(doc ? doc.content : "");
   suppressDirty = false;
-  renderNow();
+  if (!rawMode) renderNow();
 }
 
 function showEmptyState() {
+  setRawModeUI(false);
+  rawModeFilePath = null;
+  rawModeHeaderEndOffset = 0;
+  rawModeOriginalTuneId = null;
   suppressDirty = true;
   setEditorValue("");
   suppressDirty = false;
@@ -6177,7 +6541,7 @@ async function confirmAbandonIfDirty(contextLabel) {
     return true;
   }
 
-  const ok = await performSaveFlow();
+  const ok = rawMode ? await performRawSaveFlow() : await performSaveFlow();
   return Boolean(ok);
 }
 
@@ -6325,9 +6689,9 @@ function removeTuneFromContent(content, startOffset, endOffset) {
   return before + after;
 }
 
-async function refreshLibraryFile(filePath) {
+async function refreshLibraryFile(filePath, options) {
   if (!window.api || typeof window.api.parseLibraryFile !== "function") return null;
-  const res = await window.api.parseLibraryFile(filePath);
+  const res = await window.api.parseLibraryFile(filePath, options);
   if (!res || !res.files || !res.files.length) return null;
   const updatedFile = res.files[0];
   if (!libraryIndex) {
@@ -6797,6 +7161,10 @@ async function importMusicXml() {
 
 async function fileSave() {
   if (!currentDoc) return;
+  if (rawMode) {
+    await performRawSaveFlow();
+    return;
+  }
   await performSaveFlow();
 }
 
@@ -6863,6 +7231,118 @@ async function exportMusicXml() {
   setStatus("OK");
 }
 
+function renumberXInTextKeepingFirst(abcText) {
+  const lines = String(abcText || "").split(/\r\n|\n|\r/);
+  const xStartRe = /^(\s*X:\s*)(.*)$/;
+  const out = [];
+  let base = null;
+  let tuneIndex = 0;
+
+  for (const line of lines) {
+    const match = line.match(xStartRe);
+    if (!match) {
+      out.push(line);
+      continue;
+    }
+
+    const prefix = match[1];
+    const rest = match[2] || "";
+    const numMatch = rest.match(/^(\s*)(\d+)(.*)$/);
+
+    if (base == null) {
+      if (numMatch) {
+        const num = Number(numMatch[2]);
+        if (Number.isFinite(num)) {
+          base = num;
+          tuneIndex = 0;
+          out.push(line);
+          continue;
+        }
+      }
+
+      base = 1;
+      tuneIndex = 0;
+      out.push(`${prefix}${base}${rest}`);
+      continue;
+    }
+
+    tuneIndex += 1;
+    const next = base + tuneIndex;
+    if (numMatch) {
+      out.push(`${prefix}${numMatch[1]}${next}${numMatch[3]}`);
+    } else {
+      out.push(`${prefix}${next}${rest}`);
+    }
+  }
+
+  if (base == null) {
+    return { ok: false, error: "No X: headers found in file." };
+  }
+
+  return {
+    ok: true,
+    abcText: out.join("\n"),
+    base,
+    tuneCount: tuneIndex + 1,
+  };
+}
+
+async function renumberXInActiveFile(explicitFilePath) {
+  const filePath = explicitFilePath
+    || ((activeTuneMeta && activeTuneMeta.path) ? activeTuneMeta.path : null)
+    || (activeFilePath || (currentDoc && currentDoc.path) || null);
+  if (!filePath) {
+    showToast("No active file selected.", 2200);
+    return;
+  }
+
+  const ok = await ensureSafeToAbandonCurrentDoc("renumbering X numbers");
+  if (!ok) return;
+
+  const readRes = await readFile(filePath);
+  if (!readRes || !readRes.ok) {
+    await showOpenError((readRes && readRes.error) ? readRes.error : "Unable to read file.");
+    return;
+  }
+
+  const renum = renumberXInTextKeepingFirst(readRes.data);
+  if (!renum.ok) {
+    await showSaveError(renum.error || "Unable to renumber X: headers.");
+    return;
+  }
+
+  if (renum.abcText === readRes.data) {
+    setStatus("OK");
+    showToast("X numbers already sequential.", 2000);
+    return;
+  }
+
+  const writeRes = await writeFile(filePath, renum.abcText);
+  if (!writeRes || !writeRes.ok) {
+    await showSaveError((writeRes && writeRes.error) ? writeRes.error : "Unable to write file.");
+    return;
+  }
+
+  const prevFile = libraryIndex && libraryIndex.files
+    ? libraryIndex.files.find((f) => f.path === filePath)
+    : null;
+  const prevTuneIndex = prevFile && prevFile.tunes && activeTuneId
+    ? prevFile.tunes.findIndex((t) => t.id === activeTuneId)
+    : -1;
+
+  fileContentCache.set(filePath, renum.abcText);
+  const updatedFile = await refreshLibraryFile(filePath, { force: true });
+  if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
+    const idx = prevTuneIndex >= 0 ? prevTuneIndex : 0;
+    const nextTune = updatedFile.tunes[Math.min(idx, updatedFile.tunes.length - 1)];
+    if (nextTune && nextTune.id) {
+      await selectTune(nextTune.id, { skipConfirm: true });
+    }
+  }
+
+  setStatus(`Renumbered X (base ${renum.base}, ${renum.tuneCount} tunes).`);
+}
+
 async function appQuit() {
   await requestQuitApplication();
 }
@@ -6872,6 +7352,60 @@ function wireMenuActions() {
   window.api.onMenuAction(async (action) => {
     try {
       const actionType = typeof action === "string" ? action : action && action.type;
+      if (rawMode) {
+        const blocked = new Set([
+          "playStart",
+          "playPrev",
+          "playToggle",
+          "playNext",
+          "transformTransposeUp",
+          "transformTransposeDown",
+          "transformDouble",
+          "transformHalf",
+          "transformMeasures",
+          "alignBars",
+          "printPreview",
+          "print",
+          "printAll",
+          "exportPdf",
+          "exportPdfAll",
+          "exportMusicXml",
+          "importMusicXml",
+        ]);
+        if (blocked.has(actionType)) {
+          showToast("Raw mode: switch to tune mode for tools/playback/print/export.", 2400);
+          return;
+        }
+
+        const needsExit = new Set([
+          "new",
+          "newTune",
+          "newFromTemplate",
+          "open",
+          "openFolder",
+          "openRecentTune",
+          "openRecentFile",
+          "openRecentFolder",
+          "close",
+          "quit",
+        ]);
+        if (needsExit.has(actionType)) {
+          const labelMap = {
+            new: "creating a new file",
+            newTune: "creating a new tune",
+            newFromTemplate: "creating a new tune",
+            open: "opening a file",
+            openFolder: "opening a folder",
+            openRecentTune: "opening a recent tune",
+            openRecentFile: "opening a recent file",
+            openRecentFolder: "opening a recent folder",
+            close: "closing this file",
+            quit: "quitting",
+          };
+          const ok = await leaveRawModeForAction(labelMap[actionType] || "continuing");
+          if (!ok) return;
+        }
+      }
       if (actionType === "new") await fileNew();
       else if (actionType === "newTune") await fileNewTune();
       else if (actionType === "newFromTemplate") await fileNewFromTemplate();
@@ -6893,6 +7427,9 @@ function wireMenuActions() {
         openLibraryListFromCurrentLibraryIndex();
       }
       else if (actionType === "toggleLibrary") toggleLibrary();
+      else if (actionType === "renumberXInFile") await renumberXInActiveFile();
+      else if (actionType === "navTunePrev") await navigateTuneByDelta(-1);
+      else if (actionType === "navTuneNext") await navigateTuneByDelta(1);
       else if (actionType === "openRecentTune" && action && action.entry) {
         await openRecentTune(action.entry);
       }
@@ -9136,6 +9673,10 @@ async function playDrumPreview(pitch, velocity) {
 if ($btnPlayPause) {
   $btnPlayPause.addEventListener("click", async () => {
     try {
+      if (rawMode) {
+        showToast("Raw mode: switch to tune mode to play.", 2200);
+        return;
+      }
       if (isPlaying) {
         pausePlayback();
         return;
@@ -9155,6 +9696,10 @@ if ($btnPlayPause) {
 if ($btnPlay) {
   $btnPlay.addEventListener("click", async () => {
     try {
+      if (rawMode) {
+        showToast("Raw mode: switch to tune mode to play.", 2200);
+        return;
+      }
       await transportPlay();
     } catch (e) {
       logErr((e && e.stack) ? e.stack : String(e));
@@ -9166,6 +9711,10 @@ if ($btnPlay) {
 if ($btnPause) {
   $btnPause.addEventListener("click", async () => {
     try {
+      if (rawMode) {
+        showToast("Raw mode: switch to tune mode to play.", 2200);
+        return;
+      }
       await transportPause();
     } catch (e) {
       logErr((e && e.stack) ? e.stack : String(e));

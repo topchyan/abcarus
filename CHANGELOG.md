@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-01-01
+### Changed
+- Simplify one-shot command
+
+
 ## [0.12.2] - 2025-12-31
 ### Changed
 - Document release notes generation

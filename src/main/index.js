@@ -932,26 +932,28 @@ function setCachedParse(filePath, stat, parsed) {
   });
 }
 
-async function parseSingleFile(filePath, sender) {
+async function parseSingleFile(filePath, sender, options = {}) {
   let stat = null;
   let content = "";
   try {
     stat = await fs.promises.stat(filePath);
-    const cached = getCachedParse(filePath, stat);
-    if (cached) {
-      return {
-        root: path.dirname(filePath),
-        files: [
-          {
-            path: filePath,
-            basename: path.basename(filePath),
-            updatedAtMs: stat && Number.isFinite(stat.mtimeMs) ? stat.mtimeMs : 0,
-            headerText: cached.headerText || "",
-            headerEndOffset: cached.headerEndOffset || 0,
-            tunes: cached.tunes,
-          },
-        ],
-      };
+    if (!options || !options.force) {
+      const cached = getCachedParse(filePath, stat);
+      if (cached) {
+        return {
+          root: path.dirname(filePath),
+          files: [
+            {
+              path: filePath,
+              basename: path.basename(filePath),
+              updatedAtMs: stat && Number.isFinite(stat.mtimeMs) ? stat.mtimeMs : 0,
+              headerText: cached.headerText || "",
+              headerEndOffset: cached.headerEndOffset || 0,
+              tunes: cached.tunes,
+            },
+          ],
+        };
+      }
     }
     content = await fs.promises.readFile(filePath, "utf8");
   } catch (e) {
@@ -1090,6 +1092,19 @@ function createWindow() {
   win.maximize();
   win.webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
+    if (input.alt && !input.control && !input.meta && !input.shift) {
+      const key = input.key;
+      if (key === "PageUp") {
+        event.preventDefault();
+        sendMenuAction("navTunePrev");
+        return;
+      }
+      if (key === "PageDown") {
+        event.preventDefault();
+        sendMenuAction("navTuneNext");
+        return;
+      }
+    }
     const hasMod = input.control || input.meta;
     if (!hasMod || !input.shift || input.alt) return;
     const key = input.key;

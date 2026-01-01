@@ -335,9 +335,9 @@ function registerIpcHandlers(ctx) {
     if (!rootDir) return { root: "", files: [] };
     return scanLibrary(rootDir, event.sender);
   });
-  ipcMain.handle("library:parse-file", async (event, filePath) => {
+  ipcMain.handle("library:parse-file", async (event, filePath, options) => {
     if (!filePath) return { root: "", files: [] };
-    const res = await parseSingleFile(filePath, event.sender);
+    const res = await parseSingleFile(filePath, event.sender, options);
     return res || { root: "", files: [] };
   });
   ipcMain.handle("print:preview", async (_event, svgMarkup) => {
