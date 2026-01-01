@@ -54,16 +54,20 @@ This is the “do it all in one shot” flow:
 
 1) Make sure you are in the repo root.
 2) Run:
-   - Patch release:
-     - `bash deploy.sh --commit-all --version patch --tag -m "release: vX.Y.Z" -b "optional details"`
+   - Minimal (recommended):
+     - `bash deploy.sh --version patch -m "chore(release)"`
    - Minor/major:
-     - `bash deploy.sh --commit-all --version minor --tag -m "release: vX.Y.Z"`
-     - `bash deploy.sh --commit-all --version major --tag -m "release: vX.Y.Z"`
+     - `bash deploy.sh --version minor -m "chore(release)"`
+     - `bash deploy.sh --version major -m "chore(release)"`
+
+Notes on the commit message:
+- If you omit the version, `deploy.sh` appends it automatically (e.g. `: v0.12.2`).
+- You can also use `{version}` placeholder: `-m "chore(release): {version}"`.
 3) After it finishes:
    - AppImage artifact: `dist/appimage/Abcarus-x86_64.AppImage`
 
 Notes:
-- `deploy.sh` will prompt before pushing unless you pass `-y`.
+- `deploy.sh` pushes by default (non-interactive). Use `--ask` to re-enable prompts.
 - If you want to build without pushing: add `--skip-push`.
 - If you want to control the changelog / notes generation:
   - Use `--skip-release-docs` to disable auto-generation.
