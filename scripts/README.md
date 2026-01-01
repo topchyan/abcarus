@@ -7,6 +7,7 @@ Quick usage (no arguments):
 
 Local-only scripts:
 - Put personal scripts with hardcoded paths under `scripts/local/` (gitignored).
+  - Examples: `scripts/local/run.sh`, `scripts/local/get_recents.sh` (kept out of GitHub).
 
 Details:
 - `build_appimage_local.sh` removes any bundled runtime, then builds an AppDir for quick local testing.
@@ -15,5 +16,5 @@ Details:
 - `bundle_python_appimage.mjs` copies Python scripts and the runtime into the AppDir.
 - `sync_python_runtime.sh` copies the system Python executable + stdlib into `third_party/python-runtime`.
 - `install_icons.sh` installs desktop icons for local dev.
-- `run.sh` starts the Electron app.
+- Local runner scripts live under `scripts/local/` (gitignored).
 - `transpose_tests.mjs` is a local utility for transpose tests.
