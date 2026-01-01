@@ -17,6 +17,14 @@ PYTHON="${python_bin}" bash "${repo_root}/scripts/sync_python_runtime.sh"
 bash "${repo_root}/scripts/build_appimage.sh" --python-root "${repo_root}/third_party/python-runtime"
 
 appdir="${repo_root}/dist/appimage/AppDir"
+if [[ -f "${output_path}" ]]; then
+  ts="$(date +%Y%m%d-%H%M%S)"
+  backup_path="${output_path%.AppImage}.backup-${ts}.AppImage"
+  echo "Backing up existing AppImage:"
+  echo "  ${output_path}"
+  echo "  -> ${backup_path}"
+  cp -a "${output_path}" "${backup_path}"
+fi
 "${appimagetool_path}" "${appdir}" "${output_path}"
 
 echo "Release AppImage created at: ${output_path}"

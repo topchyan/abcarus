@@ -6,6 +6,9 @@ dist/
 
 # Local-only scripts and logs
 scripts/local/
+DEVLOG.md
+deploy.sh
+scripts/generate-release-docs.mjs
 get_recents.sh
 recents.zip
 debug_dumps/
