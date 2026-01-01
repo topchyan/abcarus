@@ -23,6 +23,10 @@ This project uses Semantic Versioning (SemVer) and Keep a Changelog.
    - `git push origin vX.Y.Z`
 5) Create a GitHub Release from the new CHANGELOG section.
 
+## Practical checklist
+For a step-by-step “one-shot” release workflow (deploy + AppImage + push), see:
+- `docs/RELEASE_CHECKLIST.md`
+
 ## Release notes format
 Use Keep a Changelog headings:
 - Added
