@@ -16,6 +16,16 @@ Where to find:
 - You can run the app locally: `npm run start`
 - AppImage toolchain is available (see `scripts/README.md`).
 
+## Local-only files (do not commit)
+
+This repo intentionally keeps some things local (debug dumps, personal scripts, etc.).
+
+- Repo-shared ignores live in `.gitignore` (tracked and pushed to GitHub).
+- Personal/host-specific ignores should NOT go into `.gitignore`.
+  Use one of:
+  - `.git/info/exclude` (applies only to your clone)
+  - your global git ignore file (e.g. `~/.config/git/ignore`)
+
 ## 1) Prepare the release message
 
 You typically want:
@@ -76,4 +86,3 @@ If you see errors about FUSE (/dev/fuse) or runtime download:
 - `appimagetool` may need a runtime file (`runtime-x86_64`).
   - Place it at: `dist/appimage/runtime-x86_64`
   - Then rebuild using `appimagetool --runtime-file dist/appimage/runtime-x86_64 ...`
-
