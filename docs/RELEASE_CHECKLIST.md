@@ -7,6 +7,7 @@ Where to find:
 - This checklist: `docs/RELEASE_CHECKLIST.md`
 - Release history (manual notes): `DEVLOG.md`
 - User-facing changelog: `CHANGELOG.md`
+- Generated release notes (per release): `docs/RELEASE_NOTES.md`
 
 ---
 
@@ -64,6 +65,10 @@ This is the “do it all in one shot” flow:
 Notes:
 - `deploy.sh` will prompt before pushing unless you pass `-y`.
 - If you want to build without pushing: add `--skip-push`.
+- If you want to control the changelog / notes generation:
+  - Use `--skip-release-docs` to disable auto-generation.
+  - Use `--release-from <ref>` to set the git range start (default: latest `v*` tag).
+  - Use `--release-notes-path <path>` to choose where notes are written (default: `docs/RELEASE_NOTES.md`).
 
 ## 4) Push (if skipped earlier)
 
