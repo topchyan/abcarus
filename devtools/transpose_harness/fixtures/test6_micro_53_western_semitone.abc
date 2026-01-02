@@ -1,0 +1,7 @@
+X:6
+T:Micro53 Western Semitone
+M:4/4
+L:1/8
+%%MIDI temperamentequal 53
+K:C _2B _3e ^3f
+| B e f =e e B |

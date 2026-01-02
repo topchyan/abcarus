@@ -1,0 +1,7 @@
+X:4
+T:NumAcc
+%%MIDI temperamentequal 12
+M:4/4
+L:1/8
+K:C
+| C ^1C D ^1D |

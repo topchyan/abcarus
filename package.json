@@ -1,12 +1,13 @@
 {
   "name": "abc-electron-proto",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "main": "src/main/index.js",
   "private": true,
   "scripts": {
     "start": "electron .",
     "appimage": "bash scripts/build_appimage.sh",
     "build:brand": "node scripts/build-brand-icons.mjs",
+    "test:transpose": "node devtools/transpose_harness/run_tests.js",
     "version:show": "node scripts/show-version.mjs",
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",

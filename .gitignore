@@ -12,6 +12,7 @@ scripts/generate-release-docs.mjs
 get_recents.sh
 recents.zip
 debug_dumps/
+roadmaps/
 
 # Bundled Python runtime (release builds only)
 third_party/python-runtime/

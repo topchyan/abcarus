@@ -102,6 +102,10 @@ const $disclaimerOk = document.getElementById("disclaimerOk");
 const $headerStateMarker = document.getElementById("headerStateMarker");
 
 const DEFAULT_ABC = "";
+const NEW_FILE_MINIMAL_ABC = `X:1
+T:Untitled
+K:none
+`;
 const TEMPLATE_ABC = `X:1
 T:Title          % Required for identification
 T:Subtitle       % Useful if applicable
@@ -2264,6 +2268,7 @@ function setActiveTuneText(text, metadata, options = {}) {
     updateFileContext();
     setDirtyIndicator(false);
   } else {
+    const markDirty = Boolean(options && options.markDirty);
     activeTuneMeta = null;
     activeTuneId = null;
     activeFilePath = null;
@@ -2274,12 +2279,12 @@ function setActiveTuneText(text, metadata, options = {}) {
     if (currentDoc) {
       currentDoc.path = null;
       currentDoc.content = text || "";
-      currentDoc.dirty = false;
+      currentDoc.dirty = markDirty;
     } else {
-      currentDoc = { path: null, dirty: false, content: text || "" };
+      currentDoc = { path: null, dirty: markDirty, content: text || "" };
     }
     updateFileContext();
-    setDirtyIndicator(false);
+    setDirtyIndicator(markDirty);
     headerDirty = false;
     updateHeaderStateUI();
   }
@@ -4827,6 +4832,25 @@ function parseAbcHeaderFields(text) {
   return fields;
 }
 
+function parseTuneIdentityFields(text) {
+  const out = { xNumber: "", title: "", composer: "", key: "", preview: "" };
+  const lines = String(text || "").split(/\r\n|\n|\r/);
+  for (const line of lines) {
+    if (!out.xNumber) {
+      const m = line.match(/^X:\s*(\d+)/);
+      if (m) out.xNumber = m[1];
+    }
+    if (!out.title && /^T:/.test(line)) out.title = line.replace(/^T:\s*/, "").trim();
+    else if (!out.composer && /^C:/.test(line)) out.composer = line.replace(/^C:\s*/, "").trim();
+    else if (!out.key && /^K:/.test(line)) {
+      out.key = line.replace(/^K:\s*/, "").trim();
+      break;
+    }
+  }
+  out.preview = out.title || (out.xNumber ? `X:${out.xNumber}` : "");
+  return out;
+}
+
 function getSuggestedBaseName() {
   const parsed = parseAbcHeaderFields(getEditorValue());
   const title = (activeTuneMeta && activeTuneMeta.title) || parsed.title || "untitled";
@@ -5755,7 +5779,7 @@ function countLines(text) {
   return text.split(/\r\n|\n|\r/).length;
 }
 
-function updateLibraryAfterSave(filePath, startOffset, oldEndOffset, newEndOffset, deltaLen, deltaLines, newLineCount) {
+function updateLibraryAfterSave(filePath, startOffset, oldEndOffset, newEndOffset, deltaLen, deltaLines, newLineCount, updatedTuneMeta) {
   if (!libraryIndex) return;
   const fileEntry = libraryIndex.files.find((f) => f.path === filePath);
   if (!fileEntry) return;
@@ -5764,6 +5788,13 @@ function updateLibraryAfterSave(filePath, startOffset, oldEndOffset, newEndOffse
     if (tune.startOffset === startOffset && tune.endOffset === oldEndOffset) {
       tune.endOffset = newEndOffset;
       tune.endLine = tune.startLine + newLineCount - 1;
+      if (updatedTuneMeta && typeof updatedTuneMeta === "object") {
+        if (updatedTuneMeta.xNumber != null) tune.xNumber = updatedTuneMeta.xNumber;
+        if (updatedTuneMeta.title != null) tune.title = updatedTuneMeta.title;
+        if (updatedTuneMeta.composer != null) tune.composer = updatedTuneMeta.composer;
+        if (updatedTuneMeta.key != null) tune.key = updatedTuneMeta.key;
+        if (updatedTuneMeta.preview != null) tune.preview = updatedTuneMeta.preview;
+      }
     } else if (tune.startOffset >= oldEndOffset) {
       tune.startOffset += deltaLen;
       tune.endOffset += deltaLen;
@@ -5822,6 +5853,7 @@ async function saveActiveTuneToSource() {
     const newline = oldText.endsWith("\r\n") ? "\r\n" : "\n";
     newText += newline;
   }
+  const updatedIdentity = parseTuneIdentityFields(newText);
   const updated = content.slice(0, startOffset) + newText + content.slice(endOffset);
   const res = await writeFile(filePath, updated);
   if (!res.ok) return res;
@@ -5833,10 +5865,17 @@ async function saveActiveTuneToSource() {
   const deltaLines = newLineCount - oldLineCount;
   const newEndOffset = startOffset + newText.length;
 
-  updateLibraryAfterSave(filePath, startOffset, endOffset, newEndOffset, deltaLen, deltaLines, newLineCount);
+  updateLibraryAfterSave(filePath, startOffset, endOffset, newEndOffset, deltaLen, deltaLines, newLineCount, updatedIdentity);
 
   activeTuneMeta.endOffset = newEndOffset;
   activeTuneMeta.endLine = activeTuneMeta.startLine + newLineCount - 1;
+  if (updatedIdentity && typeof updatedIdentity === "object") {
+    if (updatedIdentity.xNumber != null) activeTuneMeta.xNumber = updatedIdentity.xNumber;
+    if (updatedIdentity.title != null) activeTuneMeta.title = updatedIdentity.title;
+    if (updatedIdentity.composer != null) activeTuneMeta.composer = updatedIdentity.composer;
+    if (updatedIdentity.key != null) activeTuneMeta.key = updatedIdentity.key;
+    setTuneMetaText(buildTuneMetaLabel(activeTuneMeta));
+  }
   return { ok: true };
 }
 
@@ -6565,6 +6604,11 @@ async function performSaveFlow() {
     }
   }
 
+  if (isNewTuneDraft && activeFilePath) {
+    const ok = await performAppendFlow();
+    return Boolean(ok);
+  }
+
   if (activeTuneMeta && activeTuneMeta.path) {
     const res = await saveActiveTuneToSource();
     if (res.ok) {
@@ -7018,16 +7062,13 @@ async function performAppendFlow() {
 async function fileNew() {
   const ok = await ensureSafeToAbandonCurrentDoc("creating a new file");
   if (!ok) return;
-  setActiveTuneText("", null);
-  setDirtyIndicator(false);
+  setActiveTuneText(NEW_FILE_MINIMAL_ABC, null, { markDirty: true });
 }
 
 async function fileNewFromTemplate() {
   const ok = await ensureSafeToAbandonCurrentDoc("creating a new file");
   if (!ok) return;
-  setActiveTuneText(TEMPLATE_ABC, null);
-  if (currentDoc) currentDoc.dirty = true;
-  setDirtyIndicator(true);
+  setActiveTuneText(TEMPLATE_ABC, null, { markDirty: true });
 }
 
 function buildNewTuneDraftTemplate(nextX) {
@@ -7065,13 +7106,12 @@ function setNewTuneDraftInActiveFile(text, { filePath, basename, xNumber } = {})
   setTuneMetaText(label);
   setFileNameMeta(stripFileExtension(basename || safeBasename(filePath)));
 
-  if (currentDoc) {
-    currentDoc.path = null;
-    currentDoc.content = text || "";
-    currentDoc.dirty = false;
-  }
+  if (!currentDoc) currentDoc = createBlankDocument();
+  currentDoc.path = null;
+  currentDoc.content = text || "";
+  currentDoc.dirty = true;
   updateFileContext();
-  setDirtyIndicator(false);
+  setDirtyIndicator(true);
   updateFileHeaderPanel();
   renderNow();
 }
@@ -8156,8 +8196,20 @@ function ensurePlayer() {
         activePlaybackRange = null;
         activePlaybackEndAbcOffset = null;
         playbackStartArmed = false;
+        // After playback completes naturally, reset the playhead to the tune start.
+        try {
+          setPlaybackRange({ startOffset: 0, endOffset: null, origin: "cursor", loop: false });
+          if (editorView) {
+            suppressPlaybackRangeSelectionSync = true;
+            try {
+              editorView.dispatch({ selection: { anchor: 0, head: 0 } });
+            } finally {
+              suppressPlaybackRangeSelectionSync = false;
+            }
+          }
+        } catch {}
       }
-      if (followPlayback && lastRenderIdx != null && editorView) {
+      if (shouldLoop && followPlayback && lastRenderIdx != null && editorView) {
         // When looping, keep the visual follow-cursor without mutating PlaybackRange (loop invariance).
         suppressPlaybackRangeSelectionSync = true;
         try {
@@ -8209,6 +8261,18 @@ function ensurePlayer() {
           activePlaybackRange = null;
           activePlaybackEndAbcOffset = null;
           playbackStartArmed = false;
+          // When a bounded playback range finishes (selection / error-loop off), reset the playhead to tune start.
+          try {
+            setPlaybackRange({ startOffset: 0, endOffset: null, origin: "cursor", loop: false });
+            if (editorView) {
+              suppressPlaybackRangeSelectionSync = true;
+              try {
+                editorView.dispatch({ selection: { anchor: 0, head: 0 } });
+              } finally {
+                suppressPlaybackRangeSelectionSync = false;
+              }
+            }
+          } catch {}
         }
         return;
       }
