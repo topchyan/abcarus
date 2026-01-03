@@ -394,6 +394,7 @@ function main() {
   const modal = readText(path.join(FIXTURES, "modal_dorian.abc"));
   const nonstd = readText(path.join(FIXTURES, "test5_nonstd.abc"));
   const micro53 = readText(path.join(FIXTURES, "test6_micro_53_western_semitone.abc"));
+  const micro53Inline = readText(path.join(FIXTURES, "test8_micro_53_inline_fields_and_decorations.abc"));
   const numAcc = readText(path.join(FIXTURES, "numeric_accidentals.abc"));
 
   const results = [];
@@ -533,11 +534,28 @@ function main() {
     assertEqualBytes("TEST 6", upAgain, up);
   }));
 
-  results.push(runTest("TEST 7: numeric accidental semantic (+1 then -1)", () => {
+  results.push(runTest("TEST 7: micro 53 preserves inline fields + decorations", () => {
+    const expectedUp = readText(path.join(EXPECTED, "test8_micro_53_inline_fields_and_decorations_up.abc"));
+    if (args.verbose) {
+      const up = transpose_abc(micro53Inline, +1);
+      printVerboseCase("TEST 7", [
+        { label: "ORIGINAL", text: micro53Inline },
+        { label: "TRANSPOSED (+1)", text: up },
+      ]);
+    }
+    const up = transpose_abc(micro53Inline, +1);
+    assertEqualBytes("TEST 7", up, expectedUp);
+    assertMatch("TEST 7", up, /\[P:1st Hane\]/, "Expected inline [P:...] to be preserved");
+    assertMatch("TEST 7", up, /!courtesy!/, "Expected !courtesy! decoration to be preserved");
+    if (/\[P:[^\]]*\^[0-9]/.test(up)) fail("TEST 7: inline [P:...] corrupted by note transposition");
+    if (/court\^/i.test(up) || /dourt/i.test(up)) fail("TEST 7: decoration text corrupted by note transposition");
+  }));
+
+  results.push(runTest("TEST 8: numeric accidental semantic (+1 then -1)", () => {
     if (args.verbose) {
       const up = transpose_abc(numAcc, +1);
       const back = transpose_abc(up, -1);
-      printVerboseCase("TEST 7", [
+      printVerboseCase("TEST 8", [
         { label: "ORIGINAL", text: numAcc },
         { label: "TRANSPOSED (+1)", text: up },
         { label: "BACK (-1)", text: back },
@@ -545,7 +563,7 @@ function main() {
     }
     const up = transpose_abc(numAcc, +1);
     const back = transpose_abc(up, -1);
-    assertSemanticPitchEqual("TEST 7", numAcc, back);
+    assertSemanticPitchEqual("TEST 8", numAcc, back);
   }));
 
   const ok = results.every(Boolean);

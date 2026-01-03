@@ -10,31 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - No notable changes.
 
-
 ## [0.13.0] - 2026-01-01
 ### Changed
-- Simplify one-shot command
-
+- Simplify one-shot command.
 
 ## [0.12.2] - 2025-12-31
 ### Changed
-- Document release notes generation
-- Move local runner scripts out of repo
-- Backup existing artifact
-- Clarify local-only ignores
-- Add practical checklist
-
+- Document release notes generation.
+- Move local runner scripts out of repo.
+- Backup existing artifact.
+- Clarify local-only ignores.
+- Add practical checklist.
 
 ## [0.10.0] - 2025-12-30
 ### Added
-- 
-### Changed
-- 
-### Fixed
-- 
-### Removed
-- 
-
+- TBD (release notes not yet curated).
 
 ## [0.9.2] - 2025-12-29
 ### Added

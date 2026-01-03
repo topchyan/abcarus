@@ -46,6 +46,37 @@ function execVersion(cmd, args) {
   });
 }
 
+async function atomicWriteFileWithRetry(fs, path, filePath, data, { attempts = 5 } = {}) {
+  const absPath = String(filePath || "");
+  if (!absPath) throw new Error("Missing file path.");
+  const tmpPath = path.join(
+    path.dirname(absPath),
+    `.${path.basename(absPath)}.${process.pid}.${Date.now()}.tmp`
+  );
+  await fs.promises.writeFile(tmpPath, data, "utf8");
+  let lastErr = null;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      try {
+        await fs.promises.rename(tmpPath, absPath);
+        return;
+      } catch (e) {
+        // Windows often fails rename when target exists; remove and retry.
+        try { await fs.promises.unlink(absPath); } catch {}
+        await fs.promises.rename(tmpPath, absPath);
+        return;
+      }
+    } catch (e) {
+      lastErr = e;
+      const code = e && e.code ? String(e.code) : "";
+      if (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES") break;
+      await new Promise((r) => setTimeout(r, 50 * (i + 1)));
+    }
+  }
+  try { await fs.promises.unlink(tmpPath); } catch {}
+  throw lastErr || new Error("Unable to write file.");
+}
+
 async function getPythonVersion() {
   const python3 = await execVersion("python3", ["--version"]);
   if (python3) return python3;
@@ -72,6 +103,8 @@ function registerIpcHandlers(ctx) {
     showSaveError,
     showOpenError,
     scanLibrary,
+    scanLibraryDiscover,
+    cancelLibraryScan,
     parseSingleFile,
     withMainPrintMode,
     printWithDialog,
@@ -297,7 +330,7 @@ function registerIpcHandlers(ctx) {
   });
   ipcMain.handle("file:write", async (_e, filePath, data) => {
     try {
-      await fs.promises.writeFile(filePath, data, "utf8");
+      await atomicWriteFileWithRetry(fs, path, filePath, data);
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e && e.message ? e.message : String(e) };
@@ -331,9 +364,20 @@ function registerIpcHandlers(ctx) {
       return { ok: false, error: e && e.message ? e.message : String(e) };
     }
   });
-  ipcMain.handle("library:scan", async (event, rootDir) => {
+  ipcMain.handle("library:scan", async (event, rootDir, options) => {
     if (!rootDir) return { root: "", files: [] };
-    return scanLibrary(rootDir, event.sender);
+    return scanLibrary(rootDir, event.sender, options || {});
+  });
+  ipcMain.handle("library:scan-discover", async (event, rootDir, options) => {
+    if (!rootDir) return { root: "", files: [] };
+    if (typeof scanLibraryDiscover === "function") {
+      return scanLibraryDiscover(rootDir, event.sender, options || {});
+    }
+    return { root: "", files: [] };
+  });
+  ipcMain.handle("library:cancel-scan", async (event) => {
+    if (typeof cancelLibraryScan === "function") cancelLibraryScan(event.sender);
+    return true;
   });
   ipcMain.handle("library:parse-file", async (event, filePath, options) => {
     if (!filePath) return { root: "", files: [] };

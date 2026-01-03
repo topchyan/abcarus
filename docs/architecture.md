@@ -86,6 +86,10 @@ Upgrading these components may require updates to:
 - Rendering or playback APIs in `src/renderer/renderer.js`.
 
 ## Limitations visible in code
-- No automated tests or build/packaging scripts.
-- "Save As" is implemented but not wired to a menu action.
+- No automated end-to-end UI test suite (manual QA is required).
+- Packaging/build is currently focused on Linux AppImage via scripts under `scripts/` and `deploy.sh`.
 - Single-window UI; no session restoration beyond saved recents/settings.
+
+## Architecture decision records (ADRs)
+- `docs/adr/ADR-0001-library-store-renderer-library-service-main.md`
+- `docs/adr/ADR-0002-incremental-full-scan-gated.md`

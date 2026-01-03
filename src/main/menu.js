@@ -188,6 +188,8 @@ function buildMenuTemplate(appState, sendMenuAction) {
           click: () => sendMenuAction("renumberXInFile"),
         },
         { label: "Align Bars", accelerator: "CmdOrCtrl+Shift+A", click: () => sendMenuAction("alignBars") },
+        { type: "separator" },
+        { label: "Save Debug Dump…", accelerator: "CmdOrCtrl+Shift+D", click: () => sendMenuAction("dumpDebug") },
       ],
     },
     {

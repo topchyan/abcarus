@@ -50,11 +50,16 @@ The library tree supports per-tune file operations:
 - Playback highlights notes in both the rendered SVG and editor.
 
 ## Transformations
-Transform actions rely on `abc2abc` (`src/main/conversion/backends/abc2abc.js`):
-- Transpose up/down one semitone.
-- Double/half note lengths.
+Transform actions are split between native JS transforms and `abc2abc`:
+
+Native (renderer):
+- Transpose up/down one semitone (`transformTranspose` in `src/renderer/transpose.mjs`), including chord symbols (`"C#m7/G#"` style gchords).
+- Double/half note lengths (`transformLengthScaling` in `src/renderer/renderer.js`).
+- "Align Bars" tool realigns bars in the editor text (`alignBarsInEditor`).
+
+External backend (`abc2abc`, main process via `src/main/conversion/backends/abc2abc.js`):
 - Set measures per line (1–9).
-- A separate "Align Bars" tool realigns bars in the editor text (`alignBarsInEditor`).
+- Advanced transforms requiring `abc2abc` options (voice selection, renumbering, etc.).
 
 ## Import / export
 - Import MusicXML or MXL: `xml2abc.py` (Python) converts to ABC (`src/main/conversion/backends/xml2abc.js`).

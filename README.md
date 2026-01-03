@@ -2,16 +2,21 @@
 
 ABCarus is a desktop application for working with music encoded in ABC notation.
 
----
-⚠️ Status: Early-stage / pre-release
+ABCarus is designed for navigating, editing, rendering, and organizing large collections of `.abc` files. It treats each tune (from `X:` to the next `X:`) as an independent unit, which supports archival workflows and large libraries.
 
-ABCarus is functional but still under active development.
-Expect changes. Back up your data.
----
+## Status
+
+Pre-release / under active development. Internal APIs, UI layout, and the feature set may change. Keep backups of your data.
 
 See `docs/DISCLAIMER.md` and `CHANGELOG.md`.
 
-The application is designed for navigating, editing, and rendering large collections of ABC files. It treats each tune (from `X:` to the next `X:`) as an independent unit, rather than operating only at the file level. This makes it suitable for archival work, traditional repertoires, and structured study of notated music.
+## Project docs (recommended starting points)
+- `docs/README.md` (developer documentation index)
+- `docs/REQUIREMENTS.md` (product + engineering invariants)
+- `docs/METHODOLOGY.md` (chat-driven workflow without losing context)
+- `docs/qa/manual-merge-checklist.md` (manual QA for risky changes)
+
+## Quick start (development)
 
 ### Development setup
 - Install dependencies: `npm install`
@@ -26,18 +31,17 @@ Release AppImage builds bundle a local Python runtime at build time. See `script
 ### Core features
 
 - Recursive scanning of folders containing `.abc` files
-- Parsing files into individual tunes based on `X:` headers
-- Navigation by files and tunes
-- Text-based editing of ABC notation
-- Visual rendering of notation
+- File + tune navigation (tunes are separated by `X:` headers)
+- Text-first editing of ABC
+- Notation rendering
 - Print/export PDF for single tunes or full files
 - Basic playback for reference
 - Error scanning and grouped diagnostics
 
-### Design goals
+## Design goals
 
 - Text-first workflow
-- Predictable and reproducible behavior
+- Predictable, reproducible behavior
 - Minimal abstractions over the ABC format
 - Suitability for large libraries
 - Long-term maintainability
@@ -74,9 +78,9 @@ Import/Export uses external Python converters stored under `third_party/`:
 - `third_party/abc2xml/abc2xml.py` (ABC → MusicXML)
 - `third_party/xml2abc/xml2abc.py` (MusicXML → ABC)
 
-Python (3 recommended) must be installed and available as `python3` or `python` on your PATH.
+Python 3 must be available as `python3` or `python` on your PATH.
 
-abc2abc transforms require the `abc2abc` binary from the abcMIDI package to be installed and on your PATH.
+Some transforms use the `abc2abc` tool from the abcMIDI package; if enabled/used in your workflow, ensure `abc2abc` is on your PATH.
 
 ### Platforms
 

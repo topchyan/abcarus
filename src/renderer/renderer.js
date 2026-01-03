@@ -22,6 +22,9 @@ import {
   DEFAULT_DRUM_VELOCITY,
   velocityToDynamic,
 } from "./drums.js";
+import { createLibraryViewStore } from "./library/store.js";
+import { createLibraryActions } from "./library/actions.js";
+import { normalizeLibraryPath, pathsEqual } from "./library/path_utils.js";
 
 const $editorHost = document.getElementById("abc-editor");
 const $out = document.getElementById("out");
@@ -42,10 +45,18 @@ const $fileHeaderToggle = document.getElementById("fileHeaderToggle");
 const $fileHeaderEditor = document.getElementById("fileHeaderEditor");
 const $fileHeaderSave = document.getElementById("fileHeaderSave");
 const $fileHeaderReload = document.getElementById("fileHeaderReload");
+const $xIssuesModal = document.getElementById("xIssuesModal");
+const $xIssuesInfo = document.getElementById("xIssuesInfo");
+const $xIssuesClose = document.getElementById("xIssuesClose");
+const $xIssuesCopy = document.getElementById("xIssuesCopy");
+const $xIssuesJump = document.getElementById("xIssuesJump");
+const $xIssuesAutoFix = document.getElementById("xIssuesAutoFix");
 const $groupBy = document.getElementById("groupBy");
 const $sortBy = document.getElementById("sortBy");
 const $librarySearch = document.getElementById("librarySearch");
-const $btnLibraryMenu = document.getElementById("btnLibraryMenu");
+const $btnLibraryRefresh = document.getElementById("btnLibraryRefresh");
+const $libraryRoot = document.getElementById("libraryRoot");
+const $btnLibraryClearFilter = document.getElementById("btnLibraryClearFilter");
 const $btnToggleLibrary = document.getElementById("btnToggleLibrary");
 const $btnFileNew = document.getElementById("btnFileNew");
 const $btnFileOpen = document.getElementById("btnFileOpen");
@@ -458,7 +469,7 @@ function setErrorsEnabled(next, { triggerRefresh = false } = {}) {
     if (triggerRefresh) {
       refreshErrorsNow();
     } else {
-      renderNow();
+      scheduleRenderNow();
     }
   }
   updateErrorsFeatureUI();
@@ -712,6 +723,9 @@ function setPaneSizes(leftWidth) {
   const clamped = Math.max(min, Math.min(leftWidth, total - min - dividerWidth));
   lastSidebarWidth = clamped;
   $main.style.gridTemplateColumns = `${clamped}px ${dividerWidth}px 1fr`;
+  if (isLibraryVisible) {
+    scheduleSaveLibraryPrefs({ libraryPaneWidth: Math.round(clamped) });
+  }
 }
 
 function initPaneResizer() {
@@ -862,6 +876,8 @@ let libraryTextFilter = "";
 let tuneErrorFilter = false;
 let tuneErrorScanToken = 0;
 let tuneErrorScanInFlight = false;
+let libraryFullScanInFlight = false;
+let libraryFullScanToken = "";
 let suppressRecentEntries = false;
 let toastTimer = null;
 let errorLineOffset = 0;
@@ -883,7 +899,34 @@ let soundfontStatusTimer = null;
 const STREAMING_SF2 = new Set();
 let soundfontOptionsLoaded = false;
 let soundfontOptionsLoading = null;
+const MAX_FILE_CONTENT_CACHE_ENTRIES = 12;
 const fileContentCache = new Map();
+
+function lruGet(map, key) {
+  if (!map.has(key)) return undefined;
+  const value = map.get(key);
+  map.delete(key);
+  map.set(key, value);
+  return value;
+}
+
+function lruSet(map, key, value, maxEntries) {
+  if (map.has(key)) map.delete(key);
+  map.set(key, value);
+  while (map.size > maxEntries) {
+    const firstKey = map.keys().next().value;
+    if (firstKey == null) break;
+    map.delete(firstKey);
+  }
+}
+
+function getFileContentFromCache(filePath) {
+  return lruGet(fileContentCache, filePath);
+}
+
+function setFileContentInCache(filePath, content) {
+  lruSet(fileContentCache, filePath, content, MAX_FILE_CONTENT_CACHE_ENTRIES);
+}
 let activeTuneId = null;
 let activeTuneMeta = null;
 let activeFilePath = null;
@@ -902,6 +945,26 @@ let renamingFilePath = null;
 let renameInFlight = false;
 let librarySearchTimer = null;
 let pendingLibrarySearch = "";
+let pendingXIssuesFilePath = null;
+let pendingXIssuesTuneId = null;
+let suppressLibraryPrefsWrite = true;
+let pendingLibraryPrefsPatch = null;
+let libraryPrefsSaveTimer = null;
+const LIBRARY_PREFS_SAVE_DEBOUNCE_MS = 400;
+let lastAppliedLibraryPrefsSig = "";
+let latestSettingsSnapshot = null;
+let libraryUiStateTimer = null;
+let libraryUiStateDirty = false;
+const LIBRARY_UI_STATE_DEBOUNCE_MS = 300;
+
+const libraryViewStore = createLibraryViewStore({
+  getIndex: () => libraryIndex,
+  safeBasename,
+});
+const libraryActions = createLibraryActions({
+  openTuneFromSelection: openTuneFromLibrarySelection,
+});
+window.libraryActions = libraryActions;
 
 const GROUP_LABELS = {
   file: "File",
@@ -917,14 +980,374 @@ const GROUP_LABELS = {
   group: "G",
 };
 
+function formatPathTail(filePath, segments = 3) {
+  const raw = String(filePath || "").trim();
+  if (!raw) return "";
+  const normalized = raw.replace(/\\/g, "/").replace(/\/{2,}/g, "/");
+  const parts = normalized.split("/").filter(Boolean);
+  if (!parts.length) return normalized;
+  const tail = parts.slice(Math.max(0, parts.length - Math.max(1, segments))).join("/");
+  return parts.length > segments ? `…/${tail}` : tail;
+}
+
+function getLibraryRootKey() {
+  if (!libraryIndex || !libraryIndex.root) return null;
+  const root = String(libraryIndex.root || "");
+  const normalized = normalizeLibraryPath(root);
+  return normalized || null;
+}
+
+function hasFullLibraryIndex() {
+  return Boolean(libraryIndex && libraryIndex.indexMode === "full");
+}
+
+async function ensureFullLibraryIndex({ reason = "" } = {}) {
+  if (!window.api || typeof window.api.scanLibrary !== "function") return false;
+  if (!libraryIndex || !libraryIndex.root) return false;
+  if (hasFullLibraryIndex()) return true;
+  if (libraryFullScanInFlight) return false;
+
+  libraryFullScanInFlight = true;
+  const scanToken = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  libraryFullScanToken = scanToken;
+  const root = libraryIndex.root;
+  setScanStatus(reason ? `Indexing… (${reason})` : "Indexing…");
+  try {
+    const result = await window.api.scanLibrary(root, { token: scanToken });
+    if (!result || !result.root || result.root !== root) return false;
+    if (libraryFullScanToken !== scanToken) return false;
+    libraryIndex = { ...result, indexMode: "full" };
+    libraryViewStore.invalidate();
+    updateLibraryRootUI();
+    scheduleRenderLibraryTree();
+    updateLibraryStatus();
+    try {
+      if (document.body.classList.contains("library-list-open")) {
+        const rows = libraryViewStore.getModalRows();
+        document.dispatchEvent(new CustomEvent("library-modal:update-rows", { detail: { rows } }));
+      }
+    } catch {}
+    return true;
+  } catch (e) {
+    logErr(e && e.message ? e.message : String(e));
+    setScanStatus("Indexing failed.");
+    return false;
+  } finally {
+    if (libraryFullScanToken === scanToken) {
+      libraryFullScanToken = "";
+      libraryFullScanInFlight = false;
+    }
+  }
+}
+
+function isPathWithinRoot(filePath, rootPath) {
+  const file = normalizeLibraryPath(String(filePath || ""));
+  const root = normalizeLibraryPath(String(rootPath || ""));
+  if (!file || !root) return false;
+  if (pathsEqual(file, root)) return true;
+  const prefix = root.endsWith("/") ? root : `${root}/`;
+  return file.startsWith(prefix);
+}
+
+function scheduleSaveLibraryPrefs(patch) {
+  if (suppressLibraryPrefsWrite) return;
+  if (!patch || typeof patch !== "object") return;
+  if (!window.api || typeof window.api.updateSettings !== "function") return;
+
+  pendingLibraryPrefsPatch = { ...(pendingLibraryPrefsPatch || {}), ...patch };
+  if (libraryPrefsSaveTimer) clearTimeout(libraryPrefsSaveTimer);
+  libraryPrefsSaveTimer = setTimeout(async () => {
+    const nextPatch = pendingLibraryPrefsPatch;
+    pendingLibraryPrefsPatch = null;
+    libraryPrefsSaveTimer = null;
+    if (!nextPatch) return;
+    try {
+      await window.api.updateSettings(nextPatch);
+    } catch {}
+  }, LIBRARY_PREFS_SAVE_DEBOUNCE_MS);
+}
+
+function computeLibraryUiStateSnapshot() {
+  if (!libraryIndex || !libraryIndex.root) return null;
+  const rootKey = getLibraryRootKey();
+  if (!rootKey) return null;
+
+  const files = Array.isArray(libraryIndex.files) ? libraryIndex.files : [];
+  const expandedFiles = [];
+  for (const file of files) {
+    if (!file || !file.path) continue;
+    if (!collapsedFiles.has(file.path)) expandedFiles.push(file.path);
+  }
+
+  const expandedGroupsByMode = {};
+  if (groupMode !== "file" && files.length) {
+    const groups = buildGroupEntries(files, groupMode);
+    const expandedGroups = [];
+    for (const group of groups) {
+      if (!group || !group.id) continue;
+      if (!collapsedGroups.has(group.id)) expandedGroups.push(group.id);
+    }
+    expandedGroupsByMode[groupMode] = expandedGroups;
+  }
+
+  const active = (activeFilePath && isPathWithinRoot(activeFilePath, libraryIndex.root)) ? activeFilePath : null;
+  const activeTune = (activeTuneMeta && activeTuneMeta.path && isPathWithinRoot(activeTuneMeta.path, libraryIndex.root))
+    ? {
+      tuneId: activeTuneId || null,
+      filePath: activeTuneMeta.path || null,
+      xNumber: activeTuneMeta.xNumber != null ? String(activeTuneMeta.xNumber) : "",
+      title: activeTuneMeta.title != null ? String(activeTuneMeta.title) : "",
+      startOffset: Number.isFinite(Number(activeTuneMeta.startOffset)) ? Number(activeTuneMeta.startOffset) : null,
+    }
+    : {
+      tuneId: activeTuneId || null,
+      filePath: (active && isPathWithinRoot(active, libraryIndex.root)) ? active : null,
+      xNumber: "",
+      title: "",
+      startOffset: null,
+    };
+  return {
+    rootKey,
+    state: {
+      expandedFiles,
+      expandedGroupsByMode,
+      activeFilePath: active,
+      activeTune,
+    },
+  };
+}
+
+function scheduleSaveLibraryUiState() {
+  if (suppressLibraryPrefsWrite) return;
+  if (!libraryIndex || !libraryIndex.root) return;
+  if (!window.api || typeof window.api.updateSettings !== "function") return;
+
+  libraryUiStateDirty = true;
+  if (libraryUiStateTimer) clearTimeout(libraryUiStateTimer);
+  libraryUiStateTimer = setTimeout(() => {
+    libraryUiStateTimer = null;
+    if (!libraryUiStateDirty) return;
+    libraryUiStateDirty = false;
+    const snap = computeLibraryUiStateSnapshot();
+    if (!snap) return;
+    scheduleSaveLibraryPrefs({
+      libraryUiStateByRoot: {
+        [snap.rootKey]: snap.state,
+      },
+    });
+  }, LIBRARY_UI_STATE_DEBOUNCE_MS);
+}
+
+function applyLibraryUiStateFromSettings(settings) {
+  if (!settings || !libraryIndex || !libraryIndex.root) return false;
+  const rootKey = getLibraryRootKey();
+  if (!rootKey) return false;
+  const byRoot = settings.libraryUiStateByRoot && typeof settings.libraryUiStateByRoot === "object"
+    ? settings.libraryUiStateByRoot
+    : null;
+  const entry = byRoot && byRoot[rootKey] && typeof byRoot[rootKey] === "object"
+    ? byRoot[rootKey]
+    : null;
+  if (!entry) return { restoredFile: false, tuneSelection: null };
+
+  const files = Array.isArray(libraryIndex.files) ? libraryIndex.files : [];
+  const filePaths = files.map((f) => f && f.path).filter(Boolean);
+
+  const expandedFiles = Array.isArray(entry.expandedFiles) ? entry.expandedFiles : [];
+  const expandedFilesSet = new Set(expandedFiles.map((p) => String(p || "")).filter(Boolean));
+
+  collapsedFiles.clear();
+  for (const p of filePaths) collapsedFiles.add(p);
+  for (const p of expandedFilesSet) collapsedFiles.delete(p);
+
+  collapsedGroups.clear();
+  if (groupMode !== "file" && files.length) {
+    const groups = buildGroupEntries(files, groupMode);
+    for (const group of groups) collapsedGroups.add(group.id);
+    const byMode = entry.expandedGroupsByMode && typeof entry.expandedGroupsByMode === "object"
+      ? entry.expandedGroupsByMode
+      : null;
+    const expandedGroups = byMode && Array.isArray(byMode[groupMode]) ? byMode[groupMode] : [];
+    for (const id of expandedGroups) {
+      if (!id) continue;
+      collapsedGroups.delete(String(id));
+    }
+  }
+
+  const savedActivePath = entry.activeFilePath ? String(entry.activeFilePath) : "";
+  const hasFile = savedActivePath && filePaths.some((p) => pathsEqual(p, savedActivePath));
+  if (hasFile) {
+    activeFilePath = savedActivePath;
+    collapsedFiles.delete(savedActivePath);
+  }
+
+  const activeTune = entry.activeTune && typeof entry.activeTune === "object" ? entry.activeTune : null;
+  const tuneSelection = activeTune
+    ? {
+      tuneId: activeTune.tuneId ? String(activeTune.tuneId) : "",
+      filePath: activeTune.filePath ? String(activeTune.filePath) : (hasFile ? savedActivePath : ""),
+      xNumber: activeTune.xNumber != null ? String(activeTune.xNumber) : "",
+      title: activeTune.title != null ? String(activeTune.title) : "",
+      startOffset: Number.isFinite(Number(activeTune.startOffset)) ? Number(activeTune.startOffset) : null,
+    }
+    : null;
+
+  return { restoredFile: Boolean(hasFile), tuneSelection };
+}
+
+async function restoreLibraryTuneSelection(selection) {
+  if (!libraryIndex || !libraryIndex.root) return false;
+  if (!selection) return false;
+
+  const tuneId = selection.tuneId ? String(selection.tuneId) : "";
+  const filePath = selection.filePath ? String(selection.filePath) : "";
+  const xNumber = selection.xNumber ? String(selection.xNumber) : "";
+  const title = selection.title ? String(selection.title) : "";
+  const startOffset = selection.startOffset;
+
+  const trySelect = async (id) => {
+    if (!id) return false;
+    try {
+      const res = await selectTune(id, { skipConfirm: true, suppressRecent: true });
+      if (res && res.ok) {
+        renderLibraryTree();
+        return true;
+      }
+    } catch {}
+    return false;
+  };
+
+  if (tuneId) {
+    const ok = await trySelect(tuneId);
+    if (ok) return true;
+  }
+
+  let fileEntry = null;
+  if (filePath && libraryIndex && Array.isArray(libraryIndex.files)) {
+    fileEntry = libraryIndex.files.find((f) => pathsEqual(f.path, filePath)) || null;
+  }
+
+  if (fileEntry && (!fileEntry.tunes || !fileEntry.tunes.length) && window.api && typeof window.api.parseLibraryFile === "function") {
+    try {
+      const updated = await refreshLibraryFile(filePath);
+      if (updated) fileEntry = updated;
+    } catch {}
+  }
+
+  const tunes = fileEntry && Array.isArray(fileEntry.tunes) ? fileEntry.tunes : [];
+  if (!tunes.length) return false;
+
+  let candidate = null;
+  if (Number.isFinite(startOffset)) {
+    candidate = tunes.find((t) => Number(t.startOffset) === Number(startOffset)) || null;
+  }
+  if (!candidate && xNumber) {
+    const matches = tunes.filter((t) => String(t.xNumber || "") === xNumber);
+    if (matches.length === 1) candidate = matches[0];
+    else if (matches.length > 1 && title) {
+      const want = title.trim().toLowerCase();
+      candidate = matches.find((t) => String(t.title || "").trim().toLowerCase() === want) || matches[0];
+    } else if (matches.length) {
+      candidate = matches[0];
+    }
+  }
+
+  if (!candidate) return false;
+  const id = candidate.id ? String(candidate.id) : "";
+  return trySelect(id);
+}
+
+async function flushLibraryPrefsSave() {
+  if (!window.api || typeof window.api.updateSettings !== "function") return;
+  if (libraryUiStateTimer) {
+    clearTimeout(libraryUiStateTimer);
+    libraryUiStateTimer = null;
+  }
+  if (libraryUiStateDirty) {
+    libraryUiStateDirty = false;
+    const snap = computeLibraryUiStateSnapshot();
+    if (snap) {
+      pendingLibraryPrefsPatch = {
+        ...(pendingLibraryPrefsPatch || {}),
+        libraryUiStateByRoot: {
+          [snap.rootKey]: snap.state,
+        },
+      };
+    }
+  }
+  if (libraryPrefsSaveTimer) {
+    clearTimeout(libraryPrefsSaveTimer);
+    libraryPrefsSaveTimer = null;
+  }
+  const nextPatch = pendingLibraryPrefsPatch;
+  pendingLibraryPrefsPatch = null;
+  if (!nextPatch) return;
+  try {
+    await window.api.updateSettings(nextPatch);
+  } catch {}
+}
+
+function applyLibraryPrefsFromSettings(settings) {
+  if (!settings) return;
+  const normalized = {
+    libraryPaneVisible: Boolean(settings.libraryPaneVisible),
+    libraryPaneWidth: Number.isFinite(Number(settings.libraryPaneWidth)) ? Math.round(Number(settings.libraryPaneWidth)) : null,
+    libraryGroupBy: String(settings.libraryGroupBy || "").trim() || null,
+    librarySortBy: String(settings.librarySortBy || "").trim() || null,
+    libraryFilterText: String(settings.libraryFilterText || ""),
+  };
+  const sig = JSON.stringify(normalized);
+  if (sig === lastAppliedLibraryPrefsSig) return;
+  lastAppliedLibraryPrefsSig = sig;
+
+  const prevSuppress = suppressLibraryPrefsWrite;
+  suppressLibraryPrefsWrite = true;
+  try {
+    const nextGroup = normalized.libraryGroupBy || "";
+    if (nextGroup && GROUP_LABELS[nextGroup]) groupMode = nextGroup;
+    if ($groupBy) $groupBy.value = groupMode;
+
+    const nextSort = normalized.librarySortBy || "";
+    if (nextSort) setSortMode(nextSort, false);
+
+    const nextFilter = normalized.libraryFilterText;
+    if ($librarySearch) $librarySearch.value = nextFilter;
+    if (librarySearchTimer) {
+      clearTimeout(librarySearchTimer);
+      librarySearchTimer = null;
+    }
+    pendingLibrarySearch = "";
+    applyLibrarySearch(nextFilter);
+
+    const width = normalized.libraryPaneWidth;
+    if (Number.isFinite(width) && width > 0) lastSidebarWidth = width;
+
+    const visible = normalized.libraryPaneVisible;
+    setLibraryVisible(visible);
+  } finally {
+    suppressLibraryPrefsWrite = prevSuppress;
+  }
+}
+
+function updateLibraryRootUI() {
+  if (!$libraryRoot) return;
+  const root = libraryIndex && libraryIndex.root ? String(libraryIndex.root) : "";
+  const tail = formatPathTail(root, 3);
+  $libraryRoot.textContent = tail ? `Library: ${tail}` : "Library: (none)";
+  $libraryRoot.title = root;
+}
+
 function setScanStatus(text) {
   const value = String(text || "");
-  if (/^Done\b/i.test(value)) {
-    if ($scanStatus) $scanStatus.textContent = "";
-    setStatus(value);
-    return;
+  updateLibraryRootUI();
+  const display = value || "";
+  if ($scanStatus) {
+    $scanStatus.textContent = display;
+    $scanStatus.title = display;
   }
-  if ($scanStatus) $scanStatus.textContent = value;
+  if (/^Done\b/i.test(value)) {
+    setStatus(value);
+  }
 }
 
 function setLibraryErrorIndexForTune(tuneId, count) {
@@ -969,7 +1392,10 @@ function updateWindowTitle() {
   const hasHeader = computeHeaderPresence() === "present";
   const headerTag = hasHeader ? (headerDirty ? " [Header*]" : " [Header]") : "";
   const tuneTag = tuneDirty ? " *" : "";
-  document.title = `ABCarus — ${base}${headerTag}${tuneTag}`;
+  const root = libraryIndex && libraryIndex.root ? String(libraryIndex.root) : "";
+  const rootShort = formatPathTail(root, 3);
+  const rootTag = rootShort ? ` — ${rootShort}` : "";
+  document.title = `ABCarus — ${base}${headerTag}${tuneTag}${rootTag}`;
 }
 
 function buildTuneMetaLabel(metadata) {
@@ -1325,6 +1751,7 @@ function getTuneLabel(tune) {
 
 function getEntryTuneCount(entry) {
   if (!entry || !entry.tunes) return 0;
+  if (Number.isFinite(entry.tuneCount)) return entry.tuneCount;
   return entry.tunes.length || 0;
 }
 
@@ -1412,20 +1839,20 @@ function getVisibleLibraryFiles() {
 function setLibraryFilter(filteredFiles, label) {
   libraryFilter = filteredFiles;
   libraryFilterLabel = label || "";
-  renderLibraryTree();
+  scheduleRenderLibraryTree();
   updateLibraryStatus();
 }
 
 function clearLibraryFilter() {
   libraryFilter = null;
   libraryFilterLabel = "";
-  renderLibraryTree();
+  scheduleRenderLibraryTree();
   updateLibraryStatus();
 }
 
 function getActiveFileEntry() {
   if (!libraryIndex || !libraryIndex.files || !activeFilePath) return null;
-  return libraryIndex.files.find((file) => file.path === activeFilePath) || null;
+  return libraryIndex.files.find((file) => pathsEqual(file.path, activeFilePath)) || null;
 }
 
 function updateFileHeaderPanel() {
@@ -1442,9 +1869,12 @@ function updateFileHeaderPanel() {
     return;
   }
   $fileHeaderPanel.classList.add("active");
-  if (headerEditorFilePath !== entry.path) {
+  const nextHeaderText = entry.headerText || "";
+  const shouldReplace = headerEditorFilePath !== entry.path
+    || (!headerDirty && getHeaderEditorValue() !== nextHeaderText);
+  if (shouldReplace) {
     suppressHeaderDirty = true;
-    setHeaderEditorValue(entry.headerText || "");
+    setHeaderEditorValue(nextHeaderText);
     suppressHeaderDirty = false;
     headerDirty = false;
     headerEditorFilePath = entry.path || null;
@@ -1740,7 +2170,7 @@ function refreshErrorsNow() {
     clearTimeout(t);
     t = null;
   }
-  renderNow();
+  scheduleRenderNow();
   if (tuneErrorFilter && !tuneErrorScanInFlight) {
     const entry = getActiveFileEntry();
     if (entry) {
@@ -1811,52 +2241,68 @@ async function performRawSaveFlow() {
     await showSaveError("No file path available for raw save.");
     return false;
   }
-  const preferred = (activeTuneMeta && activeTuneMeta.path === filePath)
+  const preferred = (activeTuneMeta && pathsEqual(activeTuneMeta.path, filePath))
     ? { xNumber: activeTuneMeta.xNumber || "", indexInFile: activeTuneMeta.indexInFile || 0 }
     : { xNumber: "", indexInFile: 0 };
   const headerText = getHeaderEditorValue();
   const bodyText = getEditorValue();
   const fullText = buildRawFileText({ headerText, bodyText });
-  const res = await writeFile(filePath, fullText);
-  if (!res || !res.ok) {
-    await showSaveError((res && res.error) ? res.error : "Unable to save file.");
-    return false;
-  }
-  fileContentCache.set(filePath, fullText);
-  headerDirty = false;
-  updateHeaderStateUI();
-  if (currentDoc) {
-    currentDoc.path = filePath;
-    currentDoc.content = bodyText;
-    currentDoc.dirty = false;
-  }
-  setDirtyIndicator(false);
-  const updatedFile = await refreshLibraryFile(filePath, { force: true });
-  if (updatedFile && Number.isFinite(updatedFile.headerEndOffset)) {
-    rawModeHeaderEndOffset = Number(updatedFile.headerEndOffset) || 0;
-  }
-  if (rawMode) {
-    const entry = updatedFile || (libraryIndex && libraryIndex.files
-      ? libraryIndex.files.find((f) => f.path === filePath)
-      : null);
-    const tunes = entry && entry.tunes ? entry.tunes : [];
-    if (tunes.length) {
-      let next = null;
-      if (!next && Number.isFinite(Number(preferred.indexInFile)) && Number(preferred.indexInFile) > 0) {
-        next = tunes[Math.min(tunes.length - 1, Math.max(0, Number(preferred.indexInFile) - 1))];
+  return withFileLock(filePath, async () => {
+    const cachedBefore = getFileContentFromCache(filePath);
+    if (cachedBefore != null) {
+      const diskRes = await readFile(filePath);
+      if (!diskRes || !diskRes.ok) {
+        await showSaveError((diskRes && diskRes.error) ? diskRes.error : "Unable to read file before saving.");
+        return false;
       }
-      if (!next && preferred.xNumber) {
-        next = tunes.find((t) => String(t.xNumber || "") === String(preferred.xNumber));
-      }
-      if (!next) next = tunes[0];
-      if (next && next.id) {
-        if ($fileTuneSelect) $fileTuneSelect.value = next.id;
-        setActiveTuneInRaw(next.id);
+      const diskText = String(diskRes.data || "");
+      if (diskText !== String(cachedBefore || "")) {
+        await showSaveError("Refusing to save: file changed on disk. Refresh/reopen the file and try again.");
+        return false;
       }
     }
-  }
-  setStatus("File saved.");
-  return true;
+
+    const res = await writeFile(filePath, fullText);
+    if (!res || !res.ok) {
+      await showSaveError((res && res.error) ? res.error : "Unable to save file.");
+      return false;
+    }
+    setFileContentInCache(filePath, fullText);
+    headerDirty = false;
+    updateHeaderStateUI();
+    if (currentDoc) {
+      currentDoc.path = filePath;
+      currentDoc.content = bodyText;
+      currentDoc.dirty = false;
+    }
+    setDirtyIndicator(false);
+    const updatedFile = await refreshLibraryFile(filePath, { force: true });
+    if (updatedFile && Number.isFinite(updatedFile.headerEndOffset)) {
+      rawModeHeaderEndOffset = Number(updatedFile.headerEndOffset) || 0;
+    }
+    if (rawMode) {
+      const entry = updatedFile || (libraryIndex && libraryIndex.files
+        ? libraryIndex.files.find((f) => pathsEqual(f.path, filePath))
+        : null);
+      const tunes = entry && entry.tunes ? entry.tunes : [];
+      if (tunes.length) {
+        let next = null;
+        if (!next && Number.isFinite(Number(preferred.indexInFile)) && Number(preferred.indexInFile) > 0) {
+          next = tunes[Math.min(tunes.length - 1, Math.max(0, Number(preferred.indexInFile) - 1))];
+        }
+        if (!next && preferred.xNumber) {
+          next = tunes.find((t) => String(t.xNumber || "") === String(preferred.xNumber));
+        }
+        if (!next) next = tunes[0];
+        if (next && next.id) {
+          if ($fileTuneSelect) $fileTuneSelect.value = next.id;
+          setActiveTuneInRaw(next.id);
+        }
+      }
+    }
+    setStatus("File saved.");
+    return true;
+  });
 }
 
 function scrollToPosInEditor(pos, { y = "start" } = {}) {
@@ -1927,7 +2373,7 @@ async function enterRawMode() {
   }
 
   activeFilePath = filePath;
-  fileContentCache.set(filePath, readRes.data || "");
+  setFileContentInCache(filePath, readRes.data || "");
   const updatedFile = await refreshLibraryFile(filePath, { force: true });
   const entry = updatedFile || getActiveFileEntry();
   const headerEndOffset = entry && Number.isFinite(entry.headerEndOffset) ? Number(entry.headerEndOffset) : findHeaderEndOffset(readRes.data || "");
@@ -2052,7 +2498,7 @@ function initEditor() {
       }
       if (!rawMode) {
         if (t) clearTimeout(t);
-        t = setTimeout(renderNow, 400);
+        t = setTimeout(() => scheduleRenderNow(), 400);
       }
     }
     if (!rawMode && update.selectionSet && !isPlaying) {
@@ -2208,7 +2654,7 @@ function initHeaderEditor() {
     if (headerRenderTimer) clearTimeout(headerRenderTimer);
     headerRenderTimer = setTimeout(() => {
       headerRenderTimer = null;
-      renderNow();
+      scheduleRenderNow();
     }, 300);
   });
   const state = EditorState.create({
@@ -2237,6 +2683,7 @@ function setActiveTuneText(text, metadata, options = {}) {
   if (metadata) {
     activeTuneMeta = { ...metadata };
     activeFilePath = metadata.path || null;
+    scheduleSaveLibraryUiState();
     refreshHeaderLayers().catch(() => {});
     setTuneMetaText(buildTuneMetaLabel(metadata));
     setFileNameMeta(stripFileExtension(metadata.basename || ""));
@@ -2289,7 +2736,7 @@ function setActiveTuneText(text, metadata, options = {}) {
     updateHeaderStateUI();
   }
   updateFileHeaderPanel();
-  renderNow();
+  scheduleRenderNow({ clearOutput: true });
 }
 
 function setLibraryVisible(visible) {
@@ -2300,6 +2747,7 @@ function setLibraryVisible(visible) {
   } else if ($main) {
     $main.style.gridTemplateColumns = `0px 0px 1fr`;
   }
+  scheduleSaveLibraryPrefs({ libraryPaneVisible: Boolean(visible) });
 }
 
 function toggleLibrary() {
@@ -2327,6 +2775,8 @@ function buildGroupEntries(files, mode) {
       id: file.path,
       label: file.basename,
       tunes: Array.isArray(file.tunes) ? file.tunes : [],
+      tuneCount: Number.isFinite(file.tuneCount) ? file.tuneCount : undefined,
+      xIssues: file && file.xIssues ? file.xIssues : undefined,
       isFile: true,
       updatedAtMs: file.updatedAtMs || 0,
     }));
@@ -2356,24 +2806,48 @@ function buildGroupEntries(files, mode) {
   return Array.from(entries.values());
 }
 
+let libraryTreeRenderScheduled = false;
+let pendingLibraryTreeRenderFiles = null;
+
+function scheduleRenderLibraryTree(files = null) {
+  pendingLibraryTreeRenderFiles = files;
+  if (libraryTreeRenderScheduled) return;
+  libraryTreeRenderScheduled = true;
+  requestAnimationFrame(() => {
+    libraryTreeRenderScheduled = false;
+    const nextFiles = pendingLibraryTreeRenderFiles;
+    pendingLibraryTreeRenderFiles = null;
+    renderLibraryTree(nextFiles);
+  });
+}
+
 function renderLibraryTree(files = null) {
   if (!$libraryTree) return;
   $libraryTree.style.display = "";
-  $libraryTree.innerHTML = "";
+  $libraryTree.textContent = "";
+  const fragment = document.createDocumentFragment();
   const sourceFiles = files || getVisibleLibraryFiles();
   const filteredFiles = libraryTextFilter
     ? applyLibraryTextFilter(sourceFiles, libraryTextFilter)
     : sourceFiles;
   const hasRenameTarget = renamingFilePath
     && filteredFiles
-      .some((file) => file.path === renamingFilePath);
+      .some((file) => pathsEqual(file.path, renamingFilePath));
   if (renamingFilePath && !hasRenameTarget) renamingFilePath = null;
   const sortedFiles = sortLibraryFiles(filteredFiles);
   const entries = sortGroupEntries(buildGroupEntries(sortedFiles, groupMode));
   for (const entry of entries) {
     const fileNode = document.createElement("div");
     fileNode.className = "tree-file";
-    if (entry.isFile && activeFilePath === entry.id) fileNode.classList.add("active");
+    if (entry.isFile && pathsEqual(activeFilePath, entry.id)) fileNode.classList.add("active");
+    if (entry.isFile && entry.xIssues && entry.xIssues.ok === false) {
+      fileNode.classList.add("x-issues");
+      const parts = [];
+      if (entry.xIssues.invalid) parts.push(`invalid X: ${entry.xIssues.invalid}`);
+      if (entry.xIssues.missing) parts.push(`missing X: ${entry.xIssues.missing}`);
+      if (entry.xIssues.duplicates) parts.push("duplicate X");
+      if (parts.length) fileNode.title = `Index issue (${parts.join(", ")})`;
+    }
     const isCollapsed = entry.isFile
       ? collapsedFiles.has(entry.id)
       : collapsedGroups.has(entry.id);
@@ -2409,7 +2883,7 @@ function renderLibraryTree(files = null) {
       labelText.textContent = entry.label;
       const count = document.createElement("span");
       count.className = "tree-count";
-      count.textContent = String(entry.tunes.length || 0);
+      count.textContent = String(getEntryTuneCount(entry) || 0);
       fileLabel.append(labelText, count);
       fileLabel.addEventListener("click", (ev) => {
         // Prevent accidental double-toggle when user double-clicks to load.
@@ -2422,7 +2896,8 @@ function renderLibraryTree(files = null) {
           if (collapsedGroups.has(entry.id)) collapsedGroups.delete(entry.id);
           else collapsedGroups.add(entry.id);
         }
-        renderLibraryTree(sourceFiles);
+        scheduleRenderLibraryTree(sourceFiles);
+        scheduleSaveLibraryUiState();
       });
       fileLabel.addEventListener("dblclick", (ev) => {
         if (!entry.isFile) return;
@@ -2434,7 +2909,8 @@ function renderLibraryTree(files = null) {
         if (!entry.isFile) return;
         ev.preventDefault();
         activeFilePath = entry.id;
-        renderLibraryTree(sourceFiles);
+        scheduleRenderLibraryTree(sourceFiles);
+        scheduleSaveLibraryUiState();
         showContextMenuAt(ev.clientX, ev.clientY, { type: "file", filePath: entry.id });
       });
       fileLabel.addEventListener("dragover", (ev) => {
@@ -2493,23 +2969,23 @@ function renderLibraryTree(files = null) {
         const targetPath = entry.isFile
           ? entry.id
           : String(tune.id || "").split("::")[0];
-	        if (targetPath) {
-	          activeFilePath = targetPath;
-	          renderLibraryTree(sourceFiles);
-	        }
-	        showContextMenuAt(ev.clientX, ev.clientY, { type: "tune", tuneId: tune.id });
-	      });
+		        if (targetPath) {
+		          activeFilePath = targetPath;
+		          scheduleRenderLibraryTree(sourceFiles);
+		        }
+		        showContextMenuAt(ev.clientX, ev.clientY, { type: "tune", tuneId: tune.id });
+		      });
       button.addEventListener("click", () => {
         const targetPath = entry.isFile
           ? entry.id
           : String(tune.id || "").split("::")[0];
-	        if (targetPath) {
-	          activeFilePath = targetPath;
-	          renderLibraryTree(sourceFiles);
-	        }
-	        if (rawMode) {
-	          if ($fileTuneSelect) $fileTuneSelect.value = tune.id;
-	          setActiveTuneInRaw(tune.id);
+		        if (targetPath) {
+		          activeFilePath = targetPath;
+		          scheduleRenderLibraryTree(sourceFiles);
+		        }
+		        if (rawMode) {
+		          if ($fileTuneSelect) $fileTuneSelect.value = tune.id;
+		          setActiveTuneInRaw(tune.id);
 	          scrollToTuneInRaw(tune.id);
 	          return;
 	        }
@@ -2519,8 +2995,9 @@ function renderLibraryTree(files = null) {
     }
 
     fileNode.appendChild(children);
-    $libraryTree.appendChild(fileNode);
+    fragment.appendChild(fileNode);
   }
+  $libraryTree.appendChild(fragment);
   updateFileHeaderPanel();
 }
 
@@ -2555,7 +3032,7 @@ async function selectTune(tuneId, options = {}) {
 
   if (!selected || !fileMeta) return { ok: false, error: "Tune not found." };
 
-  let content = fileContentCache.get(fileMeta.path);
+  let content = getFileContentFromCache(fileMeta.path);
   if (content == null) {
     const res = await readFile(fileMeta.path);
     if (!res.ok) {
@@ -2563,7 +3040,45 @@ async function selectTune(tuneId, options = {}) {
       return { ok: false, error: res.error || "Unable to read file." };
     }
     content = res.data;
-    fileContentCache.set(fileMeta.path, content);
+    setFileContentInCache(fileMeta.path, content);
+  }
+
+  const isTuneSliceValid = (fullText, tune) => {
+    if (!fullText || !tune || !Number.isFinite(Number(tune.startOffset))) return false;
+    const start = Number(tune.startOffset);
+    const probe = String(fullText).slice(start, Math.min(fullText.length, start + 160));
+    if (!/^\s*X:/.test(probe)) return false;
+    const expectedX = tune && tune.xNumber != null ? String(tune.xNumber) : "";
+    if (!expectedX.trim()) return true;
+    const match = probe.match(/^\s*X:\s*(\d+)/);
+    return Boolean(match && match[1] === expectedX.trim());
+  };
+
+  if (!options._reparsed && !isTuneSliceValid(content, selected)) {
+    try {
+      const updatedFile = await refreshLibraryFile(fileMeta.path, { force: true });
+      const tunes = updatedFile && Array.isArray(updatedFile.tunes) ? updatedFile.tunes : [];
+      const expectedX = selected && selected.xNumber != null ? String(selected.xNumber) : "";
+      const expectedTitle = selected && selected.title ? String(selected.title).trim().toLowerCase() : "";
+      const expectedStart = Number.isFinite(Number(selected.startOffset)) ? Number(selected.startOffset) : null;
+      const expectedId = selected && selected.id ? String(selected.id) : "";
+
+      let replacement = null;
+      if (expectedId) replacement = tunes.find((t) => t && t.id && String(t.id) === expectedId) || null;
+      if (!replacement && expectedStart != null) replacement = tunes.find((t) => Number(t.startOffset) === expectedStart) || null;
+      if (!replacement && expectedX.trim()) {
+        const matches = tunes.filter((t) => String(t && t.xNumber != null ? t.xNumber : "") === expectedX.trim());
+        if (matches.length === 1) replacement = matches[0];
+        else if (matches.length > 1 && expectedTitle) {
+          replacement = matches.find((t) => String(t.title || "").trim().toLowerCase() === expectedTitle) || matches[0];
+        } else if (matches.length) {
+          replacement = matches[0];
+        }
+      }
+      if (replacement && replacement.id) {
+        return selectTune(replacement.id, { ...options, skipConfirm: true, _reparsed: true });
+      }
+    } catch {}
   }
 
   const tuneText = content.slice(selected.startOffset, selected.endOffset);
@@ -2592,15 +3107,6 @@ async function openTuneFromLibrarySelection(selection) {
     logErr(msg);
     return { ok: false, error: msg };
   }
-
-  const normalizeLibraryPath = (input) => {
-    let value = String(input || "").trim();
-    if (!value) return "";
-    value = value.replace(/\\/g, "/");
-    value = value.replace(/^\.\//, "");
-    value = value.replace(/\/{2,}/g, "/");
-    return value;
-  };
 
   const filePath = selection.filePath || selection.path || null;
   const tuneId = selection.tuneId || selection.id || null;
@@ -2632,7 +3138,7 @@ async function openTuneFromLibrarySelection(selection) {
 
   const findFileEntry = () => {
     if (!libraryIndex || !Array.isArray(libraryIndex.files)) return null;
-    return libraryIndex.files.find((f) => normalizeLibraryPath(f && f.path) === wantedPath) || null;
+    return libraryIndex.files.find((f) => pathsEqual(f && f.path, wantedPath)) || null;
   };
 
   let fileEntry = findFileEntry();
@@ -2682,7 +3188,7 @@ async function openRecentTune(entry) {
   await loadLibraryFromFolder(dir);
   if (libraryIndex && libraryIndex.files) {
     const id = `${entry.path}::${entry.startOffset || 0}`;
-    const fileEntry = libraryIndex.files.find((f) => f.path === entry.path);
+    const fileEntry = libraryIndex.files.find((f) => pathsEqual(f.path, entry.path));
     const tune = fileEntry ? fileEntry.tunes.find((t) => t.id === id) : null;
     if (tune) {
       await selectTune(tune.id);
@@ -2694,7 +3200,7 @@ async function openRecentTune(entry) {
     logErr(res.error || "Unable to read file.");
     return;
   }
-  fileContentCache.set(entry.path, res.data);
+  setFileContentInCache(entry.path, res.data);
   const startOffset = entry.startOffset || 0;
   const endOffset = entry.endOffset || res.data.length;
   const tuneText = res.data.slice(startOffset, endOffset);
@@ -2745,6 +3251,8 @@ async function refreshLibraryIndex() {
     setStatus("Load a library folder first.");
     return;
   }
+  const scanToken = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const rootAtStart = libraryIndex.root;
   setScanStatus("Refreshing…");
   fileContentCache.clear();
   libraryErrorIndex.clear();
@@ -2752,22 +3260,36 @@ async function refreshLibraryIndex() {
     setFileNameMeta(stripFileExtension(safeBasename(libraryIndex.root)));
   }
   try {
-    const result = await window.api.scanLibrary(libraryIndex.root);
-    libraryIndex = result || { root: libraryIndex.root, files: [] };
-	    if (libraryFilterLabel) {
-	      clearLibraryFilter();
-	    } else {
-	      renderLibraryTree();
-	      updateLibraryStatus();
-	    }
-	  } catch (e) {
-	    setScanStatus("Refresh failed.");
-	    logErr(e && e.message ? e.message : String(e));
-  }
+    if (typeof window.api.scanLibraryDiscover === "function") {
+      const discovered = await window.api.scanLibraryDiscover(libraryIndex.root, { token: scanToken, computeMeta: true });
+      if (discovered && discovered.root && Array.isArray(discovered.files)) {
+        if (!libraryIndex || libraryIndex.root !== rootAtStart) return;
+        libraryIndex = {
+          root: discovered.root,
+          files: (discovered.files || []).map((f) => ({ ...f, tunes: Array.isArray(f.tunes) ? f.tunes : [] })),
+        };
+        libraryViewStore.invalidate();
+        updateLibraryRootUI();
+        scheduleRenderLibraryTree();
+        updateLibraryStatus();
+      }
+    }
+    if (!libraryIndex || libraryIndex.root !== rootAtStart) return;
+    await ensureFullLibraryIndex({ reason: "refresh" });
+    if (libraryFilterLabel) clearLibraryFilter();
+    else {
+      scheduleRenderLibraryTree();
+      updateLibraryStatus();
+    }
+		  } catch (e) {
+		    setScanStatus("Refresh failed.");
+		    logErr(e && e.message ? e.message : String(e));
+	  }
 }
 
 async function loadLibraryFromFolder(folder) {
   if (!window.api || !folder) return;
+  const scanToken = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   setScanStatus("Scanning…");
   fileContentCache.clear();
   libraryErrorIndex.clear();
@@ -2785,8 +3307,34 @@ async function loadLibraryFromFolder(folder) {
   setDirtyIndicator(false);
 
   try {
-    const result = await window.api.scanLibrary(folder);
-    libraryIndex = result || { root: folder, files: [] };
+    if (typeof window.api.scanLibraryDiscover === "function") {
+      const discovered = await window.api.scanLibraryDiscover(folder, { token: scanToken, computeMeta: true });
+      if (discovered && discovered.root && Array.isArray(discovered.files)) {
+        if (!libraryIndex && folder !== discovered.root) {
+          // proceed: first load
+        }
+        libraryIndex = {
+          root: discovered.root,
+          files: (discovered.files || []).map((f) => ({ ...f, tunes: Array.isArray(f.tunes) ? f.tunes : [] })),
+        };
+        libraryViewStore.invalidate();
+        updateLibraryRootUI();
+        clearLibraryFilter();
+        collapsedFiles.clear();
+        collapsedGroups.clear();
+        activeFilePath = null;
+        applyLibraryUiStateFromSettings(latestSettingsSnapshot);
+        scheduleRenderLibraryTree();
+        updateLibraryStatus();
+      }
+    }
+    if (libraryIndex && libraryIndex.root && libraryIndex.root !== folder) {
+      // User switched again while discover ran.
+      return;
+    }
+    await ensureFullLibraryIndex({ reason: "library" });
+    if (libraryIndex && libraryIndex.root && libraryIndex.root !== folder) return;
+
     clearLibraryFilter();
     collapsedFiles.clear();
     collapsedGroups.clear();
@@ -2795,37 +3343,52 @@ async function loadLibraryFromFolder(folder) {
       for (const file of libraryIndex.files || []) {
         collapsedFiles.add(file.path);
       }
-	    } else {
-	      const groups = buildGroupEntries(libraryIndex.files || [], groupMode);
-	      for (const group of groups) collapsedGroups.add(group.id);
-	    }
-	    renderLibraryTree();
-	    let firstTuneId = null;
-	    for (const file of libraryIndex.files || []) {
-	      if (file.tunes && file.tunes.length) {
-	        firstTuneId = file.tunes[0].id;
-        break;
+    } else {
+      const groups = buildGroupEntries(libraryIndex.files || [], groupMode);
+      for (const group of groups) collapsedGroups.add(group.id);
+    }
+    const restoredSelection = applyLibraryUiStateFromSettings(latestSettingsSnapshot);
+    scheduleRenderLibraryTree();
+    let firstTuneId = null;
+    const restoredTune = restoredSelection && restoredSelection.tuneSelection
+      ? await restoreLibraryTuneSelection(restoredSelection.tuneSelection)
+      : false;
+    if (!restoredTune) {
+      for (const file of libraryIndex.files || []) {
+        if (file.tunes && file.tunes.length) {
+          firstTuneId = file.tunes[0].id;
+          break;
+        }
+      }
+      if (firstTuneId) {
+        await selectTune(firstTuneId);
       }
     }
-    if (firstTuneId) {
-      await selectTune(firstTuneId);
-    }
     updateLibraryStatus();
-  } catch (e) {
-    setScanStatus("Scan failed");
-    logErr((e && e.stack) ? e.stack : String(e));
-  }
+		  } catch (e) {
+		    setScanStatus("Scan failed");
+		    logErr((e && e.stack) ? e.stack : String(e));
+		  }
 }
 
 async function loadLibraryFileIntoEditor(filePath) {
   if (!filePath) return { ok: false, error: "Missing file path." };
   const resolveFromIndex = async () => {
     if (!libraryIndex || !libraryIndex.files) return { ok: false };
-    const fileEntry = libraryIndex.files.find((f) => f.path === filePath) || null;
+    const fileEntry = libraryIndex.files.find((f) => pathsEqual(f.path, filePath)) || null;
     if (!fileEntry) return { ok: false };
     if (fileEntry.tunes && fileEntry.tunes.length) {
       await selectTune(fileEntry.tunes[0].id);
       return { ok: true };
+    }
+    const tuneCount = Number.isFinite(fileEntry.tuneCount) ? fileEntry.tuneCount : null;
+    const shouldTryParse = tuneCount == null || tuneCount > 0;
+    if (shouldTryParse) {
+      const updated = await refreshLibraryFile(filePath);
+      if (updated && updated.tunes && updated.tunes.length) {
+        await selectTune(updated.tunes[0].id);
+        return { ok: true };
+      }
     }
     return { ok: false, error: `No tunes found in file: ${safeBasename(filePath)}` };
   };
@@ -2913,47 +3476,81 @@ if ($groupBy) {
     } else {
       maybeAutoSortForGroup(groupMode);
     }
-	    if (libraryIndex && libraryIndex.files) {
-	      if (groupMode === "file") {
-	        collapsedFiles.clear();
-	        for (const file of libraryIndex.files) collapsedFiles.add(file.path);
-	      } else {
-	        const groups = buildGroupEntries(libraryIndex.files, groupMode);
-	        for (const group of groups) collapsedGroups.add(group.id);
-	      }
-	      renderLibraryTree();
-	    }
-	  });
-	}
+    scheduleSaveLibraryPrefs({ libraryGroupBy: groupMode, librarySortBy: sortMode });
+    if (groupMode !== "file" && !hasFullLibraryIndex()) {
+      ensureFullLibraryIndex({ reason: `group by ${groupMode}` }).catch(() => {});
+    }
+		    if (libraryIndex && libraryIndex.files) {
+		      if (groupMode === "file") {
+		        collapsedFiles.clear();
+		        for (const file of libraryIndex.files) collapsedFiles.add(file.path);
+		      } else {
+		        const groups = buildGroupEntries(libraryIndex.files, groupMode);
+		        for (const group of groups) collapsedGroups.add(group.id);
+		      }
+		      renderLibraryTree();
+          scheduleSaveLibraryUiState();
+		    }
+		  });
+		}
 
 if ($sortBy) {
   if ($sortBy.value) sortMode = $sortBy.value;
-	  $sortBy.addEventListener("change", () => {
-	    sortMode = $sortBy.value || "update_desc";
-	    sortModeIsAuto = false;
-	    groupSortPrefs.set(groupMode, sortMode);
-	    renderLibraryTree();
-	  });
-	}
+		  $sortBy.addEventListener("change", () => {
+		    sortMode = $sortBy.value || "update_desc";
+		    sortModeIsAuto = false;
+		    groupSortPrefs.set(groupMode, sortMode);
+        scheduleSaveLibraryPrefs({ librarySortBy: sortMode });
+		    renderLibraryTree();
+		  });
+		}
 
 if ($librarySearch) {
   $librarySearch.addEventListener("input", () => {
     scheduleLibrarySearch($librarySearch.value || "");
+    scheduleSaveLibraryPrefs({ libraryFilterText: $librarySearch.value || "" });
   });
   $librarySearch.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       libraryTextFilter = "";
       $librarySearch.value = "";
-	      if (librarySearchTimer) {
-	        clearTimeout(librarySearchTimer);
-	        librarySearchTimer = null;
-	      }
-	      renderLibraryTree();
+      scheduleSaveLibraryPrefs({ libraryFilterText: "" });
+		      if (librarySearchTimer) {
+		        clearTimeout(librarySearchTimer);
+		        librarySearchTimer = null;
+		      }
+		      renderLibraryTree();
 	      updateLibraryStatus();
 	      e.preventDefault();
-	    }
-	  });
-	}
+		}
+	});
+}
+
+if ($btnLibraryClearFilter) {
+  $btnLibraryClearFilter.addEventListener("click", () => {
+    libraryTextFilter = "";
+    if ($librarySearch) $librarySearch.value = "";
+    scheduleSaveLibraryPrefs({ libraryFilterText: "" });
+    if (librarySearchTimer) {
+      clearTimeout(librarySearchTimer);
+      librarySearchTimer = null;
+    }
+    if (libraryFilterLabel) {
+      clearLibraryFilter();
+    } else {
+      renderLibraryTree();
+      updateLibraryStatus();
+    }
+  });
+}
+
+if ($btnLibraryRefresh) {
+  $btnLibraryRefresh.addEventListener("click", async () => {
+    try {
+      await refreshLibraryIndex();
+    } catch {}
+  });
+}
 
 if ($scanErrorTunes) {
   $scanErrorTunes.addEventListener("click", () => {
@@ -2980,15 +3577,6 @@ if ($scanErrorTunes) {
     setScanErrorButtonActive(true);
     scanActiveFileForTuneErrors(entry).catch(() => {});
     updateLibraryStatus();
-  });
-}
-
-if ($btnLibraryMenu) {
-  $btnLibraryMenu.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const rect = $btnLibraryMenu.getBoundingClientRect();
-    showContextMenuAt(rect.right, rect.bottom, { type: "library" });
-    e.preventDefault();
   });
 }
 
@@ -3072,6 +3660,14 @@ if (window.api && typeof window.api.onLibraryProgress === "function") {
           setScanStatus("");
         }, 600);
       }
+    } else if (payload.phase === "done") {
+      const filesFound = payload.filesFound || 0;
+      setScanStatus(`Done (${filesFound} files)`);
+      if (scanStatusClearTimer) clearTimeout(scanStatusClearTimer);
+      scanStatusClearTimer = setTimeout(() => {
+        scanStatusClearTimer = null;
+        setScanStatus("");
+      }, 900);
     }
   });
 }
@@ -3602,6 +4198,11 @@ function renderToolStatus() {
       const info = toolHealth[key];
       if (!info || info.ok) continue;
       const msg = info.error || info.detail || "Unavailable";
+      if (key === "abc2abc" && (!latestSettingsSnapshot || latestSettingsSnapshot.useNativeTranspose !== false)) {
+        warnings.push("abc2abc (optional)");
+        details.push(`abc2abc: ${msg}\nNote: semitone transpose uses the native engine; abc2abc is needed for Measures-per-Line / Voice / Renumber tools.`);
+        continue;
+      }
       warnings.push(label);
       details.push(`${label}: ${msg}`);
     }
@@ -3671,7 +4272,7 @@ function setScanErrorButtonState(isScanning) {
 
 function applyLibrarySearch(value) {
   libraryTextFilter = String(value || "").trim();
-  renderLibraryTree();
+  scheduleRenderLibraryTree();
   updateLibraryStatus();
 }
 
@@ -3772,10 +4373,13 @@ function applyTransformedText(text) {
   suppressDirty = false;
   currentDoc.content = text || "";
   currentDoc.dirty = true;
-  renderNow();
+  scheduleRenderNow({ clearOutput: true });
 }
 
 const BAR_SEP_SYMBOLS = [
+  "|:::",
+  ":::|",
+  ":::",
   ":|][|:",
   ":|[2",
   ":|]2",
@@ -4212,6 +4816,11 @@ function initContextMenu() {
       hideContextMenu();
       return;
     }
+    if (action === "xIssues" && menuTarget && menuTarget.type === "file") {
+      hideContextMenu();
+      await openXIssuesModalForFile(menuTarget.filePath);
+      return;
+    }
     if (action === "renumberXInFile" && menuTarget) {
       const filePath = menuTarget.type === "file"
         ? menuTarget.filePath
@@ -4280,11 +4889,16 @@ function showContextMenuAt(x, y, target) {
       { label: "Delete Tune…", action: "deleteTune", danger: true },
     ]);
   } else if (target.type === "file") {
+    const fileEntry = libraryIndex && Array.isArray(libraryIndex.files) && target.filePath
+      ? libraryIndex.files.find((f) => pathsEqual(f.path, target.filePath))
+      : null;
+    const hasXIssues = Boolean(fileEntry && fileEntry.xIssues && fileEntry.xIssues.ok === false);
     buildContextMenuItems([
       { label: "Load", action: "loadFile", disabled: !target.filePath },
       { label: "Paste Tune", action: "pasteTune", disabled: !clipboardTune },
       { label: "Refresh Library", action: "refreshLibrary" },
       { label: "Rename File…", action: "renameFile" },
+      { label: "X issues…", action: "xIssues", disabled: !hasXIssues },
       { label: "Renumber X…", action: "renumberXInFile", disabled: !target.filePath },
     ]);
   } else if (target.type === "library") {
@@ -4360,21 +4974,23 @@ async function commitRenameFile(oldPath, inputName) {
       renderLibraryTree();
       return;
     }
-    if (await fileExists(newPath)) {
-      await showSaveError("A file with that name already exists.");
+    await withFileLocks([oldPath, newPath], async () => {
+      if (await fileExists(newPath)) {
+        await showSaveError("A file with that name already exists.");
+        renamingFilePath = null;
+        renderLibraryTree();
+        return;
+      }
+      const res = await renameFile(oldPath, newPath);
+      if (!res || !res.ok) {
+        await showSaveError(res && res.error ? res.error : "Unable to rename file.");
+        renamingFilePath = null;
+        renderLibraryTree();
+        return;
+      }
       renamingFilePath = null;
-      renderLibraryTree();
-      return;
-    }
-    const res = await renameFile(oldPath, newPath);
-    if (!res || !res.ok) {
-      await showSaveError(res && res.error ? res.error : "Unable to rename file.");
-      renamingFilePath = null;
-      renderLibraryTree();
-      return;
-    }
-    renamingFilePath = null;
-    await renameLibraryFile(oldPath, newPath);
+      await renameLibraryFile(oldPath, newPath);
+    });
   } finally {
     renameInFlight = false;
   }
@@ -4410,7 +5026,7 @@ async function moveTuneToFile(tuneId, targetPath) {
   if (!tuneId || !targetPath) return;
   const res = findTuneById(tuneId);
   if (!res) return;
-  if (res.file.path === targetPath) {
+  if (pathsEqual(res.file.path, targetPath)) {
     await showSaveError("Target file is the same as source.");
     return;
   }
@@ -5144,12 +5760,12 @@ async function renderCurrentTuneSvgMarkupForPrint() {
 }
 
 async function getFileContentCached(filePath) {
-  let content = fileContentCache.get(filePath);
+  let content = getFileContentFromCache(filePath);
   if (content == null) {
     const res = await readFile(filePath);
     if (!res.ok) return res;
     content = res.data;
-    fileContentCache.set(filePath, content);
+    setFileContentInCache(filePath, content);
   }
   return { ok: true, data: content };
 }
@@ -5183,7 +5799,7 @@ async function renderPrintAllSvgMarkup(entry, content, options = {}) {
       if (debugInfo) debugInfo.skipped += 1;
       continue;
     }
-    const effectiveHeader = (entry && entry.path && entry.path === activeFilePath) ? getHeaderEditorValue() : (entry.headerText || "");
+    const effectiveHeader = (entry && entry.path && pathsEqual(entry.path, activeFilePath)) ? getHeaderEditorValue() : (entry.headerText || "");
     const prefix = buildHeaderPrefix(effectiveHeader, false, tuneText);
     const block = prefix.text ? `${prefix.text}${tuneText}` : tuneText;
     const meta = debugInfo ? {
@@ -5320,7 +5936,7 @@ function updateUIFromDocument(doc) {
   suppressDirty = true;
   setEditorValue(doc ? doc.content : "");
   suppressDirty = false;
-  if (!rawMode) renderNow();
+  if (!rawMode) scheduleRenderNow({ clearOutput: true });
 }
 
 function showEmptyState() {
@@ -5332,6 +5948,7 @@ function showEmptyState() {
   setEditorValue("");
   suppressDirty = false;
   $out.innerHTML = "";
+  setRenderBusy(false);
   activeTuneMeta = null;
   activeTuneId = null;
   activeFilePath = null;
@@ -5376,7 +5993,7 @@ function ensureAbc2svgModules(content) {
   if (!window.abc2svg || !window.abc2svg.modules || typeof window.abc2svg.modules.load !== "function") {
     return true;
   }
-  return window.abc2svg.modules.load(content, renderNow, logErr);
+  return window.abc2svg.modules.load(content, () => scheduleRenderNow(), logErr);
 }
 
 function normalizeHeaderNoneSpacing(text) {
@@ -5411,23 +6028,64 @@ function stripSepForRender(text) {
   return { text: stripped, replaced: stripped !== value };
 }
 
+function parseBarToken(rawToken) {
+  const raw = String(rawToken || "");
+  const digitMatch = raw.match(/(\d+)$/);
+  const voltaNumber = digitMatch ? Number(digitMatch[1]) : null;
+  const rawNoDigits = digitMatch ? raw.slice(0, raw.length - digitMatch[1].length) : raw;
+
+  let normalized = rawNoDigits
+    .replace(/[\[\]]/g, "|")
+    .replace(/\./g, "|");
+  normalized = normalized.replace(/\|+/g, "|");
+
+  const isCombined = normalized === "::" || (/^:.*:$/.test(normalized) && normalized.includes("|"));
+  const startMulti = normalized.match(/^\|(:{2,})/);
+  const endMulti = normalized.match(/(:{2,})\|$/);
+
+  const repeatCountStart = startMulti ? (startMulti[1].length + 1) : 0;
+  const repeatCountEnd = endMulti ? (endMulti[1].length + 1) : 0;
+
+  const isRepeatStart = isCombined || normalized.includes("|:") || repeatCountStart > 0;
+  const isRepeatEnd = isCombined || normalized.includes(":|") || repeatCountEnd > 0;
+
+  const isFirstEnding = voltaNumber === 1
+    && /(?:\||\[|:)/.test(rawNoDigits);
+  const isSecondEnding = voltaNumber === 2
+    && /(?:\||\[|:)/.test(rawNoDigits);
+
+  return {
+    raw,
+    rawNoDigits,
+    normalized,
+    voltaNumber: Number.isFinite(voltaNumber) ? voltaNumber : null,
+    isCombined,
+    isRepeatStart,
+    isRepeatEnd,
+    repeatCountStart,
+    repeatCountEnd,
+    isFirstEnding,
+    isSecondEnding,
+  };
+}
+
 function normalizeBarToken(token) {
   if (!token) return "";
-  if (
-    token.includes("|:") ||
-    token.includes(":|") ||
-    token.includes("|1") ||
-    token.includes("|2") ||
-    token.includes("[1") ||
-    token.includes("[2")
-  ) {
+  const info = parseBarToken(token);
+  if (info.isRepeatStart || info.isRepeatEnd || info.isFirstEnding || info.isSecondEnding) {
     return "|";
   }
   return token;
 }
 
 function hasRepeatTokens(text) {
-  return /(\|\:|\:\||\|1|\|2|\[1|\[2)/.test(text);
+  return /(\|\:|\:\||::|\|\s*\d+|\[\s*\d+)/.test(String(text || ""));
+}
+
+function shouldForceRepeatExpansionForPlayback(text) {
+  const src = String(text || "");
+  // abc2svg/abcplay can behave unpredictably on some complex repeat barlines; expand for deterministic playback.
+  return /(\|:::|:::\||\|::|::\||::)/.test(src);
 }
 
 function expandRepeatsInString(line) {
@@ -5464,7 +6122,7 @@ function expandRepeatsInString(line) {
   if (bars.length === 0) return line;
 
   const out = [];
-  let repeatStart = null;
+  let repeatStart = null; // { idx, times }
   let firstEndStart = null;
   let secondEndStart = null;
 
@@ -5478,36 +6136,46 @@ function expandRepeatsInString(line) {
 
   for (let i = 0; i < bars.length; i += 1) {
     const token = bars[i].startToken || "";
-    if (token.includes("|:")) {
-      repeatStart = i;
-      continue;
-    }
-    if (repeatStart != null && (token.includes("|1") || token.includes("[1"))) {
+    const info = parseBarToken(token);
+
+    if (repeatStart != null && info.isFirstEnding) {
       firstEndStart = i;
       continue;
     }
-    if (repeatStart != null && (token.includes("|2") || token.includes("[2"))) {
+    if (repeatStart != null && info.isSecondEnding) {
       secondEndStart = i;
       continue;
     }
-    if (repeatStart != null && token.includes(":|")) {
+    if (repeatStart != null && info.isRepeatEnd) {
       const repeatEnd = i;
-      if (firstEndStart != null && secondEndStart != null) {
-        const partA = bars.slice(repeatStart + 1, firstEndStart);
-        const partB = bars.slice(firstEndStart, secondEndStart);
-        const partC = bars.slice(secondEndStart, repeatEnd);
-        emitBars(partA);
-        emitBars(partB);
-        emitBars(partA);
-        emitBars(partC);
-      } else {
-        const part = bars.slice(repeatStart + 1, repeatEnd);
-        emitBars(part);
-        emitBars(part);
+      const times = Math.max(2, info.repeatCountEnd || (repeatStart && repeatStart.times) || 2);
+      const repeatStartIdx = repeatStart ? repeatStart.idx : null;
+      if (repeatStartIdx != null) {
+        if (firstEndStart != null && secondEndStart != null && times === 2) {
+          const partA = bars.slice(repeatStartIdx, firstEndStart);
+          const partB = bars.slice(firstEndStart, secondEndStart);
+          const partC = bars.slice(secondEndStart, repeatEnd);
+          emitBars(partA);
+          emitBars(partB);
+          emitBars(partA);
+          emitBars(partC);
+        } else {
+          const part = bars.slice(repeatStartIdx, repeatEnd);
+          for (let rep = 0; rep < times; rep += 1) emitBars(part);
+        }
       }
+
       repeatStart = null;
       firstEndStart = null;
       secondEndStart = null;
+      if (info.isRepeatStart) {
+        repeatStart = { idx: i, times: info.repeatCountStart || 2 };
+        continue;
+      }
+      continue;
+    }
+    if (info.isRepeatStart) {
+      repeatStart = { idx: i, times: info.repeatCountStart || 2 };
       continue;
     }
     if (repeatStart == null) {
@@ -5560,13 +6228,68 @@ function expandRepeatsForPlayback(text) {
   return out.join("\n");
 }
 
+let pendingRenderTimer = null;
+let pendingRenderRaf = null;
+let renderRequestToken = 0;
+let renderBusy = false;
+
+function setRenderBusy(next) {
+  renderBusy = Boolean(next);
+  try {
+    if ($renderPane) $renderPane.classList.toggle("is-rendering", renderBusy);
+  } catch {}
+}
+
+function scheduleRenderNow({ delayMs = 0, clearOutput = false } = {}) {
+  if (rawMode) return;
+  renderRequestToken += 1;
+  const token = renderRequestToken;
+  if (pendingRenderTimer) {
+    clearTimeout(pendingRenderTimer);
+    pendingRenderTimer = null;
+  }
+  if (pendingRenderRaf) {
+    cancelAnimationFrame(pendingRenderRaf);
+    pendingRenderRaf = null;
+  }
+
+  if (clearOutput) {
+    try {
+      setStatus("Rendering…");
+      setRenderBusy(true);
+    } catch {}
+  }
+
+  const run = () => {
+    if (token !== renderRequestToken) return;
+    renderNow();
+  };
+
+  if (delayMs > 0) {
+    pendingRenderTimer = setTimeout(() => {
+      pendingRenderTimer = null;
+      pendingRenderRaf = requestAnimationFrame(() => {
+        pendingRenderRaf = null;
+        run();
+      });
+    }, delayMs);
+    return;
+  }
+
+  pendingRenderRaf = requestAnimationFrame(() => {
+    pendingRenderRaf = null;
+    run();
+  });
+}
+
 function renderNow() {
   clearNoteSelection();
   clearErrors();
-  $out.innerHTML = "";
+  setRenderBusy(true);
   const currentText = getEditorValue();
   if (!currentText.trim()) {
     setStatus("Ready");
+    setRenderBusy(false);
     updateLibraryErrorIndexFromCurrentErrors();
     reconcileActiveErrorHighlightAfterRender({ renderSucceeded: true });
     return;
@@ -5575,6 +6298,7 @@ function renderNow() {
   if (!assertCleanAbcText(renderPayload.text, "renderNow")) {
     logErr("ABC text corruption detected (render).");
     setStatus("Error");
+    setRenderBusy(false);
     updateLibraryErrorIndexFromCurrentErrors();
     return;
   }
@@ -5593,6 +6317,7 @@ function renderNow() {
     ensureAbc2svgLoader();
     if (!ensureAbc2svgModules(renderText)) {
       setStatus("Loading modules…");
+      setRenderBusy(true);
       return;
     }
 
@@ -5648,6 +6373,7 @@ function renderNow() {
           setBufferStatus("Note: %%sep ignored for rendering.");
         }
         setStatus("OK");
+        setRenderBusy(false);
         updateLibraryErrorIndexFromCurrentErrors();
         reconcileActiveErrorHighlightAfterRender({ renderSucceeded: true });
         break;
@@ -5658,6 +6384,7 @@ function renderNow() {
   } catch (e) {
     logErr((e && e.stack) ? e.stack : String(e));
     setStatus("Error");
+    setRenderBusy(false);
     updateLibraryErrorIndexFromCurrentErrors();
     reconcileActiveErrorHighlightAfterRender({ renderSucceeded: false });
   }
@@ -5745,6 +6472,39 @@ async function writeFile(filePath, data) {
   return window.api.writeFile(filePath, data);
 }
 
+const fileOpQueues = new Map();
+
+function normalizeFileOpKey(filePath) {
+  const raw = String(filePath || "");
+  const normalized = normalizeLibraryPath(raw);
+  return normalized || raw;
+}
+
+async function withFileLock(filePath, operation) {
+  const key = normalizeFileOpKey(filePath);
+  if (!key) return operation();
+  const prev = fileOpQueues.get(key) || Promise.resolve();
+  const next = prev.catch(() => {}).then(operation);
+  const tail = next.finally(() => {
+    if (fileOpQueues.get(key) === tail) fileOpQueues.delete(key);
+  });
+  fileOpQueues.set(key, tail);
+  return tail;
+}
+
+async function withFileLocks(filePaths, operation) {
+  const list = Array.from(new Set((filePaths || []).map((p) => normalizeFileOpKey(p)).filter(Boolean)));
+  if (!list.length) return operation();
+  list.sort((a, b) => a.localeCompare(b));
+  let chained = operation;
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const p = list[i];
+    const prevFn = chained;
+    chained = () => withFileLock(p, prevFn);
+  }
+  return chained();
+}
+
 async function renameFile(oldPath, newPath) {
   if (!window.api || typeof window.api.renameFile !== "function") return { ok: false, error: "API missing" };
   return window.api.renameFile(oldPath, newPath);
@@ -5781,7 +6541,7 @@ function countLines(text) {
 
 function updateLibraryAfterSave(filePath, startOffset, oldEndOffset, newEndOffset, deltaLen, deltaLines, newLineCount, updatedTuneMeta) {
   if (!libraryIndex) return;
-  const fileEntry = libraryIndex.files.find((f) => f.path === filePath);
+  const fileEntry = libraryIndex.files.find((f) => pathsEqual(f.path, filePath));
   if (!fileEntry) return;
 
   for (const tune of fileEntry.tunes) {
@@ -5807,8 +6567,11 @@ function updateLibraryAfterSave(filePath, startOffset, oldEndOffset, newEndOffse
     }
   }
 
-  renderLibraryTree();
+  libraryViewStore.invalidate();
+  scheduleRenderLibraryTree();
   markActiveTuneButton(activeTuneId);
+  updateLibraryStatus();
+  scheduleSaveLibraryUiState();
 }
 
 async function saveActiveTuneToSource() {
@@ -5816,67 +6579,69 @@ async function saveActiveTuneToSource() {
     return { ok: false, error: "No active tune to save." };
   }
   const filePath = activeTuneMeta.path;
-  let content = fileContentCache.get(filePath);
-  if (content == null) {
-    const res = await readFile(filePath);
+  return withFileLock(filePath, async () => {
+    let content = getFileContentFromCache(filePath);
+    if (content == null) {
+      const res = await readFile(filePath);
+      if (!res.ok) return res;
+      content = res.data;
+      setFileContentInCache(filePath, content);
+    }
+
+    const startOffset = activeTuneMeta.startOffset;
+    const endOffset = activeTuneMeta.endOffset;
+    let newText = getEditorValue();
+    const oldText = content.slice(startOffset, endOffset);
+    const expectedX = String(activeTuneMeta.xNumber || "");
+    if (expectedX) {
+      const trimmed = oldText.replace(/^\s+/, "");
+      const xMatch = trimmed.match(/^X:\s*(\d+)/);
+      if (!xMatch || xMatch[1] !== expectedX) {
+        return {
+          ok: false,
+          error: `Refusing to save: tune offsets look stale (expected X:${expectedX}). Reload the tune and try again.`,
+        };
+      }
+    } else {
+      const trimmed = oldText.replace(/^\s+/, "");
+      if (!/^X:\s*\d+/.test(trimmed)) {
+        return {
+          ok: false,
+          error: "Refusing to save: tune offsets look stale. Reload the tune and try again.",
+        };
+      }
+    }
+    const oldEndsWithNewline = /\r?\n$/.test(oldText);
+    const newEndsWithNewline = /\r?\n$/.test(newText);
+    if (oldEndsWithNewline && !newEndsWithNewline) {
+      const newline = oldText.endsWith("\r\n") ? "\r\n" : "\n";
+      newText += newline;
+    }
+    const updatedIdentity = parseTuneIdentityFields(newText);
+    const updated = content.slice(0, startOffset) + newText + content.slice(endOffset);
+    const res = await writeFile(filePath, updated);
     if (!res.ok) return res;
-    content = res.data;
-    fileContentCache.set(filePath, content);
-  }
 
-  const startOffset = activeTuneMeta.startOffset;
-  const endOffset = activeTuneMeta.endOffset;
-  let newText = getEditorValue();
-  const oldText = content.slice(startOffset, endOffset);
-  const expectedX = String(activeTuneMeta.xNumber || "");
-  if (expectedX) {
-    const trimmed = oldText.replace(/^\s+/, "");
-    const xMatch = trimmed.match(/^X:\s*(\d+)/);
-    if (!xMatch || xMatch[1] !== expectedX) {
-      return {
-        ok: false,
-        error: `Refusing to save: tune offsets look stale (expected X:${expectedX}). Reload the tune and try again.`,
-      };
+    setFileContentInCache(filePath, updated);
+    const deltaLen = newText.length - (endOffset - startOffset);
+    const oldLineCount = countLines(oldText);
+    const newLineCount = countLines(newText);
+    const deltaLines = newLineCount - oldLineCount;
+    const newEndOffset = startOffset + newText.length;
+
+    updateLibraryAfterSave(filePath, startOffset, endOffset, newEndOffset, deltaLen, deltaLines, newLineCount, updatedIdentity);
+
+    activeTuneMeta.endOffset = newEndOffset;
+    activeTuneMeta.endLine = activeTuneMeta.startLine + newLineCount - 1;
+    if (updatedIdentity && typeof updatedIdentity === "object") {
+      if (updatedIdentity.xNumber != null) activeTuneMeta.xNumber = updatedIdentity.xNumber;
+      if (updatedIdentity.title != null) activeTuneMeta.title = updatedIdentity.title;
+      if (updatedIdentity.composer != null) activeTuneMeta.composer = updatedIdentity.composer;
+      if (updatedIdentity.key != null) activeTuneMeta.key = updatedIdentity.key;
+      setTuneMetaText(buildTuneMetaLabel(activeTuneMeta));
     }
-  } else {
-    const trimmed = oldText.replace(/^\s+/, "");
-    if (!/^X:\s*\d+/.test(trimmed)) {
-      return {
-        ok: false,
-        error: "Refusing to save: tune offsets look stale. Reload the tune and try again.",
-      };
-    }
-  }
-  const oldEndsWithNewline = /\r?\n$/.test(oldText);
-  const newEndsWithNewline = /\r?\n$/.test(newText);
-  if (oldEndsWithNewline && !newEndsWithNewline) {
-    const newline = oldText.endsWith("\r\n") ? "\r\n" : "\n";
-    newText += newline;
-  }
-  const updatedIdentity = parseTuneIdentityFields(newText);
-  const updated = content.slice(0, startOffset) + newText + content.slice(endOffset);
-  const res = await writeFile(filePath, updated);
-  if (!res.ok) return res;
-
-  fileContentCache.set(filePath, updated);
-  const deltaLen = newText.length - (endOffset - startOffset);
-  const oldLineCount = countLines(oldText);
-  const newLineCount = countLines(newText);
-  const deltaLines = newLineCount - oldLineCount;
-  const newEndOffset = startOffset + newText.length;
-
-  updateLibraryAfterSave(filePath, startOffset, endOffset, newEndOffset, deltaLen, deltaLines, newLineCount, updatedIdentity);
-
-  activeTuneMeta.endOffset = newEndOffset;
-  activeTuneMeta.endLine = activeTuneMeta.startLine + newLineCount - 1;
-  if (updatedIdentity && typeof updatedIdentity === "object") {
-    if (updatedIdentity.xNumber != null) activeTuneMeta.xNumber = updatedIdentity.xNumber;
-    if (updatedIdentity.title != null) activeTuneMeta.title = updatedIdentity.title;
-    if (updatedIdentity.composer != null) activeTuneMeta.composer = updatedIdentity.composer;
-    if (updatedIdentity.key != null) activeTuneMeta.key = updatedIdentity.key;
-    setTuneMetaText(buildTuneMetaLabel(activeTuneMeta));
-  }
-  return { ok: true };
+    return { ok: true };
+  });
 }
 
 async function showSaveError(message) {
@@ -6007,6 +6772,9 @@ async function buildDebugDumpSnapshot() {
       debugState: playbackDebug && typeof playbackDebug.getState === "function" ? playbackDebug.getState() : null,
       timeline: playbackDebug && typeof playbackDebug.getTimeline === "function" ? playbackDebug.getTimeline() : null,
       trace: playbackDebug && typeof playbackDebug.getTrace === "function" ? playbackDebug.getTrace() : playbackNoteTrace.slice(),
+      parseErrors: Array.isArray(playbackParseErrors) ? playbackParseErrors.slice(0, 200) : null,
+      sanitizeWarnings: Array.isArray(playbackSanitizeWarnings) ? playbackSanitizeWarnings.slice(0, 200) : null,
+      drumSignatureDiff: lastDrumSignatureDiff,
       lastRhythmErrorSuggestion,
     },
     render: {
@@ -6116,6 +6884,103 @@ function formatAboutInfo(info) {
   ].filter(Boolean).join("\n");
 }
 
+function closeXIssuesModal() {
+  if (!$xIssuesModal) return;
+  $xIssuesModal.classList.remove("open");
+  $xIssuesModal.setAttribute("aria-hidden", "true");
+  pendingXIssuesFilePath = null;
+  pendingXIssuesTuneId = null;
+}
+
+function formatXIssuesReport(fileEntry) {
+  const label = fileEntry && (fileEntry.basename || safeBasename(fileEntry.path))
+    ? (fileEntry.basename || safeBasename(fileEntry.path))
+    : "";
+  const issues = fileEntry && fileEntry.xIssues ? fileEntry.xIssues : null;
+  if (!issues || issues.ok) {
+    return `File: ${label}\n\nNo X issues detected.`;
+  }
+
+  const tunes = Array.isArray(fileEntry.tunes) ? fileEntry.tunes : [];
+  const invalidLines = tunes
+    .filter((t) => !(t && t.xNumber && String(t.xNumber).trim()))
+    .map((t) => t.startLine)
+    .filter((n) => Number.isFinite(n));
+
+  const dupLines = new Map();
+  if (issues.duplicates && typeof issues.duplicates === "object") {
+    for (const tune of tunes) {
+      const x = tune && tune.xNumber != null ? String(tune.xNumber) : "";
+      if (!x) continue;
+      if (!Object.prototype.hasOwnProperty.call(issues.duplicates, x)) continue;
+      if (!dupLines.has(x)) dupLines.set(x, []);
+      dupLines.get(x).push(tune.startLine);
+    }
+  }
+
+  const lines = [];
+  lines.push(`File: ${label}`);
+  lines.push("");
+  lines.push("X issues:");
+  if (invalidLines.length) {
+    const shown = invalidLines.slice(0, 30);
+    const more = invalidLines.length - shown.length;
+    lines.push(`- Invalid/empty X at tune start lines: ${shown.join(", ")}${more > 0 ? ` (+${more} more)` : ""}`);
+  }
+  if (dupLines.size) {
+    const keys = Array.from(dupLines.keys()).sort((a, b) => a.localeCompare(b));
+    const shownKeys = keys.slice(0, 20);
+    for (const x of shownKeys) {
+      const locs = (dupLines.get(x) || []).filter((n) => Number.isFinite(n));
+      const shown = locs.slice(0, 20);
+      const more = locs.length - shown.length;
+      lines.push(`- Duplicate X:${x} at lines: ${shown.join(", ")}${more > 0 ? ` (+${more} more)` : ""}`);
+    }
+    if (keys.length > shownKeys.length) lines.push(`- Duplicate X: (+${keys.length - shownKeys.length} more values)`);
+  }
+  if (!invalidLines.length && !dupLines.size) {
+    lines.push("- (No details available; re-parse the file to compute locations.)");
+  }
+
+  return lines.join("\n");
+}
+
+function computeFirstXIssueTuneId(fileEntry) {
+  const tunes = Array.isArray(fileEntry && fileEntry.tunes) ? fileEntry.tunes : [];
+  const invalid = tunes.find((t) => !(t && t.xNumber && String(t.xNumber).trim()));
+  if (invalid && invalid.id) return invalid.id;
+  const issues = fileEntry && fileEntry.xIssues ? fileEntry.xIssues : null;
+  if (issues && issues.duplicates && typeof issues.duplicates === "object") {
+    const dupX = Object.keys(issues.duplicates)[0] || "";
+    if (dupX) {
+      const dupTune = tunes.find((t) => String((t && t.xNumber) || "") === dupX);
+      if (dupTune && dupTune.id) return dupTune.id;
+    }
+  }
+  return null;
+}
+
+async function openXIssuesModalForFile(filePath) {
+  if (!$xIssuesModal || !$xIssuesInfo) return;
+  if (!filePath) return;
+  const entry = libraryIndex && Array.isArray(libraryIndex.files)
+    ? libraryIndex.files.find((f) => pathsEqual(f.path, filePath))
+    : null;
+  if (!entry) return;
+
+  let fileEntry = entry;
+  if ((!fileEntry.tunes || !fileEntry.tunes.length) && window.api && typeof window.api.parseLibraryFile === "function") {
+    const updated = await refreshLibraryFile(filePath);
+    if (updated) fileEntry = updated;
+  }
+
+  pendingXIssuesFilePath = filePath;
+  pendingXIssuesTuneId = computeFirstXIssueTuneId(fileEntry);
+  $xIssuesInfo.textContent = formatXIssuesReport(fileEntry);
+  $xIssuesModal.classList.add("open");
+  $xIssuesModal.setAttribute("aria-hidden", "false");
+}
+
 let libraryListYieldedByThisOpen = false;
 document.addEventListener("library-modal:closed", () => {
   if (!libraryListYieldedByThisOpen) return;
@@ -6130,38 +6995,9 @@ function openLibraryListFromCurrentLibraryIndex() {
   }
   if (!window.openLibraryModal) return false;
 
-  const pad2 = (n) => String(n).padStart(2, "0");
-  const formatYmd = (ms) => {
-    const d = new Date(ms);
-    if (!Number.isFinite(d.getTime())) return "";
-    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-  };
-
-  const rows = [];
-  for (const file of libraryIndex.files) {
-    const modified = file && file.updatedAtMs ? formatYmd(file.updatedAtMs) : "";
-    const filePath = file && file.path ? file.path : "";
-    const fileLabel = file && file.basename ? file.basename : safeBasename(filePath);
-    const tunes = file && Array.isArray(file.tunes) ? file.tunes : [];
-    for (const tune of tunes) {
-      const xNumber = tune && tune.xNumber != null ? tune.xNumber : "";
-      rows.push({
-        file: fileLabel,
-        filePath,
-        tuneId: tune && tune.id ? tune.id : "",
-        tuneNo: xNumber,
-        xNumber,
-        title: tune && (tune.title || tune.preview) ? (tune.title || tune.preview) : "",
-        composer: tune && tune.composer ? tune.composer : "",
-        origin: tune && tune.origin ? tune.origin : "",
-        group: tune && tune.group ? tune.group : "",
-        key: tune && tune.key ? tune.key : "",
-        meter: tune && tune.meter ? tune.meter : "",
-        tempo: tune && tune.tempo ? tune.tempo : "",
-        rhythm: tune && tune.rhythm ? tune.rhythm : "",
-        modified,
-      });
-    }
+  const rows = libraryViewStore.getModalRows();
+  if (!hasFullLibraryIndex()) {
+    ensureFullLibraryIndex({ reason: "library list" }).catch(() => {});
   }
 
   libraryListYieldedByThisOpen = false;
@@ -6191,6 +7027,57 @@ function closeAbout() {
   if (!$aboutModal) return;
   $aboutModal.classList.remove("open");
   $aboutModal.setAttribute("aria-hidden", "true");
+}
+
+if ($xIssuesClose) {
+  $xIssuesClose.addEventListener("click", () => closeXIssuesModal());
+}
+if ($xIssuesCopy) {
+  $xIssuesCopy.addEventListener("click", async () => {
+    try {
+      if (!$xIssuesInfo) return;
+      const text = String($xIssuesInfo.textContent || "");
+      if (text && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        showToast("Copied.");
+      }
+    } catch {}
+  });
+}
+if ($xIssuesJump) {
+  $xIssuesJump.addEventListener("click", async () => {
+    const filePath = pendingXIssuesFilePath;
+    const tuneId = pendingXIssuesTuneId;
+    closeXIssuesModal();
+    if (!filePath) return;
+    try {
+      const ok = await requestLoadLibraryFile(filePath);
+      if (!ok) return;
+      if (tuneId) {
+        await selectTune(tuneId, { skipConfirm: true });
+      }
+    } catch {}
+  });
+}
+
+if ($xIssuesAutoFix) {
+  $xIssuesAutoFix.addEventListener("click", async () => {
+    const filePath = pendingXIssuesFilePath;
+    closeXIssuesModal();
+    if (!filePath) return;
+    try {
+      await renumberXInActiveFile(filePath);
+      const entry = libraryIndex && Array.isArray(libraryIndex.files)
+        ? libraryIndex.files.find((f) => pathsEqual(f.path, filePath))
+        : null;
+      const hasIssues = Boolean(entry && entry.xIssues && entry.xIssues.ok === false);
+      if (hasIssues) {
+        await openXIssuesModalForFile(filePath);
+      } else {
+        showToast("Renumbered X.");
+      }
+    } catch {}
+  });
 }
 
 function showDisclaimerIfNeeded(settings) {
@@ -6487,11 +7374,20 @@ async function applyAbc2abcTransform(options) {
     && !options.doubleLengths
     && !options.halfLengths;
   if (hasOnlyTranspose) {
-    const transformed = transformTranspose(abcText, Number(options.transposeSemitones));
-    const aligned = alignBarsInText(transformed);
-    applyTransformedText(aligned);
-    setStatus("OK");
-    return;
+    const preferNative = !latestSettingsSnapshot || latestSettingsSnapshot.useNativeTranspose !== false;
+    if (preferNative) {
+      try {
+        const entry = getActiveFileEntry();
+        const headerText = buildHeaderPrefix(entry ? entry.headerText : "", false, abcText).text;
+        const transformed = transformTranspose(abcText, Number(options.transposeSemitones), { headerText });
+        const aligned = alignBarsInText(transformed);
+        applyTransformedText(aligned);
+        setStatus("OK");
+        return;
+      } catch (e) {
+        logErr(`Native transpose failed; falling back to abc2abc.\n\n${(e && e.stack) ? e.stack : String(e)}`);
+      }
+    }
   }
   if (!window.api || typeof window.api.runAbc2abc !== "function") return;
   setStatus("Running abc2abc…");
@@ -6622,18 +7518,21 @@ async function performSaveFlow() {
   }
 
   if (currentDoc.path) {
+    const filePath = currentDoc.path;
     const content = serializeDocument(currentDoc);
-    const res = await writeFile(currentDoc.path, content);
-    if (res.ok) {
-      fileContentCache.set(currentDoc.path, content);
-      currentDoc.dirty = false;
-      setDirtyIndicator(false);
-      setFileNameMeta(stripFileExtension(safeBasename(currentDoc.path)));
-      updateFileHeaderPanel();
-      return true;
-    }
-    await showSaveError(res.error || "Unable to save file.");
-    return false;
+    return withFileLock(filePath, async () => {
+      const res = await writeFile(filePath, content);
+      if (res.ok) {
+        setFileContentInCache(filePath, content);
+        currentDoc.dirty = false;
+        setDirtyIndicator(false);
+        setFileNameMeta(stripFileExtension(safeBasename(filePath)));
+        updateFileHeaderPanel();
+        return true;
+      }
+      await showSaveError(res.error || "Unable to save file.");
+      return false;
+    });
   }
 
   return performSaveAsFlow();
@@ -6647,45 +7546,47 @@ async function performSaveAsFlow() {
   const filePath = await showSaveDialog(suggestedName, suggestedDir);
   if (!filePath) return false;
 
-  const res = await writeFile(filePath, serializeDocument(currentDoc));
-  if (res.ok) {
-    const content = serializeDocument(currentDoc);
-    currentDoc.path = filePath;
-    currentDoc.dirty = false;
-    activeFilePath = filePath;
-    fileContentCache.set(filePath, content);
+  const content = serializeDocument(currentDoc);
+  return withFileLock(filePath, async () => {
+    const res = await writeFile(filePath, content);
+    if (res.ok) {
+      currentDoc.path = filePath;
+      currentDoc.dirty = false;
+      activeFilePath = filePath;
+      setFileContentInCache(filePath, content);
 
-    const updatedFile = await refreshLibraryFile(filePath);
-    if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
-      const tune = updatedFile.tunes[0];
-      activeTuneId = tune.id;
-      markActiveTuneButton(activeTuneId);
-      const tuneText = content.slice(tune.startOffset, tune.endOffset);
-      setActiveTuneText(tuneText, {
-        id: tune.id,
-        path: updatedFile.path,
-        basename: updatedFile.basename,
-        xNumber: tune.xNumber,
-        title: tune.title || "",
-        composer: tune.composer || "",
-        key: tune.key || "",
-        startLine: tune.startLine,
-        endLine: tune.endLine,
-        startOffset: tune.startOffset,
-        endOffset: tune.endOffset,
-      });
-    } else {
-      updateUIFromDocument(currentDoc);
-      setFileNameMeta(stripFileExtension(safeBasename(filePath)));
-      setTuneMetaText(safeBasename(filePath));
+      const updatedFile = await refreshLibraryFile(filePath);
+      if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
+        const tune = updatedFile.tunes[0];
+        activeTuneId = tune.id;
+        markActiveTuneButton(activeTuneId);
+        const tuneText = content.slice(tune.startOffset, tune.endOffset);
+        setActiveTuneText(tuneText, {
+          id: tune.id,
+          path: updatedFile.path,
+          basename: updatedFile.basename,
+          xNumber: tune.xNumber,
+          title: tune.title || "",
+          composer: tune.composer || "",
+          key: tune.key || "",
+          startLine: tune.startLine,
+          endLine: tune.endLine,
+          startOffset: tune.startOffset,
+          endOffset: tune.endOffset,
+        });
+      } else {
+        updateUIFromDocument(currentDoc);
+        setFileNameMeta(stripFileExtension(safeBasename(filePath)));
+        setTuneMetaText(safeBasename(filePath));
+      }
+      updateFileHeaderPanel();
+      setDirtyIndicator(false);
+      return true;
     }
-    updateFileHeaderPanel();
-    setDirtyIndicator(false);
-    return true;
-  }
 
-  await showSaveError(res.error || "Unknown error");
-  return false;
+    await showSaveError(res.error || "Unknown error");
+    return false;
+  });
 }
 
 function appendTuneToContent(existingContent, tuneText) {
@@ -6740,13 +7641,16 @@ async function refreshLibraryFile(filePath, options) {
   const updatedFile = res.files[0];
   if (!libraryIndex) {
     libraryIndex = { root: res.root, files: [updatedFile] };
+    libraryViewStore.invalidate();
   } else {
-    const idx = libraryIndex.files.findIndex((f) => f.path === updatedFile.path);
+    const idx = libraryIndex.files.findIndex((f) => pathsEqual(f.path, updatedFile.path));
     if (idx >= 0) libraryIndex.files[idx] = updatedFile;
     else libraryIndex.files.push(updatedFile);
+    libraryViewStore.invalidate();
   }
   renderLibraryTree();
   updateFileContext();
+  updateFileHeaderPanel();
   return updatedFile;
 }
 
@@ -6757,19 +7661,24 @@ async function renameLibraryFile(oldPath, newPath) {
   const updatedFile = res.files[0];
   if (!libraryIndex) {
     libraryIndex = { root: res.root, files: [updatedFile] };
+    libraryViewStore.invalidate();
   } else {
-    libraryIndex.files = (libraryIndex.files || []).filter((f) => f.path !== oldPath);
+    libraryIndex.files = (libraryIndex.files || []).filter((f) => !pathsEqual(f.path, oldPath));
     libraryIndex.files.push(updatedFile);
+    libraryViewStore.invalidate();
   }
 
   if (fileContentCache.has(oldPath)) {
-    fileContentCache.set(newPath, fileContentCache.get(oldPath));
-    fileContentCache.delete(oldPath);
+    const cached = getFileContentFromCache(oldPath);
+    if (cached != null) {
+      setFileContentInCache(newPath, cached);
+      fileContentCache.delete(oldPath);
+    }
   }
 
-  if (activeFilePath === oldPath) activeFilePath = newPath;
+  if (pathsEqual(activeFilePath, oldPath)) activeFilePath = newPath;
 
-  if (activeTuneMeta && activeTuneMeta.path === oldPath) {
+  if (activeTuneMeta && pathsEqual(activeTuneMeta.path, oldPath)) {
     activeTuneMeta.path = newPath;
     const tune = (updatedFile.tunes || []).find((t) => t.startOffset === activeTuneMeta.startOffset);
     if (tune) {
@@ -6787,38 +7696,41 @@ async function renameLibraryFile(oldPath, newPath) {
   }
 
   renderLibraryTree();
+  updateFileHeaderPanel();
   return updatedFile;
 }
 
 async function saveFileHeaderText(filePath, headerText) {
-  const res = await readFile(filePath);
-  if (!res.ok) throw new Error(res.error || "Unable to read file.");
-  const content = res.data || "";
-  const headerEndOffset = findHeaderEndOffset(content);
-  const oldHeaderText = content.slice(0, headerEndOffset);
-  const suffix = content.slice(headerEndOffset);
-  let header = String(headerText || "");
-  if (header && !/[\r\n]$/.test(header) && /^\s*X:/.test(suffix)) {
-    header += "\n";
-  }
-  const updated = header ? header + suffix : suffix;
-  const writeRes = await writeFile(filePath, updated);
-  if (!writeRes.ok) throw new Error(writeRes.error || "Unable to write file.");
-  fileContentCache.set(filePath, updated);
-  const updatedFile = await refreshLibraryFile(filePath);
-  if (activeTuneMeta && activeTuneMeta.path === filePath) {
-    const deltaLen = header.length - oldHeaderText.length;
-    const deltaLines = countLines(header) - countLines(oldHeaderText);
-    activeTuneMeta.startOffset += deltaLen;
-    activeTuneMeta.endOffset += deltaLen;
-    activeTuneMeta.startLine += deltaLines;
-    activeTuneMeta.endLine += deltaLines;
-    activeTuneId = `${filePath}::${activeTuneMeta.startOffset}`;
-    markActiveTuneButton(activeTuneId);
-    const label = updatedFile ? updatedFile.basename : safeBasename(filePath);
-    setTuneMetaText(buildTuneMetaLabel(activeTuneMeta));
-    setFileNameMeta(stripFileExtension(label || ""));
-  }
+  return withFileLock(filePath, async () => {
+    const res = await readFile(filePath);
+    if (!res.ok) throw new Error(res.error || "Unable to read file.");
+    const content = res.data || "";
+    const headerEndOffset = findHeaderEndOffset(content);
+    const oldHeaderText = content.slice(0, headerEndOffset);
+    const suffix = content.slice(headerEndOffset);
+    let header = String(headerText || "");
+    if (header && !/[\r\n]$/.test(header) && /^\s*X:/.test(suffix)) {
+      header += "\n";
+    }
+    const updated = header ? header + suffix : suffix;
+    const writeRes = await writeFile(filePath, updated);
+    if (!writeRes.ok) throw new Error(writeRes.error || "Unable to write file.");
+    setFileContentInCache(filePath, updated);
+    const updatedFile = await refreshLibraryFile(filePath);
+    if (activeTuneMeta && pathsEqual(activeTuneMeta.path, filePath)) {
+      const deltaLen = header.length - oldHeaderText.length;
+      const deltaLines = countLines(header) - countLines(oldHeaderText);
+      activeTuneMeta.startOffset += deltaLen;
+      activeTuneMeta.endOffset += deltaLen;
+      activeTuneMeta.startLine += deltaLines;
+      activeTuneMeta.endLine += deltaLines;
+      activeTuneId = `${filePath}::${activeTuneMeta.startOffset}`;
+      markActiveTuneButton(activeTuneId);
+      const label = updatedFile ? updatedFile.basename : safeBasename(filePath);
+      setTuneMetaText(buildTuneMetaLabel(activeTuneMeta));
+      setFileNameMeta(stripFileExtension(label || ""));
+    }
+  });
 }
 
 function findTuneById(tuneId) {
@@ -6831,12 +7743,12 @@ function findTuneById(tuneId) {
 }
 
 async function getTuneText(tune, fileMeta) {
-  let content = fileContentCache.get(fileMeta.path);
+  let content = getFileContentFromCache(fileMeta.path);
   if (content == null) {
     const res = await readFile(fileMeta.path);
     if (!res.ok) throw new Error(res.error || "Unable to read file.");
     content = res.data;
-    fileContentCache.set(fileMeta.path, content);
+    setFileContentInCache(fileMeta.path, content);
   }
   return content.slice(tune.startOffset, tune.endOffset);
 }
@@ -6863,16 +7775,44 @@ async function duplicateTuneById(tuneId) {
   const res = findTuneById(tuneId);
   if (!res) return;
   try {
-    const text = await getTuneText(res.tune, res.file);
-    const prepared = ensureCopyTitleInAbc(text);
-    const updatedContent = await appendTuneTextToFile(res.file.path, prepared);
-    const updatedFile = await refreshLibraryFile(res.file.path);
+    const updated = await withFileLock(res.file.path, async () => {
+      const readRes = await readFile(res.file.path);
+      if (!readRes || !readRes.ok) throw new Error(readRes && readRes.error ? readRes.error : "Unable to read file.");
+      const content = String(readRes.data || "");
+      const startOffset = Number(res.tune.startOffset);
+      const endOffset = Number(res.tune.endOffset);
+      if (!Number.isFinite(startOffset) || !Number.isFinite(endOffset) || startOffset < 0 || endOffset <= startOffset || endOffset > content.length) {
+        throw new Error("Refusing to duplicate: tune offsets look stale. Refresh the library and try again.");
+      }
+      const slice = content.slice(startOffset, endOffset);
+      const trimmed = slice.replace(/^\s+/, "");
+      const xMatch = trimmed.match(/^X:\s*(\d+)/);
+      if (!xMatch) {
+        throw new Error("Refusing to duplicate: tune offsets look stale. Refresh the library and try again.");
+      }
+      const expectedX = String(res.tune.xNumber || "");
+      if (expectedX && xMatch[1] !== expectedX) {
+        throw new Error(`Refusing to duplicate: tune offsets look stale (expected X:${expectedX}). Refresh the library and try again.`);
+      }
+
+      const prepared = ensureCopyTitleInAbc(slice);
+      const nextX = getNextXNumber(content);
+      const withX = ensureXNumberInAbc(prepared, nextX);
+      const updatedContent = appendTuneToContent(content, withX);
+      const writeRes = await writeFile(res.file.path, updatedContent);
+      if (!writeRes || !writeRes.ok) throw new Error(writeRes && writeRes.error ? writeRes.error : "Unable to duplicate tune.");
+      setFileContentInCache(res.file.path, updatedContent);
+      const updatedFile = await refreshLibraryFile(res.file.path);
+      return { updatedContent, updatedFile };
+    });
+    const updatedContent = updated ? updated.updatedContent : null;
+    const updatedFile = updated ? updated.updatedFile : null;
     activeFilePath = res.file.path;
     if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
       const tune = updatedFile.tunes[updatedFile.tunes.length - 1];
       activeTuneId = tune.id;
       markActiveTuneButton(activeTuneId);
-      const tuneText = updatedContent.slice(tune.startOffset, tune.endOffset);
+      const tuneText = updatedContent ? updatedContent.slice(tune.startOffset, tune.endOffset) : "";
       setActiveTuneText(tuneText, {
         id: tune.id,
         path: updatedFile.path,
@@ -6893,7 +7833,7 @@ async function duplicateTuneById(tuneId) {
   }
 }
 
-async function appendTuneTextToFile(filePath, text) {
+async function appendTuneTextToFileUnlocked(filePath, text) {
   const res = await readFile(filePath);
   if (!res.ok) throw new Error(res.error || "Unable to read file.");
   const nextX = getNextXNumber(res.data || "");
@@ -6901,8 +7841,12 @@ async function appendTuneTextToFile(filePath, text) {
   const updated = appendTuneToContent(res.data || "", prepared);
   const writeRes = await writeFile(filePath, updated);
   if (!writeRes.ok) throw new Error(writeRes.error || "Unable to append to file.");
-  fileContentCache.set(filePath, updated);
+  setFileContentInCache(filePath, updated);
   return updated;
+}
+
+async function appendTuneTextToFile(filePath, text) {
+  return withFileLock(filePath, async () => appendTuneTextToFileUnlocked(filePath, text));
 }
 
 async function pasteClipboardToFile(targetPath) {
@@ -6923,34 +7867,93 @@ async function pasteClipboardToFile(targetPath) {
   if (confirm !== "append") return;
 
   try {
-    await appendTuneTextToFile(targetPath, clipboardTune.text);
-    await refreshLibraryFile(targetPath);
-    activeFilePath = targetPath;
+    const sourceCandidate = clipboardTune && clipboardTune.mode === "move" ? clipboardTune.sourcePath : "";
+    await withFileLocks([targetPath, sourceCandidate].filter(Boolean), async () => {
+      if (clipboardTune.mode !== "move") {
+        await appendTuneTextToFileUnlocked(targetPath, clipboardTune.text);
+        await refreshLibraryFile(targetPath);
+        activeFilePath = targetPath;
+        return;
+      }
 
-    if (clipboardTune.mode === "move") {
-      const res = findTuneById(clipboardTune.tuneId);
-      if (res && res.file && res.file.path) {
-        const sourcePath = res.file.path;
-        const sourceRes = await readFile(sourcePath);
-        if (!sourceRes.ok) throw new Error(sourceRes.error || "Unable to read source file.");
-        const updatedSource = removeTuneFromContent(
-          sourceRes.data || "",
-          res.tune.startOffset,
-          res.tune.endOffset
-        );
-        const writeRes = await writeFile(sourcePath, updatedSource);
-        if (!writeRes.ok) throw new Error(writeRes.error || "Unable to update source file.");
-        fileContentCache.set(sourcePath, updatedSource);
-        await refreshLibraryFile(sourcePath);
-        if (activeTuneId === clipboardTune.tuneId) {
-          activeTuneId = null;
-          activeTuneMeta = null;
-          setCurrentDocument(createBlankDocument());
+      const found = findTuneById(clipboardTune.tuneId);
+      if (!found || !found.file || !found.file.path) {
+        throw new Error("Unable to move: source tune not found. Refresh the library and try again.");
+      }
+      const sourcePath = found.file.path;
+      if (!sourcePath) throw new Error("Unable to move: source path missing.");
+
+      const sourceRes = await readFile(sourcePath);
+      if (!sourceRes.ok) throw new Error(sourceRes.error || "Unable to read source file.");
+      const sourceContent = String(sourceRes.data || "");
+
+      const targetRes = await readFile(targetPath);
+      if (!targetRes.ok) throw new Error(targetRes.error || "Unable to read target file.");
+      const targetContent = String(targetRes.data || "");
+
+      const sourceSlice = sourceContent.slice(found.tune.startOffset, found.tune.endOffset);
+      const expectedSlice = String(clipboardTune.text || "");
+      if (sourceSlice !== expectedSlice) {
+        throw new Error("Refusing to move: tune offsets look stale. Reload/refresh the library and try again.");
+      }
+      const trimmedSourceSlice = sourceSlice.replace(/^\s+/, "");
+      const xMatch = trimmedSourceSlice.match(/^X:\s*(\d+)/);
+      if (!xMatch) {
+        throw new Error("Refusing to move: tune offsets look stale. Reload/refresh the library and try again.");
+      }
+      const expectedX = String(found.tune.xNumber || "");
+      if (expectedX && xMatch[1] !== expectedX) {
+        throw new Error(`Refusing to move: tune offsets look stale (expected X:${expectedX}). Reload/refresh the library and try again.`);
+      }
+
+      const updatedSource = removeTuneFromContent(sourceContent, found.tune.startOffset, found.tune.endOffset);
+      const nextX = getNextXNumber(targetContent);
+      const prepared = ensureXNumberInAbc(expectedSlice, nextX);
+      const updatedTarget = appendTuneToContent(targetContent, prepared);
+
+      const autoRenumber = !!(latestSettingsSnapshot && latestSettingsSnapshot.libraryAutoRenumberAfterMove === true);
+      let finalTarget = updatedTarget;
+      let finalSource = updatedSource;
+      if (autoRenumber) {
+        const renumTarget = renumberXInTextKeepingFirst(finalTarget);
+        if (renumTarget && renumTarget.ok && typeof renumTarget.abcText === "string") {
+          finalTarget = renumTarget.abcText;
+        }
+        const renumSource = renumberXInTextKeepingFirst(finalSource);
+        if (renumSource && renumSource.ok && typeof renumSource.abcText === "string") {
+          finalSource = renumSource.abcText;
         }
       }
+
+      const writeTargetRes = await writeFile(targetPath, finalTarget);
+      if (!writeTargetRes.ok) throw new Error(writeTargetRes.error || "Unable to update target file.");
+
+      const writeSourceRes = await writeFile(sourcePath, finalSource);
+      if (!writeSourceRes.ok) {
+        const rollback = await writeFile(targetPath, targetContent);
+        if (rollback && rollback.ok) {
+          throw new Error(writeSourceRes.error || "Unable to update source file.");
+        }
+        throw new Error((writeSourceRes && writeSourceRes.error)
+          ? `${writeSourceRes.error} (rollback failed; the tune may now be duplicated)`
+          : "Unable to update source file (rollback failed; the tune may now be duplicated)");
+      }
+
+      setFileContentInCache(targetPath, finalTarget);
+      setFileContentInCache(sourcePath, finalSource);
+      await refreshLibraryFile(targetPath);
+      await refreshLibraryFile(sourcePath);
+      activeFilePath = targetPath;
+
+      if (activeTuneId === clipboardTune.tuneId) {
+        activeTuneId = null;
+        activeTuneMeta = null;
+        setCurrentDocument(createBlankDocument());
+      }
+
       clipboardTune = null;
       setBufferStatus("");
-    }
+    });
     setStatus("OK");
   } catch (e) {
     await showSaveError(e && e.message ? e.message : String(e));
@@ -6978,32 +7981,54 @@ async function deleteTuneById(tuneId) {
   const confirm = await confirmDeleteTune(label);
   if (confirm !== "delete") return;
 
-  const res = await readFile(fileMeta.path);
-  if (!res.ok) {
-    await showSaveError(res.error || "Unable to read file.");
-    return;
-  }
+  await withFileLock(fileMeta.path, async () => {
+    const res = await readFile(fileMeta.path);
+    if (!res.ok) {
+      await showSaveError(res.error || "Unable to read file.");
+      return;
+    }
 
-  const updated = removeTuneFromContent(res.data || "", selected.startOffset, selected.endOffset);
-  const writeRes = await writeFile(fileMeta.path, updated);
-  if (!writeRes.ok) {
-    await showSaveError(writeRes.error || "Unable to delete tune.");
-    return;
-  }
+    const content = String(res.data || "");
+    const startOffset = Number(selected.startOffset);
+    const endOffset = Number(selected.endOffset);
+    if (!Number.isFinite(startOffset) || !Number.isFinite(endOffset) || startOffset < 0 || endOffset <= startOffset || endOffset > content.length) {
+      await showSaveError("Refusing to delete: tune offsets look stale. Refresh the library and try again.");
+      return;
+    }
+    const slice = content.slice(startOffset, endOffset);
+    const trimmed = slice.replace(/^\s+/, "");
+    const xMatch = trimmed.match(/^X:\s*(\d+)/);
+    if (!xMatch) {
+      await showSaveError("Refusing to delete: tune offsets look stale. Reload the tune and try again.");
+      return;
+    }
+    const expectedX = String(selected.xNumber || "");
+    if (expectedX && xMatch[1] !== expectedX) {
+      await showSaveError(`Refusing to delete: tune offsets look stale (expected X:${expectedX}). Refresh the library and try again.`);
+      return;
+    }
 
-  fileContentCache.set(fileMeta.path, updated);
-  const updatedFile = await refreshLibraryFile(fileMeta.path);
-  if (activeTuneId === tuneId) {
-    activeTuneId = null;
-    activeTuneMeta = null;
-    setCurrentDocument(createBlankDocument());
-  }
+    const updated = removeTuneFromContent(content, startOffset, endOffset);
+    const writeRes = await writeFile(fileMeta.path, updated);
+    if (!writeRes.ok) {
+      await showSaveError(writeRes.error || "Unable to delete tune.");
+      return;
+    }
 
-  if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
-    activeFilePath = fileMeta.path;
-  } else {
-    activeFilePath = null;
-  }
+    setFileContentInCache(fileMeta.path, updated);
+    const updatedFile = await refreshLibraryFile(fileMeta.path);
+    if (activeTuneId === tuneId) {
+      activeTuneId = null;
+      activeTuneMeta = null;
+      setCurrentDocument(createBlankDocument());
+    }
+
+    if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
+      activeFilePath = fileMeta.path;
+    } else {
+      activeFilePath = null;
+    }
+  });
 }
 
 async function performAppendFlow() {
@@ -7016,47 +8041,60 @@ async function performAppendFlow() {
   const confirm = await confirmAppendToFile(filePath);
   if (confirm !== "append") return false;
 
-  const res = await readFile(filePath);
-  if (!res.ok) {
-    await showSaveError(res.error || "Unable to read file.");
-    return false;
-  }
+  return withFileLock(filePath, async () => {
+    const res = await readFile(filePath);
+    if (!res.ok) {
+      await showSaveError(res.error || "Unable to read file.");
+      return false;
+    }
 
-  const nextX = getNextXNumber(res.data || "");
-  const prepared = ensureXNumberInAbc(serializeDocument(currentDoc), nextX);
-  const updated = appendTuneToContent(res.data || "", prepared);
-  const writeRes = await writeFile(filePath, updated);
-  if (!writeRes.ok) {
-    await showSaveError(writeRes.error || "Unable to append to file.");
-    return false;
-  }
+    const before = String(res.data || "");
+    const verifyRes = await readFile(filePath);
+    if (!verifyRes || !verifyRes.ok) {
+      await showSaveError((verifyRes && verifyRes.error) ? verifyRes.error : "Unable to verify file before appending.");
+      return false;
+    }
+    const verifyText = String(verifyRes.data || "");
+    if (verifyText !== before) {
+      await showSaveError("Refusing to append: file changed on disk. Refresh/reopen the file and try again.");
+      return false;
+    }
 
-  fileContentCache.set(filePath, updated);
+    const nextX = getNextXNumber(before);
+    const prepared = ensureXNumberInAbc(serializeDocument(currentDoc), nextX);
+    const updated = appendTuneToContent(before, prepared);
+    const writeRes = await writeFile(filePath, updated);
+    if (!writeRes.ok) {
+      await showSaveError(writeRes.error || "Unable to append to file.");
+      return false;
+    }
 
-  const updatedFile = await refreshLibraryFile(filePath);
-  if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
-    const tune = updatedFile.tunes[updatedFile.tunes.length - 1];
-    activeTuneId = tune.id;
-    markActiveTuneButton(activeTuneId);
-    setActiveTuneText(getEditorValue(), {
-      id: tune.id,
-      path: updatedFile.path,
-      basename: updatedFile.basename,
-      xNumber: tune.xNumber,
-      title: tune.title || "",
-      startLine: tune.startLine,
-      endLine: tune.endLine,
-      startOffset: tune.startOffset,
-      endOffset: tune.endOffset,
-    });
-  } else {
-    currentDoc.path = filePath;
-    currentDoc.dirty = false;
-    updateUIFromDocument(currentDoc);
-  }
-  setDirtyIndicator(false);
+    setFileContentInCache(filePath, updated);
 
-  return true;
+    const updatedFile = await refreshLibraryFile(filePath);
+    if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
+      const tune = updatedFile.tunes[updatedFile.tunes.length - 1];
+      activeTuneId = tune.id;
+      markActiveTuneButton(activeTuneId);
+      setActiveTuneText(getEditorValue(), {
+        id: tune.id,
+        path: updatedFile.path,
+        basename: updatedFile.basename,
+        xNumber: tune.xNumber,
+        title: tune.title || "",
+        startLine: tune.startLine,
+        endLine: tune.endLine,
+        startOffset: tune.startOffset,
+        endOffset: tune.endOffset,
+      });
+    } else {
+      currentDoc.path = filePath;
+      currentDoc.dirty = false;
+      updateUIFromDocument(currentDoc);
+    }
+    setDirtyIndicator(false);
+    return true;
+  });
 }
 
 async function fileNew() {
@@ -7113,7 +8151,7 @@ function setNewTuneDraftInActiveFile(text, { filePath, basename, xNumber } = {})
   updateFileContext();
   setDirtyIndicator(true);
   updateFileHeaderPanel();
-  renderNow();
+  scheduleRenderNow({ clearOutput: true });
 }
 
 async function fileNewTune() {
@@ -7149,7 +8187,7 @@ async function fileOpen() {
 
   await loadLibraryFromFolder(safeDirname(filePath));
   if (libraryIndex && libraryIndex.files) {
-    const fileEntry = libraryIndex.files.find((f) => f.path === filePath);
+    const fileEntry = libraryIndex.files.find((f) => pathsEqual(f.path, filePath));
     if (fileEntry && fileEntry.tunes && fileEntry.tunes.length) {
       await selectTune(fileEntry.tunes[0].id);
     } else {
@@ -7233,6 +8271,7 @@ async function requestQuitApplication() {
   try {
     const ok = await confirmAbandonIfDirty("quitting");
     if (!ok) return;
+    await flushLibraryPrefsSave();
     if (window.api && typeof window.api.quitApplication === "function") {
       await window.api.quitApplication();
     }
@@ -7339,48 +8378,50 @@ async function renumberXInActiveFile(explicitFilePath) {
   const ok = await ensureSafeToAbandonCurrentDoc("renumbering X numbers");
   if (!ok) return;
 
-  const readRes = await readFile(filePath);
-  if (!readRes || !readRes.ok) {
-    await showOpenError((readRes && readRes.error) ? readRes.error : "Unable to read file.");
-    return;
-  }
-
-  const renum = renumberXInTextKeepingFirst(readRes.data);
-  if (!renum.ok) {
-    await showSaveError(renum.error || "Unable to renumber X: headers.");
-    return;
-  }
-
-  if (renum.abcText === readRes.data) {
-    setStatus("OK");
-    showToast("X numbers already sequential.", 2000);
-    return;
-  }
-
-  const writeRes = await writeFile(filePath, renum.abcText);
-  if (!writeRes || !writeRes.ok) {
-    await showSaveError((writeRes && writeRes.error) ? writeRes.error : "Unable to write file.");
-    return;
-  }
-
-  const prevFile = libraryIndex && libraryIndex.files
-    ? libraryIndex.files.find((f) => f.path === filePath)
-    : null;
-  const prevTuneIndex = prevFile && prevFile.tunes && activeTuneId
-    ? prevFile.tunes.findIndex((t) => t.id === activeTuneId)
-    : -1;
-
-  fileContentCache.set(filePath, renum.abcText);
-  const updatedFile = await refreshLibraryFile(filePath, { force: true });
-  if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
-    const idx = prevTuneIndex >= 0 ? prevTuneIndex : 0;
-    const nextTune = updatedFile.tunes[Math.min(idx, updatedFile.tunes.length - 1)];
-    if (nextTune && nextTune.id) {
-      await selectTune(nextTune.id, { skipConfirm: true });
+  await withFileLock(filePath, async () => {
+    const readRes = await readFile(filePath);
+    if (!readRes || !readRes.ok) {
+      await showOpenError((readRes && readRes.error) ? readRes.error : "Unable to read file.");
+      return;
     }
-  }
 
-  setStatus(`Renumbered X (base ${renum.base}, ${renum.tuneCount} tunes).`);
+    const renum = renumberXInTextKeepingFirst(readRes.data);
+    if (!renum.ok) {
+      await showSaveError(renum.error || "Unable to renumber X: headers.");
+      return;
+    }
+
+    if (renum.abcText === readRes.data) {
+      setStatus("OK");
+      showToast("X numbers already sequential.", 2000);
+      return;
+    }
+
+    const writeRes = await writeFile(filePath, renum.abcText);
+    if (!writeRes || !writeRes.ok) {
+      await showSaveError((writeRes && writeRes.error) ? writeRes.error : "Unable to write file.");
+      return;
+    }
+
+    const prevFile = libraryIndex && libraryIndex.files
+      ? libraryIndex.files.find((f) => pathsEqual(f.path, filePath))
+      : null;
+    const prevTuneIndex = prevFile && prevFile.tunes && activeTuneId
+      ? prevFile.tunes.findIndex((t) => t.id === activeTuneId)
+      : -1;
+
+    setFileContentInCache(filePath, renum.abcText);
+    const updatedFile = await refreshLibraryFile(filePath, { force: true });
+    if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
+      const idx = prevTuneIndex >= 0 ? prevTuneIndex : 0;
+      const nextTune = updatedFile.tunes[Math.min(idx, updatedFile.tunes.length - 1)];
+      if (nextTune && nextTune.id) {
+        await selectTune(nextTune.id, { skipConfirm: true });
+      }
+    }
+
+    setStatus(`Renumbered X (base ${renum.base}, ${renum.tuneCount} tunes).`);
+  });
 }
 
 async function appQuit() {
@@ -7500,6 +8541,7 @@ function wireMenuActions() {
         await applyAbc2abcTransform({ measuresPerLine: action.value });
       }
       else if (actionType === "alignBars") alignBarsInEditor();
+      else if (actionType === "dumpDebug") dumpDebugToFile().catch(() => {});
       else if (actionType === "settings" && settingsController) settingsController.openSettings();
       else if (actionType === "zoomIn" && settingsController) { if (!shouldIgnoreMenuZoomAction()) settingsController.zoomIn(); }
       else if (actionType === "zoomOut" && settingsController) { if (!shouldIgnoreMenuZoomAction()) settingsController.zoomOut(); }
@@ -7529,32 +8571,37 @@ settingsController = initSettings(window.api);
 if (window.api && typeof window.api.getSettings === "function") {
   window.api.getSettings().then((settings) => {
     if (settings) {
+      latestSettingsSnapshot = settings;
       setGlobalHeaderFromSettings(settings);
       setSoundfontFromSettings(settings);
       setDrumVelocityFromSettings(settings);
       setFollowFromSettings(settings);
+      applyLibraryPrefsFromSettings(settings);
       updateGlobalHeaderToggle();
       updateErrorsFeatureUI();
       loadSoundfontSelectOptions();
       refreshHeaderLayers().catch(() => {});
       showDisclaimerIfNeeded(settings);
     }
-  }).catch(() => {});
+    suppressLibraryPrefsWrite = false;
+  }).catch(() => { suppressLibraryPrefsWrite = false; });
 }
 if (window.api && typeof window.api.onSettingsChanged === "function") {
   window.api.onSettingsChanged((settings) => {
+    latestSettingsSnapshot = settings || null;
     const prevHeader = `${globalHeaderEnabled}|${globalHeaderText}`;
     const prevSoundfont = soundfontName;
     setGlobalHeaderFromSettings(settings);
     setSoundfontFromSettings(settings);
     setDrumVelocityFromSettings(settings);
     setFollowFromSettings(settings);
+    applyLibraryPrefsFromSettings(settings);
     updateGlobalHeaderToggle();
     updateErrorsFeatureUI();
     loadSoundfontSelectOptions();
     refreshHeaderLayers().catch(() => {});
     showDisclaimerIfNeeded(settings);
-    if (settings && prevHeader !== `${globalHeaderEnabled}|${globalHeaderText}`) renderNow();
+    if (settings && prevHeader !== `${globalHeaderEnabled}|${globalHeaderText}`) scheduleRenderNow();
     if (settings && prevSoundfont !== soundfontName) {
       resetSoundfontCache();
       if (player && typeof player.stop === "function") {
@@ -7893,6 +8940,36 @@ let lastPlaybackPayloadCache = null;
 let lastSoundfontApplied = null;
 let lastPreparedPlaybackKey = null;
 let playbackNoteTrace = [];
+let playbackParseErrors = [];
+let playbackSanitizeWarnings = [];
+let lastPlaybackTuneInfo = null;
+let lastPlaybackOnIstart = null;
+let pendingPlaybackUiIstart = null;
+let pendingPlaybackUiRaf = null;
+let lastPlaybackNoteOnEls = [];
+let lastPlaybackUiRenderIdx = null;
+let lastPlaybackUiEditorIdx = null;
+let lastPlaybackUiScrollAt = 0;
+let lastDrumSignatureDiff = null;
+let lastPlaybackChordOnBarError = false;
+
+function clearPlaybackNoteOnEls() {
+  for (const el of lastPlaybackNoteOnEls) {
+    try { el.classList.remove("note-on"); } catch {}
+  }
+  lastPlaybackNoteOnEls = [];
+}
+
+function resetPlaybackUiState() {
+  clearPlaybackNoteOnEls();
+  lastPlaybackUiRenderIdx = null;
+  lastPlaybackUiEditorIdx = null;
+  pendingPlaybackUiIstart = null;
+  if (pendingPlaybackUiRaf != null) {
+    try { cancelAnimationFrame(pendingPlaybackUiRaf); } catch {}
+    pendingPlaybackUiRaf = null;
+  }
+}
 
 function playbackGuardError(message) {
   console.error(`[abcarus][playback-range] ${message}`);
@@ -7914,6 +8991,7 @@ function stopPlaybackFromGuard(message) {
   setStatus("OK");
   updatePlayButton();
   clearNoteSelection();
+  resetPlaybackUiState();
 }
 
 function clonePlaybackRange(r) {
@@ -7981,8 +9059,17 @@ function getPlaybackSourceKey() {
   const entry = getActiveFileEntry();
   const prefixPayload = buildHeaderPrefix(entry ? getHeaderEditorValue() : "", false, tuneText);
   const baseText = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
-  const repeatsFlag = window.__abcarusPlaybackExpandRepeats === true ? "exp:on" : "exp:off";
-  return `${baseText}|||${prefixPayload.offset || 0}|||${repeatsFlag}`;
+  const injected = injectGchordOn(baseText, prefixPayload.offset || 0);
+  const gchordText = injected && injected.changed ? injected.text : baseText;
+  const drumPreview = injectDrumPlayback(gchordText);
+  const preparedText = normalizeBlankLinesForPlayback(
+    normalizeDollarLineBreaksForPlayback(drumPreview && drumPreview.changed ? drumPreview.text : gchordText)
+  );
+  const sanitized = sanitizeAbcForPlayback(preparedText);
+  const expandRepeats = window.__abcarusPlaybackExpandRepeats === true;
+  const repeatsFlag = expandRepeats ? "exp:on" : "exp:off";
+  // Key includes the post-gchord text and the effective expansion mode to avoid reusing a mismatched playbackState.
+  return `${sanitized.text}|||${prefixPayload.offset || 0}|||${repeatsFlag}`;
 }
 
 function updatePlayButton() {
@@ -8011,11 +9098,17 @@ async function transportTogglePlayPause() {
     pausePlayback();
     return;
   }
+  if (!isPaused && editorView) {
+    updatePlaybackRangeFromSelection(editorView.state.selection, null);
+  }
   await startPlaybackFromRange();
 }
 
 async function transportPlay() {
   if (isPlaying) return;
+  if (!isPaused && editorView) {
+    updatePlaybackRangeFromSelection(editorView.state.selection, null);
+  }
   await startPlaybackFromRange();
 }
 
@@ -8046,6 +9139,7 @@ function resetPlaybackState() {
   activePlaybackEndAbcOffset = null;
   playbackStartArmed = false;
   clearNoteSelection();
+  resetPlaybackUiState();
   updatePlayButton();
   setSoundfontCaption();
 }
@@ -8060,7 +9154,6 @@ function highlightSourceAt(idx, on) {
 
   if (on) {
     lastRenderIdx = safeIdx;
-    try { editorView.focus(); } catch {}
     editorView.dispatch({ selection: { anchor: safeIdx, head: end } });
     const lineBlock = editorView.lineBlockAt(safeIdx);
     const lineTop = lineBlock.top;
@@ -8079,6 +9172,60 @@ function highlightSourceAt(idx, on) {
     const safeOff = Math.max(0, Math.min(idx, max));
     editorView.dispatch({ selection: { anchor: safeOff, head: safeOff } });
   }
+}
+
+function schedulePlaybackUiUpdate(istart) {
+  if (!Number.isFinite(istart)) return;
+  pendingPlaybackUiIstart = istart;
+  if (pendingPlaybackUiRaf != null) return;
+  pendingPlaybackUiRaf = requestAnimationFrame(() => {
+    pendingPlaybackUiRaf = null;
+    const i = pendingPlaybackUiIstart;
+    pendingPlaybackUiIstart = null;
+    if (!isPlaying || isPreviewing) return;
+    if (!followPlayback) return;
+    if (!$out) return;
+    if (!Number.isFinite(i)) return;
+
+    const editorIdx = Math.max(0, i - playbackIndexOffset);
+    const editorLen = editorView ? editorView.state.doc.length : 0;
+    const fromInjected = editorLen && editorIdx >= editorLen;
+    if (fromInjected) return;
+
+    if (followVoiceId || followVoiceIndex != null) {
+      const symbol = findSymbolAtOrBefore(i);
+      if (symbol && symbol.p_v) {
+        const sameId = followVoiceId && symbol.p_v.id === followVoiceId;
+        const sameIndex = followVoiceIndex != null && symbol.p_v.v === followVoiceIndex;
+        if (!sameId && !sameIndex) return;
+      }
+    }
+
+    const renderOffset = (lastRenderPayload && Number.isFinite(lastRenderPayload.offset))
+      ? lastRenderPayload.offset
+      : 0;
+    const renderIdx = editorIdx + renderOffset;
+
+    if (lastPlaybackUiEditorIdx === editorIdx && lastPlaybackUiRenderIdx === renderIdx) return;
+    lastPlaybackUiEditorIdx = editorIdx;
+    lastPlaybackUiRenderIdx = renderIdx;
+
+    clearPlaybackNoteOnEls();
+    const els = $out.querySelectorAll("._" + renderIdx + "_");
+    if (!els || !els.length) {
+      highlightSourceAt(editorIdx, true);
+      return;
+    }
+    lastPlaybackNoteOnEls = Array.from(els);
+    for (const el of lastPlaybackNoteOnEls) el.classList.add("note-on");
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (now - lastPlaybackUiScrollAt > 80) {
+      const chosen = pickClosestNoteElement(lastPlaybackNoteOnEls);
+      if (chosen) maybeScrollRenderToNote(chosen);
+      lastPlaybackUiScrollAt = now;
+    }
+    highlightSourceAt(editorIdx, true);
+  });
 }
 
 function maybeScrollRenderToNote(el) {
@@ -8191,6 +9338,7 @@ function ensurePlayer() {
       setStatus("OK");
       updatePlayButton();
       clearNoteSelection();
+      clearPlaybackNoteOnEls();
       if (!shouldLoop) {
         resumeStartIdx = null;
         activePlaybackRange = null;
@@ -8225,20 +9373,19 @@ function ensurePlayer() {
       }
     },
     onnote: (i, on) => {
-      const editorIdx = Math.max(0, i - playbackIndexOffset);
-      const renderOffset = (lastRenderPayload && Number.isFinite(lastRenderPayload.offset))
-        ? lastRenderPayload.offset
-        : 0;
-        const renderIdx = editorIdx + renderOffset;
-        const editorLen = editorView ? editorView.state.doc.length : 0;
-        const fromInjected = editorLen && editorIdx >= editorLen;
-        lastPlaybackIdx = i;
+      lastPlaybackIdx = i;
       if (on && waitingForFirstNote) {
         waitingForFirstNote = false;
         setStatus("Playing…");
         setSoundfontCaption();
       }
       if (isPreviewing) return;
+      if (on) {
+        if (Number.isFinite(lastPlaybackOnIstart) && Number.isFinite(i) && i < lastPlaybackOnIstart && window.__abcarusDebugPlayback) {
+          console.log("[abcarus] playback jump (repeat?)", { from: lastPlaybackOnIstart, to: i });
+        }
+        lastPlaybackOnIstart = i;
+      }
       if (
         on
         && activePlaybackEndAbcOffset != null
@@ -8276,6 +9423,9 @@ function ensurePlayer() {
         }
         return;
       }
+      const editorIdx = Math.max(0, i - playbackIndexOffset);
+      const editorLen = editorView ? editorView.state.doc.length : 0;
+      const fromInjected = editorLen && editorIdx >= editorLen;
       if (on && !fromInjected) {
         const timestamp = typeof performance !== "undefined" ? performance.now() : Date.now();
         const seq = (playbackTraceSeq += 1);
@@ -8319,26 +9469,9 @@ function ensurePlayer() {
           atMs: timestamp,
         });
       }
-      if (!followPlayback || fromInjected) return;
-      if (followVoiceId || followVoiceIndex != null) {
-        const symbol = findSymbolAtOrBefore(i);
-        if (symbol && symbol.p_v) {
-          const sameId = followVoiceId && symbol.p_v.id === followVoiceId;
-          const sameIndex = followVoiceIndex != null && symbol.p_v.v === followVoiceIndex;
-          if (!sameId && !sameIndex) return;
-        }
-      }
-      lastRenderIdx = editorIdx;
-      const els = $out.querySelectorAll("._" + renderIdx + "_");
-      for (const el of els) {
-        if (on) el.classList.add("note-on");
-        else el.classList.remove("note-on");
-      }
-      if (on && els.length) {
-        const chosen = pickClosestNoteElement(Array.from(els));
-        if (chosen) maybeScrollRenderToNote(chosen);
-      }
-      highlightSourceAt(editorIdx, on);
+      // Important: never let injected voices (e.g. DRUM appended to payload) steal the pending UI update,
+      // otherwise follow-highlight becomes "blinking"/pale because the RAF processes only the injected istart and returns.
+      if (on && !fromInjected) schedulePlaybackUiUpdate(i);
     },
     errmsg: (m, line, col) => {
       const loc = Number.isFinite(line) && Number.isFinite(col)
@@ -8376,6 +9509,28 @@ function buildPlaybackState(firstSymbol) {
 
   let s = firstSymbol;
   let guard = 0;
+  let preferredVoiceId = null;
+  let preferredVoiceIndex = null;
+  const considerVoice = (symbol) => {
+    if (!symbol || !symbol.p_v) return;
+    const id = symbol.p_v.id ? String(symbol.p_v.id) : null;
+    if (id && id.toUpperCase() === "DRUM") return;
+    const v = Number.isFinite(symbol.p_v.v) ? symbol.p_v.v : null;
+    if (preferredVoiceIndex == null) {
+      preferredVoiceIndex = v;
+      preferredVoiceId = id;
+      return;
+    }
+    if (v != null && preferredVoiceIndex != null && v < preferredVoiceIndex) {
+      preferredVoiceIndex = v;
+      preferredVoiceId = id;
+      return;
+    }
+    if (preferredVoiceIndex == null && v != null) {
+      preferredVoiceIndex = v;
+      preferredVoiceId = id;
+    }
+  };
 
   if (s) pushUnique(symbols, s);
   if (s) pushUnique(measures, s);
@@ -8386,6 +9541,7 @@ function buildPlaybackState(firstSymbol) {
       pushUnique(measures, s.ts_next);
       barIstarts.push(s.istart);
     }
+    if (isPlayableSymbol(s)) considerVoice(s);
     s = s.ts_next;
     guard += 1;
   }
@@ -8412,6 +9568,8 @@ function buildPlaybackState(firstSymbol) {
   }
   return {
     startSymbol,
+    preferredVoiceId,
+    preferredVoiceIndex,
     symbols,
     measures,
     symbolIstarts,
@@ -8424,7 +9582,12 @@ function buildPlaybackState(firstSymbol) {
 function setFollowVoiceFromPlayback() {
   followVoiceId = null;
   followVoiceIndex = null;
-  if (!playbackState || !playbackState.startSymbol) return;
+  if (!playbackState) return;
+  // Prefer a stable "primary" voice (first staff) to avoid highlight jumping on multi-staff scores.
+  if (playbackState.preferredVoiceId) followVoiceId = playbackState.preferredVoiceId;
+  if (Number.isFinite(playbackState.preferredVoiceIndex)) followVoiceIndex = playbackState.preferredVoiceIndex;
+  if (followVoiceId || followVoiceIndex != null) return;
+  if (!playbackState.startSymbol) return;
   const voice = playbackState.startSymbol.p_v;
   if (!voice) return;
   if (voice.id) followVoiceId = voice.id;
@@ -8497,6 +9660,7 @@ function stopPlaybackForRestart() {
     player.stop();
   }
   clearNoteSelection();
+  resetPlaybackUiState();
 }
 
 function stopPlaybackTransport() {
@@ -8514,6 +9678,7 @@ function stopPlaybackTransport() {
   setStatus("OK");
   updatePlayButton();
   clearNoteSelection();
+  resetPlaybackUiState();
   setSoundfontCaption();
 
   // After an explicit Stop, reset the playhead back to the start (like a classic transport).
@@ -8809,7 +9974,7 @@ async function refreshHeaderLayers() {
   globalHeaderLocalText = localText;
   globalHeaderUserText = userText;
   const next = `${globalHeaderGlobalText}|${globalHeaderLocalText}|${globalHeaderUserText}`;
-  if (next !== prev) renderNow();
+  if (next !== prev) scheduleRenderNow();
 }
 
 function buildHeaderPrefix(entryHeader, includeCheckbars, tuneText) {
@@ -8923,11 +10088,42 @@ function parseDrumPattern(pattern) {
 }
 
 function matchBarToken(line, idx) {
-  const chunk = line.slice(idx);
-  for (const token of BAR_SEP_SYMBOLS) {
-    if (chunk.startsWith(token)) return { token, len: token.length };
+  const src = String(line || "");
+  const start = Number(idx) || 0;
+  if (start < 0 || start >= src.length) return null;
+  const ch = src[start];
+  if (!ch) return null;
+  // Barline tokens in ABC are composed of |, :, [, ], and the special dotted barline .|
+  // Important: '[' is also used for chord notes (e.g. [CEG]), so only treat it as a barline
+  // when it's clearly a barline/volta marker (e.g. [|, [], [1, [2).
+  if (ch === ".") {
+    if (start + 1 >= src.length || src[start + 1] !== "|") return null;
+  } else if (ch === "[") {
+    const next = start + 1 < src.length ? src[start + 1] : "";
+    if (!(next === "|" || next === "]" || /[0-9]/.test(next))) return null;
+  } else if (ch === ":") {
+    const next = start + 1 < src.length ? src[start + 1] : "";
+    // Prevent false positives on inline fields like "V:1" inside "[V:1 ...]".
+    if (/[0-9]/.test(next)) return null;
+  } else if (ch !== "|" && ch !== ":") {
+    return null;
   }
-  return null;
+  let end = start;
+  while (end < src.length) {
+    const c = src[end];
+    if (c === ".") {
+      if (end + 1 < src.length && src[end + 1] === "|") {
+        end += 1;
+        continue;
+      }
+      break;
+    }
+    if (!/[|[\]:]/.test(c)) break;
+    end += 1;
+  }
+  while (end < src.length && /[0-9]/.test(src[end])) end += 1;
+  if (end <= start) return null;
+  return { token: src.slice(start, end), len: end - start };
 }
 
 function slicePatternTokens(tokens, startUnit, length) {
@@ -9000,6 +10196,46 @@ function extractDrumPlaybackBars(text) {
   let inTextBlock = false;
   const bars = [];
   const patterns = [];
+  const applyMidiDirective = (directiveLine) => {
+    const line = String(directiveLine || "").trim();
+    if (!line) return;
+    if (/^%%MIDI\s+drumon\b/i.test(line)) {
+      drumOn = true;
+      return;
+    }
+    if (/^%%MIDI\s+drumoff\b/i.test(line)) {
+      drumOn = false;
+      return;
+    }
+    const drumBarsMatch = line.match(/^%%MIDI\s+drumbars\s+(\d+)/i);
+    if (drumBarsMatch) {
+      const nextBars = Number(drumBarsMatch[1]);
+      if (Number.isFinite(nextBars) && nextBars > 0) drumBars = nextBars;
+      return;
+    }
+    const drumMatch = line.match(/^%%MIDI\s+drum\s+(.+)$/i);
+    if (drumMatch) {
+      const parts = drumMatch[1].trim().split(/\s+/);
+      const patternText = parts.shift();
+      const pattern = parseDrumPattern(patternText);
+      if (pattern) {
+        const nums = parts.map((n) => Number(n)).filter((n) => Number.isFinite(n));
+        const pitchCount = pattern.hitCount || 0;
+        const pitches = nums.slice(0, pitchCount);
+        const velocities = nums.slice(pitchCount, pitchCount * 2);
+        currentPattern = {
+          id: patterns.length + 1,
+          raw: patternText,
+          tokens: pattern.tokens,
+          totalUnits: pattern.totalUnits,
+          hitCount: pattern.hitCount,
+          pitches,
+          velocities,
+        };
+        patterns.push(currentPattern);
+      }
+    }
+  };
   const parseFieldValue = (line, field) => {
     const re = new RegExp(`\\b${field}:\\s*([^\\]\\s]+)`);
     const match = line.match(re);
@@ -9008,6 +10244,38 @@ function extractDrumPlaybackBars(text) {
   for (const rawLine of lines) {
     const trimmed = rawLine.trim();
     if (!trimmed) continue;
+    // Inline field directives like "[P:...]" or "[M:...]" are not musical bars, but some of them
+    // affect playback state (meter/unit/voice/body start), so we handle those and skip scanning.
+    if (/^\[\s*[A-Za-z]+:/.test(trimmed) && trimmed.endsWith("]")) {
+      const inner = trimmed.slice(1, -1).trim();
+      const match = inner.match(/^([A-Za-z]+)\s*:\s*(.*)$/);
+      if (match) {
+        const field = match[1].toUpperCase();
+        const value = match[2].trim();
+        if (field === "V") {
+          const v = value.split(/\s+/)[0];
+          if (v) {
+            currentVoice = v;
+            if (!firstVoice) firstVoice = v;
+            if (inBody && !primaryVoice) primaryVoice = v;
+          }
+        } else if (field === "K") {
+          inBody = true;
+          if (!primaryVoice && firstVoice) primaryVoice = firstVoice;
+        } else if (field === "M") {
+          const parsed = parseFraction(value);
+          if (parsed) meter = parsed;
+        } else if (field === "L") {
+          const parsed = parseFraction(value);
+          if (parsed) unit = parsed;
+        } else if (field === "I") {
+          // Support inline MIDI directives like [I:MIDI drum ...]
+          const v = value.replace(/^\s*MIDI\s+/i, "");
+          if (v !== value) applyMidiDirective(`%%MIDI ${v}`);
+        }
+      }
+      continue;
+    }
     if (trimmed.startsWith("V:")) {
       const v = trimmed.slice(2).trim().split(/\s+/)[0];
       if (v) {
@@ -9033,41 +10301,12 @@ function extractDrumPlaybackBars(text) {
       const parsed = parseFraction(unitValue);
       if (parsed) unit = parsed;
     }
-    if (/^%%MIDI\s+drumon\b/i.test(trimmed)) {
-      drumOn = true;
+    if (/^%%MIDI\b/i.test(trimmed)) {
+      applyMidiDirective(trimmed);
       continue;
     }
-    if (/^%%MIDI\s+drumoff\b/i.test(trimmed)) {
-      drumOn = false;
-      continue;
-    }
-    const drumBarsMatch = trimmed.match(/^%%MIDI\s+drumbars\s+(\d+)/i);
-    if (drumBarsMatch) {
-      const nextBars = Number(drumBarsMatch[1]);
-      if (Number.isFinite(nextBars) && nextBars > 0) drumBars = nextBars;
-      continue;
-    }
-    const drumMatch = trimmed.match(/^%%MIDI\s+drum\s+(.+)$/i);
-    if (drumMatch) {
-      const parts = drumMatch[1].trim().split(/\s+/);
-      const patternText = parts.shift();
-      const pattern = parseDrumPattern(patternText);
-      if (pattern) {
-        const nums = parts.map((n) => Number(n)).filter((n) => Number.isFinite(n));
-        const pitchCount = pattern.hitCount || 0;
-        const pitches = nums.slice(0, pitchCount);
-        const velocities = nums.slice(pitchCount, pitchCount * 2);
-        currentPattern = {
-          id: patterns.length + 1,
-          raw: patternText,
-          tokens: pattern.tokens,
-          totalUnits: pattern.totalUnits,
-          hitCount: pattern.hitCount,
-          pitches,
-          velocities,
-        };
-        patterns.push(currentPattern);
-      }
+    if (/^I:\s*MIDI\b/i.test(trimmed)) {
+      applyMidiDirective(trimmed.replace(/^I:\s*/i, "%%"));
       continue;
     }
     if (!inBody) continue;
@@ -9094,6 +10333,16 @@ function extractDrumPlaybackBars(text) {
     let inQuote = false;
     for (let i = 0; i < line.length; ) {
       const ch = line[i];
+      if (!inQuote && ch === "[") {
+        const slice = line.slice(i);
+        if (/^\[\s*[A-Za-z]+:/.test(slice)) {
+          const close = line.indexOf("]", i + 1);
+          if (close >= 0) {
+            i = close + 1;
+            continue;
+          }
+        }
+      }
       if (ch === "\"") {
         inQuote = !inQuote;
         i += 1;
@@ -9155,6 +10404,7 @@ function buildDrumVoiceText(info) {
   out.push("V:DRUM clef=perc name=\"Drums\"");
   out.push("%%MIDI channel 10");
   out.push(...drummapLines);
+  const firstBarLineIndex = out.length;
 
   let patternKey = null;
   let patternBarIndex = 0;
@@ -9228,6 +10478,14 @@ function buildDrumVoiceText(info) {
   if (lineBuffer) {
     lineBuffer += sep;
     flushLine();
+  } else if (sep && out.length > firstBarLineIndex) {
+    // If we flushed exactly on the last bar boundary, the final separator was never emitted.
+    // Append it to the last bar line for a stable barline signature.
+    const lastIdx = out.length - 1;
+    const lastLine = out[lastIdx] || "";
+    if (lastLine && !/[|:\]]\s*$/.test(lastLine)) {
+      out[lastIdx] = `${lastLine}${sep}`;
+    }
   }
   return out.join("\n");
 }
@@ -9237,6 +10495,13 @@ function injectDrumPlayback(text) {
     return lastDrumInjectResult;
   }
   lastDrumPlaybackActive = false;
+  lastDrumSignatureDiff = null;
+  if (window.__abcarusDisableDrumInjection === true) {
+    const res = { text, changed: false, insertAtLine: null, lineCount: 0 };
+    lastDrumInjectInput = text;
+    lastDrumInjectResult = res;
+    return res;
+  }
   if (/^\s*V:\s*DRUM\b/im.test(text || "")) {
     const res = { text, changed: false, insertAtLine: null, lineCount: 0 };
     lastDrumInjectInput = text;
@@ -9244,9 +10509,21 @@ function injectDrumPlayback(text) {
     return res;
   }
   const info = extractDrumPlaybackBars(text);
+  const expectedSig = computeExpectedBarSignatureFromInfo(info);
   const drumVoice = buildDrumVoiceText(info);
   if (!drumVoice) {
     const res = { text, changed: false, insertAtLine: null, lineCount: 0 };
+    lastDrumInjectInput = text;
+    lastDrumInjectResult = res;
+    return res;
+  }
+  const actualSig = extractBarSignatureFromText(drumVoice);
+  const sigDiff = diffSignatures(expectedSig, actualSig);
+  if (!sigDiff.ok) {
+    // Safety guard: if our generated drums don't match the barline skeleton, do not inject drums.
+    lastDrumPlaybackActive = false;
+    lastDrumSignatureDiff = sigDiff;
+    const res = { text, changed: false, insertAtLine: null, lineCount: 0, signatureDiff: sigDiff };
     lastDrumInjectInput = text;
     lastDrumInjectResult = res;
     return res;
@@ -9338,13 +10615,304 @@ function injectGchordOn(text, insertAt) {
   return { text: merged, changed: true, offsetDelta: insertText.length };
 }
 
+function normalizeDollarLineBreaksForPlayback(text) {
+  const src = String(text || "");
+  if (!src.includes("$")) return src;
+  // Playback-only cleanup:
+  // - Drop "$ %..." tails (common bar/line markers used for layout, irrelevant for playback/drums).
+  // - Replace other '$' occurrences with whitespace (some playback parsers treat '$' as a literal token and break repeats).
+  const lines = src.split(/\r\n|\n|\r/);
+  const out = [];
+  let inTextBlock = false;
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (/^%%\s*begintext\b/i.test(trimmed)) inTextBlock = true;
+    if (/^%%\s*endtext\b/i.test(trimmed)) inTextBlock = false;
+    // Don't modify linebreak directives themselves; some files use `I:linebreak $`.
+    if (!inTextBlock && (/^\s*I:\s*linebreak\b/i.test(rawLine) || /^\s*%%\s*linebreak\b/i.test(rawLine))) {
+      out.push(rawLine);
+      continue;
+    }
+    if (inTextBlock || !rawLine.includes("$")) {
+      out.push(rawLine);
+      continue;
+    }
+    let lineOut = "";
+    let inQuote = false;
+    for (let i = 0; i < rawLine.length; i += 1) {
+      const ch = rawLine[i];
+      if (ch === "\"") {
+        inQuote = !inQuote;
+        lineOut += ch;
+        continue;
+      }
+      if (!inQuote && ch === "$") {
+        const rest = rawLine.slice(i);
+        if (/^\$\s*%/.test(rest)) {
+          // Drop the rest of the line.
+          break;
+        }
+        lineOut += " ";
+        continue;
+      }
+      lineOut += ch;
+    }
+    out.push(lineOut);
+  }
+  return out.join("\n");
+}
+
+function normalizeBlankLinesForPlayback(text) {
+  const lines = String(text || "").split(/\r\n|\n|\r/);
+  if (lines.length <= 2) return String(text || "");
+  const out = [];
+  let inTextBlock = false;
+  let inBody = false;
+  const isInlineFieldLine = (line) => /^\s*\[\s*[A-Za-z]+:/.test(String(line || "").trim());
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (/^%%\s*begintext\b/i.test(trimmed)) inTextBlock = true;
+    if (/^%%\s*endtext\b/i.test(trimmed)) inTextBlock = false;
+    if (!inBody && (/^\s*K:/.test(line) || /^\s*\[\s*K:/.test(trimmed))) inBody = true;
+    if (!inBody || inTextBlock) {
+      out.push(line);
+      continue;
+    }
+    if (trimmed !== "") {
+      out.push(line);
+      continue;
+    }
+    // Inside the tune body, some playback parsers treat blank lines as tune separators.
+    // Be conservative: if a blank line is immediately followed by an inline field directive
+    // (e.g. [P:...], [M:...], [K:...]), replace it with a comment line for playback only.
+    let j = i + 1;
+    while (j < lines.length && lines[j].trim() === "") j += 1;
+    if (j < lines.length && isInlineFieldLine(lines[j])) {
+      out.push("%");
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
+function sanitizeAbcForPlayback(text) {
+  const src = String(text || "");
+  const lines = src.split(/\r\n|\n|\r/);
+  const out = [];
+  const warnings = [];
+  let inTextBlock = false;
+  let inBody = false;
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const rawLine = lines[lineIndex];
+    const trimmed = rawLine.trim();
+    if (/^%%\s*begintext\b/i.test(trimmed)) inTextBlock = true;
+    if (/^%%\s*endtext\b/i.test(trimmed)) inTextBlock = false;
+    if (!inBody && (/^\s*K:/.test(rawLine) || /^\s*\[\s*K:/.test(trimmed))) inBody = true;
+
+    if (inTextBlock || !inBody) {
+      // Still remove line-continuation backslashes outside text blocks even before body;
+      // they are never meaningful for playback parsing.
+      const cleaned = rawLine.replace(/[ \t]*\\\s*$/, "");
+      if (cleaned !== rawLine) warnings.push({ kind: "line-continuation", line: lineIndex + 1 });
+      out.push(cleaned);
+      continue;
+    }
+
+    // Split comments (keep them intact; only sanitize music part).
+    let musicPart = rawLine;
+    let commentPart = "";
+    if (!trimmed.startsWith("%%")) {
+      const commentIdx = rawLine.indexOf("%");
+      if (commentIdx >= 0) {
+        musicPart = rawLine.slice(0, commentIdx);
+        commentPart = rawLine.slice(commentIdx);
+      }
+    }
+
+    // 1) Remove trailing line-continuation backslash: `...\` -> `...`
+    const noCont = musicPart.replace(/[ \t]*\\\s*$/, "");
+    if (noCont !== musicPart) warnings.push({ kind: "line-continuation", line: lineIndex + 1 });
+    musicPart = noCont;
+
+    // 2) Make multi-repeat tokens more stable: `|:::` -> `|:` and `:::|` -> `:|`
+    // Keep `::` unchanged (common boundary repeat); only collapse 3+.
+    const beforeRepeats = musicPart;
+    musicPart = musicPart
+      .replace(/\|:{3,}/g, "|:")
+      .replace(/:{3,}\|/g, ":|");
+    if (musicPart !== beforeRepeats) warnings.push({ kind: "multi-repeat-simplified", line: lineIndex + 1 });
+
+    // 3) Replace spacer rests `y` with normal rests `z` (playback-only stability).
+    // Target `y` tokens with optional durations like `y4`, `y2/`, `y/2`.
+    const beforeY = musicPart;
+    musicPart = musicPart.replace(/(^|[^A-Za-z0-9_])y(?=([0-9]|\/|$))/g, "$1z");
+    if (musicPart !== beforeY) warnings.push({ kind: "spacer-rest-y", line: lineIndex + 1 });
+
+    out.push(`${musicPart}${commentPart}`);
+  }
+
+  return { text: out.join("\n"), warnings };
+}
+
+function stripLyricsForPlayback(text) {
+  const lines = String(text || "").split(/\r\n|\n|\r/);
+  const out = [];
+  let inTextBlock = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^%%\s*begintext\b/i.test(trimmed)) inTextBlock = true;
+    if (/^%%\s*endtext\b/i.test(trimmed)) inTextBlock = false;
+    if (inTextBlock) {
+      out.push(line);
+      continue;
+    }
+    if (/^\s*w:/.test(line)) continue;
+    if (/^\s*W:/.test(line)) continue;
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
+function normalizeBarsForPlayback(text) {
+  // abc2svg is strict about barline consistency across voices. Some sources mix `||` and `|` at the same moment,
+  // which other players may ignore. For playback-only stability, normalize multi-bars to a single bar.
+  const lines = String(text || "").split(/\r\n|\n|\r/);
+  const out = [];
+  let inTextBlock = false;
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (/^%%\s*begintext\b/i.test(trimmed)) inTextBlock = true;
+    if (/^%%\s*endtext\b/i.test(trimmed)) inTextBlock = false;
+    if (inTextBlock) {
+      out.push(rawLine);
+      continue;
+    }
+    // Leave directives untouched.
+    if (/^\s*%%/.test(rawLine) || /^\s*[A-Za-z]:/.test(rawLine) || /^\s*\[\s*[A-Za-z]+:/.test(trimmed)) {
+      out.push(rawLine);
+      continue;
+    }
+    out.push(rawLine.replace(/\|\|/g, "|"));
+  }
+  return out.join("\n");
+}
+
+function stripChordSymbolsForPlayback(text) {
+  const src = String(text || "");
+  if (!src.includes("\"")) return src;
+  const lines = src.split(/\r\n|\n|\r/);
+  const out = [];
+  let inTextBlock = false;
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (/^%%\s*begintext\b/i.test(trimmed)) inTextBlock = true;
+    if (/^%%\s*endtext\b/i.test(trimmed)) inTextBlock = false;
+    if (inTextBlock) {
+      out.push(rawLine);
+      continue;
+    }
+    // Remove chord symbols / annotations in quotes. Playback stability > chord display here.
+    // Keep the rest of the line intact.
+    out.push(rawLine.replace(/\"[^\"]*\"/g, ""));
+  }
+  return out.join("\n");
+}
+
+function extractBarSignatureFromText(text) {
+  const lines = String(text || "").split(/\r\n|\n|\r/);
+  const sig = [];
+  let inTextBlock = false;
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (/^%%\s*begintext\b/i.test(trimmed)) { inTextBlock = true; continue; }
+    if (/^%%\s*endtext\b/i.test(trimmed)) { inTextBlock = false; continue; }
+    if (inTextBlock) continue;
+    if (!trimmed) continue;
+    // Skip directives/fields that may contain ':' but are not musical bars.
+    if (/^\s*%%/.test(rawLine)) continue;
+    if (/^\s*[A-Za-z]:/.test(rawLine)) continue;
+    if (/^\s*\[\s*[A-Za-z]+:/.test(trimmed)) continue;
+    if (/^%/.test(trimmed) && !/^%%/.test(trimmed)) continue;
+    let line = rawLine;
+    const idx = line.indexOf("%");
+    if (idx >= 0 && !/^\s*%%/.test(trimmed)) line = line.slice(0, idx);
+    let inQuote = false;
+    for (let i = 0; i < line.length; ) {
+      const ch = line[i];
+      if (!inQuote && ch === "[") {
+        const slice = line.slice(i);
+        if (/^\[\s*[A-Za-z]+:/.test(slice)) {
+          const close = line.indexOf("]", i + 1);
+          if (close >= 0) { i = close + 1; continue; }
+        }
+      }
+      if (ch === "\"") { inQuote = !inQuote; i += 1; continue; }
+      if (!inQuote) {
+        const token = matchBarToken(line, i);
+        if (token) {
+          sig.push(token.token);
+          i += token.len;
+          continue;
+        }
+      }
+      i += 1;
+    }
+  }
+  return sig;
+}
+
+function computeExpectedBarSignatureFromInfo(info) {
+  const sig = [];
+  if (!info || !Array.isArray(info.bars)) return sig;
+  let sep = info.leadingToken || "";
+  for (const bar of info.bars) {
+    if (bar && bar.startToken) sep = bar.startToken;
+    if (sep) sig.push(sep);
+    sep = (bar && bar.endToken) ? bar.endToken : "|";
+  }
+  if (sep) sig.push(sep);
+  return sig;
+}
+
+function diffSignatures(expected, actual) {
+  const a = Array.isArray(expected) ? expected : [];
+  const b = Array.isArray(actual) ? actual : [];
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i += 1) {
+    if (a[i] !== b[i]) {
+      const from = Math.max(0, i - 6);
+      const to = Math.min(len, i + 7);
+      return {
+        ok: false,
+        index: i,
+        expectedToken: a[i] ?? null,
+        actualToken: b[i] ?? null,
+        expectedLen: a.length,
+        actualLen: b.length,
+        expectedSlice: a.slice(from, to),
+        actualSlice: b.slice(from, to),
+      };
+    }
+  }
+  return { ok: true, expectedLen: a.length, actualLen: b.length };
+}
+
 function getPlaybackPayload() {
   const tuneText = getEditorValue();
   const entry = getActiveFileEntry();
   const prefixPayload = buildHeaderPrefix(entry ? getHeaderEditorValue() : "", false, tuneText);
   const baseText = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
-  const repeatsFlag = window.__abcarusPlaybackExpandRepeats === true ? "exp:on" : "exp:off";
-  const sourceKey = `${baseText}|||${prefixPayload.offset || 0}|||${repeatsFlag}`;
+  const gchordPreview = injectGchordOn(baseText, prefixPayload.offset || 0);
+  const gchordPreviewText = (gchordPreview && gchordPreview.changed) ? gchordPreview.text : baseText;
+  const drumPreview = injectDrumPlayback(gchordPreviewText);
+  const previewText = normalizeBlankLinesForPlayback(
+    normalizeDollarLineBreaksForPlayback(drumPreview && drumPreview.changed ? drumPreview.text : gchordPreviewText)
+  );
+  const expandRepeats = window.__abcarusPlaybackExpandRepeats === true;
+  const repeatsFlag = expandRepeats ? "exp:on" : "exp:off";
+  const sourceKey = `${previewText}|||${prefixPayload.offset || 0}|||${repeatsFlag}`;
   if (lastPlaybackPayloadCache && lastPlaybackPayloadCache.key === sourceKey) {
     lastPlaybackMeta = lastPlaybackPayloadCache.meta
       || { drumInsertAtLine: null, drumLineCount: 0 };
@@ -9363,12 +10931,23 @@ function getPlaybackPayload() {
       offset: (payload.offset || 0) + (gchordInjected.offsetDelta || 0),
     };
   }
+  payload = { text: normalizeDollarLineBreaksForPlayback(payload.text), offset: payload.offset };
+  payload = { text: normalizeBlankLinesForPlayback(payload.text), offset: payload.offset };
+  const sanitized = sanitizeAbcForPlayback(payload.text);
+  playbackSanitizeWarnings = Array.isArray(sanitized.warnings) ? sanitized.warnings.slice(0, 200) : [];
+  payload = { text: sanitized.text, offset: payload.offset };
   const drumInjected = injectDrumPlayback(payload.text);
-  if (drumInjected.changed) payload = { text: drumInjected.text, offset: payload.offset };
+  if (drumInjected && drumInjected.signatureDiff) {
+    lastDrumSignatureDiff = drumInjected.signatureDiff;
+    playbackSanitizeWarnings.push({ kind: "drum-signature-mismatch", detail: drumInjected.signatureDiff });
+  } else {
+    lastDrumSignatureDiff = null;
+  }
+  if (drumInjected && drumInjected.changed) payload = { text: drumInjected.text, offset: payload.offset };
   lastPlaybackMeta = drumInjected.changed
     ? { drumInsertAtLine: drumInjected.insertAtLine, drumLineCount: drumInjected.lineCount }
     : { drumInsertAtLine: null, drumLineCount: 0 };
-  if (window.__abcarusPlaybackExpandRepeats === true) {
+  if (expandRepeats) {
     payload = {
       text: expandRepeatsForPlayback(payload.text),
       offset: payload.offset,
@@ -9408,6 +10987,11 @@ async function preparePlayback() {
   try { sessionStorage.setItem("audio", "sf2"); } catch {}
 
   const AbcCtor = getAbcCtor();
+  playbackParseErrors = [];
+  playbackSanitizeWarnings = [];
+  lastPlaybackChordOnBarError = false;
+  let playbackParseErrorToastShown = false;
+  lastPlaybackTuneInfo = null;
   const logPlaybackErr = (message, line, col) => {
     let loc = null;
     if (Number.isFinite(line) && Number.isFinite(col)) {
@@ -9426,6 +11010,21 @@ async function preparePlayback() {
       && drumLines > 0
       && loc.line >= drumStart
       && loc.line < (drumStart + drumLines);
+    const entry = {
+      message: String(message || ""),
+      loc,
+      inDrumBlock: Boolean(inDrumBlock),
+    };
+    playbackParseErrors.push(entry);
+    if (playbackParseErrors.length > 200) playbackParseErrors = playbackParseErrors.slice(-200);
+    if (!playbackParseErrorToastShown) {
+      playbackParseErrorToastShown = true;
+      showToast("Playback parse error (see debug dump).", 3200);
+    }
+    if (/Not enough measure bars for lyric line/i.test(entry.message)) {
+      // We'll attempt a playback-only fallback that ignores lyrics, so don't spam errors.
+      return;
+    }
     if (inDrumBlock) {
       const cleaned = String(message || "").replace(/^\s*play:\d+:\d+\s*/i, "").trim();
       logErr(cleaned || message, null, { skipMeasureRange: true });
@@ -9441,6 +11040,9 @@ async function preparePlayback() {
   };
   const abc = new AbcCtor(user);
   const playbackPayload = getPlaybackPayload();
+  if (Array.isArray(playbackSanitizeWarnings) && playbackSanitizeWarnings.length) {
+    showToast("Playback may vary (ABC sanitized for stability).", 3600);
+  }
   if (!assertCleanAbcText(playbackPayload.text, "preparePlayback")) {
     throw new Error("ABC text corruption detected (playback).");
   }
@@ -9460,8 +11062,60 @@ async function preparePlayback() {
   const playbackText = normalizeHeaderNoneSpacing(playbackPayload.text);
   abc.tosvg("play", playbackText);
 
+  // Tolerant playback mode: many real-world ABC files contain lyric/barline mismatches that stricter engines reject.
+  // We keep the file unchanged; this only affects playback.
+  if (Array.isArray(playbackParseErrors) && playbackParseErrors.some((e) => /lyric line/i.test(e.message || ""))) {
+    playbackSanitizeWarnings.push({ kind: "playback-lyrics-dropped" });
+    const abc2 = new AbcCtor(user);
+    const stripped = stripLyricsForPlayback(playbackText);
+    abc2.tosvg("play", stripped);
+    abc.tunes = abc2.tunes;
+    showToast("Playback: lyrics ignored (compat mode).", 3600);
+  }
+  if (Array.isArray(playbackParseErrors) && playbackParseErrors.some((e) => /Different bars/i.test(e.message || ""))) {
+    playbackSanitizeWarnings.push({ kind: "playback-bars-normalized" });
+    const abc3 = new AbcCtor(user);
+    const normalized = normalizeBarsForPlayback(playbackText);
+    abc3.tosvg("play", normalized);
+    abc.tunes = abc3.tunes;
+    showToast("Playback: barlines normalized (compat mode).", 3600);
+  }
+
+  // abc2svg playback is stricter than many MIDI engines (e.g. abcmidi) and rejects chord symbols placed on barlines.
+  // We don't auto-strip by default (it changes accompaniment); instead we warn and provide an opt-in toggle.
+  if (Array.isArray(playbackParseErrors) && playbackParseErrors.some((e) => /chord symbols on measure bars/i.test(e.message || ""))) {
+    lastPlaybackChordOnBarError = true;
+    playbackSanitizeWarnings.push({ kind: "abc2svg-chord-on-measure-bar" });
+    if (window.__abcarusPlaybackStripChordSymbols === true) {
+      playbackParseErrors = [];
+      playbackSanitizeWarnings.push({ kind: "playback-chords-stripped" });
+      const abc2 = new AbcCtor(user);
+      const stripped = stripChordSymbolsForPlayback(playbackText);
+      abc2.tosvg("play", stripped);
+      // Replace parsed result.
+      abc.tunes = abc2.tunes;
+      showToast("Playback: chord symbols ignored (compat mode).", 3600);
+    } else {
+      showToast("Playback may vary (chord symbols on barlines).", 3600);
+    }
+  }
+
   const tunes = abc.tunes || [];
   if (!tunes.length) throw new Error("No tunes parsed; cannot play.");
+
+  try {
+    lastPlaybackTuneInfo = {
+      count: tunes.length,
+      titles: tunes.map((t) => {
+        const info = t && t[0] ? t[0].info : null;
+        const title = info && info.T ? info.T : null;
+        const x = info && info.X ? info.X : null;
+        return { x, title };
+      }).slice(0, 20),
+    };
+  } catch {
+    lastPlaybackTuneInfo = { count: tunes.length };
+  }
 
   for (const t of tunes) {
     p.add(t[0], t[1], t[3]);
@@ -9477,6 +11131,13 @@ async function preparePlayback() {
       measures: playbackState ? playbackState.measures.length : 0,
       symbols: playbackState ? playbackState.symbols.length : 0,
       bars: playbackState && playbackState.barIstarts ? playbackState.barIstarts.length : 0,
+      tunes: lastPlaybackTuneInfo,
+    }),
+    getDiagnostics: () => ({
+      parseErrors: Array.isArray(playbackParseErrors) ? playbackParseErrors.slice() : [],
+      sanitizeWarnings: Array.isArray(playbackSanitizeWarnings) ? playbackSanitizeWarnings.slice() : [],
+      drumSignatureDiff: lastDrumSignatureDiff,
+      chordOnBarError: Boolean(lastPlaybackChordOnBarError),
     }),
     getPlaybackRange: () => clonePlaybackRange(playbackRange),
     getTimeline: () => (playbackState ? playbackState.timeline : []),

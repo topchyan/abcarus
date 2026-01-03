@@ -243,7 +243,10 @@
     if (!rowData) return { ok: false, error: "No selection." };
     const selection = buildOpenSelection(rowData);
     if (!selection) return { ok: false, error: "Validation failed.", validation: true };
-    const opener = window.openTuneFromLibrarySelection;
+    const actions = window.libraryActions;
+    const opener = actions && typeof actions.openTune === "function"
+      ? actions.openTune
+      : window.openTuneFromLibrarySelection;
     if (typeof opener !== "function") {
       console.log("Open:", rowData);
       return { ok: false, error: "Open handler not available." };
@@ -256,6 +259,13 @@
 
     function buildSearchString(r) {
       return `${r && r.file != null ? r.file : ""} ${r && r.tuneNo != null ? r.tuneNo : ""} ${r && r.title != null ? r.title : ""} ${r && r.composer != null ? r.composer : ""} ${r && r.key != null ? r.key : ""} ${r && r.meter != null ? r.meter : ""} ${r && r.tempo != null ? r.tempo : ""} ${r && r.rhythm != null ? r.rhythm : ""} ${r && r.origin != null ? r.origin : ""} ${r && r.group != null ? r.group : ""} ${r && r.modified != null ? r.modified : ""}`.toLowerCase();
+    }
+
+    function getRowSearchText(rowData) {
+      try {
+        if (rowData && typeof rowData.searchText === "string") return rowData.searchText;
+      } catch {}
+      return buildSearchString(rowData);
     }
 
     function getDemoLibraryRows() {
@@ -514,7 +524,7 @@
     }
     libTable.setFilter((data) => {
       try {
-        return buildSearchString(data).includes(q);
+        return getRowSearchText(data).includes(q);
       } catch (_e) {
         return false;
       }
@@ -548,7 +558,7 @@
     document.dispatchEvent(new CustomEvent("library-modal:opened"));
 
     requestAnimationFrame(() => {
-      const providedRows = Array.isArray(rows) && rows.length ? rows : null;
+      const providedRows = Array.isArray(rows) ? rows : null;
       const hadTable = Boolean(libTable);
       const table = ensureTabulator(providedRows || []);
       if (!table) return;
@@ -568,8 +578,9 @@
       };
 
       if (providedRows) {
+        const isSameData = currentRowsCache === providedRows;
         currentRowsCache = providedRows;
-        if (hadTable) {
+        if (hadTable && !isSameData) {
           Promise.resolve(table.setData(providedRows)).then(() => {
             finalizeOpen();
           }).catch(() => {
@@ -577,6 +588,12 @@
           });
         } else {
           finalizeOpen();
+          if (pendingFilterValue != null) {
+            const v = String(pendingFilterValue);
+            pendingFilterValue = null;
+            if ($filter) $filter.value = v;
+            applyQuickFilter(v);
+          }
         }
         return;
       }
@@ -603,6 +620,20 @@
       try { libTable.deselectRow(); } catch (_e) {}
     }
   }
+
+  document.addEventListener("library-modal:update-rows", (ev) => {
+    try {
+      if (!$overlay || $overlay.hidden) return;
+      const rows = ev && ev.detail && Array.isArray(ev.detail.rows) ? ev.detail.rows : null;
+      if (!rows) return;
+      const table = ensureTabulator(currentRowsCache || []);
+      if (!table) return;
+      if (currentRowsCache === rows) return;
+      currentRowsCache = rows;
+      pendingFilterValue = $filter ? String($filter.value || "") : "";
+      Promise.resolve(table.setData(rows)).catch(() => {});
+    } catch {}
+  });
 
   async function openSelectedIfAny() {
     if (!selectedRowData) return;

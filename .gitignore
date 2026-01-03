@@ -13,6 +13,7 @@ get_recents.sh
 recents.zip
 debug_dumps/
 roadmaps/
+docs/qa/chat-exports/
 
 # Bundled Python runtime (release builds only)
 third_party/python-runtime/

@@ -335,9 +335,31 @@ body.library-hidden .divider {
   gap: 10px;
 }
 
+.library-root-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.library-root {
+  font-size: 12px;
+  font-weight: 700;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
 .scan-status {
   font-size: 11px;
   color: #666;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sidebar-controls {
@@ -362,6 +384,11 @@ body.library-hidden .divider {
   align-items: center;
   gap: 8px;
   width: 100%;
+}
+
+.sidebar-control.sidebar-search input {
+  flex: 1;
+  min-width: 0;
 }
 
 .sidebar-label {
@@ -572,6 +599,12 @@ body.resizing * {
 .tree-file.active > .tree-label {
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+.tree-file.x-issues > .tree-label .tree-label-text::after {
+  content: " !";
+  color: #b00020;
+  font-weight: 700;
 }
 
 .tree-file.dirty > .tree-label {
@@ -805,6 +838,30 @@ body.resizing * {
 .render-pane {
   flex: 1;
   overflow: scroll;
+  position: relative;
+}
+
+.render-pane.is-rendering::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.render-pane.is-rendering::after {
+  content: "Rendering…";
+  position: absolute;
+  inset: 10px 12px auto auto;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  pointer-events: none;
+  font-size: 12px;
+  color: #444;
+  z-index: 4;
 }
 
 .split-divider {

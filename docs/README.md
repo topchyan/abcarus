@@ -37,3 +37,6 @@ No packaging or build scripts are defined beyond `npm run start`. Any production
 ## Detailed docs
 - `docs/features.md`: End-user features and behaviors.
 - `docs/architecture.md`: Main/renderer responsibilities, IPC, and data flow.
+- `docs/REQUIREMENTS.md`: Consolidated product + engineering requirements/invariants.
+- `docs/METHODOLOGY.md`: How we develop (chat-driven) without losing context.
+- `docs/soundfonts.md`: Soundfont selection and local setup.

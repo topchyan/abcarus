@@ -22,12 +22,14 @@ const DEFAULT_SETTINGS = {
   xml2abcArgs: "",
   globalHeaderText: "",
   globalHeaderEnabled: true,
+  useNativeTranspose: true,
   soundfontName: "TimGM6mb.sf2",
   soundfontPaths: [],
   followPlayback: true,
   drumVelocityMap: buildDefaultDrumVelocityMap(),
   disclaimerSeen: false,
   usePortalFileDialogs: true,
+  libraryAutoRenumberAfterMove: false,
 };
 
 const ZOOM_STEP = 0.1;
@@ -46,8 +48,10 @@ export function initSettings(api) {
   const $settingsXml2abcArgs = document.getElementById("settingsXml2abcArgs");
   const $settingsGlobalHeader = document.getElementById("settingsGlobalHeader");
   const $settingsGlobalHeaderEnabled = document.getElementById("settingsGlobalHeaderEnabled");
+  const $settingsUseNativeTranspose = document.getElementById("settingsUseNativeTranspose");
   const $settingsSoundfont = document.getElementById("settingsSoundfont");
   const $settingsUsePortalFileDialogs = document.getElementById("settingsUsePortalFileDialogs");
+  const $settingsLibraryAutoRenumberAfterMove = document.getElementById("settingsLibraryAutoRenumberAfterMove");
   const $settingsDrumMixer = document.getElementById("settingsDrumMixer");
   const $settingsTabs = Array.from(document.querySelectorAll("[data-settings-tab]"));
   const $settingsPanels = Array.from(document.querySelectorAll("[data-settings-panel]"));
@@ -112,7 +116,11 @@ export function initSettings(api) {
     if ($settingsAbc2xmlArgs) $settingsAbc2xmlArgs.value = currentSettings.abc2xmlArgs || "";
     if ($settingsXml2abcArgs) $settingsXml2abcArgs.value = currentSettings.xml2abcArgs || "";
     if ($settingsGlobalHeaderEnabled) $settingsGlobalHeaderEnabled.checked = currentSettings.globalHeaderEnabled !== false;
+    if ($settingsUseNativeTranspose) $settingsUseNativeTranspose.checked = currentSettings.useNativeTranspose !== false;
     if ($settingsUsePortalFileDialogs) $settingsUsePortalFileDialogs.checked = currentSettings.usePortalFileDialogs !== false;
+    if ($settingsLibraryAutoRenumberAfterMove) {
+      $settingsLibraryAutoRenumberAfterMove.checked = currentSettings.libraryAutoRenumberAfterMove === true;
+    }
     setGlobalHeaderValue(currentSettings.globalHeaderText || "");
     drumVelocityMap = normalizeDrumVelocityMap(currentSettings.drumVelocityMap);
     renderDrumMixer();
@@ -176,6 +184,16 @@ export function initSettings(api) {
   if ($settingsUsePortalFileDialogs) {
     $settingsUsePortalFileDialogs.addEventListener("change", () => {
       updateSettings({ usePortalFileDialogs: $settingsUsePortalFileDialogs.checked }).catch(() => {});
+    });
+  }
+  if ($settingsUseNativeTranspose) {
+    $settingsUseNativeTranspose.addEventListener("change", () => {
+      updateSettings({ useNativeTranspose: $settingsUseNativeTranspose.checked }).catch(() => {});
+    });
+  }
+  if ($settingsLibraryAutoRenumberAfterMove) {
+    $settingsLibraryAutoRenumberAfterMove.addEventListener("change", () => {
+      updateSettings({ libraryAutoRenumberAfterMove: $settingsLibraryAutoRenumberAfterMove.checked }).catch(() => {});
     });
   }
 

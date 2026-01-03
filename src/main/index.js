@@ -40,6 +40,9 @@ function getDefaultSettings() {
     xml2abcArgs: "",
     globalHeaderText: "",
     globalHeaderEnabled: true,
+    // Prefer native JS transposition for semitone shifts (renderer engine).
+    // abc2abc remains available for other transforms (e.g. measures/voice/renumber) and as a legacy fallback.
+    useNativeTranspose: true,
     soundfontName: "TimGM6mb.sf2",
     soundfontPaths: [],
     drumVelocityMap: {},
@@ -48,6 +51,14 @@ function getDefaultSettings() {
     // On Cinnamon/GTK, native file dialogs can appear off-screen; portal dialogs are more reliable.
     usePortalFileDialogs: process.platform === "linux",
     usePortalFileDialogsSetByUser: false,
+    // Library UI preferences (renderer-owned UI state, persisted for convenience).
+    libraryPaneVisible: false,
+    libraryPaneWidth: 280,
+    libraryGroupBy: "file",
+    librarySortBy: "update_desc",
+    libraryFilterText: "",
+    libraryUiStateByRoot: {},
+    libraryAutoRenumberAfterMove: false,
   };
 }
 
@@ -709,6 +720,18 @@ function clampZoom(value) {
 
 function updateSettings(patch) {
   const next = { ...getDefaultSettings(), ...appState.settings, ...patch };
+  if (patch && patch.libraryUiStateByRoot && typeof patch.libraryUiStateByRoot === "object") {
+    const prev = appState.settings && appState.settings.libraryUiStateByRoot && typeof appState.settings.libraryUiStateByRoot === "object"
+      ? appState.settings.libraryUiStateByRoot
+      : {};
+    const merged = { ...prev };
+    for (const [rootKey, value] of Object.entries(patch.libraryUiStateByRoot)) {
+      const prevRoot = prev[rootKey] && typeof prev[rootKey] === "object" ? prev[rootKey] : {};
+      const nextRoot = value && typeof value === "object" ? value : {};
+      merged[rootKey] = { ...prevRoot, ...nextRoot };
+    }
+    next.libraryUiStateByRoot = merged;
+  }
   next.renderZoom = clampZoom(Number(next.renderZoom));
   next.editorZoom = clampZoom(Number(next.editorZoom));
   next.editorFontSize = Math.min(32, Math.max(8, Number(next.editorFontSize) || 13));
@@ -840,12 +863,43 @@ function extractTuneHeader(lines, startIdx, endIdx) {
   return { title, composer, key, meter, unitLength, tempo, rhythm, source, origin, group };
 }
 
+function analyzeTuneXIssues(tunes) {
+  const duplicates = {};
+  const seen = new Map();
+  let invalid = 0;
+  let missing = 0;
+
+  for (const tune of tunes || []) {
+    const xNumber = tune && tune.xNumber != null ? String(tune.xNumber) : "";
+    const isValid = Boolean(tune && tune._xValid);
+    if (!xNumber) {
+      if (isValid) missing += 1;
+      else invalid += 1;
+      continue;
+    }
+    const prev = seen.get(xNumber) || 0;
+    seen.set(xNumber, prev + 1);
+  }
+
+  for (const [x, count] of seen.entries()) {
+    if (count > 1) duplicates[x] = count;
+  }
+
+  const duplicateCount = Object.keys(duplicates).length;
+  return {
+    ok: missing === 0 && invalid === 0 && duplicateCount === 0,
+    missing,
+    invalid,
+    duplicates: duplicateCount ? duplicates : undefined,
+  };
+}
+
 function buildTunesFromContent(absPath, content) {
   const { lines, lineStarts } = splitLinesWithOffsets(content);
   const tunes = [];
   let currentStart = null;
   let tuneIndex = 0;
-  const xRe = /^X:\s*\d+/;
+  const xRe = /^\s*X:/;
   let headerEndOffset = content.length;
   for (let i = 0; i < lines.length; i += 1) {
     if (/^\s*X:/.test(lines[i] || "")) {
@@ -857,8 +911,9 @@ function buildTunesFromContent(absPath, content) {
 
   const finalize = (startIdx, endIdx) => {
     const xLine = lines[startIdx] || "";
-    const xMatch = xLine.match(/^X:\s*(\d+)/);
+    const xMatch = xLine.match(/^\s*X:\s*(\d+)/);
     const xNumber = xMatch ? xMatch[1] : "";
+    const xValid = /^\s*X:\s*\d+/.test(xLine);
     const header = extractTuneHeader(lines, startIdx, endIdx);
     const title = header.title;
     let preview = title;
@@ -879,6 +934,7 @@ function buildTunesFromContent(absPath, content) {
       id: `${absPath}::${startOffset}`,
       indexInFile: tuneIndex,
       xNumber,
+      _xValid: xValid,
       title,
       composer: header.composer,
       key: header.key,
@@ -908,15 +964,377 @@ function buildTunesFromContent(absPath, content) {
     finalize(currentStart, lines.length - 1);
   }
 
-  return { tunes, headerText, headerEndOffset };
+  const xIssues = analyzeTuneXIssues(tunes);
+  for (const tune of tunes) delete tune._xValid;
+  return { tunes, headerText, headerEndOffset, xIssues };
 }
 
+const MAX_PARSE_CACHE_ENTRIES = 250;
 const parseCache = new Map();
+const activeScanTokens = new WeakMap();
+
+function isPersistedLibraryIndexEnabled() {
+  return process.env.ABCARUS_DISABLE_LIBRARY_INDEX !== "1";
+}
+
+function getScanTokenFromOptions(options) {
+  if (!options || typeof options !== "object") return "";
+  const token = options.token;
+  if (typeof token === "string" || typeof token === "number") return String(token);
+  return "";
+}
+
+function setActiveScanToken(sender, token) {
+  if (!sender || !token) return;
+  try { activeScanTokens.set(sender, token); } catch {}
+}
+
+function isScanTokenActive(sender, token) {
+  if (!sender || !token) return true;
+  try { return activeScanTokens.get(sender) === token; } catch { return true; }
+}
+
+function cancelLibraryScan(sender) {
+  if (!sender) return;
+  const token = `cancel-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  setActiveScanToken(sender, token);
+}
+
+function lruGet(map, key) {
+  if (!map.has(key)) return undefined;
+  const value = map.get(key);
+  map.delete(key);
+  map.set(key, value);
+  return value;
+}
+
+function lruSet(map, key, value, maxEntries) {
+  if (map.has(key)) map.delete(key);
+  map.set(key, value);
+  while (map.size > maxEntries) {
+    const firstKey = map.keys().next().value;
+    if (firstKey == null) break;
+    map.delete(firstKey);
+  }
+}
+
+const PERSISTED_LIBRARY_INDEX_VERSION = 1;
+let persistedLibraryIndex = null;
+let persistedIndexLoadAttempted = false;
+let persistedIndexSaveTimer = null;
+let persistedIndexDirty = false;
+
+function getPersistedLibraryIndexPath() {
+  try {
+    const dir = app.getPath("userData");
+    return path.join(dir, `library-index-v${PERSISTED_LIBRARY_INDEX_VERSION}.json`);
+  } catch {
+    return "";
+  }
+}
+
+async function loadPersistedLibraryIndex() {
+  if (!isPersistedLibraryIndexEnabled()) return null;
+  if (persistedIndexLoadAttempted) return persistedLibraryIndex;
+  persistedIndexLoadAttempted = true;
+  const filePath = getPersistedLibraryIndexPath();
+  if (!filePath) return null;
+  try {
+    const raw = await fs.promises.readFile(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.version !== PERSISTED_LIBRARY_INDEX_VERSION || typeof parsed.files !== "object") {
+      persistedLibraryIndex = null;
+      return null;
+    }
+    persistedLibraryIndex = parsed;
+    return persistedLibraryIndex;
+  } catch {
+    persistedLibraryIndex = null;
+    return null;
+  }
+}
+
+function ensurePersistedLibraryIndexLoaded() {
+  if (!isPersistedLibraryIndexEnabled()) return;
+  if (persistedIndexLoadAttempted) return;
+  // Fire and forget; callers tolerate a null index until loaded.
+  loadPersistedLibraryIndex().catch(() => {});
+}
+
+async function atomicWriteFileWithRetry(filePath, data, { attempts = 5 } = {}) {
+  const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await fs.promises.writeFile(tmpPath, data, "utf8");
+  let lastErr = null;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      try {
+        await fs.promises.rename(tmpPath, filePath);
+        return;
+      } catch (e) {
+        // Windows often fails rename when target exists; remove and retry.
+        try { await fs.promises.unlink(filePath); } catch {}
+        await fs.promises.rename(tmpPath, filePath);
+        return;
+      }
+    } catch (e) {
+      lastErr = e;
+      const code = e && e.code ? String(e.code) : "";
+      if (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES") break;
+      await new Promise((r) => setTimeout(r, 50 * (i + 1)));
+    }
+  }
+  try { await fs.promises.unlink(tmpPath); } catch {}
+  throw lastErr || new Error("Unable to write file.");
+}
+
+function schedulePersistedLibraryIndexSave() {
+  if (!isPersistedLibraryIndexEnabled()) return;
+  if (persistedIndexSaveTimer) return;
+  persistedIndexSaveTimer = setTimeout(async () => {
+    persistedIndexSaveTimer = null;
+    if (!persistedIndexDirty) return;
+    persistedIndexDirty = false;
+    const filePath = getPersistedLibraryIndexPath();
+    if (!filePath || !persistedLibraryIndex) return;
+    try {
+      const json = JSON.stringify(persistedLibraryIndex);
+      await atomicWriteFileWithRetry(filePath, json);
+    } catch {
+      // Ignore: cache is best-effort and should never block library usage.
+    }
+  }, 900);
+}
+
+function getPersistedEntry(filePath, stat) {
+  if (!isPersistedLibraryIndexEnabled()) return null;
+  if (!persistedLibraryIndex || !persistedLibraryIndex.files || !stat) return null;
+  const key = path.resolve(filePath);
+  const entry = persistedLibraryIndex.files[key];
+  if (!entry) return null;
+  if (entry.mtimeMs === stat.mtimeMs && entry.size === stat.size) {
+    const parsed = entry.parsed || null;
+    if (!parsed) return null;
+    if (!parsed.xIssues && Array.isArray(parsed.tunes)) {
+      // Backfill xIssues for older cache entries where we didn't persist it yet.
+      const tunes = parsed.tunes || [];
+      const xIssues = (() => {
+        const duplicates = {};
+        const seen = new Map();
+        let invalid = 0;
+        for (const tune of tunes) {
+          const x = tune && tune.xNumber != null ? String(tune.xNumber) : "";
+          if (!x) {
+            invalid += 1;
+            continue;
+          }
+          seen.set(x, (seen.get(x) || 0) + 1);
+        }
+        for (const [x, count] of seen.entries()) {
+          if (count > 1) duplicates[x] = count;
+        }
+        const duplicateCount = Object.keys(duplicates).length;
+        return {
+          ok: invalid === 0 && duplicateCount === 0,
+          missing: 0,
+          invalid,
+          duplicates: duplicateCount ? duplicates : undefined,
+        };
+      })();
+      parsed.xIssues = xIssues;
+      entry.parsed = parsed;
+      if (!entry.discover) {
+        entry.discover = {
+          tuneCount: Array.isArray(parsed.tunes) ? parsed.tunes.length : 0,
+          xIssues,
+        };
+      }
+      persistedIndexDirty = true;
+      schedulePersistedLibraryIndexSave();
+    }
+    return parsed;
+  }
+  return null;
+}
+
+function getPersistedDiscoverEntry(filePath, stat) {
+  if (!isPersistedLibraryIndexEnabled()) return null;
+  if (!persistedLibraryIndex || !persistedLibraryIndex.files || !stat) return null;
+  const key = path.resolve(filePath);
+  const entry = persistedLibraryIndex.files[key];
+  if (!entry) return null;
+  if (entry.mtimeMs !== stat.mtimeMs || entry.size !== stat.size) return null;
+
+  if (entry.discover && typeof entry.discover === "object") {
+    const tuneCount = Number(entry.discover.tuneCount);
+    return {
+      tuneCount: Number.isFinite(tuneCount) ? tuneCount : 0,
+      xIssues: entry.discover.xIssues || undefined,
+    };
+  }
+
+  const parsed = entry.parsed || null;
+  if (parsed && typeof parsed === "object") {
+    const tuneCount = Array.isArray(parsed.tunes) ? parsed.tunes.length : 0;
+    const xIssues = parsed.xIssues || undefined;
+    entry.discover = { tuneCount, xIssues };
+    persistedIndexDirty = true;
+    schedulePersistedLibraryIndexSave();
+    return { tuneCount, xIssues };
+  }
+
+  return null;
+}
+
+function analyzeXIssuesFromLines(lines) {
+  const xStartRe = /^\s*X:\s*(.*)$/;
+  const xNumberRe = /^\s*X:\s*(\d+)/;
+  let tuneCount = 0;
+  let invalid = 0;
+  const seen = new Map();
+
+  for (const line of lines) {
+    const text = line == null ? "" : String(line);
+    if (!xStartRe.test(text)) continue;
+    tuneCount += 1;
+    const match = text.match(xNumberRe);
+    if (!match || !match[1]) {
+      invalid += 1;
+      continue;
+    }
+    const x = String(match[1]);
+    seen.set(x, (seen.get(x) || 0) + 1);
+  }
+
+  const duplicates = {};
+  for (const [x, count] of seen.entries()) {
+    if (count > 1) duplicates[x] = count;
+  }
+  const duplicateCount = Object.keys(duplicates).length;
+  const xIssues = {
+    ok: invalid === 0 && duplicateCount === 0,
+    missing: 0,
+    invalid,
+    duplicates: duplicateCount ? duplicates : undefined,
+  };
+
+  return { tuneCount, xIssues };
+}
+
+function computeDiscoverFromContent(content) {
+  const lines = String(content || "").split(/\r\n|\n|\r/);
+  return analyzeXIssuesFromLines(lines);
+}
+
+function setPersistedDiscoverEntry(filePath, stat, discover) {
+  if (!isPersistedLibraryIndexEnabled()) return;
+  if (!stat || !discover) return;
+  if (!persistedLibraryIndex) {
+    persistedLibraryIndex = { version: PERSISTED_LIBRARY_INDEX_VERSION, files: {} };
+  }
+  if (!persistedLibraryIndex.files) persistedLibraryIndex.files = {};
+  const key = path.resolve(filePath);
+  const prev = persistedLibraryIndex.files[key] && typeof persistedLibraryIndex.files[key] === "object"
+    ? persistedLibraryIndex.files[key]
+    : {};
+  persistedLibraryIndex.files[key] = {
+    ...prev,
+    mtimeMs: stat.mtimeMs,
+    size: stat.size,
+    updatedAtMs: Number.isFinite(stat.mtimeMs) ? stat.mtimeMs : 0,
+    discover: {
+      tuneCount: Number.isFinite(Number(discover.tuneCount)) ? Number(discover.tuneCount) : 0,
+      xIssues: discover.xIssues || undefined,
+    },
+    // Invalidate stale parsed payload when the file changes.
+    parsed: null,
+  };
+  persistedIndexDirty = true;
+  schedulePersistedLibraryIndexSave();
+}
+
+function setPersistedEntry(filePath, stat, parsed) {
+  if (!isPersistedLibraryIndexEnabled()) return;
+  if (!stat || !parsed) return;
+  if (!persistedLibraryIndex) {
+    persistedLibraryIndex = { version: PERSISTED_LIBRARY_INDEX_VERSION, files: {} };
+  }
+  if (!persistedLibraryIndex.files) persistedLibraryIndex.files = {};
+  const key = path.resolve(filePath);
+  const headerText = parsed.headerText ? String(parsed.headerText) : "";
+  const cappedHeaderText = headerText.length > 200000 ? headerText.slice(0, 200000) : headerText;
+  const tuneCount = Array.isArray(parsed.tunes) ? parsed.tunes.length : 0;
+  persistedLibraryIndex.files[key] = {
+    mtimeMs: stat.mtimeMs,
+    size: stat.size,
+    updatedAtMs: Number.isFinite(stat.mtimeMs) ? stat.mtimeMs : 0,
+    discover: {
+      tuneCount,
+      xIssues: parsed.xIssues || undefined,
+    },
+    parsed: {
+      headerEndOffset: parsed.headerEndOffset || 0,
+      headerText: cappedHeaderText,
+      xIssues: parsed.xIssues || undefined,
+      tunes: Array.isArray(parsed.tunes) ? parsed.tunes : [],
+    },
+  };
+  persistedIndexDirty = true;
+  schedulePersistedLibraryIndexSave();
+}
+
+function createProgressEmitter(sender, intervalMs = 150) {
+  let lastSentAt = 0;
+  let timer = null;
+  let pending = null;
+
+  const flush = () => {
+    if (!sender || !pending) return;
+    const payload = pending;
+    pending = null;
+    lastSentAt = Date.now();
+    try {
+      sender.send("library:progress", payload);
+    } catch {}
+  };
+
+  const schedule = () => {
+    if (timer) return;
+    const wait = Math.max(0, intervalMs - (Date.now() - lastSentAt));
+    timer = setTimeout(() => {
+      timer = null;
+      flush();
+    }, wait);
+  };
+
+  return {
+    send(payload) {
+      if (!sender) return;
+      pending = payload;
+      if (Date.now() - lastSentAt >= intervalMs) {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        flush();
+        return;
+      }
+      schedule();
+    },
+    finish(payload) {
+      if (payload) pending = payload;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      flush();
+    },
+  };
+}
 
 function getCachedParse(filePath, stat) {
   if (!stat) return null;
   const key = path.resolve(filePath);
-  const cached = parseCache.get(key);
+  const cached = lruGet(parseCache, key);
   if (!cached) return null;
   if (cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) return cached.parsed;
   return null;
@@ -925,14 +1343,16 @@ function getCachedParse(filePath, stat) {
 function setCachedParse(filePath, stat, parsed) {
   if (!stat || !parsed) return;
   const key = path.resolve(filePath);
-  parseCache.set(key, {
+  lruSet(parseCache, key, {
     mtimeMs: stat.mtimeMs,
     size: stat.size,
     parsed,
-  });
+  }, MAX_PARSE_CACHE_ENTRIES);
 }
 
 async function parseSingleFile(filePath, sender, options = {}) {
+  ensurePersistedLibraryIndexLoaded();
+  const progress = createProgressEmitter(sender);
   let stat = null;
   let content = "";
   try {
@@ -957,19 +1377,18 @@ async function parseSingleFile(filePath, sender, options = {}) {
     }
     content = await fs.promises.readFile(filePath, "utf8");
   } catch (e) {
-    if (sender) {
-      sender.send("library:progress", {
-        phase: "parse",
-        current: filePath,
-        index: 1,
-        total: 1,
-        error: e && e.message ? e.message : String(e),
-      });
-    }
+    progress.finish({
+      phase: "parse",
+      current: filePath,
+      index: 1,
+      total: 1,
+      error: e && e.message ? e.message : String(e),
+    });
     return null;
   }
   const parsed = buildTunesFromContent(filePath, content);
   setCachedParse(filePath, stat, parsed);
+  setPersistedEntry(filePath, stat, parsed);
   return {
     root: path.dirname(filePath),
     files: [
@@ -977,21 +1396,32 @@ async function parseSingleFile(filePath, sender, options = {}) {
         path: filePath,
         basename: path.basename(filePath),
         updatedAtMs: stat && Number.isFinite(stat.mtimeMs) ? stat.mtimeMs : 0,
+        mtimeMs: stat && Number.isFinite(stat.mtimeMs) ? stat.mtimeMs : 0,
+        size: stat && Number.isFinite(stat.size) ? stat.size : 0,
         headerText: parsed.headerText || "",
         headerEndOffset: parsed.headerEndOffset || 0,
+        xIssues: parsed.xIssues || undefined,
         tunes: parsed.tunes,
       },
     ],
   };
 }
 
-async function scanLibrary(rootDir, sender) {
+async function scanLibraryDiscover(rootDir, sender, options = {}) {
+  ensurePersistedLibraryIndexLoaded();
   const absRoot = path.resolve(rootDir);
+  const token = getScanTokenFromOptions(options);
+  setActiveScanToken(sender, token);
   const stack = [absRoot];
   const abcFiles = [];
   let scannedDirs = 0;
+  const progress = createProgressEmitter(sender);
 
   while (stack.length) {
+    if (!isScanTokenActive(sender, token)) {
+      progress.finish({ phase: "done", cancelled: true, scannedDirs, filesFound: abcFiles.length });
+      return { root: absRoot, files: [], cancelled: true };
+    }
     const dir = stack.pop();
     if (!dir) continue;
     scannedDirs += 1;
@@ -1009,19 +1439,131 @@ async function scanLibrary(rootDir, sender) {
         abcFiles.push(fullPath);
       }
     }
-    if (sender) {
-      sender.send("library:progress", {
-        phase: "discover",
-        scannedDirs,
-        filesFound: abcFiles.length,
-      });
-    }
+    progress.send({
+      phase: "discover",
+      scannedDirs,
+      filesFound: abcFiles.length,
+    });
   }
 
   abcFiles.sort((a, b) => a.localeCompare(b));
   const files = [];
+  const seenFiles = new Set();
+  for (let i = 0; i < abcFiles.length; i += 1) {
+    const filePath = abcFiles[i];
+    if (!isScanTokenActive(sender, token)) {
+      progress.finish({ phase: "done", cancelled: true, scannedDirs, filesFound: files.length });
+      return { root: absRoot, files, cancelled: true };
+    }
+    try {
+      const stat = await fs.promises.stat(filePath);
+      const cached = getPersistedDiscoverEntry(filePath, stat);
+      let tuneCount = cached && Number.isFinite(cached.tuneCount) ? cached.tuneCount : null;
+      let xIssues = cached && cached.xIssues ? cached.xIssues : undefined;
+      const allowMetaRefresh = options && options.computeMeta === true;
+      if (tuneCount == null && allowMetaRefresh) {
+        // New or changed file: compute minimal metadata without full parse.
+        const content = await fs.promises.readFile(filePath, "utf8");
+        const discovered = computeDiscoverFromContent(content);
+        tuneCount = discovered.tuneCount;
+        xIssues = discovered.xIssues || undefined;
+        setPersistedDiscoverEntry(filePath, stat, { tuneCount, xIssues });
+      }
+      files.push({
+        path: filePath,
+        basename: path.basename(filePath),
+        updatedAtMs: stat && Number.isFinite(stat.mtimeMs) ? stat.mtimeMs : 0,
+        mtimeMs: stat && Number.isFinite(stat.mtimeMs) ? stat.mtimeMs : 0,
+        size: stat && Number.isFinite(stat.size) ? stat.size : 0,
+        tuneCount: Number.isFinite(tuneCount) ? tuneCount : undefined,
+        xIssues,
+      });
+      seenFiles.add(path.resolve(filePath));
+      if (i % 25 === 0) {
+        progress.send({
+          phase: "discover",
+          scannedDirs,
+          filesFound: files.length,
+        });
+      }
+    } catch {
+      // skip unreadable files
+    }
+  }
+
+  // Best-effort prune: remove deleted .abc entries under this root from the persisted index.
+  try {
+    if (isPersistedLibraryIndexEnabled() && persistedLibraryIndex && persistedLibraryIndex.files && seenFiles.size) {
+      const prefix = absRoot.endsWith(path.sep) ? absRoot : `${absRoot}${path.sep}`;
+      let removed = 0;
+      for (const key of Object.keys(persistedLibraryIndex.files)) {
+        if (!key || typeof key !== "string") continue;
+        if (!key.startsWith(prefix)) continue;
+        if (seenFiles.has(key)) continue;
+        delete persistedLibraryIndex.files[key];
+        removed += 1;
+      }
+      if (removed) {
+        persistedIndexDirty = true;
+        schedulePersistedLibraryIndexSave();
+      }
+    }
+  } catch {}
+
+  progress.finish({ phase: "done", scannedDirs, filesFound: files.length });
+  return { root: absRoot, files };
+}
+
+async function scanLibrary(rootDir, sender, options = {}) {
+  ensurePersistedLibraryIndexLoaded();
+  const absRoot = path.resolve(rootDir);
+  const token = getScanTokenFromOptions(options);
+  setActiveScanToken(sender, token);
+  const stack = [absRoot];
+  const abcFiles = [];
+  let scannedDirs = 0;
+  const progress = createProgressEmitter(sender);
+
+  while (stack.length) {
+    if (!isScanTokenActive(sender, token)) {
+      progress.finish({ phase: "done", cancelled: true, scannedDirs, filesFound: abcFiles.length });
+      return { root: absRoot, files: [], cancelled: true };
+    }
+    const dir = stack.pop();
+    if (!dir) continue;
+    scannedDirs += 1;
+    let entries = [];
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+      } else if (entry.isFile() && entry.name.toLowerCase().endsWith(".abc")) {
+        abcFiles.push(fullPath);
+      }
+    }
+    progress.send({
+      phase: "discover",
+      scannedDirs,
+      filesFound: abcFiles.length,
+    });
+  }
+
+  abcFiles.sort((a, b) => a.localeCompare(b));
+  const files = [];
+  const seenFiles = new Set();
+  let cachedCount = 0;
+  let parsedCount = 0;
 
   for (let i = 0; i < abcFiles.length; i += 1) {
+    if (!isScanTokenActive(sender, token)) {
+      progress.finish({ phase: "done", cancelled: true, scannedDirs, filesFound: files.length });
+      return { root: absRoot, files, cancelled: true };
+    }
     const filePath = abcFiles[i];
     let stat = null;
     let parsed = null;
@@ -1030,42 +1572,80 @@ async function scanLibrary(rootDir, sender) {
       const cached = getCachedParse(filePath, stat);
       if (cached) {
         parsed = cached;
+        cachedCount += 1;
       } else {
+        const persisted = getPersistedEntry(filePath, stat);
+        if (persisted) {
+          parsed = persisted;
+          setCachedParse(filePath, stat, parsed);
+          cachedCount += 1;
+        } else {
         const content = await fs.promises.readFile(filePath, "utf8");
         parsed = buildTunesFromContent(filePath, content);
         setCachedParse(filePath, stat, parsed);
+        setPersistedEntry(filePath, stat, parsed);
+        parsedCount += 1;
+        }
       }
     } catch (e) {
-      if (sender) {
-        sender.send("library:progress", {
-          phase: "parse",
-          current: filePath,
-          index: i + 1,
-          total: abcFiles.length,
-          error: e && e.message ? e.message : String(e),
-        });
-      }
+      progress.send({
+        phase: "parse",
+        current: filePath,
+        index: i + 1,
+        total: abcFiles.length,
+        cachedCount,
+        parsedCount,
+        error: e && e.message ? e.message : String(e),
+      });
       continue;
     }
     files.push({
       path: filePath,
       basename: path.basename(filePath),
       updatedAtMs: stat && Number.isFinite(stat.mtimeMs) ? stat.mtimeMs : 0,
+      mtimeMs: stat && Number.isFinite(stat.mtimeMs) ? stat.mtimeMs : 0,
+      size: stat && Number.isFinite(stat.size) ? stat.size : 0,
       headerText: parsed.headerText || "",
       headerEndOffset: parsed.headerEndOffset || 0,
+      xIssues: parsed.xIssues || undefined,
       tunes: parsed.tunes,
     });
-    if (sender) {
-      sender.send("library:progress", {
-        phase: "parse",
-        current: filePath,
-        index: i + 1,
-        total: abcFiles.length,
-        tuneCount: parsed.tunes.length,
-      });
+    seenFiles.add(path.resolve(filePath));
+    progress.send({
+      phase: "parse",
+      current: filePath,
+      index: i + 1,
+      total: abcFiles.length,
+      tuneCount: parsed.tunes.length,
+      cachedCount,
+      parsedCount,
+    });
+
+    if (i % 10 === 0) {
+      await new Promise((r) => setImmediate(r));
     }
   }
 
+  // Best-effort prune: remove deleted .abc entries under this root from the persisted index.
+  try {
+    if (isPersistedLibraryIndexEnabled() && persistedLibraryIndex && persistedLibraryIndex.files && seenFiles.size) {
+      const prefix = absRoot.endsWith(path.sep) ? absRoot : `${absRoot}${path.sep}`;
+      let removed = 0;
+      for (const key of Object.keys(persistedLibraryIndex.files)) {
+        if (!key || typeof key !== "string") continue;
+        if (!key.startsWith(prefix)) continue;
+        if (seenFiles.has(key)) continue;
+        delete persistedLibraryIndex.files[key];
+        removed += 1;
+      }
+      if (removed) {
+        persistedIndexDirty = true;
+        schedulePersistedLibraryIndexSave();
+      }
+    }
+  } catch {}
+
+  progress.finish({ phase: "done", scannedDirs, filesFound: abcFiles.length });
   return {
     root: absRoot,
     files,
@@ -1172,6 +1752,8 @@ registerIpcHandlers({
   showSaveError,
   showOpenError,
   scanLibrary,
+  scanLibraryDiscover,
+  cancelLibraryScan,
   parseSingleFile,
   withMainPrintMode,
   printWithDialog,

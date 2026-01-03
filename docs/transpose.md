@@ -1,28 +1,29 @@
-# Native Transposition
+# Transposition (Status + Design Notes)
 
-This project includes a native ABC transposition engine to avoid relying on `abc2abc` for semitone shifts.
+## Current status in the app
+Semitone transposition is implemented as a native JS transform:
+- `transformTranspose` in `src/renderer/transpose.mjs`
 
-## Pitch model
-- Each note is parsed into an absolute pitch in 12‑TET: `absolute_pitch = octave * 12 + pc`.
-- Pitch class `pc` is `0..11` with `C=0` and `B=11`.
-- Octave is derived from ABC case + comma/apostrophe marks.
-- Transposition is a direct shift: `absolute_pitch += Δ`.
+`abc2abc` (abcMIDI) remains available for other transforms and as a fallback path:
+- `src/main/conversion/backends/abc2abc.js`
 
-## Parsing rules
-- Key signatures are applied when `K:` is present (major/minor only in phase 1).
-- Measure accidentals override key signatures and apply to the same letter + octave for the rest of the bar.
-- Accidentals reset at barlines (`|`).
-- Comments, lyrics, and text blocks are preserved verbatim.
+Notes:
+- In 12-EDO (default) and 24-EDO (`%%MIDI temperamentequal 24`), microtonal accidentals are supported in quarter-tone steps (`^/`, `_/`) and numeric half-step form (`^1/2`, `_1/2`).
+- In 53-EDO (`%%MIDI temperamentequal 53`), numeric accidentals (`^n` / `_n`) are treated as 12/53-semitone units (e.g. `_3` = `_-36/53`).
+- The EDO mode is detected from the current editor text plus the enabled global header (if any).
 
-## Output modes
-- **Chromatic mode** (`K:none` or forced):
-  - Uses a consistent flat or sharp spelling for all pitch classes.
-  - Emits `=` only when needed to cancel a bar accidental.
-- **Tonal mode** (default when `K:` is present):
-  - Transposes the key and respells notes to minimize explicit accidentals.
-  - Chooses a key spelling with minimal accidentals, preferring the original sharp/flat style.
+## Native transposition work (experimental)
+There is active/experimental work toward a broader native transposition engine and a test corpus:
+- Harness runner: `devtools/transpose_harness/run_tests.js` (`npm run test:transpose`)
+- Core logic under test: `devtools/transpose_harness/transpose.js`
+- 53-EDO “truth scale” utilities/tests: `tests/truth_scale_53/`
 
-## Microtones (24‑TET)
-- Quarter‑tone accidentals are supported: `^/` and `_/`.
-- Internally, pitches are represented in quarter‑steps (24‑TET). Semitone transposition adds `Δ * 2` steps.
-- Key signatures remain semitone‑based; quarter‑tones always emit explicit accidentals.
+This work is intentionally isolated until it has strong acceptance criteria and sufficient coverage.
+
+## Working model (53-EDO + “European semitone” steps)
+The current harness codifies a specific model used in the test corpus:
+- Treat Western 12‑TET semitone steps as a sequence of ±4/±5 steps in 53‑EDO.
+- Preserve micro-accidental intent as much as possible by deterministic respelling rules.
+- Support numeric micro accidentals in tokens (e.g. `^3F`, `_5B`) and propagate them consistently when transposing.
+
+If/when this becomes a production feature, the acceptance criteria should be expressed as fixtures + golden outputs in the harness, and the app integration should remain tolerant-read/strict-write (refuse on ambiguous cases rather than corrupting notation).

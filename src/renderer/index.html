@@ -50,12 +50,17 @@
   </header>
 
   <main>
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="sidebar-controls">
-          <div class="sidebar-control">
-            <div class="sidebar-label">Group by:</div>
-            <select id="groupBy">
+	    <aside class="sidebar">
+	      <div class="sidebar-header">
+	        <div class="sidebar-controls">
+	          <div class="library-root-row">
+	            <button id="btnLibraryRefresh" class="sidebar-action" type="button" title="Refresh library">Refresh</button>
+	            <div class="library-root" id="libraryRoot" title="">Library: (none)</div>
+	          </div>
+	          <div class="scan-status" id="scanStatus">Idle</div>
+	          <div class="sidebar-control">
+	            <div class="sidebar-label">Group by:</div>
+	            <select id="groupBy">
               <option value="file">File</option>
               <option value="x">X (Reference)</option>
               <option value="composer">C (Composer)</option>
@@ -81,13 +86,10 @@
             </select>
           </div>
 	          <div class="sidebar-control sidebar-search">
-	            <div class="sidebar-label">Search:</div>
+	            <div class="sidebar-label">Filter:</div>
 	            <input id="librarySearch" type="text" placeholder="Title, composer, key…" />
+	            <button id="btnLibraryClearFilter" class="sidebar-action" type="button" title="Clear filter">Clear</button>
 	          </div>
-	        </div>
-	        <div class="sidebar-actions">
-	          <button id="btnLibraryMenu" class="sidebar-action sidebar-menu" type="button" title="Library actions">⋯</button>
-	          <div class="scan-status" id="scanStatus">Idle</div>
 	        </div>
 	      </div>
 	      <div class="sidebar-body">
@@ -199,14 +201,30 @@
               </label>
             </div>
             <div class="settings-group">
-              <div class="settings-title">Dialogs</div>
+              <div class="settings-title">Transforms</div>
               <label class="settings-row">
-                <span>Use portal file dialogs (Linux)</span>
-                <input id="settingsUsePortalFileDialogs" type="checkbox" />
+                <span>Use native transpose</span>
+                <input id="settingsUseNativeTranspose" type="checkbox" />
               </label>
-              <div class="settings-help">Improves Open/Save dialog placement on some Linux desktops.</div>
+              <div class="settings-help">When enabled, semitone transposition runs via the built-in JS engine; abc2abc is used only for other transforms.</div>
             </div>
-          </div>
+	            <div class="settings-group">
+	              <div class="settings-title">Dialogs</div>
+	              <label class="settings-row">
+	                <span>Use portal file dialogs (Linux)</span>
+	                <input id="settingsUsePortalFileDialogs" type="checkbox" />
+	              </label>
+	              <div class="settings-help">Improves Open/Save dialog placement on some Linux desktops.</div>
+	            </div>
+	            <div class="settings-group">
+	              <div class="settings-title">Library</div>
+	              <label class="settings-row">
+	                <span>Auto-renumber X after move</span>
+	                <input id="settingsLibraryAutoRenumberAfterMove" type="checkbox" />
+	              </label>
+	              <div class="settings-help">When moving a tune between files, renumbers X headers in both files to be sequential (starting at the first X).</div>
+	            </div>
+	          </div>
           <div class="settings-panel" data-settings-panel="xml" role="tabpanel">
             <div class="settings-group">
               <div class="settings-title">XML switches</div>
@@ -312,6 +330,23 @@
       </div>
       <div class="modal-footer">
         <button id="aboutCopy" type="button">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="xIssuesModal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-label="X Issues">
+      <div class="modal-header">
+        <div class="modal-title">X issues</div>
+        <button class="modal-close" id="xIssuesClose" type="button">Close</button>
+      </div>
+      <div class="modal-body">
+        <pre id="xIssuesInfo" class="about-info"></pre>
+      </div>
+      <div class="modal-footer">
+        <button id="xIssuesAutoFix" type="button">Auto-fix: Renumber X…</button>
+        <button id="xIssuesJump" type="button">Jump</button>
+        <button id="xIssuesCopy" type="button">Copy</button>
       </div>
     </div>
   </div>

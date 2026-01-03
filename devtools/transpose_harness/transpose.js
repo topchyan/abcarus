@@ -743,6 +743,46 @@ function transposeMusicLine53Western(line, deltaSteps, ctx) {
 
   while (i < src.length) {
     const ch = src[i];
+    if (ch === "\"") {
+      const close = src.indexOf("\"", i + 1);
+      if (close !== -1) {
+        out.push(src.slice(i, close + 1));
+        i = close + 1;
+        continue;
+      }
+      out.push(ch);
+      i += 1;
+      continue;
+    }
+    if (ch === "!") {
+      const close = src.indexOf("!", i + 1);
+      if (close !== -1) {
+        out.push(src.slice(i, close + 1));
+        i = close + 1;
+        continue;
+      }
+      out.push(ch);
+      i += 1;
+      continue;
+    }
+    if (ch === "[" && /[A-Za-z]:/.test(src.slice(i + 1, i + 3))) {
+      const close = src.indexOf("]", i);
+      if (close !== -1) {
+        const tag = src[i + 1].toUpperCase();
+        if (tag === "K") {
+          const inner = src.slice(i + 3, close);
+          const info = transposeKBody53BMode(inner, deltaSteps);
+          ctx.deltaCommas = info.deltaCommas;
+          ctx.readKeyMicroMap = info.readKeyMicroMap;
+          ctx.writeKeyMicroMap = info.writeKeyMicroMap;
+          out.push("[K:" + info.text + "]");
+        } else {
+          out.push(src.slice(i, close + 1));
+        }
+        i = close + 1;
+        continue;
+      }
+    }
     if (ch === "%") {
       out.push(src.slice(i));
       break;
@@ -753,19 +793,6 @@ function transposeMusicLine53Western(line, deltaSteps, ctx) {
       out.push(ch);
       i += 1;
       continue;
-    }
-    if (src.startsWith("[K:", i)) {
-      const close = src.indexOf("]", i + 3);
-      if (close !== -1) {
-        const inner = src.slice(i + 3, close);
-        const info = transposeKBody53BMode(inner, deltaSteps);
-        ctx.deltaCommas = info.deltaCommas;
-        ctx.readKeyMicroMap = info.readKeyMicroMap;
-        ctx.writeKeyMicroMap = info.writeKeyMicroMap;
-        out.push("[K:" + info.text + "]");
-        i = close + 1;
-        continue;
-      }
     }
     const note = parseNoteTokenAt(src, i, 53);
     if (note) {
