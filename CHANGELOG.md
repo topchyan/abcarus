@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-01-03
+### Added
+- Native transposition backend (with `abc2abc` as optional fallback).
+- Transposition of chord symbols (gchords) in quotes (12-TET).
+- Native 53-EDO transposition support via `%%MIDI temperamentequal 53`.
+- Project requirements/methodology docs and ADRs.
+
+### Changed
+- Settings now include a toggle for native transposition.
+
+### Fixed
+- 53-EDO repeated transposition corruption around inline fields and `!decorations!`.
+
 ## [0.13.1] - 2026-01-02
 ### Changed
 - No notable changes.
