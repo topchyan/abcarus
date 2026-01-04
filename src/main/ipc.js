@@ -3,6 +3,7 @@ const {
   convertAbcToMusicXml,
   checkConversionTools,
 } = require("./conversion");
+const { getSettingsSchema } = require("./settings_schema");
 
 const os = require("os");
 const { execFile } = require("child_process");
@@ -438,6 +439,13 @@ function registerIpcHandlers(ctx) {
   });
   ipcMain.handle("settings:get", async () => {
     return getSettings();
+  });
+  ipcMain.handle("settings:schema", async () => {
+    try {
+      return { ok: true, schema: getSettingsSchema() };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
   });
   ipcMain.handle("settings:paths", async () => {
     if (ctx && typeof ctx.getSettingsPaths === "function") return ctx.getSettingsPaths();

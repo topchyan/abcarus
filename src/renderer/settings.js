@@ -10,76 +10,77 @@ import {
   clampVelocity,
   DEFAULT_DRUM_VELOCITY,
 } from "./drums.js";
-
-const DEFAULT_SETTINGS = {
-  renderZoom: 1,
-  editorZoom: 1,
-  editorFontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-  editorFontSize: 13,
-  editorNotesBold: true,
-  editorLyricsBold: true,
-  abc2xmlArgs: "",
-  xml2abcArgs: "",
-  globalHeaderText: "",
-  globalHeaderEnabled: true,
-  useNativeTranspose: true,
-  soundfontName: "TimGM6mb.sf2",
-  soundfontPaths: [],
-  followPlayback: true,
-  drumVelocityMap: buildDefaultDrumVelocityMap(),
-  disclaimerSeen: false,
-  usePortalFileDialogs: true,
-  libraryAutoRenumberAfterMove: false,
-};
+import { createSettingsStore } from "./settings_store.js";
 
 const ZOOM_STEP = 0.1;
 
+const FALLBACK_SCHEMA = [
+  { key: "renderZoom", type: "number", default: 1, section: "General", label: "Score zoom (%)", ui: { input: "percent", min: 50, max: 800, step: 5 } },
+  { key: "editorZoom", type: "number", default: 1, section: "General", label: "Editor zoom (%)", ui: { input: "percent", min: 50, max: 800, step: 5 } },
+  { key: "editorFontFamily", type: "string", default: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", section: "Editor", label: "Font family", ui: { input: "text" } },
+  { key: "editorFontSize", type: "number", default: 13, section: "Editor", label: "Font size", ui: { input: "number", min: 8, max: 32, step: 1 } },
+  { key: "editorNotesBold", type: "boolean", default: true, section: "Editor", label: "Bold notes", ui: { input: "checkbox" } },
+  { key: "editorLyricsBold", type: "boolean", default: true, section: "Editor", label: "Bold inline lyrics", ui: { input: "checkbox" } },
+  { key: "useNativeTranspose", type: "boolean", default: true, section: "Transforms", label: "Use native transpose", ui: { input: "checkbox" } },
+  { key: "abc2xmlArgs", type: "string", default: "", section: "Import/Export", label: "abc2xml flags", ui: { input: "text", placeholder: "-x -y=value" }, advanced: true },
+  { key: "xml2abcArgs", type: "string", default: "", section: "Import/Export", label: "xml2abc flags", ui: { input: "text", placeholder: "-x -y=value" }, advanced: true },
+  { key: "globalHeaderEnabled", type: "boolean", default: true, section: "Header", label: "Enable global header", ui: { input: "checkbox" } },
+  { key: "globalHeaderText", type: "string", default: "", section: "Header", label: "Global header", ui: { input: "code" } },
+  { key: "usePortalFileDialogs", type: "boolean", default: true, section: "Dialogs", label: "Use portal file dialogs (Linux)", ui: { input: "checkbox" }, advanced: true },
+  { key: "libraryAutoRenumberAfterMove", type: "boolean", default: false, section: "Library", label: "Auto-renumber X after move", ui: { input: "checkbox" } },
+  { key: "drumVelocityMap", type: "object", default: {}, section: "Playback", label: "Drum mixer", ui: { input: "drumVelocityMap" }, advanced: true },
+];
+
+function buildDefaults(schema) {
+  const out = {};
+  for (const entry of schema) {
+    if (!entry || !entry.key) continue;
+    out[entry.key] = entry.default;
+  }
+  // Keep renderer-side defaults for computed maps.
+  if (out.drumVelocityMap && typeof out.drumVelocityMap === "object") {
+    // leave as-is (main may provide real values); normalization happens on apply.
+  }
+  return out;
+}
+
+function groupSchemaForModal(schema) {
+  const uiEntries = (schema || []).filter((e) => e && e.ui && e.ui.input && !e.legacy);
+  const bySection = new Map();
+  for (const entry of uiEntries) {
+    const section = String(entry.section || "Other");
+    if (!bySection.has(section)) bySection.set(section, []);
+    bySection.get(section).push(entry);
+  }
+  for (const entries of bySection.values()) {
+    entries.sort((a, b) => String(a.label || a.key).localeCompare(String(b.label || b.key)));
+  }
+  return bySection;
+}
+
 export function initSettings(api) {
+  const store = createSettingsStore(api);
+
   const $settingsModal = document.getElementById("settingsModal");
   const $settingsClose = document.getElementById("settingsClose");
   const $settingsReset = document.getElementById("settingsReset");
-  const $settingsRenderZoom = document.getElementById("settingsRenderZoom");
-  const $settingsEditorZoom = document.getElementById("settingsEditorZoom");
-  const $settingsFontFamily = document.getElementById("settingsFontFamily");
-  const $settingsFontSize = document.getElementById("settingsFontSize");
-  const $settingsNotesBold = document.getElementById("settingsNotesBold");
-  const $settingsLyricsBold = document.getElementById("settingsLyricsBold");
-  const $settingsAbc2xmlArgs = document.getElementById("settingsAbc2xmlArgs");
-  const $settingsXml2abcArgs = document.getElementById("settingsXml2abcArgs");
-  const $settingsGlobalHeader = document.getElementById("settingsGlobalHeader");
-  const $settingsGlobalHeaderEnabled = document.getElementById("settingsGlobalHeaderEnabled");
-  const $settingsUseNativeTranspose = document.getElementById("settingsUseNativeTranspose");
-  const $settingsSoundfont = document.getElementById("settingsSoundfont");
-  const $settingsUsePortalFileDialogs = document.getElementById("settingsUsePortalFileDialogs");
-  const $settingsLibraryAutoRenumberAfterMove = document.getElementById("settingsLibraryAutoRenumberAfterMove");
-  const $settingsDrumMixer = document.getElementById("settingsDrumMixer");
-  const $settingsTabs = Array.from(document.querySelectorAll("[data-settings-tab]"));
-  const $settingsPanels = Array.from(document.querySelectorAll("[data-settings-panel]"));
+  const $settingsTabsHost = document.getElementById("settingsTabs");
+  const $settingsPanelsHost = document.getElementById("settingsPanels");
   const $renderPane = document.querySelector(".render-pane");
   const $editorPane = document.querySelector(".editor-pane");
 
-  let currentSettings = { ...DEFAULT_SETTINGS };
+  let schema = FALLBACK_SCHEMA;
+  let defaultSettings = buildDefaults(schema);
+  let currentSettings = { ...defaultSettings };
   let activePane = "render";
+
+  const controlByKey = new Map(); // key -> { entry, el, kind }
   let globalHeaderView = null;
   let suppressGlobalUpdate = false;
   let globalUpdateTimer = null;
-  let soundfontOptionsLoaded = false;
-  let soundfontOptionsLoading = null;
   let drumVelocityMap = buildDefaultDrumVelocityMap();
   const drumRowByPitch = new Map();
   let drumUpdateTimer = null;
-
-  function setGlobalHeaderValue(text) {
-    if (!globalHeaderView) return;
-    const next = String(text || "");
-    const doc = globalHeaderView.state.doc.toString();
-    if (doc === next) return;
-    suppressGlobalUpdate = true;
-    globalHeaderView.dispatch({
-      changes: { from: 0, to: globalHeaderView.state.doc.length, insert: next },
-    });
-    suppressGlobalUpdate = false;
-  }
 
   function normalizeDrumVelocityMap(map) {
     const base = buildDefaultDrumVelocityMap();
@@ -93,8 +94,14 @@ export function initSettings(api) {
     return base;
   }
 
+  async function updateSettings(patch) {
+    const next = await store.update(patch);
+    if (next) applySettings(next);
+  }
+
   function applySettings(settings) {
-    currentSettings = { ...DEFAULT_SETTINGS, ...settings };
+    currentSettings = { ...defaultSettings, ...(settings || {}) };
+
     const root = document.documentElement.style;
     root.setProperty("--editor-font-family", currentSettings.editorFontFamily);
     root.setProperty("--editor-font-size", `${currentSettings.editorFontSize}px`);
@@ -103,103 +110,66 @@ export function initSettings(api) {
     root.setProperty("--render-zoom", String(currentSettings.renderZoom));
     root.setProperty("--editor-zoom", String(currentSettings.editorZoom));
 
-    if ($settingsRenderZoom) {
-      $settingsRenderZoom.value = String(Math.round(currentSettings.renderZoom * 100));
+    for (const [key, meta] of controlByKey.entries()) {
+      const entry = meta.entry;
+      if (!entry || !entry.ui) continue;
+      const kind = entry.ui.input;
+      const value = currentSettings[key];
+      if (kind === "checkbox" && meta.el) {
+        meta.el.checked = Boolean(value);
+      } else if (kind === "percent" && meta.el) {
+        meta.el.value = String(Math.round((Number(value) || 1) * 100));
+      } else if ((kind === "number" || kind === "text") && meta.el) {
+        meta.el.value = String(value == null ? "" : value);
+      }
     }
-    if ($settingsEditorZoom) {
-      $settingsEditorZoom.value = String(Math.round(currentSettings.editorZoom * 100));
+
+    if (globalHeaderView) {
+      const nextText = String(currentSettings.globalHeaderText || "");
+      const doc = globalHeaderView.state.doc.toString();
+      if (doc !== nextText) {
+        suppressGlobalUpdate = true;
+        globalHeaderView.dispatch({
+          changes: { from: 0, to: globalHeaderView.state.doc.length, insert: nextText },
+        });
+        suppressGlobalUpdate = false;
+      }
     }
-    if ($settingsFontFamily) $settingsFontFamily.value = currentSettings.editorFontFamily;
-    if ($settingsFontSize) $settingsFontSize.value = String(currentSettings.editorFontSize);
-    if ($settingsNotesBold) $settingsNotesBold.checked = !!currentSettings.editorNotesBold;
-    if ($settingsLyricsBold) $settingsLyricsBold.checked = !!currentSettings.editorLyricsBold;
-    if ($settingsAbc2xmlArgs) $settingsAbc2xmlArgs.value = currentSettings.abc2xmlArgs || "";
-    if ($settingsXml2abcArgs) $settingsXml2abcArgs.value = currentSettings.xml2abcArgs || "";
-    if ($settingsGlobalHeaderEnabled) $settingsGlobalHeaderEnabled.checked = currentSettings.globalHeaderEnabled !== false;
-    if ($settingsUseNativeTranspose) $settingsUseNativeTranspose.checked = currentSettings.useNativeTranspose !== false;
-    if ($settingsUsePortalFileDialogs) $settingsUsePortalFileDialogs.checked = currentSettings.usePortalFileDialogs !== false;
-    if ($settingsLibraryAutoRenumberAfterMove) {
-      $settingsLibraryAutoRenumberAfterMove.checked = currentSettings.libraryAutoRenumberAfterMove === true;
-    }
-    setGlobalHeaderValue(currentSettings.globalHeaderText || "");
+
     drumVelocityMap = normalizeDrumVelocityMap(currentSettings.drumVelocityMap);
     renderDrumMixer();
-    if ($settingsSoundfont) {
-      if (!soundfontOptionsLoaded) {
-        loadSoundfontOptions();
-      }
-      $settingsSoundfont.value = currentSettings.soundfontName || DEFAULT_SETTINGS.soundfontName;
+  }
+
+  function openSettings() {
+    if (!$settingsModal) return;
+    $settingsModal.classList.add("open");
+    $settingsModal.setAttribute("aria-hidden", "false");
+  }
+
+  function closeSettings() {
+    if (!$settingsModal) return;
+    $settingsModal.classList.remove("open");
+    $settingsModal.setAttribute("aria-hidden", "true");
+  }
+
+  function zoomBy(delta) {
+    if (activePane === "editor") {
+      const nextZoom = (currentSettings.editorZoom || 1) + delta;
+      updateSettings({ editorZoom: nextZoom }).catch(() => {});
+    } else {
+      const nextZoom = (currentSettings.renderZoom || 1) + delta;
+      updateSettings({ renderZoom: nextZoom }).catch(() => {});
     }
   }
 
-  async function loadSoundfontOptions(force) {
-    if (!$settingsSoundfont) return;
-    if (soundfontOptionsLoading && !force) return soundfontOptionsLoading;
-    if (force) {
-      soundfontOptionsLoading = null;
-      soundfontOptionsLoaded = false;
-    }
-    soundfontOptionsLoading = (async () => {
-      let fonts = [];
-      if (api && typeof api.listSoundfonts === "function") {
-        try {
-          const list = await api.listSoundfonts();
-          if (Array.isArray(list)) fonts = list;
-        } catch {}
-      }
-      const fallback = DEFAULT_SETTINGS.soundfontName;
-      const current = currentSettings.soundfontName || fallback;
-      if (current && !fonts.includes(current)) fonts.unshift(current);
-      if (!fonts.includes(fallback)) fonts.unshift(fallback);
-      const seen = new Set();
-      $settingsSoundfont.textContent = "";
-      for (const name of fonts) {
-        if (!name || seen.has(name)) continue;
-        seen.add(name);
-        const option = document.createElement("option");
-        option.value = name;
-        option.textContent = name;
-        $settingsSoundfont.appendChild(option);
-      }
-      soundfontOptionsLoaded = true;
-      $settingsSoundfont.value = current;
-    })();
-    return soundfontOptionsLoading;
-  }
-
-  async function updateSettings(patch) {
-    if (!api || typeof api.updateSettings !== "function") return;
-    const next = await api.updateSettings(patch);
-    if (next) applySettings(next);
-  }
-
-  function updateDrumVelocity(pitch, value) {
-    drumVelocityMap = { ...drumVelocityMap, [pitch]: clampVelocity(value) };
-    if (drumUpdateTimer) clearTimeout(drumUpdateTimer);
-    drumUpdateTimer = setTimeout(() => {
-      updateSettings({ drumVelocityMap });
-    }, 200);
-  }
-
-  if ($settingsUsePortalFileDialogs) {
-    $settingsUsePortalFileDialogs.addEventListener("change", () => {
-      updateSettings({ usePortalFileDialogs: $settingsUsePortalFileDialogs.checked }).catch(() => {});
-    });
-  }
-  if ($settingsUseNativeTranspose) {
-    $settingsUseNativeTranspose.addEventListener("change", () => {
-      updateSettings({ useNativeTranspose: $settingsUseNativeTranspose.checked }).catch(() => {});
-    });
-  }
-  if ($settingsLibraryAutoRenumberAfterMove) {
-    $settingsLibraryAutoRenumberAfterMove.addEventListener("change", () => {
-      updateSettings({ libraryAutoRenumberAfterMove: $settingsLibraryAutoRenumberAfterMove.checked }).catch(() => {});
-    });
+  function zoomReset() {
+    updateSettings({ renderZoom: 1, editorZoom: 1 }).catch(() => {});
   }
 
   function renderDrumMixer() {
-    if (!$settingsDrumMixer) return;
-    if (!$settingsDrumMixer.hasChildNodes()) {
+    const host = controlByKey.get("drumVelocityMap")?.host;
+    if (!host) return;
+    if (!host.hasChildNodes()) {
       const table = document.createElement("table");
       const thead = document.createElement("thead");
       thead.innerHTML = "<tr><th>Pitch</th><th>Instrument</th><th>Velocity</th><th>Preview</th></tr>";
@@ -226,7 +196,13 @@ export function initSettings(api) {
           valueSpan.textContent = slider.value;
         });
         slider.addEventListener("change", () => {
-          updateDrumVelocity(item.pitch, slider.value);
+          const pitch = item.pitch;
+          const value = clampVelocity(slider.value);
+          drumVelocityMap = { ...drumVelocityMap, [pitch]: value };
+          if (drumUpdateTimer) clearTimeout(drumUpdateTimer);
+          drumUpdateTimer = setTimeout(() => {
+            updateSettings({ drumVelocityMap }).catch(() => {});
+          }, 200);
         });
         tdVelocity.appendChild(slider);
         tdVelocity.appendChild(valueSpan);
@@ -251,7 +227,7 @@ export function initSettings(api) {
       }
       table.appendChild(thead);
       table.appendChild(tbody);
-      $settingsDrumMixer.appendChild(table);
+      host.appendChild(table);
     }
 
     for (const item of DRUM_INSTRUMENTS) {
@@ -263,182 +239,280 @@ export function initSettings(api) {
     }
   }
 
-  function openSettings() {
-    if (!$settingsModal) return;
-    $settingsModal.classList.add("open");
-    $settingsModal.setAttribute("aria-hidden", "false");
-    loadSoundfontOptions(true);
-  }
+  function createRow(entry) {
+    const row = document.createElement("label");
+    row.className = "settings-row";
+    const labelSpan = document.createElement("span");
+    labelSpan.textContent = String(entry.label || entry.key);
+    row.appendChild(labelSpan);
 
-  function closeSettings() {
-    if (!$settingsModal) return;
-    $settingsModal.classList.remove("open");
-    $settingsModal.setAttribute("aria-hidden", "true");
-  }
-
-  function zoomBy(delta) {
-    if (activePane === "editor") {
-      const nextZoom = (currentSettings.editorZoom || 1) + delta;
-      updateSettings({ editorZoom: nextZoom });
-    } else {
-      const nextZoom = (currentSettings.renderZoom || 1) + delta;
-      updateSettings({ renderZoom: nextZoom });
+    const kind = entry.ui.input;
+    let input = null;
+    if (kind === "checkbox") {
+      input = document.createElement("input");
+      input.type = "checkbox";
+      input.addEventListener("change", () => {
+        updateSettings({ [entry.key]: Boolean(input.checked) }).catch(() => {});
+      });
+      row.appendChild(input);
+      controlByKey.set(entry.key, { entry, el: input });
+      return row;
     }
+
+    if (kind === "number" || kind === "percent") {
+      input = document.createElement("input");
+      input.type = "number";
+      if (entry.ui.min != null) input.min = String(entry.ui.min);
+      if (entry.ui.max != null) input.max = String(entry.ui.max);
+      if (entry.ui.step != null) input.step = String(entry.ui.step);
+      input.addEventListener("change", () => {
+        const raw = Number(input.value);
+        if (kind === "percent") {
+          updateSettings({ [entry.key]: raw / 100 }).catch(() => {});
+        } else {
+          updateSettings({ [entry.key]: raw }).catch(() => {});
+        }
+      });
+      row.appendChild(input);
+      controlByKey.set(entry.key, { entry, el: input });
+      return row;
+    }
+
+    if (kind === "text") {
+      input = document.createElement("input");
+      input.type = "text";
+      if (entry.ui.placeholder) input.placeholder = String(entry.ui.placeholder);
+      input.addEventListener("change", () => {
+        updateSettings({ [entry.key]: input.value || "" }).catch(() => {});
+      });
+      row.appendChild(input);
+      controlByKey.set(entry.key, { entry, el: input });
+      return row;
+    }
+
+    // Other inputs are handled as custom sections.
+    return null;
   }
 
-  function zoomReset() {
-    updateSettings({ renderZoom: 1, editorZoom: 1 });
+  function createGroup(title, help) {
+    const group = document.createElement("div");
+    group.className = "settings-group";
+    const head = document.createElement("div");
+    head.className = "settings-title";
+    head.textContent = title;
+    group.appendChild(head);
+    if (help) {
+      const p = document.createElement("div");
+      p.className = "settings-help";
+      p.textContent = help;
+      group.appendChild(p);
+    }
+    return group;
+  }
+
+  function buildSettingsUi() {
+    if (!$settingsTabsHost || !$settingsPanelsHost) return;
+    $settingsTabsHost.textContent = "";
+    $settingsPanelsHost.textContent = "";
+    controlByKey.clear();
+
+    const bySection = groupSchemaForModal(schema);
+
+    const panels = [
+      {
+        key: "main",
+        label: "Main",
+        sections: ["General", "Editor", "Transforms", "Library", "Dialogs"],
+      },
+      {
+        key: "xml",
+        label: "Import/Export",
+        sections: ["Import/Export"],
+      },
+      {
+        key: "globals",
+        label: "Header",
+        sections: ["Header"],
+      },
+      {
+        key: "drums",
+        label: "Drums",
+        sections: ["Playback"],
+      },
+    ];
+
+    const setActiveTab = (name) => {
+      const tabs = Array.from($settingsTabsHost.querySelectorAll("[data-settings-tab]"));
+      const panels = Array.from($settingsPanelsHost.querySelectorAll("[data-settings-panel]"));
+      tabs.forEach((tab) => {
+        const active = tab.dataset.settingsTab === name;
+        tab.classList.toggle("active", active);
+        tab.setAttribute("aria-selected", active ? "true" : "false");
+        tab.tabIndex = active ? 0 : -1;
+      });
+      panels.forEach((panel) => {
+        panel.classList.toggle("active", panel.dataset.settingsPanel === name);
+      });
+    };
+
+    for (const panel of panels) {
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = "settings-tab";
+      tab.dataset.settingsTab = panel.key;
+      tab.setAttribute("role", "tab");
+      tab.textContent = panel.label;
+      tab.addEventListener("click", () => setActiveTab(panel.key));
+      $settingsTabsHost.appendChild(tab);
+
+      const panelEl = document.createElement("div");
+      panelEl.className = "settings-panel";
+      panelEl.dataset.settingsPanel = panel.key;
+      panelEl.setAttribute("role", "tabpanel");
+
+      for (const sectionName of panel.sections) {
+        const entries = bySection.get(sectionName) || [];
+        const normal = entries.filter((e) => !e.advanced && e.ui && e.ui.input !== "code" && e.ui.input !== "drumVelocityMap");
+        const advanced = entries.filter((e) => e.advanced && e.ui && e.ui.input !== "code" && e.ui.input !== "drumVelocityMap");
+
+        const hasCode = entries.some((e) => e.ui && e.ui.input === "code");
+        const hasDrums = entries.some((e) => e.ui && e.ui.input === "drumVelocityMap");
+
+        if (normal.length || hasCode || hasDrums) {
+          let groupHelp = null;
+          if (sectionName === "Header") groupHelp = "Prepended before file headers and tunes during render/playback.";
+          if (sectionName === "Playback") groupHelp = "Playback-related settings.";
+          const group = createGroup(sectionName, groupHelp);
+          for (const entry of normal) {
+            const row = createRow(entry);
+            if (row) group.appendChild(row);
+            if (entry.help) {
+              const help = document.createElement("div");
+              help.className = "settings-help";
+              help.textContent = String(entry.help);
+              group.appendChild(help);
+            }
+          }
+
+          if (hasCode) {
+            const enabledEntry = entries.find((e) => e.key === "globalHeaderEnabled");
+            const textEntry = entries.find((e) => e.key === "globalHeaderText");
+            if (enabledEntry) {
+              const row = createRow(enabledEntry);
+              if (row) group.appendChild(row);
+            }
+            if (textEntry) {
+              const editorHost = document.createElement("div");
+              editorHost.className = "settings-editor";
+              editorHost.setAttribute("aria-label", "Global header");
+              group.appendChild(editorHost);
+
+              const updateListener = EditorView.updateListener.of((update) => {
+                if (!update.docChanged || suppressGlobalUpdate) return;
+                if (globalUpdateTimer) clearTimeout(globalUpdateTimer);
+                globalUpdateTimer = setTimeout(() => {
+                  if (!globalHeaderView) return;
+                  const text = globalHeaderView.state.doc.toString();
+                  updateSettings({ globalHeaderText: text }).catch(() => {});
+                }, 400);
+              });
+              const state = EditorState.create({
+                doc: "",
+                extensions: [
+                  basicSetup,
+                  updateListener,
+                  EditorState.tabSize.of(2),
+                  indentUnit.of("  "),
+                ],
+              });
+              globalHeaderView = new EditorView({ state, parent: editorHost });
+            }
+          }
+
+          if (hasDrums) {
+            const drumEntry = entries.find((e) => e.key === "drumVelocityMap");
+            const help = document.createElement("div");
+            help.className = "settings-help";
+            help.textContent = drumEntry && drumEntry.help
+              ? String(drumEntry.help)
+              : "Default velocities for GM drum pitches.";
+            group.appendChild(help);
+            const mixer = document.createElement("div");
+            mixer.className = "drum-mixer";
+            group.appendChild(mixer);
+            controlByKey.set("drumVelocityMap", { entry: drumEntry, host: mixer });
+          }
+
+          panelEl.appendChild(group);
+        }
+
+        if (advanced.length) {
+          const details = document.createElement("details");
+          details.className = "settings-advanced";
+          const summary = document.createElement("summary");
+          summary.textContent = `${sectionName} (Advanced)`;
+          details.appendChild(summary);
+          const inner = document.createElement("div");
+          inner.className = "settings-group";
+          for (const entry of advanced) {
+            const row = createRow(entry);
+            if (row) inner.appendChild(row);
+            if (entry.help) {
+              const help = document.createElement("div");
+              help.className = "settings-help";
+              help.textContent = String(entry.help);
+              inner.appendChild(help);
+            }
+          }
+          details.appendChild(inner);
+          panelEl.appendChild(details);
+        }
+      }
+
+      $settingsPanelsHost.appendChild(panelEl);
+    }
+
+    setActiveTab("main");
   }
 
   if ($settingsClose) {
-    $settingsClose.addEventListener("click", () => {
-      closeSettings();
-    });
+    $settingsClose.addEventListener("click", () => closeSettings());
   }
-
   if ($settingsModal) {
     $settingsModal.addEventListener("click", (e) => {
       if (e.target === $settingsModal) closeSettings();
     });
   }
-
   if ($settingsReset) {
     $settingsReset.addEventListener("click", () => {
-      updateSettings({ ...DEFAULT_SETTINGS });
+      // Preserve previous behavior: reset only what the Settings modal owns.
+      const patch = {};
+      for (const entry of schema) {
+        if (!entry || !entry.key || !entry.ui || !entry.ui.input || entry.legacy) continue;
+        patch[entry.key] = entry.default;
+      }
+      updateSettings(patch).catch(() => {});
     });
   }
 
-  if ($settingsRenderZoom) {
-    $settingsRenderZoom.addEventListener("change", () => {
-      const value = Number($settingsRenderZoom.value || 100);
-      updateSettings({ renderZoom: value / 100 });
-    });
-  }
-
-  if ($settingsEditorZoom) {
-    $settingsEditorZoom.addEventListener("change", () => {
-      const value = Number($settingsEditorZoom.value || 100);
-      updateSettings({ editorZoom: value / 100 });
-    });
-  }
-
-  if ($settingsFontFamily) {
-    $settingsFontFamily.addEventListener("change", () => {
-      updateSettings({
-        editorFontFamily: $settingsFontFamily.value || DEFAULT_SETTINGS.editorFontFamily,
-      });
-    });
-  }
-
-  if ($settingsFontSize) {
-    $settingsFontSize.addEventListener("change", () => {
-      updateSettings({
-        editorFontSize: Number($settingsFontSize.value || DEFAULT_SETTINGS.editorFontSize),
-      });
-    });
-  }
-
-  if ($settingsNotesBold) {
-    $settingsNotesBold.addEventListener("change", () => {
-      updateSettings({ editorNotesBold: $settingsNotesBold.checked });
-    });
-  }
-
-  if ($settingsLyricsBold) {
-    $settingsLyricsBold.addEventListener("change", () => {
-      updateSettings({ editorLyricsBold: $settingsLyricsBold.checked });
-    });
-  }
-
-  if ($settingsAbc2xmlArgs) {
-    $settingsAbc2xmlArgs.addEventListener("change", () => {
-      updateSettings({ abc2xmlArgs: $settingsAbc2xmlArgs.value || "" });
-    });
-  }
-
-  if ($settingsXml2abcArgs) {
-    $settingsXml2abcArgs.addEventListener("change", () => {
-      updateSettings({ xml2abcArgs: $settingsXml2abcArgs.value || "" });
-    });
-  }
-
-  if ($settingsSoundfont) {
-    $settingsSoundfont.addEventListener("change", () => {
-      updateSettings({ soundfontName: $settingsSoundfont.value || DEFAULT_SETTINGS.soundfontName });
-    });
-  }
-
-  if ($settingsGlobalHeaderEnabled) {
-    $settingsGlobalHeaderEnabled.addEventListener("change", () => {
-      updateSettings({ globalHeaderEnabled: $settingsGlobalHeaderEnabled.checked });
-    });
-  }
-
-  if ($settingsGlobalHeader && !globalHeaderView) {
-    const updateListener = EditorView.updateListener.of((update) => {
-      if (!update.docChanged || suppressGlobalUpdate) return;
-      if (globalUpdateTimer) clearTimeout(globalUpdateTimer);
-      globalUpdateTimer = setTimeout(() => {
-        if (!globalHeaderView) return;
-        const text = globalHeaderView.state.doc.toString();
-        updateSettings({ globalHeaderText: text });
-      }, 400);
-    });
-    const state = EditorState.create({
-      doc: currentSettings.globalHeaderText || "",
-      extensions: [
-        basicSetup,
-        updateListener,
-        EditorState.tabSize.of(2),
-        indentUnit.of("  "),
-      ],
-    });
-    globalHeaderView = new EditorView({
-      state,
-      parent: $settingsGlobalHeader,
-    });
-  }
-
-  if ($settingsTabs.length && $settingsPanels.length) {
-    const setActiveTab = (name) => {
-      $settingsTabs.forEach((tab) => {
-        tab.classList.toggle("active", tab.dataset.settingsTab === name);
-      });
-      $settingsPanels.forEach((panel) => {
-        panel.classList.toggle("active", panel.dataset.settingsPanel === name);
-      });
-    };
-    $settingsTabs.forEach((tab) => {
-      tab.addEventListener("click", () => {
-        setActiveTab(tab.dataset.settingsTab);
-      });
-    });
-    setActiveTab("main");
-  }
-
-  if (api && typeof api.onSettingsChanged === "function") {
-    api.onSettingsChanged((settings) => {
-      if (settings) applySettings(settings);
-    });
-  }
+  store.subscribe((settings) => {
+    if (settings) applySettings(settings);
+  });
 
   if ($renderPane) {
-    $renderPane.addEventListener("pointerdown", () => {
-      activePane = "render";
-    });
+    $renderPane.addEventListener("pointerdown", () => { activePane = "render"; });
   }
-
   if ($editorPane) {
-    $editorPane.addEventListener("pointerdown", () => {
-      activePane = "editor";
-    });
+    $editorPane.addEventListener("pointerdown", () => { activePane = "editor"; });
   }
 
   (async () => {
-    if (api && typeof api.getSettings === "function") {
-      const settings = await api.getSettings();
-      if (settings) applySettings(settings);
-    }
+    const schemaRes = await store.getSchema().catch(() => null);
+    if (schemaRes && schemaRes.ok && Array.isArray(schemaRes.schema)) schema = schemaRes.schema;
+    defaultSettings = buildDefaults(schema);
+    buildSettingsUi();
+    const settings = await store.get().catch(() => null);
+    if (settings) applySettings(settings);
   })();
 
   return {
@@ -450,3 +524,4 @@ export function initSettings(api) {
     setActivePane: (pane) => { activePane = pane; },
   };
 }
+

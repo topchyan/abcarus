@@ -5,6 +5,7 @@ const { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell, Menu, screen } 
 const { applyMenu } = require("./menu");
 const { registerIpcHandlers } = require("./ipc");
 const { resolveThirdPartyRoot } = require("./conversion");
+const { getDefaultSettings: getDefaultSettingsFromSchema } = require("./settings_schema");
 
 let mainWindow = null;
 let isQuitting = false;
@@ -29,36 +30,8 @@ function resolveAppIconPath() {
 }
 
 function getDefaultSettings() {
-  return {
-    renderZoom: 1,
-    editorZoom: 1,
-    editorFontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-    editorFontSize: 13,
-    editorNotesBold: true,
-    editorLyricsBold: true,
-    abc2xmlArgs: "",
-    xml2abcArgs: "",
-    globalHeaderText: "",
-    globalHeaderEnabled: true,
-    // Prefer native JS transposition for semitone shifts (renderer engine).
-    useNativeTranspose: true,
-    soundfontName: "TimGM6mb.sf2",
-    soundfontPaths: [],
-    drumVelocityMap: {},
-    disclaimerSeen: false,
-    errorsEnabled: false,
-    // On Cinnamon/GTK, native file dialogs can appear off-screen; portal dialogs are more reliable.
-    usePortalFileDialogs: process.platform === "linux",
-    usePortalFileDialogsSetByUser: false,
-    // Library UI preferences (renderer-owned UI state, persisted for convenience).
-    libraryPaneVisible: false,
-    libraryPaneWidth: 280,
-    libraryGroupBy: "file",
-    librarySortBy: "update_desc",
-    libraryFilterText: "",
-    libraryUiStateByRoot: {},
-    libraryAutoRenumberAfterMove: false,
-  };
+  // Source of truth: `src/main/settings_schema.js`.
+  return getDefaultSettingsFromSchema();
 }
 
 function getStatePath() {

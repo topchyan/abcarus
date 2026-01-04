@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld("api", {
   getSoundfontInfo: async (name) => ipcRenderer.invoke("sf2:info", name),
   quitApplication: async () => ipcRenderer.invoke("app:quit"),
   getSettings: async () => ipcRenderer.invoke("settings:get"),
+  getSettingsSchema: async () => ipcRenderer.invoke("settings:schema"),
   updateSettings: async (patch) => ipcRenderer.invoke("settings:update", patch),
   getSettingsPaths: async () => ipcRenderer.invoke("settings:paths"),
   getLastRecent: async () => ipcRenderer.invoke("recent:last"),
