@@ -80,7 +80,7 @@ Import/Export uses external Python converters stored under `third_party/`:
 
 Python 3 must be available as `python3` or `python` on your PATH.
 
-Some transforms use the `abc2abc` tool from the abcMIDI package; if enabled/used in your workflow, ensure `abc2abc` is on your PATH.
+MusicXML import/export requires Python 3 (system or bundled runtime, depending on packaging).
 
 ### Platforms
 
@@ -95,7 +95,6 @@ Major third-party components used by ABCarus:
 - abc2svg — https://chiselapp.com/user/moinejf/repository/abc2svg/doc/trunk/README.md
 - abc2xml — https://wim.vree.org/svgParse/abc2xml.html
 - xml2abc — https://wim.vree.org/svgParse/xml2abc.html
-- abcMIDI (abc2abc) — http://abc.sourceforge.net/abcMIDI/
 - CodeMirror — https://codemirror.net/
 - Tabulator — https://tabulator.info/
 - Electron — https://www.electronjs.org/

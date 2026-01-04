@@ -5,7 +5,7 @@
 Range: v0.13.1..HEAD
 
 ### Added
-- Native transposition backend (with `abc2abc` as optional fallback).
+- Native transposition backend.
 - Transposition of chord symbols (gchords) in quotes (12-TET).
 - Native 53-EDO transposition support via `%%MIDI temperamentequal 53`.
 - Project requirements/methodology docs and ADRs.

@@ -41,7 +41,6 @@ function getDefaultSettings() {
     globalHeaderText: "",
     globalHeaderEnabled: true,
     // Prefer native JS transposition for semitone shifts (renderer engine).
-    // abc2abc remains available for other transforms (e.g. measures/voice/renumber) and as a legacy fallback.
     useNativeTranspose: true,
     soundfontName: "TimGM6mb.sf2",
     soundfontPaths: [],

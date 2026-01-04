@@ -1,7 +1,6 @@
 const {
   convertFileToAbc,
   convertAbcToMusicXml,
-  transformAbcWithAbc2abc,
   checkConversionTools,
 } = require("./conversion");
 
@@ -285,19 +284,6 @@ function registerIpcHandlers(ctx) {
       });
       await fs.promises.writeFile(filePath, converted.xmlText, "utf8");
       return { ok: true, warnings: converted.warnings || null };
-    } catch (e) {
-      return {
-        ok: false,
-        error: e && e.message ? e.message : String(e),
-        detail: e && e.detail ? e.detail : "",
-        code: e && e.code ? e.code : "",
-      };
-    }
-  });
-  ipcMain.handle("abc2abc:run", async (_event, abcText, options) => {
-    try {
-      const res = await transformAbcWithAbc2abc({ abcText, options: options || {} });
-      return { ok: true, abcText: res.abcText, warnings: res.warnings || null };
     } catch (e) {
       return {
         ok: false,

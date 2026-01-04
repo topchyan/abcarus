@@ -42,7 +42,7 @@ ABCarus is an Electron app with a main process and a renderer process:
 `src/preload.js` exposes a small API to the renderer:
 - Dialogs (open/save/confirm).
 - File I/O, library scanning, and printing.
-- Conversion endpoints for MusicXML and abc2abc transforms.
+- Conversion endpoints for MusicXML import/export.
 - Settings access and updates.
 
 The renderer does not access Node APIs directly; it uses these IPC methods.
@@ -72,13 +72,13 @@ The renderer does not access Node APIs directly; it uses these IPC methods.
 ### Import/export pipeline
 - Import MusicXML/MXL: main process runs `xml2abc.py`, returns ABC to the renderer.
 - Export MusicXML: main process runs `abc2xml.py` on the current editor buffer.
-- abc2abc transforms: main process executes the `abc2abc` binary and returns updated ABC text.
+- Native transforms (renderer) perform in-place ABC rewriting.
 
 ## External dependencies and upgrade points
 Bundled tools are in `third_party/`:
 - `abc2svg` for rendering and playback.
 - `abc2xml` and `xml2abc` for conversion.
-- `abcMIDI` (specifically `abc2abc`) for transformations.
+- MusicXML conversion tools (abc2xml/xml2abc) executed via Python.
 - Soundfonts (`third_party/sf2/`).
 
 Upgrading these components may require updates to:

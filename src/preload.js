@@ -31,8 +31,6 @@ contextBridge.exposeInMainWorld("api", {
   importMusicXml: async () => ipcRenderer.invoke("import:musicxml"),
   exportMusicXml: async (abcText, suggestedName) =>
     ipcRenderer.invoke("export:musicxml", abcText, suggestedName),
-  runAbc2abc: async (abcText, options) =>
-    ipcRenderer.invoke("abc2abc:run", abcText, options),
   checkConversionTools: async () => ipcRenderer.invoke("tools:check"),
   readFile: async (filePath) => ipcRenderer.invoke("file:read", filePath),
   writeFile: async (filePath, data) => ipcRenderer.invoke("file:write", filePath, data),

@@ -4189,7 +4189,6 @@ function renderToolStatus() {
   const details = [];
   if (toolHealth) {
     const entries = [
-      ["abc2abc", "abc2abc"],
       ["abc2xml", "abc2xml"],
       ["xml2abc", "xml2abc"],
       ["python", "Python"],
@@ -4198,11 +4197,6 @@ function renderToolStatus() {
       const info = toolHealth[key];
       if (!info || info.ok) continue;
       const msg = info.error || info.detail || "Unavailable";
-      if (key === "abc2abc" && (!latestSettingsSnapshot || latestSettingsSnapshot.useNativeTranspose !== false)) {
-        warnings.push("abc2abc (optional)");
-        details.push(`abc2abc: ${msg}\nNote: semitone transpose uses the native engine; abc2abc is needed for Measures-per-Line / Voice / Renumber tools.`);
-        continue;
-      }
       warnings.push(label);
       details.push(`${label}: ${msg}`);
     }
@@ -7345,6 +7339,115 @@ function stripInlineCommentsForMeasures(text) {
   return out.join("\n");
 }
 
+function splitInlineCommentForMeasures(line) {
+  const s = String(line || "");
+  let idx = -1;
+  for (let i = 0; i < s.length; i += 1) {
+    if (s[i] === "%" && s[i - 1] !== "\\") {
+      idx = i;
+      break;
+    }
+  }
+  if (idx === -1) return { head: s, comment: "" };
+  return { head: s.slice(0, idx), comment: s.slice(idx) };
+}
+
+function isAbcFieldLineForMeasures(line) {
+  const s = String(line || "");
+  return /^[\t ]*[A-Za-z]:/.test(s) || /^[\t ]*%/.test(s);
+}
+
+function reflowMeasuresInMusicLine(line, measuresPerLine) {
+  const n = Math.max(1, Math.trunc(Number(measuresPerLine) || 0));
+  if (!Number.isFinite(n) || n <= 0) return String(line || "");
+  const { head, comment } = splitInlineCommentForMeasures(line);
+  const src = String(head || "");
+  const out = [];
+  let count = 0;
+  let i = 0;
+  let inQuote = false;
+  let inDecoration = false;
+
+  while (i < src.length) {
+    const ch = src[i];
+
+    if (inQuote) {
+      out.push(ch);
+      if (ch === "\"") inQuote = false;
+      i += 1;
+      continue;
+    }
+    if (inDecoration) {
+      out.push(ch);
+      if (ch === "!") inDecoration = false;
+      i += 1;
+      continue;
+    }
+
+    if (ch === "\"") {
+      inQuote = true;
+      out.push(ch);
+      i += 1;
+      continue;
+    }
+    if (ch === "!") {
+      inDecoration = true;
+      out.push(ch);
+      i += 1;
+      continue;
+    }
+
+    // Preserve bracketed inline fields verbatim: [K:...], [V:...], [I:...], etc.
+    if (ch === "[" && /[A-Za-z]:/.test(src.slice(i + 1, i + 3))) {
+      const close = src.indexOf("]", i);
+      if (close !== -1) {
+        out.push(src.slice(i, close + 1));
+        i = close + 1;
+        continue;
+      }
+    }
+
+    if (ch === "|") {
+      let j = i;
+      while (j < src.length && src[j] === "|") j += 1;
+      out.push(src.slice(i, j));
+      i = j;
+      count += 1;
+      if (count % n === 0) {
+        // Avoid splitting inside whitespace-only remainder; trim leading spaces on the next segment.
+        out.push("\n");
+        while (i < src.length && (src[i] === " " || src[i] === "\t")) i += 1;
+      }
+      continue;
+    }
+
+    out.push(ch);
+    i += 1;
+  }
+
+  return out.join("") + (comment || "");
+}
+
+function transformMeasuresPerLine(abcText, measuresPerLine) {
+  const n = Math.max(1, Math.trunc(Number(measuresPerLine) || 0));
+  if (!Number.isFinite(n) || n <= 0) return String(abcText || "");
+
+  const lines = String(abcText || "").split(/\r\n|\n|\r/);
+  const out = [];
+  for (const line of lines) {
+    if (!line) {
+      out.push(line);
+      continue;
+    }
+    if (isAbcFieldLineForMeasures(line)) {
+      out.push(line);
+      continue;
+    }
+    out.push(reflowMeasuresInMusicLine(line, n));
+  }
+  return out.join("\n");
+}
+
 async function applyAbc2abcTransform(options) {
   const abcText = getEditorValue();
   if (!abcText.trim()) {
@@ -7367,6 +7470,19 @@ async function applyAbc2abcTransform(options) {
     setStatus("OK");
     return;
   }
+  const hasOnlyMeasuresPerLine = options.measuresPerLine
+    && options.transposeSemitones == null
+    && !options.voice
+    && options.renumberX == null
+    && !options.doubleLengths
+    && !options.halfLengths;
+  if (hasOnlyMeasuresPerLine) {
+    const transformed = transformMeasuresPerLine(abcText, options.measuresPerLine);
+    const normalized = normalizeMeasuresLineBreaks(transformed);
+    applyTransformedText(normalized);
+    setStatus("OK");
+    return;
+  }
   const hasOnlyTranspose = options.transposeSemitones != null
     && !options.measuresPerLine
     && !options.voice
@@ -7385,33 +7501,14 @@ async function applyAbc2abcTransform(options) {
         setStatus("OK");
         return;
       } catch (e) {
-        logErr(`Native transpose failed; falling back to abc2abc.\n\n${(e && e.stack) ? e.stack : String(e)}`);
+        logErr(`Native transpose failed.\n\n${(e && e.stack) ? e.stack : String(e)}`);
       }
     }
   }
-  if (!window.api || typeof window.api.runAbc2abc !== "function") return;
-  setStatus("Running abc2abc…");
-  const abcInput = options.measuresPerLine
-    ? stripInlineCommentsForMeasures(abcText)
-    : abcText;
-  const res = await window.api.runAbc2abc(abcInput, options);
-  if (!res || res.canceled) {
-    setStatus("Ready");
-    return;
-  }
-  if (!res.ok) {
-    const msg = formatConversionError(res);
-    logErr(msg);
-    setStatus("Error");
-    await showSaveError(msg);
-    return;
-  }
-  const transformed = options.measuresPerLine
-    ? normalizeMeasuresLineBreaks(res.abcText || "")
-    : (res.abcText || "");
-  applyTransformedText(transformed);
-  if (res.warnings) logErr(`abc2abc warning: ${res.warnings}`);
-  setStatus("OK");
+  // Remaining combinations previously supported by abc2abc are intentionally not implemented here.
+  // Keep strict-write behavior: refuse rather than risk corrupting data.
+  await showSaveError("This transform combination is not supported.");
+  setStatus("Error");
 }
 
 function formatConversionError(res) {
@@ -8218,17 +8315,7 @@ async function importMusicXml() {
   if (!currentDoc) setCurrentDocument(createBlankDocument());
   const fallbackTitle = deriveTitleFromPath(res.sourcePath);
   let prepared = ensureTitleInAbc(res.abcText || "", fallbackTitle);
-  if (window.api && typeof window.api.runAbc2abc === "function") {
-    const transformRes = await window.api.runAbc2abc(prepared, { measuresPerLine: 4 });
-    if (transformRes && transformRes.ok && transformRes.abcText) {
-      prepared = transformRes.abcText;
-      if (transformRes.warnings) logErr(`abc2abc warning: ${transformRes.warnings}`);
-    } else if (transformRes && !transformRes.canceled) {
-      const msg = formatConversionError(transformRes);
-      logErr(msg);
-      await showOpenError(msg);
-    }
-  }
+  prepared = normalizeMeasuresLineBreaks(transformMeasuresPerLine(prepared, 4));
   const aligned = alignBarsInText(prepared);
   const finalText = aligned || prepared;
   setActiveTuneText(finalText, null);

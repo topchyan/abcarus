@@ -4,13 +4,10 @@ const { app } = require("electron");
 const {
   ConversionError,
   resolvePythonExecutable,
-  resolveNodeExecutable,
   parseArgString,
-  resolveExecutable,
 } = require("./utils");
 const { convertAbcToMusicXml: runAbcToMusicXml } = require("./backends/abc2xml");
 const { convertMusicXmlToAbc } = require("./backends/xml2abc");
-const { transformWithAbc2abc } = require("./backends/abc2abc");
 
 const TOOL_SCRIPTS = {
   abc2xml: ["abc2xml.py"],
@@ -63,31 +60,12 @@ async function convertAbcToMusicXml({ abcText, args }) {
   return runAbcToMusicXml({ python, scriptPath, abcText, extraArgs });
 }
 
-async function transformAbcWithAbc2abc({ abcText, options }) {
-  const thirdPartyRoot = resolveThirdPartyRoot();
-  const bundledCandidates = process.platform === "win32"
-    ? [path.join(thirdPartyRoot, "abcMIDI", "bin", "abc2abc.exe")]
-    : [path.join(thirdPartyRoot, "abcMIDI", "bin", "abc2abc")];
-  const systemCandidates = process.platform === "win32" ? ["abc2abc.exe", "abc2abc"] : ["abc2abc"];
-  const candidates = [...bundledCandidates, ...systemCandidates];
-  const executable = await resolveExecutable(candidates);
-  return transformWithAbc2abc({ executable, abcText, options });
-}
-
 async function checkConversionTools() {
   const result = {
     python: { ok: false, path: null, error: "", detail: "", code: "" },
-    abc2abc: { ok: false, path: null, error: "", detail: "", code: "" },
     abc2xml: { ok: false, path: null, error: "", detail: "", code: "" },
     xml2abc: { ok: false, path: null, error: "", detail: "", code: "" },
   };
-
-  const thirdPartyRoot = resolveThirdPartyRoot();
-  const bundledAbc2abc = process.platform === "win32"
-    ? [path.join(thirdPartyRoot, "abcMIDI", "bin", "abc2abc.exe")]
-    : [path.join(thirdPartyRoot, "abcMIDI", "bin", "abc2abc")];
-  const systemAbc2abc = process.platform === "win32" ? ["abc2abc.exe", "abc2abc"] : ["abc2abc"];
-  const abc2abcCandidates = [...bundledAbc2abc, ...systemAbc2abc];
 
   try {
     const python = await resolvePythonExecutable();
@@ -97,19 +75,6 @@ async function checkConversionTools() {
       ok: false,
       path: null,
       error: e && e.message ? e.message : "Python not found.",
-      detail: e && e.detail ? e.detail : "",
-      code: e && e.code ? e.code : "",
-    };
-  }
-
-  try {
-    const exe = await resolveExecutable(abc2abcCandidates);
-    result.abc2abc = { ok: true, path: exe };
-  } catch (e) {
-    result.abc2abc = {
-      ok: false,
-      path: null,
-      error: e && e.message ? e.message : "abc2abc not found.",
       detail: e && e.detail ? e.detail : "",
       code: e && e.code ? e.code : "",
     };
@@ -147,7 +112,6 @@ async function checkConversionTools() {
 module.exports = {
   convertFileToAbc,
   convertAbcToMusicXml,
-  transformAbcWithAbc2abc,
   resolveThirdPartyRoot,
   ConversionError,
   checkConversionTools,

@@ -21,14 +21,13 @@ Scripts are defined in `package.json`.
 ## Runtime dependencies
 - Electron (dev dependency in `package.json`).
 - Python 3 on PATH for MusicXML import/export (`third_party/abc2xml/abc2xml.py`, `third_party/xml2abc/xml2abc.py`).
-- `abc2abc` binary for transforms (bundled under `third_party/abcMIDI/bin/abc2abc` or available on PATH).
 - Soundfont data in `third_party/sf2/` for audio playback.
 
 ## Key folders
 - `src/main/`: Electron main process (window, menus, IPC, file dialogs, scanning).
 - `src/preload.js`: Preload bridge exposing IPC APIs to the renderer.
 - `src/renderer/`: UI and feature logic (editor, library, rendering, playback).
-- `third_party/`: Bundled external tools and libraries (abc2svg, abcMIDI, xml2abc, abc2xml, soundfonts).
+- `third_party/`: Bundled external tools and libraries (abc2svg, xml2abc, abc2xml, soundfonts).
 - `assets/`: App icons.
 
 ## Packaging/build

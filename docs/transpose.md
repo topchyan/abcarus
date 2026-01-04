@@ -4,8 +4,7 @@
 Semitone transposition is implemented as a native JS transform:
 - `transformTranspose` in `src/renderer/transpose.mjs`
 
-`abc2abc` (abcMIDI) remains available for other transforms and as a fallback path:
-- `src/main/conversion/backends/abc2abc.js`
+Semitone transposition runs via the built-in JS engine.
 
 Notes:
 - In 12-EDO (default) and 24-EDO (`%%MIDI temperamentequal 24`), microtonal accidentals are supported in quarter-tone steps (`^/`, `_/`) and numeric half-step form (`^1/2`, `_1/2`).
