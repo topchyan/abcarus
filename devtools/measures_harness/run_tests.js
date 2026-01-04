@@ -41,8 +41,11 @@ function diffFirstMismatch(aText, bText) {
 }
 
 function assertEqualBytes(name, actual, expected) {
-  if (actual !== expected) {
-    const diff = diffFirstMismatch(actual, expected);
+  const norm = (s) => String(s || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n$/, "");
+  const a = norm(actual);
+  const b = norm(expected);
+  if (a !== b) {
+    const diff = diffFirstMismatch(a, b);
     fail(`${name}: output mismatch\n${diff}`);
   }
 }
@@ -53,7 +56,9 @@ function assertNoBlankLinesOutsideBegintext(name, text) {
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     if (/^\s*%%\s*begintext\b/i.test(line)) inTextBlock = true;
-    if (!inTextBlock && line.trim() === "") {
+    // Ignore the trailing empty line from a final newline.
+    const isTrailing = i === lines.length - 1;
+    if (!inTextBlock && !isTrailing && line.trim() === "") {
       fail(`${name}: blank line at L${i + 1} (blank lines terminate tunes in ABC)`);
     }
     if (inTextBlock && /^\s*%%\s*endtext\b/i.test(line)) inTextBlock = false;
@@ -67,6 +72,16 @@ async function runCase({ name, fixture, expected, measuresPerLine }) {
   const actual = normalizeMeasuresLineBreaks(transformMeasuresPerLine(input, measuresPerLine));
   assertNoBlankLinesOutsideBegintext(name, actual);
   assertEqualBytes(name, actual, expectedText);
+}
+
+async function runReflowRoundtripCase({ name, fixture, measuresPerLineA, measuresPerLineB }) {
+  const input = readText(path.join(FIXTURES, fixture));
+  const { transformMeasuresPerLine, normalizeMeasuresLineBreaks } = await import("../../src/renderer/measures.mjs");
+  const once = normalizeMeasuresLineBreaks(transformMeasuresPerLine(input, measuresPerLineA));
+  const twice = normalizeMeasuresLineBreaks(transformMeasuresPerLine(once, measuresPerLineB));
+  const direct = normalizeMeasuresLineBreaks(transformMeasuresPerLine(input, measuresPerLineB));
+  assertNoBlankLinesOutsideBegintext(name, twice);
+  assertEqualBytes(name, twice, direct);
 }
 
 async function main() {
@@ -99,7 +114,23 @@ async function main() {
       process.exitCode = 1;
     }
   }
+
+  try {
+    await runReflowRoundtripCase({
+      name: "TEST 3: reflow 1 bar/line -> 2 bars/line changes output",
+      fixture: "hasapia-mandilatos.abc",
+      measuresPerLineA: 1,
+      measuresPerLineB: 2,
+    });
+    console.log("% PASS TEST 3: reflow 1 bar/line -> 2 bars/line changes output");
+  } catch (e) {
+    console.log("% FAIL TEST 3: reflow 1 bar/line -> 2 bars/line changes output");
+    const msg = String(e && e.message ? e.message : e);
+    for (const line of msg.split(/\r\n|\n|\r/)) {
+      console.log(`% ${line}`);
+    }
+    process.exitCode = 1;
+  }
 }
 
 main();
-

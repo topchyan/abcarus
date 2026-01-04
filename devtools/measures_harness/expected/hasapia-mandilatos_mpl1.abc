@@ -19,22 +19,22 @@ K: Dm ^c
 "Gm" GGAB (c/4d/4c/)(B/A/) (G/^F/)G          |
 (c/4d/4c/)(B/A/) G(B/A/4B/4)"A" AA (c/d/)e     |
 "Gm" GGAB (c/4d/4c/)(B/A/) (G/^F/)G          |
-(c/4d/4c/)(B/A/) G(B/"A"A/4B/4) AE A2         :: 
- "A" cde^f (g/4a/4g/)(=f/e/) (d/c/)d         |
-e/g/f/e/ d(f/e/4f/4) ea e2                    | 
- "A" cde^f (g/4a/4g/)(=f/e/) (d/c/)d         |
-"Gm" c/e/d/c/ (c/B/)(B/A/4B/4) A/e/c/e/ A2     :: 
- "A" c/e/d/c/ c/B/B/A/ A/G/A/B/ c(B/4A/4B/)  |
-"Gm" c/e/d/c/ c/B/B/A/ A/B/c/d/ e/A/e/A/        | 
- "A" c/e/d/c/ c/B/B/A/ A/G/A/B/ c(B/4A/4B/)  |
-"Gm" c/e/d/c/ (c/B/)(B/A/4"A"B/4) A/e/c/e/ A2  :: 
+(c/4d/4c/)(B/A/) G(B/"A"A/4B/4) AE A2         ::
+"A" cde^f (g/4a/4g/)(=f/e/) (d/c/)d         |
+e/g/f/e/ d(f/e/4f/4) ea e2                    |
+"A" cde^f (g/4a/4g/)(=f/e/) (d/c/)d         |
+"Gm" c/e/d/c/ (c/B/)(B/A/4B/4) A/e/c/e/ A2     ::
+"A" c/e/d/c/ c/B/B/A/ A/G/A/B/ c(B/4A/4B/)  |
+"Gm" c/e/d/c/ c/B/B/A/ A/B/c/d/ e/A/e/A/        |
+"A" c/e/d/c/ c/B/B/A/ A/G/A/B/ c(B/4A/4B/)  |
+"Gm" c/e/d/c/ (c/B/)(B/A/4"A"B/4) A/e/c/e/ A2  ::
 [M:7/8][Q:1/4=220]
 %%MIDI drumbars 2
 %%MIDI drum d2d2dddddd2d2d  41 43 41 37 43   41 41 43 43 43
 "Gm" G2 G2 A2 B     |
 c2 B AG^FG       |
 c2 B AGBA         |
-"A" A2 A2 ^cde      | 
+"A" A2 A2 ^cde      |
 "Gm" G2 G2 A2 B     |
 c2 B AG^FG       |
 c2 B AGBA         |
@@ -42,13 +42,13 @@ c2 B AGBA         |
 "A" c2 d2 ee^f      |
 ggfe dcd         |
 egfe dfe     |
-e2 a2 e2 e         | 
-    c2 d2 ee^f      |
+e2 a2 e2 e         |
+c2 d2 ee^f      |
 ggfe dcd         |
 "Gm" cedc cBA     |
 "A" Aece A3      ::
-    cedc  cBA       |
+cedc  cBA       |
 AGAB cdB         |
 "Gm" cedc cBA     |
 1 "A"ABcd eAe      :|
-]2 "A" Aece A3 |] 
+]2 "A" Aece A3 |]

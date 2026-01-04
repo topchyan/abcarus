@@ -16,6 +16,24 @@ function isAbcFieldLine(line) {
   return /^[\t ]*[A-Za-z]:/.test(s) || /^[\t ]*%/.test(s);
 }
 
+function isInlineFieldOnlyLine(line) {
+  const s = String(line || "").trim();
+  if (!s.startsWith("[")) return false;
+  // Lines like: [M:7/8][Q:1/4=220]
+  return /^\[[A-Za-z]:/.test(s);
+}
+
+function hasInlineComment(line) {
+  const s = String(line || "");
+  for (let i = 0; i < s.length; i += 1) {
+    if (s[i] === "%" && s[i - 1] !== "\\") {
+      // If there is non-whitespace before %, it's an inline comment.
+      return Boolean(s.slice(0, i).trim());
+    }
+  }
+  return false;
+}
+
 function consumeBarlineToken(src, start) {
   const s = String(src || "");
   const i = start;
@@ -94,17 +112,30 @@ function reflowMeasuresInMusicLine(line, measuresPerLine) {
       out.push(bar.text);
       i = bar.end;
       count += 1;
-      if (count % n === 0) {
-        const beforeBreak = out[out.length - 1] || "";
-        // If we are at end-of-line, never emit a trailing newline (it creates an empty line after join()).
-        // Also, trim leading spaces on the next segment.
-        let k = i;
-        while (k < src.length && (src[k] === " " || src[k] === "\t")) k += 1;
-        if (k < src.length) {
-          // Avoid duplicating breaks on already-broken lines.
+      const shouldBreak = (count % n === 0);
+      // Canonicalize whitespace after barlines so repeated reflows converge:
+      // - if we don't break: collapse any horizontal whitespace to a single space (when there is remainder)
+      // - if we break: drop leading whitespace on the next segment
+      let k = i;
+      while (k < src.length && (src[k] === " " || src[k] === "\t")) k += 1;
+      if (k < src.length) {
+        if (shouldBreak) {
+          const beforeBreak = out[out.length - 1] || "";
           if (!/\n$/.test(beforeBreak)) out.push("\n");
           i = k;
+        } else if (k > i) {
+          out.push(" ");
+          i = k;
+        } else {
+          // No whitespace after the barline. Insert a single space in common cases so
+          // that repeated reflows converge to the same formatting.
+          const nextCh = src[i];
+          if (nextCh && !/\s/.test(nextCh) && !/[|:\]\[0-9]/.test(nextCh)) {
+            out.push(" ");
+          }
         }
+      } else {
+        i = k;
       }
       continue;
     }
@@ -146,10 +177,21 @@ export function normalizeMeasuresLineBreaks(text) {
       out.push("%");
       continue;
     }
-    // Guard: never leave an empty line after transforms, since blank lines terminate tunes in ABC.
+    // Guard: blank lines terminate tunes in ABC. Only allow them as tune separators (before next X:) or inside begintext.
     if (!line.trim()) {
-      if (nextIsComment || prevIsComment) out.push("%");
-      // Otherwise: drop it.
+      let j = i + 1;
+      while (j < lines.length && !lines[j].trim()) j += 1;
+      while (j < lines.length && /^\s*%/.test(lines[j])) j += 1;
+      const nextNonEmpty = j < lines.length ? lines[j] : "";
+      const looksLikeTuneSeparator = !nextNonEmpty || /^\s*X:/.test(nextNonEmpty);
+      if (looksLikeTuneSeparator) {
+        out.push("");
+      } else if (nextIsComment || prevIsComment) {
+        out.push("%");
+      } else {
+        // Replace accidental blank line with a harmless comment to avoid truncating the tune.
+        out.push("%");
+      }
       continue;
     }
     out.push(line);
@@ -164,24 +206,58 @@ export function transformMeasuresPerLine(abcText, measuresPerLine) {
   const lines = String(abcText || "").split(/\r\n|\n|\r/);
   const out = [];
   let inTextBlock = false;
+  let pendingMusic = null;
+
+  const flushPending = () => {
+    if (!pendingMusic) return;
+    out.push(reflowMeasuresInMusicLine(pendingMusic, n));
+    pendingMusic = null;
+  };
 
   for (const line of lines) {
     if (/^\s*%%\s*begintext\b/i.test(line)) inTextBlock = true;
     if (inTextBlock) {
+      flushPending();
       out.push(line);
       if (/^\s*%%\s*endtext\b/i.test(line)) inTextBlock = false;
       continue;
     }
     if (!line) {
+      flushPending();
       out.push(line);
       continue;
     }
     if (isAbcFieldLine(line)) {
+      flushPending();
       out.push(line);
       continue;
     }
-    out.push(reflowMeasuresInMusicLine(line, n));
+    if (isInlineFieldOnlyLine(line)) {
+      flushPending();
+      out.push(line);
+      continue;
+    }
+    if (hasInlineComment(line)) {
+      flushPending();
+      out.push(reflowMeasuresInMusicLine(line, n));
+      continue;
+    }
+
+    // Merge adjacent music lines so that changing measures-per-line can reflow existing output.
+    if (!pendingMusic) {
+      pendingMusic = line;
+    } else {
+      const prefix = pendingMusic.match(/^\s*/)?.[0] || "";
+      const left = pendingMusic.trimEnd();
+      const right = line.trimStart();
+      // Preserve common first/second ending syntax when it lands on a line boundary: `|1` / `|2`.
+      if (left.endsWith("|") && /^[0-9]/.test(right)) {
+        pendingMusic = `${prefix}${left.trim()}${right}`;
+      } else {
+        pendingMusic = `${prefix}${left.trim()} ${right}`;
+      }
+    }
   }
+  flushPending();
   return out.join("\n");
 }
-
