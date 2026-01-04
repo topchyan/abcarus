@@ -13,19 +13,75 @@ class ConversionError extends Error {
 
 let cachedPython = null;
 
+function resolveRepoRootFromHere() {
+  // This file lives in `src/main/conversion/`.
+  return path.resolve(__dirname, "..", "..", "..");
+}
+
+function bundledPythonCandidates() {
+  const candidates = [];
+
+  // Linux AppImage (already bundled by build script).
+  if (process.env.APPDIR) {
+    candidates.push(
+      path.join(process.env.APPDIR, "usr", "bin", "python3"),
+      path.join(process.env.APPDIR, "usr", "bin", "python")
+    );
+  }
+
+  // Packaged app: include large binaries via app.asar.unpacked.
+  const unpackedThirdParty = path.join(
+    process.resourcesPath || "",
+    "app.asar.unpacked",
+    "third_party"
+  );
+
+  if (process.platform === "win32") {
+    candidates.push(
+      path.join(unpackedThirdParty, "python-embed", "win-x64", "python.exe"),
+      path.join(unpackedThirdParty, "python-embed", "win-x64", "python3.exe")
+    );
+  }
+
+  // Dev tree (optional local runtime; typically gitignored).
+  const devThirdParty = path.join(resolveRepoRootFromHere(), "third_party");
+  if (process.platform === "win32") {
+    candidates.push(
+      path.join(devThirdParty, "python-embed", "win-x64", "python.exe"),
+      path.join(devThirdParty, "python-embed", "win-x64", "python3.exe")
+    );
+  }
+
+  return candidates;
+}
+
+function pythonEnvForExecutable(pythonPath) {
+  const exe = String(pythonPath || "");
+  if (!exe) return {};
+  const lower = exe.toLowerCase();
+  const isBundled = lower.includes(`${path.sep}python-runtime${path.sep}`)
+    || lower.includes(`${path.sep}python-embed${path.sep}`)
+    || Boolean(process.env.APPDIR);
+  if (!isBundled) return {};
+  // Embeddable Python on Windows often needs PYTHONHOME to find stdlib zip.
+  return { PYTHONHOME: path.dirname(exe), PYTHONUTF8: "1" };
+}
+
 async function resolvePythonExecutable() {
   if (cachedPython) return cachedPython;
-  const candidates = process.platform === "win32" ? ["python"] : ["python3", "python"];
-  if (process.env.APPDIR) {
-    const appDirPython3 = path.join(process.env.APPDIR, "usr", "bin", "python3");
-    const appDirPython = path.join(process.env.APPDIR, "usr", "bin", "python");
-    candidates.unshift(appDirPython3, appDirPython);
-  }
+  const candidates = [];
+  for (const c of bundledPythonCandidates()) candidates.push(c);
+  if (process.platform === "win32") candidates.push("python");
+  else candidates.push("python3", "python");
+
   for (const candidate of candidates) {
     try {
       if (candidate.includes(path.sep) && !fs.existsSync(candidate)) continue;
       await new Promise((resolve, reject) => {
-        execFile(candidate, ["-c", "print('ok')"], { timeout: 4000 }, (err) => {
+        execFile(candidate, ["-c", "print('ok')"], {
+          timeout: 4000,
+          env: { ...process.env, ...pythonEnvForExecutable(candidate) },
+        }, (err) => {
           if (err) reject(err);
           else resolve();
         });
@@ -36,7 +92,7 @@ async function resolvePythonExecutable() {
   }
   throw new ConversionError(
     "Python not found.",
-    "Install Python (3 recommended) to use import/export tools.",
+    "Install Python (3 recommended) or bundle an embeddable Python runtime to use import/export tools.",
     "PYTHON_NOT_FOUND"
   );
 }
@@ -77,7 +133,12 @@ async function runPythonScript({
     const child = spawn(pythonPath, [scriptPath, ...(args || [])], {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, PYTHONIOENCODING: "utf-8", ...(env || {}) },
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: "utf-8",
+        ...pythonEnvForExecutable(pythonPath),
+        ...(env || {}),
+      },
     });
 
     let stdoutLen = 0;

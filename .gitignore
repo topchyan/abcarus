@@ -17,6 +17,7 @@ docs/qa/chat-exports/
 
 # Bundled Python runtime (release builds only)
 third_party/python-runtime/
+third_party/python-embed/
 
 # Soundfonts: keep only TimGM6mb.sf2 tracked
 third_party/sf2/*.sf2
