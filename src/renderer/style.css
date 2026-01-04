@@ -6,15 +6,36 @@
 }
 
 :root {
+  --font-family-ui: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans", sans-serif;
   --editor-font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --editor-font-size: 13px;
   --editor-notes-weight: 600;
   --editor-lyrics-weight: 600;
   --render-zoom: 1;
   --editor-zoom: 1;
+
+  --font-size-ui: 13px;
+  --line-height-ui: 1.35;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+
+  --radius-1: 6px;
+  --radius-2: 10px;
+  --border-color: #d0d0d0;
+  --bg: #fff;
+  --panel-bg: #fff;
+  --text: #111;
+  --muted-text: #666;
+  --hover-bg: rgba(0, 0, 0, 0.04);
+  --active-bg: rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 8px 20px rgba(0, 0, 0, 0.12);
+  --focus-ring: 0 0 0 3px rgba(27, 95, 191, 0.25);
+
   --button-height: 30px;
-  --button-radius: 8px;
-  --button-border: #d0d0d0;
+  --button-radius: var(--radius-2);
+  --button-border: var(--border-color);
   --button-bg: #f7f7f7;
   --button-bg-hover: #ededed;
   --button-text: #333;
@@ -26,7 +47,11 @@ html,
 body {
   height: 100%;
   margin: 0;
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-ui);
+  line-height: var(--line-height-ui);
+  color: var(--text);
+  background: var(--bg);
 }
 
 body {
@@ -53,9 +78,9 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 12px;
-  border-bottom: 1px solid #ddd;
-  gap: 12px;
+  padding: 10px var(--space-3);
+  border-bottom: 1px solid var(--border-color);
+  gap: var(--space-3);
 }
 
 .toolbar-sep {
@@ -86,7 +111,7 @@ header {
 
 .controls button:hover {
   border-color: var(--button-border);
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--hover-bg);
   color: #374151;
 }
 
@@ -1325,13 +1350,13 @@ svg {
 
 .settings-help {
   font-size: 12px;
-  color: #666;
+  color: var(--muted-text);
 }
 
 .settings-editor {
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-2);
+  background: var(--panel-bg);
   min-height: 160px;
   overflow: hidden;
   flex: 1;
@@ -1344,17 +1369,17 @@ svg {
 .context-menu {
   position: fixed;
   z-index: 999;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-2);
   padding: 2px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-md);
   display: none;
   min-width: 120px;
   font-size: 12px;
   font-family: inherit;
-  color: #222;
-  line-height: 1.2;
+  color: var(--text);
+  line-height: var(--line-height-ui);
 }
 
 .context-menu.open {
@@ -1366,18 +1391,18 @@ svg {
   align-items: center;
   width: 100%;
   text-align: left;
-  padding: 6px 8px;
-  border-radius: 5px;
+  padding: 6px 10px;
+  border-radius: var(--radius-1);
   cursor: pointer;
   font-size: 12px;
-  color: #222;
-  line-height: 1.2;
+  color: var(--text);
+  line-height: var(--line-height-ui);
   white-space: nowrap;
   min-height: 24px;
 }
 
 .context-menu-item:hover {
-  background: #f2f2f2;
+  background: var(--hover-bg);
 }
 
 .context-menu-item.danger:hover {
@@ -1388,6 +1413,28 @@ svg {
 .context-menu-item.disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.settings-advanced > summary {
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  color: var(--muted-text);
 }
 
 .settings-group {
