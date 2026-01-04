@@ -40,3 +40,4 @@ No packaging or build scripts are defined beyond `npm run start`. Any production
 - `docs/REQUIREMENTS.md`: Consolidated product + engineering requirements/invariants.
 - `docs/METHODOLOGY.md`: How we develop (chat-driven) without losing context.
 - `docs/soundfonts.md`: Soundfont selection and local setup.
+- `docs/adr/`: Architecture decision records (ADRs).
