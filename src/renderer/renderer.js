@@ -4531,6 +4531,109 @@ function isLikelyAnacrusis(bar, defaultLength, metre) {
   return actual <= metre * 0.8;
 }
 
+function formatMetreFromText(abcText) {
+  const text = String(abcText || "");
+  const match = text.match(/^M:\s*([0-9]+)\s*\/\s*([0-9]+)\s*$/m);
+  if (!match) return "";
+  return `${match[1]}/${match[2]}`;
+}
+
+function detectMeterMismatchInBarlines(abcText) {
+  const text = String(abcText || "");
+  const metre = getMetre(text);
+  const defaultLen = getDefaultLen(text);
+  if (!Number.isFinite(metre) || metre <= 0) return null;
+  if (!Number.isFinite(defaultLen) && defaultLen !== "mcm_default") return null;
+
+  const lines = text.split(/\r\n|\n|\r/);
+  let inTextBlock = false;
+  let inBody = false;
+  let buffer = "";
+  const bars = [];
+
+  const flushBar = () => {
+    const trimmed = buffer.trim();
+    buffer = "";
+    if (trimmed) bars.push(trimmed);
+  };
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (/^%%\s*begintext\b/i.test(trimmed)) { inTextBlock = true; continue; }
+    if (/^%%\s*endtext\b/i.test(trimmed)) { inTextBlock = false; continue; }
+    if (inTextBlock) continue;
+
+    if (!inBody) {
+      if (/^\s*K:/.test(rawLine) || /^\s*\[\s*K:/.test(trimmed)) inBody = true;
+      continue;
+    }
+
+    // Skip directives/fields/lyrics/comments.
+    if (!trimmed) continue;
+    if (/^%/.test(trimmed) && !/^%%/.test(trimmed)) continue;
+    if (/^\s*%%/.test(rawLine)) continue;
+    if (/^\s*[A-Za-z]:/.test(rawLine)) continue;
+
+    // Strip inline comment.
+    let line = rawLine;
+    const idx = line.indexOf("%");
+    if (idx >= 0) line = line.slice(0, idx);
+
+    const parts = splitLineIntoParts(line);
+    for (const part of parts) {
+      const p = String(part || "");
+      if (BAR_SEP_NO_SPACE.test(p.trim())) {
+        flushBar();
+        continue;
+      }
+      buffer += ` ${p}`;
+    }
+  }
+  flushBar();
+
+  const usable = [];
+  for (const bar of bars) {
+    const len = getBarLength(bar, defaultLen, metre);
+    if (!Number.isFinite(len) || len <= 0) continue;
+    usable.push({ bar, len });
+  }
+  if (usable.length < 6) return null;
+  if (isLikelyAnacrusis(usable[0].bar, defaultLen, metre)) usable.shift();
+  if (usable.length < 6) return null;
+
+  const counts = new Map(); // multiple -> count
+  const tol = 0.12;
+  for (const item of usable) {
+    const ratio = item.len / metre;
+    if (!Number.isFinite(ratio) || ratio <= 0) continue;
+    const rounded = Math.round(ratio);
+    if (rounded < 2 || rounded > 8) continue;
+    if (Math.abs(ratio - rounded) > tol) continue;
+    counts.set(rounded, (counts.get(rounded) || 0) + 1);
+  }
+  if (!counts.size) return null;
+
+  let best = { multiple: 0, count: 0 };
+  for (const [multiple, count] of counts.entries()) {
+    if (count > best.count) best = { multiple, count };
+  }
+  const total = usable.length;
+  if (best.count < Math.max(4, Math.ceil(total * 0.6))) return null;
+
+  const metreText = formatMetreFromText(text) || "";
+  const hint = metreText
+    ? `Bars look ~${best.multiple}× longer than M:${metreText}`
+    : `Bars look ~${best.multiple}× longer than the meter`;
+  return {
+    kind: "meter-mismatch",
+    detail: `${hint}. Consider updating M: or adding barlines.`,
+    multiple: best.multiple,
+    barCount: total,
+    matchCount: best.count,
+    metre: metreText || null,
+  };
+}
+
 function alignBeams(bars) {
   if (!bars || !bars.length) return bars || [];
   const barParts = bars.map((b) => b.split(/ +/));
@@ -8884,6 +8987,7 @@ let lastPlaybackUiEditorIdx = null;
 let lastPlaybackUiScrollAt = 0;
 let lastDrumSignatureDiff = null;
 let lastPlaybackChordOnBarError = false;
+let lastMeterMismatchToastKey = null;
 
 function clearPlaybackNoteOnEls() {
   for (const el of lastPlaybackNoteOnEls) {
@@ -10891,6 +10995,16 @@ function getPlaybackPayload() {
   const sanitized = sanitizeAbcForPlayback(payload.text);
   playbackSanitizeWarnings = Array.isArray(sanitized.warnings) ? sanitized.warnings.slice(0, 200) : [];
   payload = { text: sanitized.text, offset: payload.offset };
+
+  const meterWarn = detectMeterMismatchInBarlines(payload.text);
+  if (meterWarn) {
+    playbackSanitizeWarnings.push(meterWarn);
+    if (lastMeterMismatchToastKey !== sourceKey) {
+      showToast(`Meter mismatch: ${meterWarn.detail}`, 5200);
+      lastMeterMismatchToastKey = sourceKey;
+    }
+  }
+
   const drumInjected = injectDrumPlayback(payload.text);
   if (drumInjected && drumInjected.signatureDiff) {
     lastDrumSignatureDiff = drumInjected.signatureDiff;
