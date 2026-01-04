@@ -1,15 +1,10 @@
 # Release Notes
 
-## [0.15.0] - 2026-01-03
+## [0.15.1] - 2026-01-03
 
-Range: v0.14.0..HEAD
+Range: v0.15.0..HEAD
 
-### Added
-- Support embeddable python runtime
 ### Changed
-- Remove abc2abc dependency
-- Native transpose
+- Translate ADRs to English
 ### Fixed
-- Honor inline meter changes
-- Reflow measures-per-line repeatable
-- Measures-per-line without blank lines
+- Detect system python in AppImage
