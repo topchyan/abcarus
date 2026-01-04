@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-01-03
+### Added
+- Support embeddable python runtime
+### Changed
+- Remove abc2abc dependency
+- Native transpose
+### Fixed
+- Honor inline meter changes
+- Reflow measures-per-line repeatable
+- Measures-per-line without blank lines
+
+
 ## [0.14.0] - 2026-01-03
 ### Added
 - Native transposition backend (with `abc2abc` as optional fallback).
