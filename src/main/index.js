@@ -709,6 +709,7 @@ function updateSettings(patch) {
   next.editorFontSize = Math.min(32, Math.max(8, Number(next.editorFontSize) || 13));
   next.editorNotesBold = Boolean(next.editorNotesBold);
   next.editorLyricsBold = Boolean(next.editorLyricsBold);
+  next.autoAlignBarsAfterTransforms = Boolean(next.autoAlignBarsAfterTransforms);
   if (patch && Object.prototype.hasOwnProperty.call(patch, "usePortalFileDialogs")) {
     next.usePortalFileDialogsSetByUser = true;
   }

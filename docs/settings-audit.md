@@ -24,6 +24,7 @@ Grouped as displayed in the Settings modal:
 - `editorNotesBold` (default `true`) — Bold notes
 - `editorLyricsBold` (default `true`) — Bold inline lyrics
 - `useNativeTranspose` (default `true`) — Use native transpose
+- `autoAlignBarsAfterTransforms` (default `false`) — Auto-align bars after transforms *(Advanced)*
 - `libraryAutoRenumberAfterMove` (default `false`) — Auto-renumber X after move
 - `usePortalFileDialogs` (default: `true` on Linux, else `false`) — Use portal file dialogs (Linux) *(Advanced)*
 
@@ -52,4 +53,3 @@ These keys are kept for backward compatibility and/or internal UI state persiste
 - `errorsEnabled` (intentionally forced Off on persist)
 - `usePortalFileDialogsSetByUser`
 - `libraryPaneVisible`, `libraryPaneWidth`, `libraryGroupBy`, `librarySortBy`, `libraryFilterText`, `libraryUiStateByRoot`
-

@@ -7303,7 +7303,10 @@ async function applyAbc2abcTransform(options) {
     && options.renumberX == null;
   if (hasOnlyLengthTransform) {
     const mode = options.doubleLengths ? "double" : "half";
-    const transformed = transformLengthScaling(abcText, mode);
+    let transformed = transformLengthScaling(abcText, mode);
+    if (latestSettingsSnapshot && latestSettingsSnapshot.autoAlignBarsAfterTransforms) {
+      transformed = alignBarsInText(transformed);
+    }
     applyTransformedText(transformed);
     setStatus("OK");
     return;
@@ -7315,9 +7318,13 @@ async function applyAbc2abcTransform(options) {
     && !options.doubleLengths
     && !options.halfLengths;
   if (hasOnlyMeasuresPerLine) {
-    const transformed = transformMeasuresPerLine(abcText, options.measuresPerLine);
-    const normalized = normalizeMeasuresLineBreaks(transformed);
-    applyTransformedText(normalized);
+    let transformed = transformMeasuresPerLine(abcText, options.measuresPerLine);
+    transformed = normalizeMeasuresLineBreaks(transformed);
+    if (latestSettingsSnapshot && latestSettingsSnapshot.autoAlignBarsAfterTransforms) {
+      transformed = alignBarsInText(transformed);
+      transformed = normalizeMeasuresLineBreaks(transformed);
+    }
+    applyTransformedText(transformed);
     setStatus("OK");
     return;
   }

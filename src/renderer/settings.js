@@ -21,7 +21,8 @@ const FALLBACK_SCHEMA = [
   { key: "editorFontSize", type: "number", default: 13, section: "Editor", label: "Font size", ui: { input: "number", min: 8, max: 32, step: 1 } },
   { key: "editorNotesBold", type: "boolean", default: true, section: "Editor", label: "Bold notes", ui: { input: "checkbox" } },
   { key: "editorLyricsBold", type: "boolean", default: true, section: "Editor", label: "Bold inline lyrics", ui: { input: "checkbox" } },
-  { key: "useNativeTranspose", type: "boolean", default: true, section: "Transforms", label: "Use native transpose", ui: { input: "checkbox" } },
+  { key: "useNativeTranspose", type: "boolean", default: true, section: "Tools", label: "Use native transpose", ui: { input: "checkbox" } },
+  { key: "autoAlignBarsAfterTransforms", type: "boolean", default: false, section: "Tools", label: "Auto-align bars after transforms", ui: { input: "checkbox" }, advanced: true },
   { key: "abc2xmlArgs", type: "string", default: "", section: "Import/Export", label: "abc2xml flags", ui: { input: "text", placeholder: "-x -y=value" }, advanced: true },
   { key: "xml2abcArgs", type: "string", default: "", section: "Import/Export", label: "xml2abc flags", ui: { input: "text", placeholder: "-x -y=value" }, advanced: true },
   { key: "globalHeaderEnabled", type: "boolean", default: true, section: "Header", label: "Enable global header", ui: { input: "checkbox" } },
@@ -322,7 +323,7 @@ export function initSettings(api) {
       {
         key: "main",
         label: "Main",
-        sections: ["General", "Editor", "Transforms", "Library", "Dialogs"],
+        sections: ["General", "Editor", "Tools", "Library", "Dialogs"],
       },
       {
         key: "xml",
@@ -524,4 +525,3 @@ export function initSettings(api) {
     setActivePane: (pane) => { activePane = pane; },
   };
 }
-
