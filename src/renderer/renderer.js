@@ -9178,7 +9178,7 @@ function maybeScrollRenderToNote(el) {
 }
 
 async function ensureSoundfontLoaded() {
-  // уже загружен
+  // already loaded
   const desired = soundfontName || "TimGM6mb.sf2";
   if (
     soundfontReadyName === desired
@@ -9204,7 +9204,7 @@ async function ensureSoundfontLoaded() {
     }
     const b64 = await window.api.readFileBase64(sf2Url);
     if (!b64 || !b64.length) throw new Error("SF2 base64 is empty");
-    window.abc2svg.sf2 = b64; // чистый base64 (как ты и хотел)
+    window.abc2svg.sf2 = b64; // raw base64
     soundfontSource = "abc2svg.sf2";
     soundfontReadyName = name;
   };
@@ -9407,13 +9407,13 @@ function ensurePlayer() {
     err: (m) => logErr(m),
   });
 
-  // чтобы в консоли можно было смотреть:
+  // Expose for debugging in the console:
   window.p = player;
 
-  // лечим NaN-speed из localStorage:
+  // Guard against NaN speed from localStorage:
   if (typeof player.set_speed === "function") player.set_speed(1);
 
-  // КЛЮЧ: говорим snd-1.js брать SF2 из window.abc2svg.sf2
+  // Key: tell snd-1.js to use SF2 from window.abc2svg.sf2
   if (typeof player.set_sfu === "function") player.set_sfu(soundfontSource || "abc2svg.sf2");
   try { sessionStorage.setItem("audio", "sf2"); } catch {}
 

@@ -4,39 +4,38 @@ date: 2026-01-02
 status: "Accepted with constraints"
 ---
 
-# ADR-0002: Incremental Full Scan библиотеки (gated)
+# ADR-0002: Incremental Full Library Scan (Gated)
 
-## Контекст
+## Context
 
-Full scan библиотеки (`scanLibrary`) даёт пользователю привычный UX: дерево быстро и предсказуемо заполняется тюнами под файлами. При больших коллекциях и при повторных открытиях/refresh появляется O(N)-штраф: чтение и парс всех файлов заново.
+A full library scan (`scanLibrary`) provides familiar UX: the tree is filled quickly and predictably with tunes under files. For large collections and repeated open/refresh cycles, this becomes an O(N) penalty: reading and parsing all files again.
 
-В проекте уже существует best-effort persisted index в `userData`. Он может выступать ускорителем для повторных запусков при корректной валидации по `mtimeMs/size`, но не должен становиться новым источником истины.
+The project already has a best-effort persisted index in `userData`. It can act as an accelerator on subsequent runs when validated by `mtimeMs/size`, but it must not become a new source of truth.
 
-## Решение
+## Decision
 
-Делаем `scanLibrary()` инкрементальным без изменения UX:
-- Для неизменённых файлов (совпадают `mtimeMs` и `size`) берём `tunes/xIssues/header` из persisted index/кеша, не читаем файл.
-- Для новых/изменённых файлов выполняем чтение и парс, обновляем persisted index.
-- Best-effort чистка удалённых записей — только в пределах текущего `libraryRoot`.
-- Прогресс остаётся throttled, финальный `done` обязателен. Допускается добавлять счётчики `cachedCount/parsedCount` в payload, без роста частоты событий.
+Make `scanLibrary()` incremental without changing UX:
+- For unchanged files (matching `mtimeMs` and `size`), read `tunes/xIssues/header` from the persisted index/cache and skip reading the file.
+- For new/changed files, read and parse, then update the persisted index.
+- Best-effort cleanup of deleted entries is limited to the current `libraryRoot`.
+- Progress stays throttled; a final `done` is required. It is acceptable to add counters like `cachedCount/parsedCount` to the payload without increasing event frequency.
 
-## Ограничения (gates)
+## Constraints (gates)
 
-1. Persisted index — только accelerator, не source of truth. Окончательная валидация — при `openTune`: если `X/offset/структура` не сходятся, выполняем forced reparse файла и самокоррекцию записи индекса.
-2. Никаких UX-изменений: не вводим “Loading…” и промежуточные состояния в Tree/Modal.
-3. Индекс scoped по `libraryRoot/roots`: чистка удалённых — только в пределах текущих roots.
-4. Версионирование формата + атомарная запись (temp + rename/replace) + безопасный fallback: при ошибке/несовместимости индекс игнорируется, выполняется rebuild.
-5. Обязателен kill-switch (без UI): переключатель env/config, чтобы вернуть режим “parse всё” без отката коммитов.
+1. The persisted index is an accelerator only, not a source of truth. Final validation happens on `openTune`: if `X/offset/structure` mismatches, force a file reparse and self-heal the index entry.
+2. No UX changes: do not introduce “Loading…” or intermediate states in Tree/Modal.
+3. The index is scoped by `libraryRoot/roots`: deleted-entry cleanup is limited to the current roots.
+4. Format versioning + atomic writes (temp + rename/replace) + safe fallback: on errors/incompatibility the index is ignored and rebuilt.
+5. A kill-switch (no UI) is required: an env/config toggle to restore “parse everything” without reverting commits.
 
-## Реализация (вертикальный срез)
+## Implementation (vertical slice)
 
-Только узкий срез в `scanLibrary/refresh`:
-- `scanLibrary()` использует persisted index для неизменённых, парсит только изменённые, делает cleanup под root.
-- `openTune/selectTune` валидирует соответствие `X/offset` и при несовпадении принудительно перепарсивает файл и переоткрывает тюн.
-- Kill-switch: `ABCARUS_DISABLE_LIBRARY_INDEX=1` выключает использование persisted index (ускоритель).
+Only a narrow slice in `scanLibrary/refresh`:
+- `scanLibrary()` uses the persisted index for unchanged files, parses only changed ones, and performs cleanup under the root.
+- `openTune/selectTune` validates `X/offset` and, on mismatch, forces a file reparse and reopens the tune.
+- Kill-switch: `ABCARUS_DISABLE_LIBRARY_INDEX=1` disables use of the persisted index (accelerator).
 
-## Метрики/ожидаемый эффект
+## Metrics / expected impact
 
-- Улучшение: повторные `scanLibrary()` (open folder / refresh) должны становиться быстрее при больших библиотеках за счёт reuse неизменённых файлов.
-- Guardrail: UX и поведение Tree/Modal остаются как раньше (без новых промежуточных состояний).
-
+- Improvement: repeated `scanLibrary()` (open folder / refresh) should get faster for large libraries by reusing unchanged-file results.
+- Guardrail: Tree/Modal UX and behavior remain unchanged (no new intermediate states).

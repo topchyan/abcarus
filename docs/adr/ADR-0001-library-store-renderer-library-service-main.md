@@ -1,61 +1,60 @@
-# ADR-0001: LibraryStore в renderer, LibraryService в main; без репликации state по IPC
+# ADR-0001: LibraryStore in renderer, LibraryService in main (no IPC state replication)
 
-Дата: 2 января 2026  
-Статус: Accepted
+Date: 2026-01-02  
+Status: Accepted
 
-## Контекст
+## Context
 
-В ABCarus библиотека (Tree + Modal) опирается на сканирование файловой системы, извлечение метаданных (discover), парсинг (parse) и операции записи (rename/move/bulk). При больших коллекциях узкое место быстро смещается не столько в вычисления, сколько в синхронизацию, объём данных и частоту событий между процессами Electron. Попытка держать канонический LibraryStore в main и “стримить” состояние в renderer неизбежно превращается в отдельный проект: диффы, версии state, восстановление при рассинхроне, дедупликация и контроль payload, иначе IPC становится медленным “кешем поверх медленного пайплайна”.
+In ABCarus, the library UI (Tree + Modal) relies on filesystem scanning, metadata extraction (discover), parsing (parse), and write operations (rename/move/bulk). With large collections, the bottleneck quickly shifts from CPU to cross-process synchronization: payload sizes and event frequency between Electron processes. Trying to keep a canonical `LibraryStore` in `main` and “stream” state into the renderer effectively becomes its own project: diffs, state versions, resync recovery, deduplication, and payload controls—otherwise IPC turns into a slow cache layered on top of a slow pipeline.
 
-Нужно решение, которое минимизирует риск, сохраняет инварианты (tolerant-read/strict-write, транзакционность, throttling progress) и даёт понятный путь к discover/parse split и persisted index.
+We need an approach that minimizes risk, preserves invariants (tolerant-read/strict-write, transactional writes, throttled progress), and provides a clear path toward discover/parse split and a persisted index.
 
-## Решение
+## Decision
 
-Каноническое состояние UI-библиотеки (LibraryStoreState) находится в renderer. Все изменения UI-состояния происходят через LibraryActions в renderer.
+The canonical library UI state (`LibraryStoreState`) lives in the renderer. All UI state changes go through `LibraryActions` in the renderer.
 
-В main находится LibraryService как узкий набор операций, близких к I/O: discover, parse-file, stat-guard, операции записи (атомарные), ведение persisted index (чтение/запись/миграции), политика X-policy для bulk на уровне “разрешить/запретить” и подготовительные проверки.
+The `main` process hosts `LibraryService` as a narrow, I/O-adjacent surface: discover, parse-file, stat-guard, atomic write operations, persisted index maintenance (read/write/migrations), bulk gating (“allow/deny” policy), and preflight checks.
 
-IPC используется как RPC (request/response) плюс ограниченный поток прогресса, обязательно throttled. Репликация/стриминг “живого store” по IPC не применяется.
+IPC is used as RPC (request/response) plus a limited progress stream, strictly throttled. Replicating/streaming a “live store” over IPC is not used.
 
-Persisted index физически пишется и обслуживается в main (атомарно, версионированно), а в renderer только гидратируется через RPC-вызов (получение нужных фрагментов/срезов), после чего renderer обновляет свой store.
+The persisted index is physically written and maintained in `main` (atomically, versioned). The renderer hydrates via RPC (fetching the needed slices), then updates its store.
 
-## Рассмотренные альтернативы
+## Alternatives considered
 
-Альтернатива A: LibraryStore в main, renderer подписывается на диффы/снапшоты. Это повышает сложность, риск рассинхрона и нагрузку на IPC, особенно при крупных библиотеках и частых обновлениях.
+Alternative A: Keep `LibraryStore` in `main` and have the renderer subscribe to diffs/snapshots. This increases complexity, desync risk, and IPC load, especially with large libraries and frequent updates.
 
-Альтернатива B: Дублировать store в обоих процессах и “сводить” изменения. Это почти гарантированно приводит к расхождениям и неустранимым edge-case’ам при сбоях/гонках.
+Alternative B: Duplicate the store in both processes and “merge” changes. This almost guarantees divergence and hard-to-debug edge cases under failure/race conditions.
 
-Выбранная модель (store в renderer, service в main) локализует сложность и оставляет IPC “тонким”.
+The chosen model (store in renderer, service in main) localizes complexity and keeps IPC “thin”.
 
-## Последствия
+## Consequences
 
-Положительные: уменьшается риск IPC-блокировок; Tree/Modal получают единый источник истины в одном процессе; ускорители (persisted index) внедряются как оптимизация сервиса, не ломая контракт UI; упрощается вертикальный срез внедрения (openTune + parse-file через actions).
+Positive: lower risk of IPC stalls; Tree/Modal share a single source of truth in one process; accelerators (persisted index) are implemented as service optimizations without changing the UI contract; easier vertical slices (openTune + parse-file via actions).
 
-Негативные: renderer отвечает за консистентность UI-store и должен аккуратно обрабатывать конкурирующие запросы (например, параллельные openTune); потребуется дисциплина в проекте, чтобы никто не начинал “подпитывать” renderer скрытыми снапшотами огромных структур.
+Negative: the renderer owns UI-store consistency and must carefully handle concurrent requests (e.g., parallel openTune); team discipline is required to avoid introducing hidden “state pushes” of large snapshots into the renderer.
 
-## Инварианты
+## Invariants
 
-tolerant-read/strict-write: чтение/сканирование терпимо к частичным данным и ошибкам; запись и массовые операции допускаются только при строгих проверках и предсказуемом результате.
+Tolerant-read/strict-write: reads/scans tolerate partial data and errors; writes and bulk operations run only with strict validation and predictable outcomes.
 
-Транзакционность: операции записи выполняются атомарно (temp + replace/rename с ретраями), с чёткими стадиями и откатом при ошибках; состояние в renderer обновляется только после подтверждённого результата от main.
+Transactional writes: write operations are atomic (temp + replace/rename with retries), with clear stages and rollback on failure; renderer state updates only after confirmed results from `main`.
 
-Throttling progress: прогресс и события сканирования/парса никогда не отправляются “по событию на файл” без ограничения частоты; финальный сигнал завершения обязателен.
+Progress throttling: scan/parse progress must never be “one event per file” at unbounded frequency; a final completion signal is required.
 
-## Практическая реализация
+## Practical implementation
 
-Renderer реализует `LibraryActions.openTune()` как единственный путь открытия: резолв “намерения” → stat-guard/parse через LibraryService → обновление LibraryStore → передача данных в editor.
+Renderer implements `LibraryActions.openTune()` as the only open path: resolve “intent” → stat-guard/parse via `LibraryService` → update `LibraryStore` → pass data into the editor.
 
-Main реализует `LibraryService.parseFile(path)` и `discover(path|roots)` как чистые I/O операции с контролем ошибок, с возможностью использования persisted index и инкрементального refresh.
+Main implements `LibraryService.parseFile(path)` and `discover(path|roots)` as pure I/O operations with robust error handling, optionally using a persisted index and incremental refresh.
 
-Persisted index живёт в `userData`, имеет версию формата, атомарную запись и безопасный fallback на rebuild при любой несовместимости или повреждении.
+The persisted index lives in `userData`, has a format version, is written atomically, and falls back safely to rebuild on any incompatibility or corruption.
 
-## План миграции
+## Migration plan
 
-Сначала вводится discover/parse режим и новые actions для openTune/parse-file, переводится Modal на чтение из renderer store и открытие только через actions. Затем подключается persisted index как ускоритель discover/parse. После этого постепенно переводятся rename/move/bulk и Tree на тот же store/actions, с включением транзакций и X-policy gating.
+Start by introducing the discover/parse mode and new actions for openTune/parse-file; move Modal to read from the renderer store and open only via actions. Then add the persisted index as a discover/parse accelerator. After that, gradually move rename/move/bulk and Tree to the same store/actions, including transactional writes and bulk gating.
 
-## Открытые вопросы
+## Open questions
 
-Нужно ли в перспективе поддерживать несколько окон/рендереров. Если да, это потребует отдельного ADR о модели синхронизации (скорее всего, через сервис-API и явную “сессию”, но без неконтролируемого стриминга state).
+Do we need multi-window / multiple renderers in the future? If so, we should write a separate ADR for a synchronization model (likely via a service API and explicit “sessions”, but without uncontrolled state streaming).
 
-Нормализация ключей и путей для Windows/macOS должна быть отдельным техрешением (case-sensitivity, separators, long paths) и тестовым набором.
-
+Key/path normalization for Windows/macOS should be handled as a separate technical decision (case-sensitivity, separators, long paths) with an accompanying test suite.

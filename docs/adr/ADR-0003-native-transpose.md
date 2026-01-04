@@ -1,62 +1,62 @@
-# ADR-0003: Нативная транспозиция (замена abc2abc) + микротональная 53-EDO поддержка
+# ADR-0003: Native Transposition (abc2abc replacement) + microtonal 53-EDO support
 
-Дата: 4 января 2026  
-Статус: Accepted
+Date: 2026-01-04  
+Status: Accepted
 
-## Контекст
+## Context
 
-ABCarus исторически использовал внешний инструмент `abc2abc` (abcMIDI) для транспозиции. Это добавляет зависимость от внешнего бинарника, различия поведения между платформами и ограничивает развитие (в частности, микротональная логика и работа с gchords в кавычках).
+Historically, ABCarus used the external `abc2abc` tool (abcMIDI) for transposition. This adds a dependency on an external binary, platform-specific behavioral differences, and limits evolution (in particular: microtonal logic and handling of gchords in quotes).
 
-Нужно:
-- транспонировать “внутри приложения” (drop-in replacement для semitone transpose) без зависимости от `abc2abc`;
-- корректно обрабатывать микротональные случай `%%MIDI temperamentequal 53` (53-EDO) и не ломать текст/аннотации;
-- транспонировать аккорды (gchords) строго в 12-TET.
+We need:
+- in-app transposition (a drop-in replacement for semitone transpose) without relying on `abc2abc`;
+- correct handling of the microtonal case `%%MIDI temperamentequal 53` (53-EDO) without corrupting text/annotations;
+- transposition of gchords strictly in 12-TET.
 
-## Решение
+## Decision
 
-Вводится “native transpose” как основной путь транспозиции в UI:
-- По умолчанию включён (`useNativeTranspose: true`), может быть выключен в Settings.
-- В случае ошибки/несовместимости нативного пути операция должна отказываться, а не “тихо” менять текст.
+Introduce “native transpose” as the primary transposition path in the UI:
+- Enabled by default (`useNativeTranspose: true`), can be disabled in Settings.
+- On errors/incompatibility, the native path must refuse rather than “silently” modify text.
 
-Нативная транспозиция реализована в `src/renderer/transpose.mjs` и используется из renderer (через существующие UI/IPC пути), без изменения имен IPC и menu action строк.
+Native transposition is implemented in `src/renderer/transpose.mjs` and invoked from the renderer (via existing UI/IPC paths), without changing IPC names or menu action strings.
 
-### 53-EDO (temperamentequal 53)
+### 53-EDO (`temperamentequal 53`)
 
-При наличии `%%MIDI temperamentequal 53` транспозиция работает в “53-режиме”:
-- применяется детерминированный “western semitone” сдвиг (±1) в 53-EDO;
-- транспонируются микротональные акциденталы в `K:` и inline `[K:...]`;
-- обработка *не трогает* содержимое `!decorations!` и любых bracketed полей `[X:...]` кроме `[K:...]`, чтобы избежать порчи текста и каскадных ошибок при повторных транспозициях.
+When `%%MIDI temperamentequal 53` is present, transposition runs in “53 mode”:
+- apply a deterministic “western semitone” shift (±1) in 53-EDO;
+- transpose microtonal accidentals in `K:` and inline `[K:...]`;
+- do *not* modify the contents of `!decorations!` or bracketed fields `[X:...]` except `[K:...]`, to avoid text corruption and cascading errors on repeated transpositions.
 
-### gchords (аккорды в кавычках)
+### gchords (quoted chord symbols)
 
-Строки вида `"Em7"`, `"A7/E"`, `"C#m7/G#"` транспонируются как 12-TET:
-- транспонируется root и (если есть) slash-bass;
-- текстовые аннотации в кавычках, которые не выглядят как аккорды, сохраняются как есть.
+Strings like `"Em7"`, `"A7/E"`, `"C#m7/G#"` are transposed in 12-TET:
+- transpose the root and (if present) the slash-bass;
+- preserve quoted text annotations that do not look like chord symbols.
 
-## Область (где искать код)
+## Scope (where to look in code)
 
-- Алгоритм: `src/renderer/transpose.mjs`
-- Включение/фоллбэк: `src/renderer/renderer.js` (useNativeTranspose)
-- Настройка: `src/renderer/index.html`, `src/renderer/settings.js`
-- Интеграция header (temperamentequal из header): `src/renderer/renderer.js` (передача effective header в transpose)
+- Algorithm: `src/renderer/transpose.mjs`
+- Enable/fallback: `src/renderer/renderer.js` (`useNativeTranspose`)
+- Setting UI: `src/renderer/index.html`, `src/renderer/settings.js`
+- Header integration (temperamentequal from header): `src/renderer/renderer.js` (passes effective header into transpose)
 
-## Последствия
+## Consequences
 
-Положительные:
-- меньше внешних зависимостей (транспозиция не требует `abc2abc`);
-- контролируемое поведение и возможность точечных исправлений (включая микротональные кейсы);
-- переносимость на Windows/macOS упрощается (падает число “обязательных бинарников”).
+Positive:
+- fewer external dependencies (transposition no longer requires `abc2abc`);
+- controlled behavior and the ability to apply targeted fixes (including microtonal cases);
+- easier portability to Windows/macOS (fewer “required binaries”).
 
-Негативные:
-- ответственность за корректность транспозиции теперь в кодовой базе ABCarus;
-- часть сложных/редких кейсов может требовать строгого отказа или fallback, чтобы не рисковать порчей данных.
+Negative:
+- responsibility for transposition correctness now lives in the ABCarus codebase;
+- some complex/rare cases may require strict refusal or fallback to avoid risking data corruption.
 
-## Инварианты
+## Invariants
 
-- Tolerant-read / strict-write: нативный путь должен быть консервативен и предпочитать отказ/фоллбэк вместо “тихой порчи”.
-- Не спамить renderer прогрессом/статусами.
-- Стабильность при повторных транспозициях: отсутствие “дрейфа” регистра/текста из-за обработки не-нотных конструкций.
+- Tolerant-read / strict-write: the native path must be conservative and prefer refusal/fallback over “silent corruption”.
+- Do not spam the renderer with progress/status updates.
+- Stability under repeated transpositions: no register/text “drift” caused by processing non-note constructs.
 
-## Авторство идеи (не юридическое заключение)
+## Idea authorship (not legal advice)
 
-Идея “native transpose” как замены `abc2abc` и требования к музыкальному поведению/качеству были сформулированы владельцем проекта (Avetik) и воплощены в коде ABCarus. Юридический статус и права определяются лицензией репозитория и договорённостями участников проекта.
+The “native transpose” idea as a replacement for `abc2abc`, and the required musical behavior/quality constraints, were defined by the project owner (Avetik) and implemented in ABCarus. Legal status and rights are defined by the repository license and contributor agreements.

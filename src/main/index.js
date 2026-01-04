@@ -1660,7 +1660,7 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false, // <-- ВАЖНО: иначе preload без fs
+      sandbox: false, // IMPORTANT: otherwise preload has no fs
       preload: path.join(__dirname, "..", "preload.js"),
     },
   });
