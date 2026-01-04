@@ -7,6 +7,7 @@
     "start": "electron .",
     "appimage": "bash scripts/build_appimage.sh",
     "build:brand": "node scripts/build-brand-icons.mjs",
+    "test:measures": "node devtools/measures_harness/run_tests.js",
     "test:transpose": "node devtools/transpose_harness/run_tests.js",
     "version:show": "node scripts/show-version.mjs",
     "release:patch": "node scripts/release.mjs patch",
