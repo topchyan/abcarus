@@ -18,6 +18,13 @@ function resolveRepoRootFromHere() {
   return path.resolve(__dirname, "..", "..", "..");
 }
 
+function getPythonEmbedPlatformArch() {
+  if (process.platform === "win32") return "win-x64";
+  if (process.platform === "darwin") return process.arch === "arm64" ? "darwin-arm64" : "darwin-x64";
+  if (process.platform === "linux") return "linux-x64";
+  return "";
+}
+
 function bundledPythonCandidates() {
   const candidates = [];
 
@@ -35,21 +42,21 @@ function bundledPythonCandidates() {
     "app.asar.unpacked",
     "third_party"
   );
+  const embedDir = path.join(unpackedThirdParty, "python-embed", getPythonEmbedPlatformArch());
 
   if (process.platform === "win32") {
-    candidates.push(
-      path.join(unpackedThirdParty, "python-embed", "win-x64", "python.exe"),
-      path.join(unpackedThirdParty, "python-embed", "win-x64", "python3.exe")
-    );
+    candidates.push(path.join(embedDir, "python.exe"), path.join(embedDir, "python3.exe"));
+  } else {
+    candidates.push(path.join(embedDir, "python3"), path.join(embedDir, "python"));
   }
 
   // Dev tree (optional local runtime; typically gitignored).
   const devThirdParty = path.join(resolveRepoRootFromHere(), "third_party");
+  const devEmbedDir = path.join(devThirdParty, "python-embed", getPythonEmbedPlatformArch());
   if (process.platform === "win32") {
-    candidates.push(
-      path.join(devThirdParty, "python-embed", "win-x64", "python.exe"),
-      path.join(devThirdParty, "python-embed", "win-x64", "python3.exe")
-    );
+    candidates.push(path.join(devEmbedDir, "python.exe"), path.join(devEmbedDir, "python3.exe"));
+  } else {
+    candidates.push(path.join(devEmbedDir, "python3"), path.join(devEmbedDir, "python"));
   }
 
   return candidates;
@@ -64,9 +71,9 @@ function pythonEnvForExecutable(pythonPath) {
     || (Boolean(process.env.APPDIR)
       && exe.includes(path.sep)
       && path.resolve(exe).startsWith(path.resolve(process.env.APPDIR)));
-  if (!isBundled) return {};
+  if (!isBundled) return { PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" };
   // Embeddable Python on Windows often needs PYTHONHOME to find stdlib zip.
-  return { PYTHONHOME: path.dirname(exe), PYTHONUTF8: "1" };
+  return { PYTHONHOME: path.dirname(exe), PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" };
 }
 
 async function resolvePythonExecutable() {
@@ -79,8 +86,12 @@ async function resolvePythonExecutable() {
   for (const candidate of candidates) {
     try {
       if (candidate.includes(path.sep) && !fs.existsSync(candidate)) continue;
+      const isPathLike = candidate.includes(path.sep);
+      const probe = isPathLike
+        ? "import sys; import os; print(sys.executable); print(os.getcwd())"
+        : "print('ok')";
       await new Promise((resolve, reject) => {
-        execFile(candidate, ["-c", "print('ok')"], {
+        execFile(candidate, ["-c", probe], {
           timeout: 4000,
           env: { ...process.env, ...pythonEnvForExecutable(candidate) },
         }, (err) => {

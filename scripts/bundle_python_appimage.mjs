@@ -71,10 +71,20 @@ function getArgValue(flag) {
 }
 
 async function findPythonScripts(root) {
+  // Only ship the tool scripts that ABCarus actually executes.
+  // Do NOT scan/copy bundled runtimes (e.g. python stdlib under third_party/python-runtime),
+  // as that explodes AppImage size and duplicates the runtime that is copied separately.
+  const toolDirs = [
+    path.join(root, "third_party", "abc2xml"),
+    path.join(root, "third_party", "xml2abc"),
+  ];
   const scripts = [];
-  await walkDir(root, (entryPath, dirent) => {
-    if (dirent.isFile() && entryPath.endsWith(".py")) scripts.push(entryPath);
-  });
+  for (const dir of toolDirs) {
+    if (!(await existsDir(dir))) continue;
+    await walkDir(dir, (entryPath, dirent) => {
+      if (dirent.isFile() && entryPath.endsWith(".py")) scripts.push(entryPath);
+    });
+  }
   return scripts;
 }
 

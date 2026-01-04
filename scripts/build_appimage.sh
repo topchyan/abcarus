@@ -9,6 +9,7 @@ desktop_id="com.abcarus.ABCarus"
 electron_dist="${repo_root}/node_modules/electron/dist"
 icon_path="${repo_root}/assets/icons/abcarus_512.png"
 python_root="${repo_root}/third_party/python-runtime"
+python_embed_root="${repo_root}/third_party/python-embed/linux-x64"
 clean=1
 
 appdir="$(cd "${repo_root}" && mkdir -p "${appdir}" && cd "${appdir}" && pwd)"
@@ -41,12 +42,29 @@ if command -v rsync >/dev/null 2>&1; then
     --exclude ".git" \
     --exclude "dist" \
     --exclude "node_modules" \
+    --exclude "devtools" \
+    --exclude "docs" \
+    --exclude "scripts" \
+    --exclude "third_party/python-runtime" \
+    --exclude "third_party/python-embed" \
+    --exclude "docs/qa/chat-exports" \
+    --exclude "*.md" \
     "${repo_root}/" "${resources_app}/"
 else
   (
     cd "${repo_root}"
-    tar --exclude "./.git" --exclude "./dist" --exclude "./node_modules" -cf - . \
-      | (cd "${resources_app}" && tar -xf -)
+    tar \
+      --exclude "./.git" \
+      --exclude "./dist" \
+      --exclude "./node_modules" \
+      --exclude "./devtools" \
+      --exclude "./docs" \
+      --exclude "./scripts" \
+      --exclude "./third_party/python-runtime" \
+      --exclude "./third_party/python-embed" \
+      --exclude "./docs/qa/chat-exports" \
+      --exclude "./*.md" \
+      -cf - . | (cd "${resources_app}" && tar -xf -)
   )
 fi
 
@@ -102,6 +120,10 @@ cat > "${appdir}/usr/share/metainfo/${desktop_id}.appdata.xml" <<EOF
   <launchable type="desktop-id">${desktop_id}.desktop</launchable>
 </component>
 EOF
+
+if [[ -d "${python_embed_root}" ]]; then
+  python_root="${python_embed_root}"
+fi
 
 node "${repo_root}/scripts/bundle_python_appimage.mjs" --appdir "${appdir}" --python-root "${python_root}"
 

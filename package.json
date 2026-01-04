@@ -9,6 +9,7 @@
     "build:brand": "node scripts/build-brand-icons.mjs",
     "test:measures": "node devtools/measures_harness/run_tests.js",
     "test:transpose": "node devtools/transpose_harness/run_tests.js",
+    "size:report": "node devtools/size_report.js dist/appimage/AppDir",
     "version:show": "node scripts/show-version.mjs",
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
