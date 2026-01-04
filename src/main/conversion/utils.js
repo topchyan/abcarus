@@ -61,7 +61,9 @@ function pythonEnvForExecutable(pythonPath) {
   const lower = exe.toLowerCase();
   const isBundled = lower.includes(`${path.sep}python-runtime${path.sep}`)
     || lower.includes(`${path.sep}python-embed${path.sep}`)
-    || Boolean(process.env.APPDIR);
+    || (Boolean(process.env.APPDIR)
+      && exe.includes(path.sep)
+      && path.resolve(exe).startsWith(path.resolve(process.env.APPDIR)));
   if (!isBundled) return {};
   // Embeddable Python on Windows often needs PYTHONHOME to find stdlib zip.
   return { PYTHONHOME: path.dirname(exe), PYTHONUTF8: "1" };
