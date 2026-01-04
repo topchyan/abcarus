@@ -10121,7 +10121,7 @@ function extractDrumPlaybackBars(text) {
   let inTextBlock = false;
   const bars = [];
   const patterns = [];
-  const applyMidiDirective = (directiveLine) => {
+  function applyMidiDirective(directiveLine) {
     const line = String(directiveLine || "").trim();
     if (!line) return;
     if (/^%%MIDI\s+drumon\b/i.test(line)) {
@@ -10160,6 +10160,48 @@ function extractDrumPlaybackBars(text) {
         patterns.push(currentPattern);
       }
     }
+  }
+  const applyInlineField = (field, value) => {
+    const f = String(field || "").trim().toUpperCase();
+    const v = String(value || "").trim();
+    if (!f) return;
+    if (f === "V") {
+      const voice = v.split(/\s+/)[0];
+      if (voice) {
+        currentVoice = voice;
+        if (!firstVoice) firstVoice = voice;
+        if (inBody && !primaryVoice) primaryVoice = voice;
+      }
+      return;
+    }
+    if (f === "K") {
+      inBody = true;
+      if (!primaryVoice && firstVoice) primaryVoice = firstVoice;
+      return;
+    }
+    if (f === "M") {
+      const parsed = parseFraction(v);
+      if (parsed) meter = parsed;
+      return;
+    }
+    if (f === "L") {
+      const parsed = parseFraction(v);
+      if (parsed) unit = parsed;
+      return;
+    }
+    if (f === "I") {
+      // Support inline MIDI directives like [I:MIDI drum ...]
+      const cleaned = v.replace(/^\s*MIDI\s+/i, "");
+      if (cleaned !== v) applyMidiDirective(`%%MIDI ${cleaned}`);
+    }
+  };
+  const applyInlineFieldsFromLine = (line) => {
+    const s = String(line || "");
+    const re = /\[\s*([A-Za-z]+)\s*:\s*([^\]]*)\]/g;
+    let match = null;
+    while ((match = re.exec(s)) !== null) {
+      applyInlineField(match[1], match[2]);
+    }
   };
   const parseFieldValue = (line, field) => {
     const re = new RegExp(`\\b${field}:\\s*([^\\]\\s]+)`);
@@ -10171,35 +10213,13 @@ function extractDrumPlaybackBars(text) {
     if (!trimmed) continue;
     // Inline field directives like "[P:...]" or "[M:...]" are not musical bars, but some of them
     // affect playback state (meter/unit/voice/body start), so we handle those and skip scanning.
-    if (/^\[\s*[A-Za-z]+:/.test(trimmed) && trimmed.endsWith("]")) {
-      const inner = trimmed.slice(1, -1).trim();
-      const match = inner.match(/^([A-Za-z]+)\s*:\s*(.*)$/);
-      if (match) {
-        const field = match[1].toUpperCase();
-        const value = match[2].trim();
-        if (field === "V") {
-          const v = value.split(/\s+/)[0];
-          if (v) {
-            currentVoice = v;
-            if (!firstVoice) firstVoice = v;
-            if (inBody && !primaryVoice) primaryVoice = v;
-          }
-        } else if (field === "K") {
-          inBody = true;
-          if (!primaryVoice && firstVoice) primaryVoice = firstVoice;
-        } else if (field === "M") {
-          const parsed = parseFraction(value);
-          if (parsed) meter = parsed;
-        } else if (field === "L") {
-          const parsed = parseFraction(value);
-          if (parsed) unit = parsed;
-        } else if (field === "I") {
-          // Support inline MIDI directives like [I:MIDI drum ...]
-          const v = value.replace(/^\s*MIDI\s+/i, "");
-          if (v !== value) applyMidiDirective(`%%MIDI ${v}`);
-        }
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      // Handle multi-inline-field lines like: [M:7/8][Q:1/4=220]
+      const remainder = trimmed.replace(/\[\s*[A-Za-z]+\s*:\s*[^\]]*\]/g, "").trim();
+      if (remainder === "") {
+        applyInlineFieldsFromLine(trimmed);
+        continue;
       }
-      continue;
     }
     if (trimmed.startsWith("V:")) {
       const v = trimmed.slice(2).trim().split(/\s+/)[0];
@@ -10263,6 +10283,9 @@ function extractDrumPlaybackBars(text) {
         if (/^\[\s*[A-Za-z]+:/.test(slice)) {
           const close = line.indexOf("]", i + 1);
           if (close >= 0) {
+            const inner = line.slice(i + 1, close);
+            const match = inner.match(/^\s*([A-Za-z]+)\s*:\s*(.*)\s*$/);
+            if (match) applyInlineField(match[1], match[2]);
             i = close + 1;
             continue;
           }
