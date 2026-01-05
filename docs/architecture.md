@@ -69,6 +69,10 @@ The renderer does not access Node APIs directly; it uses these IPC methods.
 2. The abc2svg player (`snd-1.js`) is fed the parsed tune.
 3. Playback events highlight notes in both the SVG and editor.
 
+#### Drums / velocity notes (roadmap)
+- Drum velocity controls were prototyped but are **deferred** for now: missing drum sounds were traced to the selected `.sf2` (coverage), and switching soundfonts addressed the immediate gap.
+- We expect upcoming abc2svg improvements (Jef Moine) to change/expand drum handling; revisit `Drum velocity` settings only after that lands, to avoid locking into a UI model that may diverge.
+
 ### Import/export pipeline
 - Import MusicXML/MXL: main process runs `xml2abc.py`, returns ABC to the renderer.
 - Export MusicXML: main process runs `abc2xml.py` on the current editor buffer.
