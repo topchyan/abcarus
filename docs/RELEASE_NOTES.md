@@ -1,5 +1,14 @@
 # Release Notes
 
+## [0.16.1] - 2026-01-05
+
+Range: v0.16.0..HEAD
+
+Name: Library Stability Patch
+
+### Fixed
+- Library Tree: reliably open tunes even if index entries became stale after re-parse.
+
 ## [0.16.0] - 2026-01-05
 
 Range: v0.15.1..HEAD
