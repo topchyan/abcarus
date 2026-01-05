@@ -2918,7 +2918,20 @@ function renderLibraryTree(files = null) {
 	          scrollToTuneInRaw(tune.id);
 	          return;
 	        }
-	        selectTune(tune.id);
+          // Do not rely solely on `tune.id` (it can change if the file is re-parsed).
+          // Use the tolerant open helper that can fall back to xNumber and force a re-parse.
+          openTuneFromLibrarySelection({
+            filePath: targetPath,
+            tuneId: tune.id,
+            xNumber: tune.xNumber,
+          }).then((res) => {
+            if (!res || !res.ok) {
+              const msg = res && res.error ? res.error : "Unable to open tune.";
+              showToast(msg, 3000);
+            }
+          }).catch(() => {
+            showToast("Unable to open tune.", 3000);
+          });
 	      });
       children.appendChild(button);
     }
@@ -3093,6 +3106,17 @@ async function openTuneFromLibrarySelection(selection) {
   }
   if (!tune && xNumber) {
     tune = (fileEntry.tunes || []).find((t) => String(t.xNumber || "") === xNumber) || null;
+  }
+  if (!tune) {
+    // The file may have been modified or re-parsed, making cached tune IDs stale.
+    // Force a re-parse of the file and retry matching by id / X number.
+    try {
+      const refreshed = await refreshLibraryFile(fileEntry.path, { force: true });
+      const tunes = refreshed && Array.isArray(refreshed.tunes) ? refreshed.tunes : (fileEntry.tunes || []);
+      if (tuneId) tune = tunes.find((t) => t && t.id === tuneId) || null;
+      if (!tune && tuneNo) tune = tunes.find((t) => String(t && (t.xNumber || "")) === tuneNo) || null;
+      if (!tune && xNumber) tune = tunes.find((t) => String(t && (t.xNumber || "")) === xNumber) || null;
+    } catch {}
   }
   if (!tune) {
     const msg = `Tune not found in file: ${safeBasename(filePath)}${tuneNo ? ` (X:${tuneNo})` : (xNumber ? ` (X:${xNumber})` : "")}`;
