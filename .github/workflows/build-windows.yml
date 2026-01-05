@@ -33,7 +33,7 @@ jobs:
         run: pwsh -ExecutionPolicy Bypass -File devtools/pbs/pbs-install-windows.ps1 -Platform win-x64
 
       - name: Build Windows artifact
-        run: npm run dist:win
+        run: npx electron-builder --win --x64 --publish never
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
