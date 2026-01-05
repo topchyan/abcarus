@@ -1,5 +1,14 @@
 # Release Notes
 
+## [0.16.2] - 2026-01-05
+
+Range: v0.16.1..HEAD
+
+Name: AppImage Packaging Fix
+
+### Fixed
+- AppImage: avoid duplicating converter scripts; preserve symlinks in bundled Python runtime.
+
 ## [0.16.1] - 2026-01-05
 
 Range: v0.16.0..HEAD
