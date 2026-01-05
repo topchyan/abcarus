@@ -30,7 +30,7 @@ jobs:
         run: npm run -s pbs:check
 
       - name: Install bundled Python (PBS)
-        run: powershell -ExecutionPolicy Bypass -File devtools/pbs/pbs-install-windows.ps1 -Platform win-x64
+        run: pwsh -ExecutionPolicy Bypass -File devtools/pbs/pbs-install-windows.ps1 -Platform win-x64
 
       - name: Build Windows artifact
         run: npm run dist:win

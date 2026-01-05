@@ -88,9 +88,28 @@ function Pick-PythonExe([string]$Root) {
   return ($candidates | Sort-Object { $_.Length } | Select-Object -First 1)
 }
 
+function Get-RelativePathCompat([string]$From, [string]$To) {
+  try {
+    $method = [System.IO.Path].GetMethod("GetRelativePath", [Type[]]@([string], [string]))
+    if ($null -ne $method) {
+      return [System.IO.Path]::GetRelativePath($From, $To)
+    }
+  } catch {}
+
+  $fromPath = $From
+  if (![string]::IsNullOrEmpty($fromPath) -and !$fromPath.EndsWith("\")) {
+    $fromPath = "${fromPath}\"
+  }
+  $fromUri = [System.Uri]::new($fromPath)
+  $toUri = [System.Uri]::new($To)
+  $relUri = $fromUri.MakeRelativeUri($toUri)
+  return [System.Uri]::UnescapeDataString($relUri.ToString()).Replace("/", "\")
+}
+
 # Discover python.exe without assuming a fixed layout.
 $discoveredTmpPython = Pick-PythonExe -Root $tmp
-$discoveredRel = [System.IO.Path]::GetRelativePath((Resolve-Path $tmp).Path, $discoveredTmpPython)
+$tmpResolved = (Resolve-Path $tmp).Path
+$discoveredRel = Get-RelativePathCompat -From $tmpResolved -To $discoveredTmpPython
 
 # Remove previous runtime content, but keep lock + gitkeep.
 Get-ChildItem -Force -Path $dest | ForEach-Object {
