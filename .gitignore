@@ -14,6 +14,16 @@ recents.zip
 debug_dumps/
 roadmaps/
 docs/qa/chat-exports/
+# Keep chat exports out of git, but allow curated prompts/README.
+docs/qa/chat-exports/**
+!docs/qa/chat-exports/
+!docs/qa/chat-exports/**/
+!docs/qa/chat-exports/README.md
+!docs/qa/chat-exports/**/prompt_*.txt
+!docs/qa/chat-exports/**/prompt_*.md
+
+# Generated prompt extraction outputs (never commit)
+docs/qa/chat-exports/prompts*/
 
 # Bundled Python runtime (release builds only)
 third_party/python-runtime/

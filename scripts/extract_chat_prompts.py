@@ -143,6 +143,14 @@ def extract_prompt_blocks_from_codex_txt(text: str) -> list[str]:
             if block:
                 prompts.append(block)
 
+    # Also extract fenced code blocks (often used for "official" spec prompts).
+    # This helps when the surrounding transcript separators are inconsistent.
+    fence_re = re.compile(r"```[^\n]*\n(.*?)\n```", re.DOTALL)
+    for match in fence_re.finditer(normalize_newlines(text)):
+        fenced = match.group(0).strip()
+        if fenced:
+            prompts.append(fenced)
+
     # Dedupe while preserving order (Codex exports often repeat the prompt block).
     seen: set[str] = set()
     unique: list[str] = []
@@ -153,6 +161,78 @@ def extract_prompt_blocks_from_codex_txt(text: str) -> list[str]:
         seen.add(key)
         unique.append(p)
 
+    return unique
+
+
+def extract_role_spec_blocks(text: str) -> list[str]:
+    """
+    Extract structured "official" Codex task prompts embedded in plain text logs.
+
+    Heuristics:
+    - start at a line beginning with ROLE: ... ChatGPT-Codex
+    - continue until next ROLE: or a likely free-form chat line after a blank line
+    """
+    lines = normalize_newlines(text).split("\n")
+    blocks: list[str] = []
+    i = 0
+
+    role_re = re.compile(r"^\s*ROLE:\s*You are\s+ChatGPT-?Codex\b", re.IGNORECASE)
+    marker_re = re.compile(r"^\s*(PRIMARY OBJECTIVE|OBJECTIVE|DELIVERABLES|OUTPUT FORMAT|CONSTRAINTS)\s*:", re.IGNORECASE)
+
+    def looks_like_spec_line(line: str) -> bool:
+        s = (line or "").strip()
+        if not s:
+            return True
+        if s.startswith(("```", "-", "*", "#")):
+            return True
+        if re.match(r"^\d+[\).\]]\s+", s):
+            return True
+        if ":" in s and re.match(r"^[A-Z][A-Z0-9 _-]{2,}:", s):
+            return True
+        if marker_re.match(s):
+            return True
+        return False
+
+    while i < len(lines):
+        if not role_re.match(lines[i]):
+            i += 1
+            continue
+
+        buf: list[str] = [lines[i]]
+        i += 1
+        saw_marker = False
+        blank_run = 0
+        while i < len(lines):
+            line = lines[i]
+            if role_re.match(line):
+                break
+            if marker_re.match(line.strip()):
+                saw_marker = True
+            if line.strip() == "":
+                blank_run += 1
+            else:
+                blank_run = 0
+
+            # Terminate when we have enough "spec" content and we hit a likely chat line.
+            if saw_marker and blank_run >= 1 and line.strip() and not looks_like_spec_line(line):
+                break
+
+            buf.append(line)
+            i += 1
+
+        block = "\n".join(buf).strip()
+        if block:
+            blocks.append(block)
+
+    # Dedupe while preserving order.
+    seen: set[str] = set()
+    unique: list[str] = []
+    for b in blocks:
+        key = hashlib.sha1(b.encode("utf-8", errors="ignore")).hexdigest()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(b)
     return unique
 
 
@@ -174,7 +254,10 @@ def extract_prompts_from_file(path: Path) -> list[str]:
 
     # Codex CLI exports.
     if name_lower in {"codex-chat.txt", "codex-chat.md"}:
-        return extract_prompt_blocks_from_codex_txt(extract_text(path))
+        text = extract_text(path)
+        prompts = extract_prompt_blocks_from_codex_txt(text)
+        role_specs = extract_role_spec_blocks(text)
+        return role_specs + prompts
 
     # Unknown formats: no extraction.
     return []
@@ -189,12 +272,34 @@ def safe_slug(text: str, max_len: int = 64) -> str:
     return raw or "prompt"
 
 
+def is_fence_line(line: str) -> bool:
+    s = (line or "").strip()
+    return s.startswith("```") and len(s) <= 16
+
+
+def first_meaningful_line(block: str) -> str:
+    for line in (block or "").splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if is_fence_line(s):
+            continue
+        return s
+    return ""
+
+
 def main():
     parser = argparse.ArgumentParser(description="Extract user prompts from docs/qa/chat-exports.")
     parser.add_argument(
         "--input-dir",
         default="docs/qa/chat-exports",
         help="Directory that contains chat exports.",
+    )
+    parser.add_argument(
+        "--kind",
+        choices=("all", "official"),
+        default="all",
+        help="Which prompts to extract: all user prompts, or only 'official' Codex task prompts (ROLE/OBJECTIVE blocks).",
     )
     parser.add_argument(
         "--output-dir",
@@ -210,8 +315,27 @@ def main():
     out_root = Path(args.output_dir)
     out_root.mkdir(parents=True, exist_ok=True)
 
-    files = sorted([p for p in root.rglob("*") if p.is_file() and out_root not in p.parents])
+    def should_skip_file(p: Path) -> bool:
+        try:
+            rel = p.relative_to(root)
+        except ValueError:
+            return False
+        # Never re-process generated prompt outputs if they live under the exports tree.
+        for part in rel.parts:
+            if part.startswith("prompts"):
+                return True
+        return False
+
+    files = sorted(
+        [p for p in root.rglob("*") if p.is_file() and out_root not in p.parents and not should_skip_file(p)]
+    )
     total_prompts = 0
+
+    official_re = re.compile(
+        r"(^|\n)\s*ROLE:\s*You are\s+ChatGPT-?Codex\b",
+        re.IGNORECASE,
+    )
+    objective_re = re.compile(r"(^|\n)\s*(PRIMARY OBJECTIVE|OBJECTIVE|DELIVERABLES)\s*:", re.IGNORECASE)
 
     for path in files:
         rel = path.relative_to(root)
@@ -224,7 +348,15 @@ def main():
 
         source_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", path.name).strip("-._") or "export"
         for idx, prompt in enumerate(prompts, start=1):
-            first_line = next((ln.strip() for ln in prompt.splitlines() if ln.strip()), "")
+            if args.kind == "official":
+                # Keep only structured task prompts for Codex (architect/PM style).
+                # Require ROLE: ChatGPT-Codex and at least one "objective/deliverables" marker.
+                if not official_re.search(prompt):
+                    continue
+                if not objective_re.search(prompt):
+                    continue
+
+            first_line = first_meaningful_line(prompt)
             slug = safe_slug(first_line)
             digest = hashlib.sha1(prompt.encode("utf-8", errors="ignore")).hexdigest()[:10]
             out_name = f"{source_stem}__{idx:04d}__{slug}__{digest}.txt"
