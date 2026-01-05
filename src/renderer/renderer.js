@@ -9336,6 +9336,30 @@ async function ensureSoundfontLoaded() {
 
   if (!window.abc2svg) window.abc2svg = {};
 
+  const withTimeout = (promise, ms, label) => {
+    const timeoutMs = Number(ms) > 0 ? Number(ms) : 0;
+    if (!timeoutMs) return promise;
+    return new Promise((resolve, reject) => {
+      let done = false;
+      const timer = setTimeout(() => {
+        if (done) return;
+        done = true;
+        reject(new Error(`${label || "Operation"} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+      Promise.resolve(promise).then((value) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(value);
+      }, (err) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  };
+
   const loadSoundfont = async (name) => {
     const isPath = name.startsWith("/") || /^[a-zA-Z]:\\/.test(name) || name.startsWith("file://");
     const sf2Url = isPath
@@ -9350,7 +9374,17 @@ async function ensureSoundfontLoaded() {
     if (!window.api || typeof window.api.readFileBase64 !== "function") {
       throw new Error("preload API missing: window.api.readFileBase64");
     }
-    const b64 = await window.api.readFileBase64(sf2Url);
+    let b64 = "";
+    try {
+      // Reading and base64-encoding SF2 can be slow on some platforms; avoid hanging forever.
+      b64 = await withTimeout(window.api.readFileBase64(sf2Url), 15000, "Soundfont load");
+    } catch (e) {
+      // Fallback: let the player load SF2 from a local file URL instead of embedding base64.
+      window.abc2svg.sf2 = null;
+      soundfontSource = sf2Url;
+      soundfontReadyName = name;
+      return;
+    }
     if (!b64 || !b64.length) throw new Error("SF2 base64 is empty");
     window.abc2svg.sf2 = b64; // raw base64
     soundfontSource = "abc2svg.sf2";

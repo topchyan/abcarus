@@ -47,7 +47,12 @@ function bundledPythonCandidates() {
   const embedDir = path.join(unpackedThirdParty, "python-embed", getPythonEmbedPlatformArch());
 
   if (process.platform === "win32") {
-    candidates.push(path.join(embedDir, "python.exe"), path.join(embedDir, "python3.exe"));
+    // PBS layout typically provides `python/python.exe` on Windows.
+    candidates.push(
+      path.join(embedDir, "python", "python.exe"),
+      path.join(embedDir, "python.exe"),
+      path.join(embedDir, "python3.exe")
+    );
     // Legacy python.org embeddable (temporary).
     candidates.push(path.join(unpackedThirdParty, "python-embed", "win-x64-legacy", "python.exe"));
   } else {
@@ -64,7 +69,11 @@ function bundledPythonCandidates() {
   const devThirdParty = path.join(resolveRepoRootFromHere(), "third_party");
   const devEmbedDir = path.join(devThirdParty, "python-embed", getPythonEmbedPlatformArch());
   if (process.platform === "win32") {
-    candidates.push(path.join(devEmbedDir, "python.exe"), path.join(devEmbedDir, "python3.exe"));
+    candidates.push(
+      path.join(devEmbedDir, "python", "python.exe"),
+      path.join(devEmbedDir, "python.exe"),
+      path.join(devEmbedDir, "python3.exe")
+    );
     candidates.push(path.join(devThirdParty, "python-embed", "win-x64-legacy", "python.exe"));
   } else {
     candidates.push(
