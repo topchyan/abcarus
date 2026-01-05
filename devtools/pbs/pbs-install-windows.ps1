@@ -115,6 +115,7 @@ $discoveredRel = Get-RelativePathCompat -From $tmpResolved -To $discoveredTmpPyt
 Get-ChildItem -Force -Path $dest | ForEach-Object {
   if ($_.Name -eq "python-build-standalone.lock.json") { return }
   if ($_.Name -eq ".gitkeep") { return }
+  if ($_.Name -eq ".install_tmp") { return }
   Remove-Item -Recurse -Force $_.FullName
 }
 
