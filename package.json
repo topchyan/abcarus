@@ -1,12 +1,20 @@
 {
   "name": "abc-electron-proto",
-  "version": "0.15.1",
+  "version": "0.16.0",
   "main": "src/main/index.js",
   "private": true,
   "scripts": {
     "start": "electron .",
     "appimage": "bash scripts/build_appimage.sh",
     "build:brand": "node scripts/build-brand-icons.mjs",
+    "pbs:check": "node scripts/check_pbs_lock.mjs",
+    "pbs:check-runtime": "node scripts/check_pbs_runtime.mjs",
+    "predist:dir": "node scripts/check_pbs_runtime.mjs",
+    "predist:win": "node scripts/check_pbs_runtime.mjs",
+    "predist:mac": "node scripts/check_pbs_runtime.mjs",
+    "dist:dir": "electron-builder --dir",
+    "dist:win": "electron-builder --win --x64",
+    "dist:mac": "electron-builder --mac",
     "test:measures": "node devtools/measures_harness/run_tests.js",
     "test:transpose": "node devtools/transpose_harness/run_tests.js",
     "test:settings": "node devtools/settings_harness/run_tests.js",
@@ -19,9 +27,45 @@
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.0",
     "electron": "^28.0.0",
+    "electron-builder": "^24.13.3",
     "semver": "^7.6.3"
   },
   "dependencies": {
     "tabulator-tables": "^6.3.1"
+  },
+  "build": {
+    "appId": "com.abcarus.ABCarus",
+    "productName": "ABCarus",
+    "files": [
+      "**/*",
+      "!dist/**",
+      "!debug_dumps/**",
+      "!docs/qa/chat-exports/**",
+      "!devtools/**",
+      "!roadmaps/**",
+      "!scripts/local/**",
+      "!third_party/python-embed/.cache/**",
+      "!third_party/python-runtime/**",
+      "!**/*.map"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "third_party/abc2xml/**",
+      "third_party/xml2abc/**",
+      "third_party/python-embed/**"
+    ],
+    "directories": {
+      "output": "dist/electron-builder"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ]
+    }
   }
 }

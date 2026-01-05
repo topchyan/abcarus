@@ -20,7 +20,7 @@ Scripts are defined in `package.json`.
 
 ## Runtime dependencies
 - Electron (dev dependency in `package.json`).
-- Python 3 on PATH for MusicXML import/export (`third_party/abc2xml/abc2xml.py`, `third_party/xml2abc/xml2abc.py`).
+- Bundled Python 3.11 runtime for MusicXML import/export (`third_party/abc2xml/abc2xml.py`, `third_party/xml2abc/xml2abc.py`).
 - Soundfont data in `third_party/sf2/` for audio playback.
 
 ## Key folders
@@ -38,5 +38,7 @@ No packaging or build scripts are defined beyond `npm run start`. Any production
 - `docs/architecture.md`: Main/renderer responsibilities, IPC, and data flow.
 - `docs/REQUIREMENTS.md`: Consolidated product + engineering requirements/invariants.
 - `docs/METHODOLOGY.md`: How we develop (chat-driven) without losing context.
+- `docs/python-build-standalone.md`: Bundled Python policy + PBS install workflow.
+- `docs/packaging.md`: Packaging workflows per OS.
 - `docs/soundfonts.md`: Soundfont selection and local setup.
 - `docs/adr/`: Architecture decision records (ADRs).

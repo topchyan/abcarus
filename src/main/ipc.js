@@ -3,6 +3,7 @@ const {
   convertAbcToMusicXml,
   checkConversionTools,
 } = require("./conversion");
+const { resolvePythonExecutable, pythonEnvForExecutable } = require("./conversion/utils");
 const { getSettingsSchema } = require("./settings_schema");
 
 const os = require("os");
@@ -78,11 +79,22 @@ async function atomicWriteFileWithRetry(fs, path, filePath, data, { attempts = 5
 }
 
 async function getPythonVersion() {
-  const python3 = await execVersion("python3", ["--version"]);
-  if (python3) return python3;
-  const python = await execVersion("python", ["--version"]);
-  if (python) return python;
-  return "";
+  try {
+    const pythonPath = await resolvePythonExecutable();
+    return await new Promise((resolve) => {
+      execFile(
+        pythonPath,
+        ["--version"],
+        { timeout: 1500, env: { ...process.env, ...pythonEnvForExecutable(pythonPath) } },
+        (err, stdout, stderr) => {
+          if (err) return resolve("");
+          resolve(String(stdout || stderr || "").trim());
+        }
+      );
+    });
+  } catch {
+    return "";
+  }
 }
 
 function registerIpcHandlers(ctx) {

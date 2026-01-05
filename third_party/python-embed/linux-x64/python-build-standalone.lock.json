@@ -1,0 +1,11 @@
+{
+  "repo": "astral-sh/python-build-standalone",
+  "tag": "20251217",
+  "asset": "cpython-3.11.14+20251217-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+  "sha256": "49e99461d9c4ea3ee80ff0e5d00afa197f9d4c00ebf5fab51e70e507f330003a",
+  "triple": "x86_64-unknown-linux-gnu",
+  "platform": "linux-x64",
+  "pyMinor": "3.11",
+  "flavor": "install_only_stripped",
+  "downloadedAtUtc": "2026-01-05T01:28:42.487Z"
+}

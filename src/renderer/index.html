@@ -22,7 +22,7 @@
 <body>
   <header>
     <div class="controls">
-      <button id="btnToggleLibrary" title="Library list (Ctrl+Shift+L)">Library</button>
+      <button id="btnToggleLibrary" title="Toggle Library Tree (Ctrl+L). Shift-click: Library Catalog (Ctrl+Shift+L)">Library</button>
       <div class="controls-sep" aria-hidden="true"></div>
       <button id="btnFileNew" type="button" title="New file (Ctrl+N)">New File</button>
       <button id="btnFileOpen" type="button" title="Open (Ctrl+O)">Open</button>
@@ -155,7 +155,7 @@
 			    <div id="errorsList" class="errors-list"></div>
 			  </div>
 	
-		  <div class="modal" id="settingsModal" aria-hidden="true">
+  <div class="modal" id="settingsModal" aria-hidden="true">
 		    <div class="modal-card settings-card" role="dialog" aria-label="Settings">
 	      <div class="modal-header">
 	        <div class="modal-title">Settings</div>
@@ -167,41 +167,6 @@
       </div>
       <div class="modal-footer">
         <button id="settingsReset" type="button">Reset Defaults</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal" id="findLibraryModal" aria-hidden="true">
-    <div class="modal-card" role="dialog" aria-label="Find in Library">
-      <div class="modal-header">
-        <div class="modal-title">Find in Library</div>
-        <button class="modal-close" id="findLibraryClose" type="button">Close</button>
-      </div>
-      <div class="modal-body">
-        <label class="settings-row">
-          <span>Tag</span>
-          <select id="findLibraryTag">
-            <option value="X">X (Reference)</option>
-            <option value="T">T (Title)</option>
-            <option value="C">C (Composer)</option>
-            <option value="M">M (Meter)</option>
-            <option value="K">K (Key)</option>
-            <option value="L">L (Unit Length)</option>
-            <option value="Q">Q (Tempo)</option>
-            <option value="R">R (Rhythm)</option>
-            <option value="S">S (Source)</option>
-            <option value="O">O (Origin)</option>
-            <option value="G">G (Group)</option>
-          </select>
-        </label>
-        <label class="settings-row">
-          <span>Value</span>
-          <input id="findLibraryValue" type="text" />
-        </label>
-      </div>
-      <div class="modal-footer">
-        <button id="findLibraryApply" type="button">Apply</button>
-        <button id="findLibraryClear" type="button">Clear Filter</button>
       </div>
     </div>
   </div>
@@ -272,14 +237,14 @@
   </div>
 
   <div id="libOverlay" class="lib-overlay" hidden>
-    <div class="lib-modal" role="dialog" aria-modal="true" aria-label="Library">
+    <div class="lib-modal" role="dialog" aria-modal="true" aria-label="Library Catalog">
       <div class="lib-header">
         <div class="lib-header-top">
-          <div class="lib-title">Library</div>
+          <div class="lib-title">Library Catalog</div>
           <button id="libClose" class="lib-x" type="button" aria-label="Close">×</button>
         </div>
         <div class="lib-header-bottom">
-          <div class="lib-hint">Tip: double-click a row to open.</div>
+          <div class="lib-hint">Tip: use Quick filter to search; double-click a row to open.</div>
           <div class="lib-controls">
             <label class="lib-label">
               Quick filter

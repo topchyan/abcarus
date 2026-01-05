@@ -78,7 +78,7 @@ The renderer does not access Node APIs directly; it uses these IPC methods.
 Bundled tools are in `third_party/`:
 - `abc2svg` for rendering and playback.
 - `abc2xml` and `xml2abc` for conversion.
-- MusicXML conversion tools (abc2xml/xml2abc) executed via Python.
+- MusicXML conversion tools (abc2xml/xml2abc) executed via a bundled Python runtime.
 - Soundfonts (`third_party/sf2/`).
 
 Upgrading these components may require updates to:

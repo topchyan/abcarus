@@ -18,16 +18,22 @@ Practical size expectation (Windows x64):
 
 Place the runtime at:
 - `third_party/python-embed/win-x64/`
-  - expected executable: `python.exe` (or `python3.exe`)
+  - expected executable: `python.exe` (python-build-standalone install)
 
 This folder is gitignored.
 
 When packaged, binaries should be shipped via `app.asar.unpacked`, and ABCarus will prefer:
 - `<resources>/app.asar.unpacked/third_party/python-embed/win-x64/python.exe`
-
-If not present, ABCarus falls back to system Python (`python` on PATH).
+ABCarus does not rely on system Python by default.
 
 ## Notes
 
 - The embeddable distribution should include its `pythonXY.zip` / `_pth` configuration so `python -c "print('ok')"` works out of the box.
-- ABCarus sets `PYTHONIOENCODING=utf-8` and, for bundled runtimes, also sets `PYTHONHOME` to the runtime directory.
+- ABCarus sets `PYTHONIOENCODING=utf-8` and, for bundled runtimes, also sets `PYTHONHOME` to the runtime root.
+
+## Legacy (temporary)
+
+Older python.org "embeddable" runtimes may exist under:
+- `third_party/python-embed/win-x64-legacy/`
+
+ABCarus prefers PBS under `win-x64` and only uses legacy as a fallback.

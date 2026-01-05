@@ -1,0 +1,11 @@
+{
+  "repo": "astral-sh/python-build-standalone",
+  "tag": "20251217",
+  "asset": "cpython-3.11.14+20251217-aarch64-apple-darwin-install_only_stripped.tar.gz",
+  "sha256": "a5a4bb1dc3c1beff4a9c07fd35e07e031498b71a5a63d19de383d445d43181c6",
+  "triple": "aarch64-apple-darwin",
+  "platform": "darwin-arm64",
+  "pyMinor": "3.11",
+  "flavor": "install_only_stripped",
+  "downloadedAtUtc": "2026-01-05T01:28:45.458Z"
+}

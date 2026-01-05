@@ -13,6 +13,8 @@ class ConversionError extends Error {
 
 let cachedPython = null;
 
+const REQUIRED_PYTHON_MAJOR_MINOR = "3.11";
+
 function resolveRepoRootFromHere() {
   // This file lives in `src/main/conversion/`.
   return path.resolve(__dirname, "..", "..", "..");
@@ -46,8 +48,16 @@ function bundledPythonCandidates() {
 
   if (process.platform === "win32") {
     candidates.push(path.join(embedDir, "python.exe"), path.join(embedDir, "python3.exe"));
+    // Legacy python.org embeddable (temporary).
+    candidates.push(path.join(unpackedThirdParty, "python-embed", "win-x64-legacy", "python.exe"));
   } else {
-    candidates.push(path.join(embedDir, "python3"), path.join(embedDir, "python"));
+    // PBS installs typically provide bin/python3.
+    candidates.push(
+      path.join(embedDir, "bin", "python3"),
+      path.join(embedDir, "bin", "python"),
+      path.join(embedDir, "python3"),
+      path.join(embedDir, "python")
+    );
   }
 
   // Dev tree (optional local runtime; typically gitignored).
@@ -55,8 +65,14 @@ function bundledPythonCandidates() {
   const devEmbedDir = path.join(devThirdParty, "python-embed", getPythonEmbedPlatformArch());
   if (process.platform === "win32") {
     candidates.push(path.join(devEmbedDir, "python.exe"), path.join(devEmbedDir, "python3.exe"));
+    candidates.push(path.join(devThirdParty, "python-embed", "win-x64-legacy", "python.exe"));
   } else {
-    candidates.push(path.join(devEmbedDir, "python3"), path.join(devEmbedDir, "python"));
+    candidates.push(
+      path.join(devEmbedDir, "bin", "python3"),
+      path.join(devEmbedDir, "bin", "python"),
+      path.join(devEmbedDir, "python3"),
+      path.join(devEmbedDir, "python")
+    );
   }
 
   return candidates;
@@ -66,46 +82,101 @@ function pythonEnvForExecutable(pythonPath) {
   const exe = String(pythonPath || "");
   if (!exe) return {};
   const lower = exe.toLowerCase();
-  const isBundled = lower.includes(`${path.sep}python-runtime${path.sep}`)
-    || lower.includes(`${path.sep}python-embed${path.sep}`)
+  const isBundled = lower.includes(`${path.sep}python-embed${path.sep}`)
     || (Boolean(process.env.APPDIR)
       && exe.includes(path.sep)
       && path.resolve(exe).startsWith(path.resolve(process.env.APPDIR)));
   if (!isBundled) return { PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" };
-  // Embeddable Python on Windows often needs PYTHONHOME to find stdlib zip.
-  return { PYTHONHOME: path.dirname(exe), PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" };
+  const base = process.platform === "win32"
+    ? path.dirname(exe)
+    : path.resolve(path.dirname(exe), "..");
+  // Bundled runtimes should not depend on system site-packages.
+  return {
+    PYTHONHOME: base,
+    PYTHONNOUSERSITE: "1",
+    PYTHONUTF8: "1",
+    PYTHONIOENCODING: "utf-8",
+  };
+}
+
+function isBundledPythonExecutable(pythonPath) {
+  const exe = String(pythonPath || "");
+  if (!exe) return false;
+  const lower = exe.toLowerCase();
+  return lower.includes(`${path.sep}python-embed${path.sep}`)
+    || (Boolean(process.env.APPDIR)
+      && exe.includes(path.sep)
+      && path.resolve(exe).startsWith(path.resolve(process.env.APPDIR)));
 }
 
 async function resolvePythonExecutable() {
   if (cachedPython) return cachedPython;
   const candidates = [];
   for (const c of bundledPythonCandidates()) candidates.push(c);
-  if (process.platform === "win32") candidates.push("python");
-  else candidates.push("python3", "python");
+  const allowSystemPython = String(process.env.ABCARUS_ALLOW_SYSTEM_PYTHON || "").trim() === "1";
+  if (allowSystemPython) {
+    if (process.platform === "win32") candidates.push("python");
+    else candidates.push("python3", "python");
+  }
 
+  let lastBundledProbeError = "";
   for (const candidate of candidates) {
     try {
       if (candidate.includes(path.sep) && !fs.existsSync(candidate)) continue;
-      const isPathLike = candidate.includes(path.sep);
-      const probe = isPathLike
-        ? "import sys; import os; print(sys.executable); print(os.getcwd())"
-        : "print('ok')";
+      const allowOtherVersion = String(process.env.ABCARUS_ALLOW_OTHER_PYTHON || "").trim() === "1";
+      const probe = allowOtherVersion
+        ? "print('ok')"
+        : `import sys; print(f\"{sys.version_info.major}.{sys.version_info.minor}\")`;
+      let out = "";
       await new Promise((resolve, reject) => {
         execFile(candidate, ["-c", probe], {
           timeout: 4000,
           env: { ...process.env, ...pythonEnvForExecutable(candidate) },
-        }, (err) => {
+        }, (err, stdout, stderr) => {
           if (err) reject(err);
-          else resolve();
+          else {
+            out = String(stdout || stderr || "").trim();
+            resolve();
+          }
         });
       });
+      if (!allowOtherVersion) {
+        if (out !== REQUIRED_PYTHON_MAJOR_MINOR) continue;
+      }
+
+      // Second probe for bundled/legacy runtimes only: ensure sys.executable works.
+      if (isBundledPythonExecutable(candidate)) {
+        try {
+          await new Promise((resolve, reject) => {
+            execFile(candidate, ["-c", "import sys; print(sys.executable)"], {
+              timeout: 4000,
+              env: { ...process.env, ...pythonEnvForExecutable(candidate) },
+            }, (err, stdout, stderr) => {
+              if (err) {
+                const detail = String(stderr || stdout || err.message || err).trim();
+                reject(new Error(detail || "Second probe failed."));
+              } else {
+                const text = String(stdout || stderr || "").trim();
+                if (!text) reject(new Error("Second probe returned empty sys.executable."));
+                else resolve();
+              }
+            });
+          });
+        } catch (e) {
+          lastBundledProbeError = `${candidate}: ${e && e.message ? e.message : String(e)}`;
+          continue;
+        }
+      }
+
       cachedPython = candidate;
       return candidate;
     } catch {}
   }
   throw new ConversionError(
     "Python not found.",
-    "Install Python (3 recommended) or bundle an embeddable Python runtime to use import/export tools.",
+    lastBundledProbeError
+      ? `Bundled Python failed to run: ${lastBundledProbeError}`
+      : `ABCarus requires a bundled Python ${REQUIRED_PYTHON_MAJOR_MINOR} runtime for import/export tools.`,
     "PYTHON_NOT_FOUND"
   );
 }
@@ -339,6 +410,7 @@ module.exports = {
   resolvePythonExecutable,
   resolveNodeExecutable,
   resolveExecutable,
+  pythonEnvForExecutable,
   runPythonScript,
   runNodeScript,
   runProcess,

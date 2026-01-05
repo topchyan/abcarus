@@ -8,7 +8,6 @@ app_name="abcarus"
 desktop_id="com.abcarus.ABCarus"
 electron_dist="${repo_root}/node_modules/electron/dist"
 icon_path="${repo_root}/assets/icons/abcarus_512.png"
-python_root="${repo_root}/third_party/python-runtime"
 python_embed_root="${repo_root}/third_party/python-embed/linux-x64"
 clean=1
 
@@ -45,7 +44,6 @@ if command -v rsync >/dev/null 2>&1; then
     --exclude "devtools" \
     --exclude "docs" \
     --exclude "scripts" \
-    --exclude "third_party/python-runtime" \
     --exclude "third_party/python-embed" \
     --exclude "docs/qa/chat-exports" \
     --exclude "*.md" \
@@ -60,7 +58,6 @@ else
       --exclude "./devtools" \
       --exclude "./docs" \
       --exclude "./scripts" \
-      --exclude "./third_party/python-runtime" \
       --exclude "./third_party/python-embed" \
       --exclude "./docs/qa/chat-exports" \
       --exclude "./*.md" \
@@ -121,8 +118,13 @@ cat > "${appdir}/usr/share/metainfo/${desktop_id}.appdata.xml" <<EOF
 </component>
 EOF
 
-if [[ -d "${python_embed_root}" ]]; then
-  python_root="${python_embed_root}"
+python_root="${python_embed_root}"
+if [[ ! -x "${python_root}/bin/python3" ]]; then
+  echo "Bundled Python runtime not found at: ${python_root}"
+  echo "Install it via:"
+  echo "  node devtools/pbs/pbs-update-lock.mjs --platform=linux-x64 --py=3.11 --flavor=install_only_stripped"
+  echo "  bash devtools/pbs/pbs-install-unix.sh linux-x64"
+  exit 1
 fi
 
 node "${repo_root}/scripts/bundle_python_appimage.mjs" --appdir "${appdir}" --python-root "${python_root}"

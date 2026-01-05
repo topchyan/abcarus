@@ -13,7 +13,7 @@ To reduce AppImage size, the AppImage builder now excludes non-runtime content w
 - `devtools/**`
 - `scripts/**`
 - `docs/qa/chat-exports/**`
-- `third_party/python-runtime/**` (runtime is copied into AppDir `usr/` instead)
+- `third_party/python-embed/**` (runtime is copied into AppDir `usr/` instead)
 - `third_party/python-embed/**` (bundled runtime is copied into AppDir `usr/` instead)
 - root `*.md`
 
@@ -28,7 +28,7 @@ The AppImage build copies only the Python tool scripts that ABCarus executes:
 - `third_party/abc2xml/**`
 - `third_party/xml2abc/**`
 
-It intentionally does not scan/copy bundled runtimes (e.g. `third_party/python-runtime/**`) into `usr/share/abcarus`, to avoid duplication and unnecessary size.
+It intentionally does not scan/copy bundled runtimes (e.g. `third_party/python-embed/**`) into `usr/share/abcarus`, to avoid duplication and unnecessary size.
 
 ### Known size drivers
 

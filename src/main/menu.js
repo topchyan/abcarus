@@ -110,7 +110,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
       submenu: [
         { role: "toggleDevTools" },
         { type: "separator" },
-        { label: "Library List…", accelerator: "CmdOrCtrl+Shift+L", click: () => sendMenuAction("libraryList") },
+        { label: "Library Catalog…", accelerator: "CmdOrCtrl+Shift+L", click: () => sendMenuAction("libraryList") },
         { label: "Toggle Library", accelerator: "CmdOrCtrl+L", click: () => sendMenuAction("toggleLibrary") },
         { label: "Toggle File Header", accelerator: "Alt+H", click: () => sendMenuAction("toggleFileHeader") },
         { type: "separator" },

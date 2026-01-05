@@ -94,12 +94,6 @@ const $errorsPopoverTitle = document.getElementById("errorsPopoverTitle");
 const $errorsListPopover = document.getElementById("errorsList");
 const $sidebarBody = document.querySelector(".sidebar-body");
 const $editorPane = document.querySelector(".editor-pane");
-const $findLibraryModal = document.getElementById("findLibraryModal");
-const $findLibraryClose = document.getElementById("findLibraryClose");
-const $findLibraryApply = document.getElementById("findLibraryApply");
-const $findLibraryClear = document.getElementById("findLibraryClear");
-const $findLibraryTag = document.getElementById("findLibraryTag");
-const $findLibraryValue = document.getElementById("findLibraryValue");
 const $moveTuneModal = document.getElementById("moveTuneModal");
 const $moveTuneClose = document.getElementById("moveTuneClose");
 const $moveTuneTarget = document.getElementById("moveTuneTarget");
@@ -1889,65 +1883,8 @@ function findHeaderEndOffset(content) {
   return Number.isFinite(match.index) ? match.index : 0;
 }
 
-function closeFindLibraryModal() {
-  if (!$findLibraryModal) return;
-  $findLibraryModal.classList.remove("open");
-  $findLibraryModal.setAttribute("aria-hidden", "true");
-}
-
-function applyFindLibraryModal() {
-  if (!$findLibraryTag || !$findLibraryValue) return;
-  const tag = String($findLibraryTag.value || "").toUpperCase();
-  const value = String($findLibraryValue.value || "").trim();
-  if (!value) {
-    setStatus("Enter a value to search.");
-    return;
-  }
-  applyLibraryTagFilter(tag, value);
-  closeFindLibraryModal();
-}
-
 function normalizeFilterValue(value) {
   return String(value || "").trim().toLowerCase();
-}
-
-function matchTuneField(tune, tag, value) {
-  const needle = normalizeFilterValue(value);
-  if (!needle) return false;
-  const fieldMap = {
-    X: tune.xNumber,
-    T: tune.title,
-    C: tune.composer,
-    M: tune.meter,
-    K: tune.key,
-    L: tune.unitLength,
-    Q: tune.tempo,
-    R: tune.rhythm,
-    S: tune.source,
-    O: tune.origin,
-    G: tune.group,
-  };
-  const raw = fieldMap[tag] || "";
-  return normalizeFilterValue(raw).includes(needle);
-}
-
-function applyLibraryTagFilter(tag, value) {
-  if (!libraryIndex || !libraryIndex.files) return;
-  const filtered = [];
-  for (const file of libraryIndex.files) {
-    const tunes = (file.tunes || []).filter((tune) => matchTuneField(tune, tag, value));
-    if (tunes.length) {
-      filtered.push({
-        path: file.path,
-        basename: file.basename,
-        headerText: file.headerText || "",
-        headerEndOffset: file.headerEndOffset || 0,
-        updatedAtMs: file.updatedAtMs || 0,
-        tunes,
-      });
-    }
-  }
-  setLibraryFilter(filtered, `${tag}:${value}`);
 }
 
 function updateLibraryStatus() {
@@ -2014,18 +1951,6 @@ function applyLibraryTextFilter(files, query) {
   return filtered;
 }
 
-
-function promptFindInLibrary() {
-  if (!libraryIndex) {
-    setStatus("Load a library folder first.");
-    return;
-  }
-  if ($findLibraryModal) {
-    $findLibraryModal.classList.add("open");
-    $findLibraryModal.setAttribute("aria-hidden", "false");
-    if ($findLibraryValue) $findLibraryValue.focus();
-  }
-}
 
 function getEditorValue() {
   if (!editorView) return "";
@@ -2478,11 +2403,10 @@ function initEditor() {
     { key: "Mod-g", run: gotoLine },
     { key: "Ctrl-F7", run: (view) => moveLineSelection(view, 1) },
     { key: "Mod-F7", run: (view) => moveLineSelection(view, 1) },
-    { key: "Ctrl-F5", run: (view) => moveLineSelection(view, -1) },
-    { key: "Mod-F5", run: (view) => moveLineSelection(view, -1) },
+	    { key: "Ctrl-F5", run: (view) => moveLineSelection(view, -1) },
+	    { key: "Mod-F5", run: (view) => moveLineSelection(view, -1) },
 	    { key: "Tab", run: indentSelectionMore },
 	    { key: "Shift-Tab", run: indentSelectionLess },
-	    { key: "F2", run: () => { toggleLibrary(); return true; } },
 	    { key: "F5", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to play.", 2200); return true; } transportTogglePlayPause(); return true; } },
 	    { key: "F6", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to navigate errors.", 2200); return true; } activateErrorByNav(-1); return true; } },
 	    { key: "F7", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to navigate errors.", 2200); return true; } activateErrorByNav(1); return true; } },
@@ -2753,6 +2677,10 @@ function setLibraryVisible(visible) {
 
 function toggleLibrary() {
   setLibraryVisible(!isLibraryVisible);
+  // Toggling the library pane changes available width; reset the editor/render split so the UI looks tidy.
+  requestAnimationFrame(() => {
+    try { resetRightPaneSplit(); } catch {}
+  });
 }
 
 function getGroupValue(tune, mode) {
@@ -3427,8 +3355,12 @@ async function requestLoadLibraryFile(filePath) {
 }
 
 if ($btnToggleLibrary) {
-  $btnToggleLibrary.addEventListener("click", () => {
-    openLibraryListFromCurrentLibraryIndex();
+  $btnToggleLibrary.addEventListener("click", (e) => {
+    if (e && e.shiftKey) {
+      openLibraryListFromCurrentLibraryIndex();
+      return;
+    }
+    toggleLibrary();
   });
 }
 
@@ -4540,12 +4472,24 @@ function formatMetreFromText(abcText) {
 
 function detectMeterMismatchInBarlines(abcText) {
   const text = String(abcText || "");
+  const metreText = formatMetreFromText(text) || "";
+  if (!metreText) return null;
   const metre = getMetre(text);
   const defaultLen = getDefaultLen(text);
   if (!Number.isFinite(metre) || metre <= 0) return null;
   if (!Number.isFinite(defaultLen) && defaultLen !== "mcm_default") return null;
 
   const lines = text.split(/\r\n|\n|\r/);
+  let metreLoc = null;
+  for (let i = 0; i < lines.length; i += 1) {
+    const rawLine = lines[i];
+    const match = rawLine.match(/^(\s*)M:\s*([0-9]+)\s*\/\s*([0-9]+)/);
+    if (!match) continue;
+    const found = `${match[2]}/${match[3]}`;
+    if (found !== metreText) continue;
+    metreLoc = { line: i + 1, col: (match[1] ? match[1].length : 0) + 1 };
+    break;
+  }
   let inTextBlock = false;
   let inBody = false;
   let buffer = "";
@@ -4620,7 +4564,6 @@ function detectMeterMismatchInBarlines(abcText) {
   const total = usable.length;
   if (best.count < Math.max(4, Math.ceil(total * 0.6))) return null;
 
-  const metreText = formatMetreFromText(text) || "";
   const hint = metreText
     ? `Bars look ~${best.multiple}× longer than M:${metreText}`
     : `Bars look ~${best.multiple}× longer than the meter`;
@@ -4631,7 +4574,99 @@ function detectMeterMismatchInBarlines(abcText) {
     barCount: total,
     matchCount: best.count,
     metre: metreText || null,
+    loc: metreLoc,
   };
+}
+
+function detectRepeatMarkerAfterShortBar(abcText) {
+  const text = String(abcText || "");
+  const metreText = formatMetreFromText(text) || "";
+  if (!metreText) return null;
+  const metre = getMetre(text);
+  const defaultLen = getDefaultLen(text);
+  if (!Number.isFinite(metre) || metre <= 0) return null;
+  if (!Number.isFinite(defaultLen) && defaultLen !== "mcm_default") return null;
+
+  const lines = text.split(/\r\n|\n|\r/);
+  let inTextBlock = false;
+  let inBody = false;
+  let buffer = "";
+  let lastStartToken = null;
+  let lastTokenLoc = null;
+
+  const flushBar = (endToken, endLoc) => {
+    const bar = buffer.trim();
+    buffer = "";
+    if (!bar) return null;
+    const len = getBarLength(bar, defaultLen, metre);
+    if (!Number.isFinite(len) || len <= 0) return null;
+    const ratio = len / metre;
+    if (!Number.isFinite(ratio) || ratio <= 0) return null;
+    if (Math.abs(ratio - 1) <= 0.15) return null;
+
+    const token = String(endToken || "").trim();
+    if (!token.includes(":")) return null;
+
+    const ratioText = ratio.toFixed(2).replace(/\.?0+$/, "");
+    return {
+      kind: "repeat-short-bar",
+      detail: `Repeat marker "${token}" follows a bar of ~${ratioText}× length under M:${metreText}. Consider fixing bar lengths or changing M: locally.`,
+      metre: metreText,
+      ratio,
+      token,
+      startToken: lastStartToken || null,
+      loc: endLoc || lastTokenLoc || null,
+    };
+  };
+
+  for (let lineNo = 0; lineNo < lines.length; lineNo += 1) {
+    const rawLine = lines[lineNo];
+    const trimmed = rawLine.trim();
+    if (/^%%\s*begintext\b/i.test(trimmed)) { inTextBlock = true; continue; }
+    if (/^%%\s*endtext\b/i.test(trimmed)) { inTextBlock = false; continue; }
+    if (inTextBlock) continue;
+
+    if (!inBody) {
+      if (/^\s*K:/.test(rawLine) || /^\s*\[\s*K:/.test(trimmed)) inBody = true;
+      continue;
+    }
+
+    if (!trimmed) continue;
+    if (/^%/.test(trimmed) && !/^%%/.test(trimmed)) continue;
+    if (/^\s*%%/.test(rawLine)) continue;
+    if (/^\s*[A-Za-z]:/.test(rawLine)) continue;
+
+    let line = rawLine;
+    const commentIdx = line.indexOf("%");
+    if (commentIdx >= 0) line = line.slice(0, commentIdx);
+
+    const parts = splitLineIntoParts(line);
+    let cursor = 0;
+    for (const part of parts) {
+      const p = String(part || "");
+      const pos = line.indexOf(p, cursor);
+      const start = pos >= 0 ? pos : cursor;
+      cursor = start + p.length;
+
+      const token = p.trim();
+      if (BAR_SEP_NO_SPACE.test(token)) {
+        const loc = { line: lineNo + 1, col: start + 1 };
+        if (!buffer.trim()) {
+          lastStartToken = token;
+          lastTokenLoc = loc;
+          continue;
+        }
+        const warn = flushBar(token, loc);
+        lastStartToken = token;
+        lastTokenLoc = loc;
+        if (warn) return warn;
+        continue;
+      }
+      buffer += ` ${p}`;
+    }
+  }
+
+  return null;
 }
 
 function alignBeams(bars) {
@@ -5002,7 +5037,6 @@ function showContextMenuAt(x, y, target) {
   } else if (target.type === "library") {
     buildContextMenuItems([
       { label: "Refresh Library", action: "refreshLibrary" },
-      { label: "Find in Library…", action: "findLibrary" },
       { label: "Clear Search", action: "clearSearch", disabled: !libraryTextFilter },
     ]);
   } else if (target.type === "editor") {
@@ -6454,6 +6488,14 @@ function renderNow() {
         const abc = new AbcCtor(user);
         abcInstance = abc;
         abc.tosvg("out", renderText);
+        const meterWarn = detectMeterMismatchInBarlines(renderText);
+        if (meterWarn && meterWarn.detail) {
+          addError(`Warning: Meter mismatch: ${meterWarn.detail}`, meterWarn.loc || null, { skipMeasureRange: true });
+        }
+        const repeatWarn = detectRepeatMarkerAfterShortBar(renderText);
+        if (repeatWarn && repeatWarn.detail) {
+          addError(`Warning: ${repeatWarn.detail}`, repeatWarn.loc || null, { skipMeasureRange: true });
+        }
 
         const svg = svgParts.join("");
         if (!svg.trim()) throw new Error("No SVG output produced (see errors).");
@@ -7080,6 +7122,7 @@ async function openXIssuesModalForFile(filePath) {
 }
 
 let libraryListYieldedByThisOpen = false;
+let libraryTreeHintToastShown = false;
 document.addEventListener("library-modal:closed", () => {
   if (!libraryListYieldedByThisOpen) return;
   document.body.classList.remove("library-list-open");
@@ -7096,6 +7139,11 @@ function openLibraryListFromCurrentLibraryIndex() {
   const rows = libraryViewStore.getModalRows();
   if (!hasFullLibraryIndex()) {
     ensureFullLibraryIndex({ reason: "library list" }).catch(() => {});
+  }
+
+  if (!isLibraryVisible && !libraryTreeHintToastShown) {
+    libraryTreeHintToastShown = true;
+    showToast("Tip: Library Tree is hidden. Click Library or press Ctrl+L.", 4200);
   }
 
   libraryListYieldedByThisOpen = false;
@@ -8558,7 +8606,6 @@ function wireMenuActions() {
       else if (actionType === "find" && editorView) openFindPanel(editorView);
       else if (actionType === "replace" && editorView) openReplacePanel(editorView);
       else if (actionType === "gotoLine" && editorView) gotoLine(editorView);
-      else if (actionType === "findLibrary") promptFindInLibrary();
       else if (actionType === "clearLibraryFilter") clearLibraryFilter();
       else if (actionType === "playStart") await startPlaybackAtIndex(0);
       else if (actionType === "playPrev") await startPlaybackAtMeasureOffset(-1);
@@ -8816,43 +8863,6 @@ if ($out) {
   });
 }
 
-if ($findLibraryClose) {
-  $findLibraryClose.addEventListener("click", () => {
-    closeFindLibraryModal();
-  });
-}
-
-if ($findLibraryModal) {
-  $findLibraryModal.addEventListener("click", (e) => {
-    if (e.target === $findLibraryModal) closeFindLibraryModal();
-  });
-}
-
-if ($findLibraryApply) {
-  $findLibraryApply.addEventListener("click", () => {
-    applyFindLibraryModal();
-  });
-}
-
-if ($findLibraryClear) {
-  $findLibraryClear.addEventListener("click", () => {
-    clearLibraryFilter();
-    closeFindLibraryModal();
-  });
-}
-
-if ($findLibraryValue) {
-  $findLibraryValue.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      applyFindLibraryModal();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      closeFindLibraryModal();
-    }
-  });
-}
-
 if ($moveTuneClose) {
   $moveTuneClose.addEventListener("click", () => {
     closeMoveTuneModal();
@@ -8988,6 +8998,9 @@ let lastPlaybackUiScrollAt = 0;
 let lastDrumSignatureDiff = null;
 let lastPlaybackChordOnBarError = false;
 let lastMeterMismatchToastKey = null;
+let lastPlaybackMeterMismatchWarning = null;
+let lastRepeatShortBarToastKey = null;
+let lastPlaybackRepeatShortBarWarning = null;
 
 function clearPlaybackNoteOnEls() {
   for (const el of lastPlaybackNoteOnEls) {
@@ -10795,12 +10808,13 @@ function sanitizeAbcForPlayback(text) {
     if (noCont !== musicPart) warnings.push({ kind: "line-continuation", line: lineIndex + 1 });
     musicPart = noCont;
 
-    // 2) Make multi-repeat tokens more stable: `|:::` -> `|:` and `:::|` -> `:|`
-    // Keep `::` unchanged (common boundary repeat); only collapse 3+.
+    // 2) Make multi-repeat tokens more stable: `|:::` -> `|::`, `:::` -> `::`, `:::|` -> `::|`
+    // Keep `::` unchanged (common boundary repeat); only collapse 3+ down to the double-repeat form.
     const beforeRepeats = musicPart;
     musicPart = musicPart
-      .replace(/\|:{3,}/g, "|:")
-      .replace(/:{3,}\|/g, ":|");
+      .replace(/\|:{3,}/g, "|::")
+      .replace(/:{3,}\|/g, "::|")
+      .replace(/:{3,}/g, "::");
     if (musicPart !== beforeRepeats) warnings.push({ kind: "multi-repeat-simplified", line: lineIndex + 1 });
 
     // 3) Replace spacer rests `y` with normal rests `z` (playback-only stability).
@@ -10996,12 +11010,24 @@ function getPlaybackPayload() {
   playbackSanitizeWarnings = Array.isArray(sanitized.warnings) ? sanitized.warnings.slice(0, 200) : [];
   payload = { text: sanitized.text, offset: payload.offset };
 
+  lastPlaybackMeterMismatchWarning = null;
+  lastPlaybackRepeatShortBarWarning = null;
   const meterWarn = detectMeterMismatchInBarlines(payload.text);
   if (meterWarn) {
+    lastPlaybackMeterMismatchWarning = meterWarn;
     playbackSanitizeWarnings.push(meterWarn);
     if (lastMeterMismatchToastKey !== sourceKey) {
       showToast(`Meter mismatch: ${meterWarn.detail}`, 5200);
       lastMeterMismatchToastKey = sourceKey;
+    }
+  }
+  const repeatShortBarWarn = detectRepeatMarkerAfterShortBar(payload.text);
+  if (repeatShortBarWarn) {
+    lastPlaybackRepeatShortBarWarning = repeatShortBarWarn;
+    playbackSanitizeWarnings.push(repeatShortBarWarn);
+    if (lastRepeatShortBarToastKey !== sourceKey) {
+      showToast(`Repeat may be wrong: ${repeatShortBarWarn.detail}`, 5600);
+      lastRepeatShortBarToastKey = sourceKey;
     }
   }
 
@@ -11128,6 +11154,20 @@ async function preparePlayback() {
   }
   playbackIndexOffset = playbackPayload.offset || 0;
   setErrorLineOffsetFromHeader(playbackPayload.text.slice(0, playbackIndexOffset));
+  if (lastPlaybackMeterMismatchWarning && lastPlaybackMeterMismatchWarning.detail) {
+    addError(
+      `Warning: Meter mismatch: ${lastPlaybackMeterMismatchWarning.detail}`,
+      lastPlaybackMeterMismatchWarning.loc || null,
+      { skipMeasureRange: true }
+    );
+  }
+  if (lastPlaybackRepeatShortBarWarning && lastPlaybackRepeatShortBarWarning.detail) {
+    addError(
+      `Warning: ${lastPlaybackRepeatShortBarWarning.detail}`,
+      lastPlaybackRepeatShortBarWarning.loc || null,
+      { skipMeasureRange: true }
+    );
+  }
   const playbackText = normalizeHeaderNoneSpacing(playbackPayload.text);
   abc.tosvg("play", playbackText);
 

@@ -44,13 +44,13 @@ xml2abc is used as an external tool.
 
 ---
 
-## Python runtime (release builds)
+## Python runtime (bundled)
 
-ABCarus bundles a Python runtime for MusicXML import/export tools in release AppImage builds.
+ABCarus bundles a Python runtime for MusicXML import/export tools.
 
 - Project: Python
 - License: Python Software Foundation License (PSF)
-- License file: third_party/python-runtime/lib/python3.11/LICENSE.txt
+- License file: third_party/python-embed/<platform>/lib/python3.11/LICENSE.txt
 - Website: https://www.python.org/
 
 ---
