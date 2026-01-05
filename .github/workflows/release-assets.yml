@@ -1,0 +1,114 @@
+name: Release Assets
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to build (e.g. v0.16.2)"
+        required: true
+        default: "v0.16.2"
+
+permissions:
+  contents: write
+
+jobs:
+  linux-appimage:
+    name: Linux AppImage (x86_64)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install appimagetool
+        run: |
+          mkdir -p ../appimagetool
+          curl -L --fail -o ../appimagetool/appimagetool-x86_64.AppImage \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x ../appimagetool/appimagetool-x86_64.AppImage
+
+      - name: Verify PBS locks
+        run: npm run -s pbs:check
+
+      - name: Build AppImage
+        run: bash scripts/build_appimage_release.sh
+
+      - name: Compute SHA256
+        run: |
+          cd dist/appimage
+          sha256sum ABCarus-x86_64.AppImage > SHA256SUMS-linux.txt
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/appimage/ABCarus-x86_64.AppImage
+            dist/appimage/SHA256SUMS-linux.txt
+
+  windows-x64:
+    name: Windows (x64)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify PBS locks
+        run: npm run -s pbs:check
+
+      - name: Install bundled Python (PBS)
+        run: pwsh -ExecutionPolicy Bypass -File devtools/pbs/pbs-install-windows.ps1 -Platform win-x64
+
+      - name: Build Windows artifact
+        run: npx electron-builder --win --x64 --publish never
+
+      - name: Create portable zip
+        run: |
+          $src = "dist/electron-builder/win-unpacked"
+          $zip = "dist/electron-builder/ABCarus-win-unpacked-x64.zip"
+          if (Test-Path $zip) { Remove-Item -Force $zip }
+          Compress-Archive -Path "$src/*" -DestinationPath $zip
+
+      - name: Compute SHA256
+        run: |
+          $setup = Get-ChildItem -Path "dist/electron-builder" -Filter "*Setup*.exe" | Select-Object -First 1
+          if (-not $setup) { throw "Setup exe not found under dist/electron-builder" }
+          $zip = "dist/electron-builder/ABCarus-win-unpacked-x64.zip"
+          $lines = @()
+          $lines += "$( (Get-FileHash -Algorithm SHA256 $setup.FullName).Hash.ToLower() )  $($setup.Name)"
+          $lines += "$( (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower() )  $(Split-Path -Leaf $zip)"
+          $lines | Out-File -Encoding ascii "dist/electron-builder/SHA256SUMS-windows.txt"
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/electron-builder/*Setup*.exe
+            dist/electron-builder/ABCarus-win-unpacked-x64.zip
+            dist/electron-builder/SHA256SUMS-windows.txt
