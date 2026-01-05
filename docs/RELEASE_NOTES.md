@@ -1,5 +1,14 @@
 # Release Notes
 
+## [0.16.3] - 2026-01-05
+
+Range: v0.16.2..HEAD
+
+### Changed
+- CI: attach Linux/Windows artifacts to GitHub Releases on tags.
+### Fixed
+- Windows portable: ensure `ffmpeg.dll` is present and add a README reminding to extract before running.
+
 ## [0.16.2] - 2026-01-05
 
 Range: v0.16.1..HEAD
