@@ -76,7 +76,7 @@ function Pick-PythonExe([string]$Root) {
   $candidates = Get-PythonCandidates -Root $Root
   if ($candidates.Count -eq 0) {
     Write-Host "ERROR: python.exe not found under extracted archive (max depth 2)."
-    Write-Host "Top-level entries under $Root:"
+    Write-Host "Top-level entries under ${Root}:"
     Get-ChildItem -Force -Path $Root | ForEach-Object { Write-Host ("  - " + $_.Name) }
     exit 1
   }
