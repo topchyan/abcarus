@@ -35,6 +35,24 @@ jobs:
       - name: Build Windows artifact
         run: npx electron-builder --win --x64 --publish never
 
+      - name: Sanity check win-unpacked
+        run: |
+          $root = "dist/electron-builder/win-unpacked"
+          if (!(Test-Path $root)) { throw "Missing win-unpacked: $root" }
+          $required = @(
+            "ABCarus.exe",
+            "ffmpeg.dll",
+            "resources/app.asar"
+          )
+          foreach ($r in $required) {
+            $p = Join-Path $root $r
+            if (!(Test-Path $p)) {
+              Write-Host "Top-level in win-unpacked:"
+              Get-ChildItem -Force -Path $root | ForEach-Object { Write-Host ("  - " + $_.Name) }
+              throw "Missing required file: $p"
+            }
+          }
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:

@@ -92,6 +92,20 @@ jobs:
         run: |
           $src = "dist/electron-builder/win-unpacked"
           $zip = "dist/electron-builder/ABCarus-win-unpacked-x64.zip"
+          if (!(Test-Path $src)) { throw "Missing win-unpacked: $src" }
+          if (!(Test-Path (Join-Path $src "ffmpeg.dll"))) {
+            Write-Host "Top-level in win-unpacked:"
+            Get-ChildItem -Force -Path $src | ForEach-Object { Write-Host ("  - " + $_.Name) }
+            throw "ffmpeg.dll is missing in win-unpacked"
+          }
+          @"
+ABCarus portable build (Windows)
+
+IMPORTANT:
+  - Extract the entire zip to a folder before running.
+  - Do NOT run ABCarus.exe directly from inside the zip viewer,
+    otherwise required DLLs (e.g. ffmpeg.dll) may not be found.
+"@ | Out-File -Encoding ascii (Join-Path $src "README-PORTABLE.txt")
           if (Test-Path $zip) { Remove-Item -Force $zip }
           Compress-Archive -Path "$src/*" -DestinationPath $zip
 
