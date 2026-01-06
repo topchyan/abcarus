@@ -176,6 +176,8 @@ let playbackTraceSeq = 0;
 let practiceEnabled = false;
 let practiceTempoMultiplier = 0.75;
 let practiceStatusText = "";
+let currentPlaybackPlan = null;
+let pendingPlaybackPlan = null;
 let lastRhythmErrorSuggestion = null;
 let errorsEnabled = false;
 
@@ -8705,7 +8707,7 @@ function wireMenuActions() {
       else if (actionType === "clearLibraryFilter") clearLibraryFilter();
       else if (actionType === "playStart") await startPlaybackAtIndex(0);
       else if (actionType === "playPrev") await startPlaybackAtMeasureOffset(-1);
-      else if (actionType === "playToggle") { await transportTogglePlayPause(); }
+      else if (actionType === "playToggle") { await togglePlayPauseEffective(); }
       else if (actionType === "playNext") await startPlaybackAtMeasureOffset(1);
       else if (actionType === "resetLayout") resetLayout();
       else if (actionType === "helpGuide") await openExternal("https://abcplus.sourceforge.net/abcplus_en.pdf");
@@ -9061,6 +9063,7 @@ let player = null;
 var isPlaying = false;
 let isPaused = false;
 let suppressOnEnd = false;
+let desiredPlayerSpeed = 1;
 let lastPlaybackIdx = null;
 let lastRenderIdx = null;
 let lastStartPlaybackIdx = 0;
@@ -9133,6 +9136,8 @@ function stopPlaybackFromGuard(message) {
   activePlaybackRange = null;
   activePlaybackEndAbcOffset = null;
   playbackStartArmed = false;
+  currentPlaybackPlan = null;
+  pendingPlaybackPlan = null;
   setStatus("OK");
   updatePlayButton();
   clearNoteSelection();
@@ -9239,6 +9244,67 @@ function updatePlayButton() {
   updatePracticeUi();
 }
 
+function buildTransportPlaybackPlan() {
+  return {
+    mode: "transport",
+    rangeStart: 0,
+    rangeEnd: null,
+    loopEnabled: false,
+    tempoMultiplier: 1,
+  };
+}
+
+function buildPracticePlaybackPlan() {
+  const tempo = Number(practiceTempoMultiplier);
+  return {
+    mode: "practice",
+    rangeStart: 0,
+    rangeEnd: null,
+    loopEnabled: true,
+    tempoMultiplier: (Number.isFinite(tempo) && tempo > 0) ? tempo : 0.75,
+  };
+}
+
+function buildDefaultPlaybackPlan() {
+  return practiceEnabled ? buildPracticePlaybackPlan() : buildTransportPlaybackPlan();
+}
+
+function syncPendingPlaybackPlan() {
+  pendingPlaybackPlan = buildDefaultPlaybackPlan();
+}
+
+function applyPlaybackPlanSpeed(plan) {
+  const next = Number(plan && plan.tempoMultiplier);
+  desiredPlayerSpeed = (Number.isFinite(next) && next > 0) ? next : 1;
+  if (player && typeof player.set_speed === "function") {
+    try { player.set_speed(desiredPlayerSpeed); } catch {}
+  }
+}
+
+async function togglePlayPauseEffective() {
+  if (isPlaying) {
+    pausePlayback();
+    return;
+  }
+
+  if (isPaused) {
+    applyPlaybackPlanSpeed(currentPlaybackPlan || buildTransportPlaybackPlan());
+    await startPlaybackFromRange();
+    return;
+  }
+
+  const plan = pendingPlaybackPlan || buildDefaultPlaybackPlan();
+  pendingPlaybackPlan = null;
+  currentPlaybackPlan = plan;
+  applyPlaybackPlanSpeed(plan);
+  await startPlaybackFromRange({
+    startOffset: plan.rangeStart,
+    endOffset: plan.rangeEnd,
+    origin: plan.mode,
+    loop: plan.loopEnabled,
+  });
+}
+
 async function transportTogglePlayPause() {
   if (isPlaying) {
     pausePlayback();
@@ -9287,6 +9353,8 @@ function resetPlaybackState() {
   activePlaybackRange = null;
   activePlaybackEndAbcOffset = null;
   playbackStartArmed = false;
+  currentPlaybackPlan = null;
+  pendingPlaybackPlan = null;
   clearNoteSelection();
   resetPlaybackUiState();
   updatePlayButton();
@@ -9527,6 +9595,7 @@ function ensurePlayer() {
         activePlaybackRange = null;
         activePlaybackEndAbcOffset = null;
         playbackStartArmed = false;
+        currentPlaybackPlan = null;
         // Transport: end-of-tune behaves like Stop (playhead=0).
       }
       if (shouldLoop && followPlayback && lastRenderIdx != null && editorView) {
@@ -9580,6 +9649,7 @@ function ensurePlayer() {
           activePlaybackRange = null;
           activePlaybackEndAbcOffset = null;
           playbackStartArmed = false;
+          currentPlaybackPlan = null;
           // Transport: end-of-range behaves like Stop (playhead=0).
         }
         return;
@@ -9646,8 +9716,11 @@ function ensurePlayer() {
   // Expose for debugging in the console:
   window.p = player;
 
-  // Guard against NaN speed from localStorage:
-  if (typeof player.set_speed === "function") player.set_speed(1);
+  // Guard against NaN speed from localStorage (and allow Practice to override speed deterministically):
+  if (typeof player.set_speed === "function") {
+    const next = Number(desiredPlayerSpeed);
+    player.set_speed(Number.isFinite(next) && next > 0 ? next : 1);
+  }
 
   // Key: tell snd-1.js to use SF2 from window.abc2svg.sf2
   if (typeof player.set_sfu === "function") player.set_sfu(soundfontSource || "abc2svg.sf2");
@@ -9836,6 +9909,7 @@ function stopPlaybackTransport() {
   activePlaybackRange = null;
   activePlaybackEndAbcOffset = null;
   playbackStartArmed = false;
+  currentPlaybackPlan = null;
   setStatus("OK");
   updatePlayButton();
   clearNoteSelection();
@@ -9905,7 +9979,10 @@ function updatePracticeUi() {
     } else {
       const tempo = formatPracticeTempoLabel(practiceTempoMultiplier);
       const state = isPlaying ? "Playing" : (isPaused ? "Paused" : "Ready");
-      const text = tempo ? `Practice: ON (${tempo}) — ${state}` : `Practice: ON — ${state}`;
+      const pending = pendingPlaybackPlan ? " (pending)" : "";
+      const text = tempo
+        ? `Practice: ON (${tempo}) — ${state}${pending}`
+        : `Practice: ON — ${state}${pending}`;
       if (practiceStatusText !== text) {
         practiceStatusText = text;
         $practiceStatus.textContent = text;
@@ -11662,15 +11739,7 @@ if ($btnPlayPause) {
         showToast("Raw mode: switch to tune mode to play.", 2200);
         return;
       }
-      if (isPlaying) {
-        pausePlayback();
-        return;
-      }
-      if (isPaused) {
-        await startPlaybackFromRange();
-        return;
-      }
-      await startPlaybackFromRange();
+      await togglePlayPauseEffective();
     } catch (e) {
       logErr((e && e.stack) ? e.stack : String(e));
       setStatus("Error");
@@ -11689,6 +11758,7 @@ if ($btnPracticeToggle) {
       return;
     }
     practiceEnabled = !practiceEnabled;
+    syncPendingPlaybackPlan();
     updatePracticeUi();
   });
 }
@@ -11698,6 +11768,7 @@ if ($practiceTempo) {
     const next = Number($practiceTempo.value);
     if (!Number.isFinite(next)) return;
     practiceTempoMultiplier = next;
+    if (practiceEnabled) syncPendingPlaybackPlan();
     updatePracticeUi();
   });
   const initial = Number($practiceTempo.value);
