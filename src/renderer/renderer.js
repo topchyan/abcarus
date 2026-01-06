@@ -71,7 +71,6 @@ const $btnPlayPause = document.getElementById("btnPlayPause");
 const $btnPracticeToggle = document.getElementById("btnPracticeToggle");
 const $practiceTempoWrap = document.getElementById("practiceTempoWrap");
 const $practiceTempo = document.getElementById("practiceTempo");
-const $practiceStatus = document.getElementById("practiceStatus");
 const $btnRestart = document.getElementById("btnRestart");
 const $btnPrevMeasure = document.getElementById("btnPrevMeasure");
 const $btnNextMeasure = document.getElementById("btnNextMeasure");
@@ -10223,10 +10222,10 @@ function updatePracticeUi() {
     if ($practiceTempo.value !== value) $practiceTempo.value = value;
   }
 
-  if ($practiceStatus) {
+  if ($btnPracticeToggle) {
     if (!practiceEnabled) {
-      $practiceStatus.hidden = true;
-      $practiceStatus.textContent = "";
+      practiceStatusText = "";
+      $btnPracticeToggle.title = "Practice mode (loop + tempo override)";
     } else {
       const tempo = formatPracticeTempoLabel(practiceTempoMultiplier);
       const state = isPlaying ? "Playing" : (isPaused ? "Paused" : "Ready");
@@ -10255,11 +10254,8 @@ function updatePracticeUi() {
       const text = tempo
         ? `Practice: ON (${tempo}) — ${state}${pending}${hint}`
         : `Practice: ON — ${state}${pending}${hint}`;
-      if (practiceStatusText !== text) {
-        practiceStatusText = text;
-        $practiceStatus.textContent = text;
-      }
-      $practiceStatus.hidden = false;
+      if (practiceStatusText !== text) practiceStatusText = text;
+      $btnPracticeToggle.title = practiceStatusText;
     }
   }
 }
