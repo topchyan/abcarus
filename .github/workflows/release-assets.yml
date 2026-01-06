@@ -112,18 +112,22 @@ jobs:
 
       - name: Create portable SFX (optional)
         run: |
-          $src = "dist/electron-builder/win-unpacked"
-          $out = "dist/electron-builder/ABCarus-win-unpacked-x64.exe"
+          $repo = $env:GITHUB_WORKSPACE
+          if (!$repo) { $repo = (Get-Location).Path }
+          $src = Join-Path $repo "dist/electron-builder/win-unpacked"
+          $out = Join-Path $repo "dist/electron-builder/ABCarus-win-unpacked-x64.exe"
           if (!(Test-Path $src)) { throw "Missing win-unpacked: $src" }
 
           $sevenZip = @(
             "C:\\Program Files\\7-Zip\\7z.exe",
             "C:\\Program Files (x86)\\7-Zip\\7z.exe"
+            "C:\\ProgramData\\chocolatey\\bin\\7z.exe"
           ) | Where-Object { Test-Path $_ } | Select-Object -First 1
 
           $sevenZipSfx = @(
             "C:\\Program Files\\7-Zip\\7z.sfx",
             "C:\\Program Files (x86)\\7-Zip\\7z.sfx"
+            "C:\\ProgramData\\chocolatey\\lib\\7zip\\tools\\7z.sfx"
           ) | Where-Object { Test-Path $_ } | Select-Object -First 1
 
           if (!$sevenZip -or !$sevenZipSfx) {
@@ -135,7 +139,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 
           $payload = Join-Path $tmp "payload.7z"
-          & $sevenZip a -t7z -mx=9 $payload "$src\\*" | Out-Host
+          $srcAbs = (Resolve-Path $src).Path
+          & $sevenZip a -t7z -mx=9 $payload (Join-Path $srcAbs "*") | Out-Host
+          if ($LASTEXITCODE -ne 0) { throw "7z failed building payload (exit $LASTEXITCODE)" }
 
           $config = Join-Path $tmp "config.txt"
           $configText = @(
@@ -151,6 +157,7 @@ jobs:
           $bytes.AddRange([System.IO.File]::ReadAllBytes($sevenZipSfx))
           $bytes.AddRange([System.Text.Encoding]::UTF8.GetBytes((Get-Content -Raw $config)))
           $bytes.AddRange([System.IO.File]::ReadAllBytes($payload))
+          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $out) | Out-Null
           [System.IO.File]::WriteAllBytes($out, $bytes.ToArray())
 
           Write-Host "Created SFX: $out"
