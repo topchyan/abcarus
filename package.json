@@ -1,6 +1,6 @@
 {
   "name": "abc-electron-proto",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "main": "src/main/index.js",
   "private": true,
   "scripts": {

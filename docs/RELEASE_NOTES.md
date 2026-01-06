@@ -1,5 +1,17 @@
 # Release Notes
 
+## [0.17.1] - 2026-01-06
+
+Range: v0.17.0..HEAD
+
+### Added
+- Developer tooling: third-party upgrade review (`npm run thirdparty:review`) and abc2svg upgrade helper (`npm run abc2svg:upgrade`).
+### Changed
+- Windows packaging: add single-file portable build alongside Setup installer.
+### Fixed
+- Playback: tolerate missing `abc2svg.drum` in some upstream builds.
+- Playback: normalize `^3/4` / `_3/4` accidentals for compatibility.
+
 ## [0.17.0] - 2026-01-06
 
 Range: v0.16.3..HEAD

@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-01-06
+### Added
+- Developer tooling: third-party upgrade review (`npm run thirdparty:review`) and abc2svg upgrade helper (`npm run abc2svg:upgrade`).
+### Changed
+- Windows packaging: add single-file portable build alongside Setup installer.
+### Fixed
+- Playback: tolerate missing `abc2svg.drum` in some upstream builds.
+- Playback: normalize `^3/4` / `_3/4` accidentals for compatibility.
+
+
 ## [0.17.0] - 2026-01-06
 ### Added
 - abc2svg v1.22.35 update (includes MIDI drum support via `%%MIDI drum`, `%%MIDI drumon`, `%%MIDI drumbars`).
