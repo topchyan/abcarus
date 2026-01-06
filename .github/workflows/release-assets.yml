@@ -98,14 +98,15 @@ jobs:
             Get-ChildItem -Force -Path $src | ForEach-Object { Write-Host ("  - " + $_.Name) }
             throw "ffmpeg.dll is missing in win-unpacked"
           }
-          @"
-ABCarus portable build (Windows)
-
-IMPORTANT:
-  - Extract the entire zip to a folder before running.
-  - Do NOT run ABCarus.exe directly from inside the zip viewer,
-    otherwise required DLLs (e.g. ffmpeg.dll) may not be found.
-"@ | Out-File -Encoding ascii (Join-Path $src "README-PORTABLE.txt")
+          $readme = @(
+            "ABCarus portable build (Windows)",
+            "",
+            "IMPORTANT:",
+            "  - Extract the entire zip to a folder before running.",
+            "  - Do NOT run ABCarus.exe directly from inside the zip viewer,",
+            "    otherwise required DLLs (e.g. ffmpeg.dll) may not be found."
+          ) -join "`r`n"
+          $readme | Out-File -Encoding ascii (Join-Path $src "README-PORTABLE.txt")
           if (Test-Path $zip) { Remove-Item -Force $zip }
           Compress-Archive -Path "$src/*" -DestinationPath $zip
 
@@ -137,13 +138,14 @@ IMPORTANT:
           & $sevenZip a -t7z -mx=9 $payload "$src\\*" | Out-Host
 
           $config = Join-Path $tmp "config.txt"
-          @"
-;!@Install@!UTF-8!
-Title="ABCarus (portable)"
-BeginPrompt="Extract ABCarus portable build to a folder. Do NOT run from inside a zip viewer."
-RunProgram="ABCarus.exe"
-;!@InstallEnd@!
-"@ | Out-File -Encoding utf8 $config
+          $configText = @(
+            ';!@Install@!UTF-8!',
+            'Title="ABCarus (portable)"',
+            'BeginPrompt="Extract ABCarus portable build to a folder. Do NOT run from inside a zip viewer."',
+            'RunProgram="ABCarus.exe"',
+            ';!@InstallEnd@!'
+          ) -join "`r`n"
+          $configText | Out-File -Encoding utf8 $config
 
           $bytes = New-Object System.Collections.Generic.List[byte]
           $bytes.AddRange([System.IO.File]::ReadAllBytes($sevenZipSfx))
