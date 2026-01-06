@@ -45,7 +45,6 @@ if command -v rsync >/dev/null 2>&1; then
     --exclude "docs" \
     --exclude "scripts" \
     --exclude "third_party/python-embed" \
-    --exclude "docs/qa/chat-exports" \
     --exclude "*.md" \
     "${repo_root}/" "${resources_app}/"
 else
@@ -59,7 +58,6 @@ else
       --exclude "./docs" \
       --exclude "./scripts" \
       --exclude "./third_party/python-embed" \
-      --exclude "./docs/qa/chat-exports" \
       --exclude "./*.md" \
       -cf - . | (cd "${resources_app}" && tar -xf -)
   )

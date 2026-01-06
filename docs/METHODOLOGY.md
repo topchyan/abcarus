@@ -8,7 +8,7 @@ This project is developed iteratively via chat sessions. To prevent “context l
 3) Requirements in `docs/REQUIREMENTS.md` (product + engineering invariants).
 4) `docs/features.md` / `docs/architecture.md` (descriptions of current behavior/structure).
 5) Local devlog (optional; kept out of git).
-6) Chat exports in `docs/qa/chat-exports/` (raw evidence; not canonical).
+6) Chat exports (raw evidence; not canonical; kept out of git).
 
 ## How we capture decisions
 
@@ -27,8 +27,6 @@ ADRs should be small, concrete, and include constraints/acceptance criteria.
   - `node scripts/chat-log.mjs -m "what changed" --notes "optional notes"`
 
 ## Chat exports workflow (context preservation)
-We keep exported conversations in `docs/qa/chat-exports/YYYYMMDD/` so history survives across assistant sessions.
-
 Rules of thumb:
 - Treat exports as raw logs: do not rely on them as “spec” unless the same decision is recorded in an ADR/requirements.
 - When a chat introduces a new invariant/requirement, convert it into one of:

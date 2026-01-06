@@ -289,10 +289,10 @@ def first_meaningful_line(block: str) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Extract user prompts from docs/qa/chat-exports.")
+    parser = argparse.ArgumentParser(description="Extract user prompts from local chat exports.")
     parser.add_argument(
         "--input-dir",
-        default="docs/qa/chat-exports",
+        default="scripts/local/chat-exports",
         help="Directory that contains chat exports.",
     )
     parser.add_argument(
@@ -303,7 +303,7 @@ def main():
     )
     parser.add_argument(
         "--output-dir",
-        default="docs/qa/chat-exports/prompts",
+        default="scripts/local/chat-exports/prompts",
         help="Directory to write per-prompt files into (grouped by date).",
     )
     args = parser.parse_args()

@@ -8,18 +8,8 @@ dist/
 scripts/local/
 debug_dumps/
 
-# Large exports: keep raw data out of git, allow curated notes.
-docs/qa/chat-exports/**
-!docs/qa/chat-exports/
-!docs/qa/chat-exports/**/
-!docs/qa/chat-exports/README.md
-!docs/qa/chat-exports/**/README.md
-!docs/qa/chat-exports/**/codex-chat-summary.md
-!docs/qa/chat-exports/**/prompt_*.txt
-!docs/qa/chat-exports/**/prompt_*.md
-
-# Generated prompt extraction outputs (never commit)
-docs/qa/chat-exports/prompts*/
+# Local-only chat exports
+docs/qa/chat-exports/
 
 # Bundled Python runtime
 third_party/python-embed/**

@@ -12,7 +12,6 @@ To reduce AppImage size, the AppImage builder now excludes non-runtime content w
 - `docs/**`
 - `devtools/**`
 - `scripts/**`
-- `docs/qa/chat-exports/**`
 - `third_party/python-embed/**` (runtime is copied into AppDir `usr/` instead)
 - `third_party/python-embed/**` (bundled runtime is copied into AppDir `usr/` instead)
 - root `*.md`

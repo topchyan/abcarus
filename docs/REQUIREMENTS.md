@@ -3,7 +3,6 @@
 This document consolidates the *explicit* requirements and invariants that guide ABCarus development. It is meant to prevent “lost context” across chat-driven sessions.
 
 Sources used to build this doc:
-- Chat exports in `docs/qa/chat-exports/` (raw history).
 - Accepted ADRs in `docs/adr/`.
 - Current implementation (see `docs/features.md`, `docs/architecture.md`).
 
