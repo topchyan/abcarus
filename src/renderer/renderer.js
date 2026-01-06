@@ -11818,6 +11818,26 @@ function findBoundaryAtOrBefore(sorted, target) {
   return best;
 }
 
+function findBarStartContaining(sortedMeasureIstarts, target) {
+  if (!Array.isArray(sortedMeasureIstarts) || !sortedMeasureIstarts.length) return null;
+  const t = Number(target);
+  if (!Number.isFinite(t)) return null;
+  let lo = 0;
+  let hi = sortedMeasureIstarts.length - 1;
+  let best = sortedMeasureIstarts[0];
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const v = sortedMeasureIstarts[mid];
+    if (v <= t) {
+      best = v;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return best;
+}
+
 function computePracticePlaybackRange(loopEnabled) {
   if (!editorView) return null;
   const max = editorView.state.doc.length;
@@ -11836,7 +11856,7 @@ function computePracticePlaybackRange(loopEnabled) {
     : null;
   const canSnap = Boolean(measureIstarts && measureIstarts.length);
 
-  const snapStart = (editorOffset) => {
+  const snapStartToBarBoundaryAtOrAfter = (editorOffset) => {
     if (!canSnap) return Math.max(0, Math.min(Number(editorOffset) || 0, max));
     const derived = toDerivedOffset(editorOffset);
     const boundary = findBoundaryAtOrAfter(measureIstarts, derived);
@@ -11847,6 +11867,13 @@ function computePracticePlaybackRange(loopEnabled) {
     if (!canSnap) return Math.max(0, Math.min(Number(editorOffset) || 0, max));
     const derived = toDerivedOffset(editorOffset);
     const boundary = findBoundaryAtOrBefore(measureIstarts, derived);
+    const editor = boundary == null ? null : toEditorOffset(boundary);
+    return Math.max(0, Math.min(Number.isFinite(editor) ? editor : 0, max));
+  };
+  const snapBarStartContaining = (editorOffset) => {
+    if (!canSnap) return Math.max(0, Math.min(Number(editorOffset) || 0, max));
+    const derived = toDerivedOffset(editorOffset);
+    const boundary = findBarStartContaining(measureIstarts, derived);
     const editor = boundary == null ? null : toEditorOffset(boundary);
     return Math.max(0, Math.min(Number.isFinite(editor) ? editor : 0, max));
   };
@@ -11862,8 +11889,9 @@ function computePracticePlaybackRange(loopEnabled) {
   };
 
   if (!hasSelection) {
-    const startOffset = snapStart(cursor);
-    practiceRangeHint = canSnap ? "looping from cursor (snapped)" : "looping from cursor";
+    // In Practice, starting "from cursor" means the start of the bar containing the cursor.
+    const startOffset = snapBarStartContaining(cursor);
+    practiceRangeHint = canSnap ? "looping from cursor bar" : "looping from cursor";
     return {
       startOffset,
       endOffset: null,
@@ -11872,7 +11900,7 @@ function computePracticePlaybackRange(loopEnabled) {
     };
   }
 
-  const snappedSelStart = snapStart(selStart);
+  const snappedSelStart = snapStartToBarBoundaryAtOrAfter(selStart);
   const snappedSelEnd = snapEnd(selEnd);
   if (!(snappedSelEnd > snappedSelStart)) {
     return fallbackWholeTune("selection invalid; looping whole tune");
@@ -11880,13 +11908,15 @@ function computePracticePlaybackRange(loopEnabled) {
 
   const cursorInsideSelection = cursor >= selStart && cursor <= selEnd;
   if (practiceStartFromCursor && cursorInsideSelection) {
-    const snappedCursor = snapStart(cursor);
-    if (!(snappedSelEnd > snappedCursor)) {
+    // "From Cursor" means start of the bar containing the cursor (not the cursor position itself).
+    const barStart = snapBarStartContaining(cursor);
+    const startOffset = Math.max(snappedSelStart, barStart);
+    if (!(snappedSelEnd > startOffset)) {
       return fallbackWholeTune("selection invalid; looping whole tune");
     }
-    practiceRangeHint = canSnap ? "looping selection from cursor (snapped)" : "looping selection from cursor";
+    practiceRangeHint = canSnap ? "looping selection from cursor bar" : "looping selection from cursor";
     return {
-      startOffset: snappedCursor,
+      startOffset,
       endOffset: snappedSelEnd,
       origin: "practice",
       loop: Boolean(loopEnabled),
