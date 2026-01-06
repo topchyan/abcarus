@@ -69,7 +69,6 @@ const $btnPause = document.getElementById("btnPause");
 const $btnStop = document.getElementById("btnStop");
 const $btnPlayPause = document.getElementById("btnPlayPause");
 const $btnPracticeToggle = document.getElementById("btnPracticeToggle");
-const $btnPracticeFromCursor = document.getElementById("btnPracticeFromCursor");
 const $practiceTempoWrap = document.getElementById("practiceTempoWrap");
 const $practiceTempo = document.getElementById("practiceTempo");
 const $practiceStatus = document.getElementById("practiceStatus");
@@ -175,7 +174,6 @@ let lastTraceTimestamp = null;
 let playbackTraceSeq = 0;
 
 let practiceEnabled = false;
-let practiceStartFromCursor = false;
 let practiceTempoMultiplier = 0.75;
 let practiceStatusText = "";
 let practiceRangeHint = "";
@@ -10219,13 +10217,6 @@ function updatePracticeUi() {
     $btnPracticeToggle.disabled = busy;
   }
 
-  if ($btnPracticeFromCursor) {
-    $btnPracticeFromCursor.hidden = !practiceEnabled;
-    $btnPracticeFromCursor.classList.toggle("toggle-active", practiceStartFromCursor);
-    $btnPracticeFromCursor.setAttribute("aria-pressed", practiceStartFromCursor ? "true" : "false");
-    $btnPracticeFromCursor.disabled = !practiceEnabled || Boolean(waitingForFirstNote);
-  }
-
   if ($practiceTempoWrap) $practiceTempoWrap.hidden = !practiceEnabled;
   if ($practiceTempo && practiceEnabled) {
     const value = String(practiceTempoMultiplier);
@@ -11975,30 +11966,8 @@ function computePracticePlaybackRange(loopEnabled) {
   }
 
   const cursorInsideSelection = cursor >= selStart && cursor <= selEnd;
-  if (practiceStartFromCursor && cursorInsideSelection) {
-    // "From Cursor" means start of the bar containing the cursor (not the cursor position itself).
-    const barStart = snapBarStartContaining(cursor);
-    const startOffset = Math.max(snappedSelStart, barStart);
-    if (!(snappedSelEnd > startOffset)) {
-      return fallbackWholeTune("selection invalid; looping whole tune");
-    }
-    practiceRangeHint = canSnap ? "looping selection from cursor bar" : "looping selection from cursor";
-    return {
-      startOffset,
-      endOffset: snappedSelEnd,
-      origin: "practice",
-      loop: Boolean(loopEnabled),
-    };
-  }
-
-  if (practiceStartFromCursor && !cursorInsideSelection) {
-    practiceRangeHint = canSnap
-      ? "looping selection (cursor outside; snapped)"
-      : "looping selection (cursor outside)";
-  } else {
-    if (selectionExpanded) practiceRangeHint = canSnap ? "looping selection (expanded)" : "looping selection";
-    else practiceRangeHint = canSnap ? "looping selection (snapped)" : "looping selection";
-  }
+  if (selectionExpanded) practiceRangeHint = canSnap ? "looping selection (expanded)" : "looping selection";
+  else practiceRangeHint = canSnap ? "looping selection (snapped)" : "looping selection";
   return {
     startOffset: snappedSelStart,
     endOffset: snappedSelEnd,
@@ -12240,7 +12209,6 @@ if ($btnPracticeToggle) {
     }
     practiceEnabled = !practiceEnabled;
     if (!practiceEnabled) {
-      practiceStartFromCursor = false;
       practiceRangeHint = "";
       practiceRangePreview = null;
     }
@@ -12249,23 +12217,6 @@ if ($btnPracticeToggle) {
       try { editorView.focus(); } catch {}
       updatePracticeRangePreview();
     }
-    updatePracticeUi();
-  });
-}
-
-if ($btnPracticeFromCursor) {
-  $btnPracticeFromCursor.addEventListener("click", () => {
-    if (rawMode) {
-      showToast("Raw mode: Practice is unavailable.", 2200);
-      return;
-    }
-    if (!practiceEnabled) {
-      showToast("Enable Practice first.", 2000);
-      return;
-    }
-    practiceStartFromCursor = !practiceStartFromCursor;
-    syncPendingPlaybackPlan();
-    updatePracticeRangePreview();
     updatePracticeUi();
   });
 }
