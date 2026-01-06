@@ -13,10 +13,9 @@
 ### Selection and cursor rules (tolerant read)
 - **No selection**: range starts at the cursor (snapped to the next bar boundary when available) and runs to the end of the tune.
 - **Selection present**:
-  - The selection is snapped to full bars:
-    - start → bar boundary at/after selection start
-    - end → bar boundary at/before selection end
-  - Default: loops the snapped selection.
+  - Practice treats selection as “whole bars”:
+    - start → start of the first selected bar
+    - end → end of the last selected bar (next bar boundary), or tune end
   - If the cursor is outside the selection: the selection remains authoritative.
   - If snapping yields an empty/invalid range: fallback to looping the whole tune.
 - Snapping prefers the parsed playback timeline (`abc2svg` symbol chain). If not available, it falls back to “no snapping”.

@@ -11949,32 +11949,18 @@ function computePracticePlaybackRange(loopEnabled) {
     };
   }
 
-  let snappedSelStart = snapStartToBarBoundaryAtOrAfter(selStart);
-  let snappedSelEnd = selectionReachesEnd ? null : snapEnd(selEnd);
-  let selectionExpanded = false;
+  // Selection always means "whole bars": from the start of the first selected bar
+  // to the end of the last selected bar (next bar boundary), or tune end if selection reaches the end.
+  const snappedSelStart = snapBarStartContaining(selStart);
+  const snappedSelEnd = selectionReachesEnd ? null : snapEndToBarBoundaryAtOrAfter(selEnd);
   if (!(snappedSelEnd == null ? true : (snappedSelEnd > snappedSelStart))) {
-    // Tolerant-read fallback: if the strict snap collapses (common when the user highlights "roughly" across bars),
-    // expand to include all bars overlapped by the selection.
-    const expandedStart = snapBarStartContaining(selStart);
-    const expandedEnd = selectionReachesEnd ? null : snapEndToBarBoundaryAtOrAfter(selEnd);
-    if (expandedEnd == null || expandedEnd > expandedStart) {
-      snappedSelStart = expandedStart;
-      snappedSelEnd = expandedEnd;
-      selectionExpanded = true;
-    } else {
-      return fallbackWholeTune("selection invalid; looping whole tune");
-    }
+    return fallbackWholeTune("selection invalid; looping whole tune");
   }
 
-  const cursorInsideSelection = cursor >= selStart && cursor <= selEnd;
   if (snappedSelEnd == null) {
-    practiceRangeHint = selectionExpanded
-      ? (canSnap ? "looping selection → end (expanded)" : "looping selection → end")
-      : (canSnap ? "looping selection → end (snapped)" : "looping selection → end");
-  } else if (selectionExpanded) {
-    practiceRangeHint = canSnap ? "looping selection (expanded)" : "looping selection";
+    practiceRangeHint = canSnap ? "looping selection → end" : "looping selection → end";
   } else {
-    practiceRangeHint = canSnap ? "looping selection (snapped)" : "looping selection";
+    practiceRangeHint = canSnap ? "looping selection (bars)" : "looping selection";
   }
   return {
     startOffset: snappedSelStart,
