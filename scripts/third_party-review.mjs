@@ -281,7 +281,7 @@ function candidateSummary(root, candidateZip, components) {
   if (hasA2sCore && !hasA2sDist) {
     out.warnings.push(
       "Candidate looks like an abc2svg source tree (core/abc2svg.js) without prebuilt dist files (abc2svg-1.js, snd-1.js). " +
-        "Review is limited until dist artifacts are available or built."
+        "Review is limited until dist artifacts are available or built (see upstream README: run ./build or ninja/samu)."
     );
   }
 

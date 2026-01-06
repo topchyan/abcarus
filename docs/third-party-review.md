@@ -22,6 +22,12 @@ Other vendored assets (CodeMirror, Tabulator, SF2, fonts) should still be review
 - Put the upstream archive in `third_party/_upd/` (not committed).
 - Keep the original filename and also record the upstream commit/tag in your notes.
 
+Note for `abc2svg`:
+- Some upstream archives are **source trees** and do not include the prebuilt runtime files used by ABCarus
+  (`abc2svg-1.js`, `snd-1.js`, `MIDI-1.js`, ...). In that case, build the scripts from the source tree
+  using its own `./build` script (POSIX shell) or `ninja/samu` as described in the upstream README.
+  You do **not** need `samu` if you use `./build`.
+
 ### 2) Generate an upgrade report (no changes to `third_party/`)
 
 Run:
@@ -73,4 +79,3 @@ When reporting bugs upstream, include:
 - Minimal reproduction tune (or a minimal excerpt).
 - Expected vs actual behavior.
 - abc2svg version (`third_party/abc2svg/version.txt`) and OS/runtime details.
-
