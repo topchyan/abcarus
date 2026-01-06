@@ -7,9 +7,8 @@ dist/
 # Local-only helpers and artifacts
 scripts/local/
 debug_dumps/
-roadmaps/
 
-# Chat exports are large; keep raw exports out of git, but allow curated prompts/summaries.
+# Large exports: keep raw data out of git, allow curated notes.
 docs/qa/chat-exports/**
 !docs/qa/chat-exports/
 !docs/qa/chat-exports/**/
@@ -22,11 +21,10 @@ docs/qa/chat-exports/**
 # Generated prompt extraction outputs (never commit)
 docs/qa/chat-exports/prompts*/
 
-# Bundled Python runtime (release builds only)
-third_party/python-runtime/
+# Bundled Python runtime
 third_party/python-embed/**
-third_party/python-embed/.cache/
 !third_party/python-embed/**/
+third_party/python-embed/.cache/
 !third_party/python-embed/**/python-build-standalone.lock.json
 !third_party/python-embed/**/.gitkeep
 
@@ -41,8 +39,6 @@ third_party/_upd/
 # Soundfonts: keep only TimGM6mb.sf2 tracked
 third_party/sf2/*.sf2
 !third_party/sf2/TimGM6mb.sf2
-third_party/sf2/*.7z
-third_party/sf2/FreePatsGM-SF2-20221026/
 
 # Dependencies
 node_modules/
