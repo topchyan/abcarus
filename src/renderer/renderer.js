@@ -9235,18 +9235,21 @@ async function transportTogglePlayPause() {
     pausePlayback();
     return;
   }
-  if (!isPaused && editorView) {
-    updatePlaybackRangeFromSelection(editorView.state.selection, null);
+  if (isPaused) {
+    await startPlaybackFromRange();
+    return;
   }
-  await startPlaybackFromRange();
+  // Transport always starts from 0 (not from cursor/selection).
+  await startPlaybackFromRange({ startOffset: 0, endOffset: null, origin: "transport", loop: false });
 }
 
 async function transportPlay() {
   if (isPlaying) return;
-  if (!isPaused && editorView) {
-    updatePlaybackRangeFromSelection(editorView.state.selection, null);
+  if (isPaused) {
+    await startPlaybackFromRange();
+    return;
   }
-  await startPlaybackFromRange();
+  await startPlaybackFromRange({ startOffset: 0, endOffset: null, origin: "transport", loop: false });
 }
 
 async function transportPause() {
@@ -9515,18 +9518,7 @@ function ensurePlayer() {
         activePlaybackRange = null;
         activePlaybackEndAbcOffset = null;
         playbackStartArmed = false;
-        // After playback completes naturally, reset the playhead to the tune start.
-        try {
-          setPlaybackRange({ startOffset: 0, endOffset: null, origin: "cursor", loop: false });
-          if (editorView) {
-            suppressPlaybackRangeSelectionSync = true;
-            try {
-              editorView.dispatch({ selection: { anchor: 0, head: 0 } });
-            } finally {
-              suppressPlaybackRangeSelectionSync = false;
-            }
-          }
-        } catch {}
+        // Transport: end-of-tune behaves like Stop (playhead=0).
       }
       if (shouldLoop && followPlayback && lastRenderIdx != null && editorView) {
         // When looping, keep the visual follow-cursor without mutating PlaybackRange (loop invariance).
@@ -9579,18 +9571,7 @@ function ensurePlayer() {
           activePlaybackRange = null;
           activePlaybackEndAbcOffset = null;
           playbackStartArmed = false;
-          // When a bounded playback range finishes (selection / error-loop off), reset the playhead to tune start.
-          try {
-            setPlaybackRange({ startOffset: 0, endOffset: null, origin: "cursor", loop: false });
-            if (editorView) {
-              suppressPlaybackRangeSelectionSync = true;
-              try {
-                editorView.dispatch({ selection: { anchor: 0, head: 0 } });
-              } finally {
-                suppressPlaybackRangeSelectionSync = false;
-              }
-            }
-          } catch {}
+          // Transport: end-of-range behaves like Stop (playhead=0).
         }
         return;
       }
@@ -9852,19 +9833,7 @@ function stopPlaybackTransport() {
   resetPlaybackUiState();
   setSoundfontCaption();
 
-  // After an explicit Stop, reset the playhead back to the start (like a classic transport).
-  // The user can then move the cursor/selection to choose a new start location.
-  try {
-    setPlaybackRange({ startOffset: 0, endOffset: null, origin: "cursor", loop: false });
-    if (editorView) {
-      suppressPlaybackRangeSelectionSync = true;
-      try {
-        editorView.dispatch({ selection: { anchor: 0, head: 0 } });
-      } finally {
-        suppressPlaybackRangeSelectionSync = false;
-      }
-    }
-  } catch {}
+  // Transport: explicit Stop resets internal playhead to 0.
 }
 
 function toDerivedOffset(editorOffset) {
