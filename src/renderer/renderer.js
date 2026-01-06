@@ -2007,7 +2007,10 @@ function highlightSvgPracticeBarAtEditorOffset(editorOffset) {
     const end = measure.end + renderOffset;
     const hits = barEls.filter((el) => {
       const s = Number(el.dataset && el.dataset.start);
-      return Number.isFinite(s) && s >= start && s < end;
+      const e = Number(el.dataset && el.dataset.end);
+      if (!Number.isFinite(s)) return false;
+      const stop = Number.isFinite(e) ? e : s + 1;
+      return s < end && stop > start;
     });
     if (hits.length) {
       clearSvgPracticeBarHighlight();
@@ -9941,6 +9944,13 @@ function buildPlaybackState(firstSymbol) {
   let guard = 0;
   let preferredVoiceId = null;
   let preferredVoiceIndex = null;
+  const editorLen = editorView ? editorView.state.doc.length : 0;
+  const editorMaxIstart = (Number.isFinite(playbackIndexOffset) ? playbackIndexOffset : 0) + (Number.isFinite(editorLen) ? editorLen : 0);
+  const isInjectedSymbol = (symbol) => {
+    if (!symbol || !Number.isFinite(symbol.istart)) return false;
+    if (!editorLen) return false;
+    return symbol.istart >= editorMaxIstart;
+  };
   const considerVoice = (symbol) => {
     if (!symbol || !symbol.p_v) return;
     const id = symbol.p_v.id ? String(symbol.p_v.id) : null;
@@ -9962,19 +9972,37 @@ function buildPlaybackState(firstSymbol) {
     }
   };
 
-  if (s) pushUnique(symbols, s);
-  if (s) pushUnique(measures, s);
+  if (s && !isInjectedSymbol(s)) pushUnique(symbols, s);
+  if (s && !isInjectedSymbol(s)) pushUnique(measures, s);
 
   while (s && guard < 200000) {
-    pushUnique(symbols, s);
-    if (isBarLikeSymbol(s) && s.ts_next) {
-      pushUnique(measures, s.ts_next);
-      barIstarts.push(s.istart);
+    if (!isInjectedSymbol(s)) {
+      pushUnique(symbols, s);
+      if (isBarLikeSymbol(s) && s.ts_next && !isInjectedSymbol(s.ts_next)) {
+        pushUnique(measures, s.ts_next);
+        barIstarts.push(s.istart);
+      }
+      if (isPlayableSymbol(s)) considerVoice(s);
     }
-    if (isPlayableSymbol(s)) considerVoice(s);
     s = s.ts_next;
     guard += 1;
   }
+
+  // Sort by istart (text position) so binary searches behave deterministically even with multi-voice timelines.
+  // Note: injected/appended voices (e.g. DRUM) are filtered out above, so these maps reflect editor-visible ABC.
+  symbols.sort((a, b) => a.istart - b.istart);
+  measures.sort((a, b) => a.istart - b.istart);
+
+  const uniqSorted = (arr) => {
+    const out = [];
+    let last = null;
+    for (const v of arr.slice().sort((a, b) => a - b)) {
+      if (!Number.isFinite(v)) continue;
+      if (last == null || v !== last) out.push(v);
+      last = v;
+    }
+    return out;
+  };
 
   const symbolIstarts = symbols.map((item) => item.istart);
   const measureIstarts = measures.map((item) => item.istart);
@@ -10002,9 +10030,9 @@ function buildPlaybackState(firstSymbol) {
     preferredVoiceIndex,
     symbols,
     measures,
-    symbolIstarts,
-    measureIstarts,
-    barIstarts,
+    symbolIstarts: uniqSorted(symbolIstarts),
+    measureIstarts: uniqSorted(measureIstarts),
+    barIstarts: uniqSorted(barIstarts),
     timeline,
   };
 }
