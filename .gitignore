@@ -19,6 +19,8 @@ docs/qa/chat-exports/**
 !docs/qa/chat-exports/
 !docs/qa/chat-exports/**/
 !docs/qa/chat-exports/README.md
+!docs/qa/chat-exports/**/README.md
+!docs/qa/chat-exports/**/codex-chat-summary.md
 !docs/qa/chat-exports/**/prompt_*.txt
 !docs/qa/chat-exports/**/prompt_*.md
 
