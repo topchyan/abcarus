@@ -661,7 +661,8 @@ src.connect(ac.destination)
 src.start(0)}
 if(!gain){ac=conf.ac
 if(!ac){conf.ac=ac=new(window.AudioContext||window.webkitAudioContext)
-try{if(ac&&typeof ac.resume==="function"&&ac.state==="suspended"){ac.resume().catch(function(){})}}catch(e){}
+if(ac.state==="suspended")
+ac.resume()
 play_unlock()}
 gain=ac.createGain()
 gain.gain.value=conf.gain}
@@ -717,88 +718,7 @@ modgen[info.type]=info.value}
 return{modgen:modgen}};sf2.Parser.GeneratorEnumeratorTable=['startAddrsOffset','endAddrsOffset','startloopAddrsOffset','endloopAddrsOffset','startAddrsCoarseOffset','modLfoToPitch','vibLfoToPitch','modEnvToPitch','initialFilterFc','initialFilterQ','modLfoToFilterFc','modEnvToFilterFc','endAddrsCoarseOffset','modLfoToVolume',undefined,'chorusEffectsSend','reverbEffectsSend','pan',undefined,undefined,undefined,'delayModLFO','freqModLFO','delayVibLFO','freqVibLFO','delayModEnv','attackModEnv','holdModEnv','decayModEnv','sustainModEnv','releaseModEnv','keynumToModEnvHold','keynumToModEnvDecay','delayVolEnv','attackVolEnv','holdVolEnv','decayVolEnv','sustainVolEnv','releaseVolEnv','keynumToVolEnvHold','keynumToVolEnvDecay','instrument',undefined,'keyRange','velRange','startloopAddrsCoarseOffset','keynum','velocity','initialAttenuation',undefined,'endloopAddrsCoarseOffset','coarseTune','fineTune','sampleID','sampleModes',undefined,'scaleTuning','exclusiveClass','overridingRootKey'];sf2.Riff={};sf2.Riff.Parser=function(input,options){options=options||{};this.input=input;this.ip=options.index||0;this.length=options.length||input.length-this.ip;this.offset=this.ip;this.padding=options.padding!==undefined?options.padding:true;this.bigEndian=options.bigEndian!==undefined?options.bigEndian:false};sf2.Riff.Chunk=function(type,size,offset){this.type=type;this.size=size;this.offset=offset};sf2.Riff.Parser.prototype.parse=function(){var length=this.length+this.offset;this.chunkList=[];while(this.ip<length)
 this.parseChunk()};sf2.Riff.Parser.prototype.parseChunk=function(){var input=this.input,ip=this.ip,size;this.chunkList.push(new sf2.Riff.Chunk(String.fromCharCode(input[ip++],input[ip++],input[ip++],input[ip++]),(size=this.bigEndian?((input[ip++]<<24)|(input[ip++]<<16)|(input[ip++]<<8)|(input[ip++])):((input[ip++])|(input[ip++]<<8)|(input[ip++]<<16)|(input[ip++]<<24))),ip));ip+=size;if(this.padding&&((ip-this.offset)&1)===1)
 ip++;this.ip=ip};sf2.Riff.Parser.prototype.getChunk=function(index){var chunk=this.chunkList[index];if(chunk===undefined)
-return null;return chunk};sf2.Riff.Parser.prototype.getNumberOfChunks=function(){return this.chunkList.length};return sf2}));abc2svg.drum=function(first,voice_tb,cfmt){var c,i,on,n,nb,ss,v,str,pits,vols,l,dl,s=first,C=abc2svg.C,vdr={v:voice_tb.length,id:"_drum",time:0,sym:{type:C.BLOCK,subtype:"midiprog",chn:9,time:0,dur:0}},_sdr={v:vdr.v,p_v:vdr,type:C.NOTE,nhd:0}
-function gendr(ss,s){var c,i,j,sdr,s2,ti=ss.time,te=s.time+(s.dur||0),d=dl/l
-while(ti<te){j=0
-for(i=0;i<str.length;i++){c=str[i]
-if(c=='z'){ti+=d
-c=str[i+1]
-if(c>='2'&&c<='9'){ti+=(+c-1)*d
-i++}
-continue}
-sdr=Object.create(_sdr)
-sdr.time=ti
-s2=sdr
-sdr.dur=d
-sdr.notes=[{dur:d,midi:pits[j++]}]
-c=str[i+1]
-if(c>='2'&&c<='9'){sdr.dur*=+c
-sdr.notes[0].dur=sdr.dur
-i++}
-if(s2.next){sdr.next=s2.next
-s2.next=sdr
-sdr.prev=s2
-sdr.next.prev=sdr}else{vdr.last_sym.next=sdr
-sdr.prev=vdr.last_sym
-vdr.last_sym=sdr}
-	while(s&&s.time>ti)
-	s=s.ts_prev
-	while(s&&s.time<ti)
-	s=s.ts_next
-	while(s&&s.time==ti&&s.v<sdr.v)
-	s=s.ts_next
-	if(!s||!s.ts_prev){vdr.last_sym=sdr.prev
-	vdr.last_sym.next=null
-	ti+=sdr.dur
-	continue}
-	sdr.ts_next=s
-	sdr.ts_prev=s.ts_prev
-	s.ts_prev=sdr
-sdr.ts_prev.ts_next=sdr
-ti+=sdr.dur}}}
-vdr.sym.p_v=vdr
-vdr.sym.v=vdr.v
-vdr.last_sym=vdr.sym
-while(!s.dur)
-s=s.ts_next
-vdr.sym.ts_prev=s.ts_prev
-vdr.sym.ts_next=s
-vdr.sym.ts_prev.ts_next=s.ts_prev=vdr.sym
-for(v=0;v<voice_tb.length;v++){on=str=null
-nb=1
-for(s=voice_tb[v].sym;s;s=s.next){if(s.subtype!="mididrum")
-continue
-if(s.on)
-on=1
-if(s.nb)
-nb=s.nb
-if(s.txt){str=s.txt.shift()
-n=0
-for(i=0;i<str.length;i++)
-if(str[i]=='d')
-n++
-pits=s.txt.slice(0,n)
-if(s.txt.length>n)
-vols=s.txt.slice(n)
-n=0
-for(i=0;i<str.length;i++){c=str[i]
-n++
-if(c>='2'&&c<='9')
-n+=+c-2}
-l=n}
-if(on&&str){ss=s
-c=0
-i=s.time
-while(1){if(!s.next||s.next.subtype=="mididrum")
-break
-s=s.next
-if(s.bar_num&&!c){if(!i)
-i=s.time
-else
-dl=c=(s.time-i)*nb}}
-gendr(ss,s)}}}
-voice_tb.push(vdr)}
-function Midi5(i_conf){var po,conf=i_conf,empty=function(){},det_tb,rf,op
+return null;return chunk};sf2.Riff.Parser.prototype.getNumberOfChunks=function(){return this.chunkList.length};return sf2}));function Midi5(i_conf){var po,conf=i_conf,empty=function(){},det_tb,rf,op
 function get_time(po){return window.performance.now()/1000}
 var mutone=function(k,a,t){if(!det_tb){if(!a)
 return

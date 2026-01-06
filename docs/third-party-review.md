@@ -40,6 +40,10 @@ If the candidate is an `abc2svg` **source** archive (no `abc2svg-1.js` / `snd-1.
 files from the archive and compare them to the currently vendored runtime files:
 - `node scripts/third_party-review.mjs --candidate third_party/_upd/<abc2svg>.zip --abc2svg-build`
 
+To apply a vetted upgrade into `third_party/abc2svg/` (Linux/macOS only; requires `bash`):
+- Dry-run: `node scripts/upgrade_abc2svg_from_source_zip.mjs --zip third_party/_upd/<abc2svg>.zip`
+- Apply: `node scripts/upgrade_abc2svg_from_source_zip.mjs --zip third_party/_upd/<abc2svg>.zip --apply`
+
 Outputs are written to `scripts/local/third-party-reviews/` by default (not committed).
 
 ### 3) Review checklist (what to look for)

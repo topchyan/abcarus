@@ -21,6 +21,7 @@
     "size:report": "node devtools/size_report.js dist/appimage/AppDir",
     "version:show": "node scripts/show-version.mjs",
     "thirdparty:review": "node scripts/third_party-review.mjs",
+    "abc2svg:upgrade": "node scripts/upgrade_abc2svg_from_source_zip.mjs",
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
     "release:major": "node scripts/release.mjs major"
