@@ -9983,8 +9983,18 @@ function buildPlaybackState(firstSymbol) {
   while (s && guard < 200000) {
     if (!isInjectedSymbol(s)) {
       pushUnique(symbols, s);
-      if (isBarLikeSymbol(s) && s.ts_next && !isInjectedSymbol(s.ts_next)) {
-        pushUnique(measures, s.ts_next);
+      if (isBarLikeSymbol(s) && s.ts_next) {
+        // In some abc2svg timelines (multi-voice + injected DRUM), a barline's ts_next may point into
+        // the injected tail. For bar-snapping/highlighting we want the next *editor-visible* symbol.
+        let next = s.ts_next;
+        let hop = 0;
+        while (next && isInjectedSymbol(next) && hop < 64) {
+          next = next.ts_next;
+          hop += 1;
+        }
+        if (next && !isInjectedSymbol(next)) {
+          pushUnique(measures, next);
+        }
         barIstarts.push(s.istart);
       }
       if (isPlayableSymbol(s)) considerVoice(s);
