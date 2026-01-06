@@ -5,13 +5,13 @@ import path from "node:path";
 function usage(exitCode = 1) {
   const msg = [
     "Usage:",
-    "  node scripts/chat-log.mjs [DEVLOG.md] -m \"message\" [--notes \"optional notes\"]",
-    "  node scripts/chat-log.mjs --file DEVLOG.md -m \"message\" [--notes \"optional notes\"]",
+    "  node scripts/chat-log.mjs [scripts/local/DEVLOG.md] -m \"message\" [--notes \"optional notes\"]",
+    "  node scripts/chat-log.mjs --file scripts/local/DEVLOG.md -m \"message\" [--notes \"optional notes\"]",
     "",
     "Notes:",
     "  - If -m/--message is omitted and stdin is a TTY, the script will prompt.",
     "",
-    "Appends a new entry to DEVLOG.md with the current git state (branch/HEAD/status/diffstat).",
+    "Appends a new entry to a local devlog with the current git state (branch/HEAD/status/diffstat).",
   ].join("\n");
   process.stderr.write(`${msg}\n`);
   process.exit(exitCode);
@@ -31,8 +31,8 @@ function parseArgs(argv) {
   }
   out.message = out.message.trim();
   out.notes = out.notes.trim();
-  out.file = (out.file || "DEVLOG.md").trim();
-  if (!out.file) out.file = "DEVLOG.md";
+  out.file = (out.file || "scripts/local/DEVLOG.md").trim();
+  if (!out.file) out.file = "scripts/local/DEVLOG.md";
   if (!out.message) {
     if (process.stdin.isTTY) {
       process.stderr.write("Message: ");
@@ -96,6 +96,7 @@ const entry = [
 const devlogPath = path.isAbsolute(args.file)
   ? args.file
   : path.join(process.cwd(), args.file);
+fs.mkdirSync(path.dirname(devlogPath), { recursive: true });
 if (!fs.existsSync(devlogPath)) {
   fs.writeFileSync(
     devlogPath,

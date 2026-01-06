@@ -4,17 +4,12 @@ dist/
 # Editor settings
 .vscode/
 
-# Local-only scripts and logs
+# Local-only helpers and artifacts
 scripts/local/
-DEVLOG.md
-deploy.sh
-scripts/generate-release-docs.mjs
-get_recents.sh
-recents.zip
 debug_dumps/
 roadmaps/
-docs/qa/chat-exports/
-# Keep chat exports out of git, but allow curated prompts/README.
+
+# Chat exports are large; keep raw exports out of git, but allow curated prompts/summaries.
 docs/qa/chat-exports/**
 !docs/qa/chat-exports/
 !docs/qa/chat-exports/**/

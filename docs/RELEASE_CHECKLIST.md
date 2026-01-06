@@ -5,7 +5,6 @@ This is a step-by-step guide for making a release build and pushing it to GitHub
 Where to find:
 - High-level policy: `docs/RELEASES.md`
 - This checklist: `docs/RELEASE_CHECKLIST.md`
-- Release history (manual notes): `DEVLOG.md`
 - User-facing changelog: `CHANGELOG.md`
 - Generated release notes (per release): `docs/RELEASE_NOTES.md`
 
@@ -37,42 +36,36 @@ Example:
 - Subject: `release: v0.12.2`
 - Body: a few bullet points, one per major change.
 
-## 2) Update CHANGELOG and DEVLOG
+## 2) Update CHANGELOG (and optional local devlog)
 
-If you use `deploy.sh` (recommended), it can do both automatically (see below).
+The repository release flow is driven by `scripts/release.mjs` (via `npm run release:*`) and
+`scripts/generate-release-docs.mjs` (to update `CHANGELOG.md` and `docs/RELEASE_NOTES.md`).
 
 Manual (optional):
-- Append DEVLOG entry:
+- Append local devlog entry:
   - `node scripts/chat-log.mjs -m "your message" --notes "optional notes"`
 - Edit `CHANGELOG.md`:
   - Ensure `## [Unreleased]` exists.
   - Add a new `## [X.Y.Z] - YYYY-MM-DD` section right under it.
 
-## 3) Release (recommended: one-shot)
+## 3) Release (recommended)
 
-This is the “do it all in one shot” flow:
+This flow bumps the version, updates release docs, commits, and creates a tag:
 
-1) Make sure you are in the repo root.
-2) Run:
-   - Minimal (recommended):
-     - `bash deploy.sh --version patch -m "chore(release)"`
-   - Minor/major:
-     - `bash deploy.sh --version minor -m "chore(release)"`
-     - `bash deploy.sh --version major -m "chore(release)"`
+1) Ensure the working tree is clean.
+2) Run one of:
+   - `npm run release:patch`
+   - `npm run release:minor`
+   - `npm run release:major`
 
-Notes on the commit message:
-- If you omit the version, `deploy.sh` appends it automatically (e.g. `: v0.12.2`).
-- You can also use `{version}` placeholder: `-m "chore(release): {version}"`.
-3) After it finishes:
-   - AppImage artifact: `dist/appimage/Abcarus-x86_64.AppImage`
+3) Push commit and tag:
+   - `git push`
+   - `git push origin vX.Y.Z`
 
 Notes:
-- `deploy.sh` pushes by default (non-interactive). Use `--ask` to re-enable prompts.
-- If you want to build without pushing: add `--skip-push`.
-- If you want to control the changelog / notes generation:
-  - Use `--skip-release-docs` to disable auto-generation.
-  - Use `--release-from <ref>` to set the git range start (default: latest `v*` tag).
-  - Use `--release-notes-path <path>` to choose where notes are written (default: `docs/RELEASE_NOTES.md`).
+- Release notes are generated from git history and written to:
+  - `CHANGELOG.md`
+  - `docs/RELEASE_NOTES.md`
 
 ## 4) Push (if skipped earlier)
 
@@ -95,3 +88,8 @@ If you see errors about FUSE (/dev/fuse) or runtime download:
 - `appimagetool` may need a runtime file (`runtime-x86_64`).
   - Place it at: `dist/appimage/runtime-x86_64`
   - Then rebuild using `appimagetool --runtime-file dist/appimage/runtime-x86_64 ...`
+
+## Local helpers (not in git)
+
+Some contributors keep optional convenience scripts under `scripts/local/` (gitignored).
+They are not required for the release process.

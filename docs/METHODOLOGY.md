@@ -7,7 +7,7 @@ This project is developed iteratively via chat sessions. To prevent “context l
 2) ADRs in `docs/adr/` (architectural decisions + constraints).
 3) Requirements in `docs/REQUIREMENTS.md` (product + engineering invariants).
 4) `docs/features.md` / `docs/architecture.md` (descriptions of current behavior/structure).
-5) `DEVLOG.md` (detailed narrative log; allowed to be verbose).
+5) Local devlog (optional; kept out of git).
 6) Chat exports in `docs/qa/chat-exports/` (raw evidence; not canonical).
 
 ## How we capture decisions
@@ -23,7 +23,8 @@ ADRs should be small, concrete, and include constraints/acceptance criteria.
 ### How we record non-architectural decisions
 - Add/adjust requirements in `docs/REQUIREMENTS.md`.
 - Update `docs/features.md` when behavior changes.
-- Append a dated entry to `DEVLOG.md` for session history and “why”.
+- Optionally append a dated entry to a local devlog for session history and “why”:
+  - `node scripts/chat-log.mjs -m "what changed" --notes "optional notes"`
 
 ## Chat exports workflow (context preservation)
 We keep exported conversations in `docs/qa/chat-exports/YYYYMMDD/` so history survives across assistant sessions.
@@ -68,7 +69,7 @@ Store dated plans under `roadmaps/YYYYMMDD/` as Markdown files.
 
 ## Release workflow
 - User-facing changes live in `CHANGELOG.md` (Keep a Changelog format).
-- Session narrative lives in `DEVLOG.md`.
+- Session narrative can live in a local devlog (not committed).
 - Versioning and releases:
   - `docs/VERSIONING.md`
   - `docs/RELEASES.md`
@@ -77,4 +78,3 @@ Store dated plans under `roadmaps/YYYYMMDD/` as Markdown files.
 ## Licensing hygiene
 - Do not copy/translate GPL/LGPL code into app-owned sources unless the licensing plan is explicit and compatible.
 - Prefer thin wrappers around third-party tools under `third_party/` so upgrades remain straightforward and license boundaries stay clear.
-

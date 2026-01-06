@@ -91,7 +91,7 @@ Upgrading these components may require updates to:
 
 ## Limitations visible in code
 - No automated end-to-end UI test suite (manual QA is required).
-- Packaging/build is currently focused on Linux AppImage via scripts under `scripts/` and `deploy.sh`.
+- Packaging/build is currently focused on Linux AppImage via scripts under `scripts/` and a tagged GitHub Release workflow.
 - Single-window UI; no session restoration beyond saved recents/settings.
 
 ## Architecture decision records (ADRs)
