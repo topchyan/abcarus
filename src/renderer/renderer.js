@@ -173,7 +173,7 @@ let lastTraceTimestamp = null;
 let playbackTraceSeq = 0;
 
 let practiceEnabled = false;
-let practiceTempoMultiplier = 0.75;
+let practiceTempoMultiplier = 0.8;
 let practiceStatusText = "";
 let practiceRangeHint = "";
 let practiceRangePreview = null; // {startOffset,endOffset}
@@ -1442,17 +1442,16 @@ function setFileNameMeta(name) {
   updateWindowTitle();
 }
 
-function updateWindowTitle() {
-  const base = ($fileNameMeta && $fileNameMeta.textContent) ? $fileNameMeta.textContent : "Untitled";
-  const tuneDirty = Boolean(currentDoc && currentDoc.dirty);
-  const hasHeader = computeHeaderPresence() === "present";
-  const headerTag = hasHeader ? (headerDirty ? " [Header*]" : " [Header]") : "";
-  const tuneTag = tuneDirty ? " *" : "";
-  const root = libraryIndex && libraryIndex.root ? String(libraryIndex.root) : "";
-  const rootShort = formatPathTail(root, 3);
-  const rootTag = rootShort ? ` — ${rootShort}` : "";
-  document.title = `ABCarus — ${base}${headerTag}${tuneTag}${rootTag}`;
-}
+	function updateWindowTitle() {
+	  const tuneDirty = Boolean(currentDoc && currentDoc.dirty);
+	  const dirtyTag = (tuneDirty || headerDirty) ? "*" : "";
+	  const filePath = (currentDoc && currentDoc.path) ? String(currentDoc.path) : "";
+	  const fileNameWithExt = filePath ? safeBasename(filePath) : "Untitled.abc";
+	  const dirPath = filePath ? safeDirname(filePath) : (libraryIndex && libraryIndex.root ? String(libraryIndex.root) : "");
+	  const dirShort = formatPathTail(dirPath, 3);
+	  const display = dirShort ? `${dirShort}/${fileNameWithExt}` : fileNameWithExt;
+	  document.title = `ABCarus — ${display}${dirtyTag}`;
+	}
 
 function buildTuneMetaLabel(metadata) {
   if (!metadata) return "Untitled";
@@ -8737,6 +8736,24 @@ function wireMenuActions() {
   window.api.onMenuAction(async (action) => {
     try {
       const actionType = typeof action === "string" ? action : action && action.type;
+      const busy = isPlaybackBusy();
+      if (busy) {
+        const allowed = new Set([
+          "playStart",
+          "playPrev",
+          "playToggle",
+          "playNext",
+          "resetLayout",
+          "zoomIn",
+          "zoomOut",
+          "zoomReset",
+          "quit",
+        ]);
+        if (!allowed.has(actionType)) {
+          showToast("Playback active: stop before changing files/settings/tools.", 2400);
+          return;
+        }
+      }
       if (rawMode) {
         const blocked = new Set([
           "playStart",
@@ -9223,6 +9240,7 @@ let lastMeterMismatchToastKey = null;
 let lastPlaybackMeterMismatchWarning = null;
 let lastRepeatShortBarToastKey = null;
 let lastPlaybackRepeatShortBarWarning = null;
+let playbackStartToken = 0;
 
 function clearPlaybackNoteOnEls() {
   for (const el of lastPlaybackNoteOnEls) {
@@ -9250,6 +9268,7 @@ function playbackGuardError(message) {
 
 function stopPlaybackFromGuard(message) {
   playbackGuardError(message);
+  playbackStartToken += 1;
   if (player && (isPlaying || isPaused) && typeof player.stop === "function") {
     suppressOnEnd = true;
     try { player.stop(); } catch {}
@@ -9366,7 +9385,61 @@ function updatePlayButton() {
     else if (isPaused) $btnPlayPause.textContent = "Resume";
     else $btnPlayPause.textContent = "Play";
   }
+  updatePlaybackInteractionLock();
   updatePracticeUi();
+}
+
+function isPlaybackBusy() {
+  return Boolean(isPlaying || isPaused || waitingForFirstNote);
+}
+
+function updatePlaybackInteractionLock() {
+  const busy = isPlaybackBusy();
+  const disable = (el, allowWhileBusy = false) => {
+    if (!el) return;
+    el.disabled = busy && !allowWhileBusy;
+  };
+
+  // Allowlist during playback: transport controls + view-only controls (zoom is via menu).
+  disable($btnPlay, true);
+  disable($btnPause, true);
+  disable($btnPlayPause, true);
+  disable($btnStop, true);
+  disable($btnResetLayout, true);
+
+  // Block file/library/tool actions while playing/paused/loading to prevent state races.
+  disable($btnToggleLibrary);
+  disable($btnLibraryRefresh);
+  disable($btnLibraryClearFilter);
+  disable($groupBy);
+  disable($sortBy);
+  disable($librarySearch);
+  disable($fileTuneSelect);
+
+  disable($btnFileNew);
+  disable($btnFileOpen);
+  disable($btnFileSave);
+  disable($btnFileClose);
+  disable($btnToggleRaw);
+
+  disable($btnToggleErrors);
+  disable($btnToggleFollow);
+  disable($btnToggleGlobals);
+  disable($fileHeaderToggle);
+  disable($fileHeaderSave);
+  disable($fileHeaderReload);
+
+  disable($btnPracticeToggle);
+  disable($practiceTempo);
+
+  disable($soundfontSelect);
+  disable($soundfontAdd);
+  disable($soundfontRemove);
+
+  disable($xIssuesAutoFix);
+  disable($xIssuesJump);
+  disable($xIssuesCopy);
+  disable($xIssuesClose, true);
 }
 
 function buildTransportPlaybackPlan() {
@@ -9386,7 +9459,7 @@ function buildPracticePlaybackPlan() {
     rangeStart: 0,
     rangeEnd: null,
     loopEnabled: true,
-    tempoMultiplier: (Number.isFinite(tempo) && tempo > 0) ? tempo : 0.75,
+    tempoMultiplier: (Number.isFinite(tempo) && tempo > 0) ? tempo : 0.8,
   };
 }
 
@@ -9463,6 +9536,7 @@ async function transportPause() {
 }
 
 function resetPlaybackState() {
+  playbackStartToken += 1;
   stopPlaybackForRestart();
   suppressOnEnd = false;
   isPlaying = false;
@@ -9762,6 +9836,7 @@ function ensurePlayer() {
         return;
       }
       const shouldLoop = Boolean(activePlaybackRange && activePlaybackRange.loop);
+      const loopRange = shouldLoop ? activePlaybackRange : null;
       isPlaying = false;
       isPaused = false;
       waitingForFirstNote = false;
@@ -9788,6 +9863,7 @@ function ensurePlayer() {
       }
       if (shouldLoop) {
         queueMicrotask(() => {
+          if (!loopRange || activePlaybackRange !== loopRange) return;
           if (pendingPlaybackPlan) {
             const plan = pendingPlaybackPlan;
             pendingPlaybackPlan = null;
@@ -9802,7 +9878,7 @@ function ensurePlayer() {
             updatePracticeUi();
             return;
           }
-          startPlaybackFromRange(activePlaybackRange).catch(() => {});
+          startPlaybackFromRange(loopRange).catch(() => {});
         });
       }
     },
@@ -9834,7 +9910,9 @@ function ensurePlayer() {
         updatePlayButton();
         clearNoteSelection();
         if (activePlaybackRange && activePlaybackRange.loop) {
+          const loopRange = activePlaybackRange;
           queueMicrotask(() => {
+            if (!loopRange || activePlaybackRange !== loopRange) return;
             if (pendingPlaybackPlan) {
               const plan = pendingPlaybackPlan;
               pendingPlaybackPlan = null;
@@ -9849,7 +9927,7 @@ function ensurePlayer() {
               updatePracticeUi();
               return;
             }
-            startPlaybackFromRange(activePlaybackRange).catch(() => {});
+            startPlaybackFromRange(loopRange).catch(() => {});
           });
         } else {
           resumeStartIdx = null;
@@ -10141,13 +10219,14 @@ function findMeasureIndex(idx) {
 function stopPlaybackForRestart() {
   if (player && typeof player.stop === "function") {
     suppressOnEnd = true;
-    player.stop();
+    try { player.stop(); } catch {}
   }
   clearNoteSelection();
   resetPlaybackUiState();
 }
 
 function stopPlaybackTransport() {
+  playbackStartToken += 1;
   if (player && (isPlaying || isPaused || waitingForFirstNote) && typeof player.stop === "function") {
     suppressOnEnd = true;
     try { player.stop(); } catch {}
@@ -11981,10 +12060,23 @@ function updatePracticeRangePreview() {
 
 async function startPlaybackFromRange(rangeOverride) {
   if (!editorView) return;
+  const startToken = (playbackStartToken += 1);
+  const abortStart = (message) => {
+    if (startToken !== playbackStartToken) return;
+    waitingForFirstNote = false;
+    isPlaying = false;
+    isPaused = false;
+    setStatus("OK");
+    updatePlayButton();
+    clearNoteSelection();
+    resetPlaybackUiState();
+    setSoundfontCaption();
+    if (message) showToast(message, 2600);
+  };
   let range = clonePlaybackRange(rangeOverride || playbackRange);
   const max = editorView.state.doc.length;
   if (!Number.isFinite(range.startOffset) || range.startOffset < 0 || range.startOffset > max) {
-    showToast("Playback range start is invalid.", 2600);
+    abortStart("Playback range start is invalid.");
     return;
   }
 
@@ -11998,16 +12090,23 @@ async function startPlaybackFromRange(rangeOverride) {
   const sourceKey = getPlaybackSourceKey();
   const canReuse = playbackState && lastPreparedPlaybackKey && lastPreparedPlaybackKey === sourceKey && player;
   waitingForFirstNote = true;
-  if (!canReuse) {
-    stopPlaybackForRestart();
-    const desired = soundfontName || "TimGM6mb.sf2";
-    setSoundfontCaption("Loading...");
-    updateSoundfontLoadingStatus(desired);
-    await preparePlayback();
-  } else {
-    await ensureSoundfontReady();
-    stopPlaybackForRestart();
+  try {
+    if (!canReuse) {
+      stopPlaybackForRestart();
+      const desired = soundfontName || "TimGM6mb.sf2";
+      setSoundfontCaption("Loading...");
+      updateSoundfontLoadingStatus(desired);
+      await preparePlayback();
+    } else {
+      await ensureSoundfontReady();
+      stopPlaybackForRestart();
+    }
+  } catch (e) {
+    stopPlaybackFromGuard(`Playback start failed: ${(e && e.message) ? e.message : String(e)}`);
+    showToast("Playback failed to start. Try again.", 3200);
+    return;
   }
+  if (startToken !== playbackStartToken) return;
 
   if (range.origin === "practice") {
     const computed = computePracticePlaybackRange(range.loop);
@@ -12018,13 +12117,12 @@ async function startPlaybackFromRange(rangeOverride) {
 
   const startAbcOffset = toDerivedOffset(range.startOffset);
   if (!Number.isFinite(startAbcOffset)) {
-    showToast("Playback range start is invalid.", 2600);
+    abortStart("Playback range start is invalid.");
     return;
   }
   const startSym = findSymbolAtOrAfter(startAbcOffset);
   if (!startSym || !Number.isFinite(startSym.istart)) {
-    showToast("Playback start is not mappable.", 2600);
-    waitingForFirstNote = false;
+    abortStart("Playback start is not mappable.");
     return;
   }
 
@@ -12047,7 +12145,13 @@ async function startPlaybackFromRange(rangeOverride) {
   playbackTraceSeq = 0;
 
   playbackStartArmed = true;
-  startPlaybackFromPrepared(startSym.istart);
+  try {
+    startPlaybackFromPrepared(startSym.istart);
+  } catch (e) {
+    stopPlaybackFromGuard(`Playback start failed: ${(e && e.message) ? e.message : String(e)}`);
+    showToast("Playback failed to start. Try again.", 3200);
+    return;
+  }
   playbackStartArmed = false;
 }
 
@@ -12193,10 +12297,12 @@ if ($btnPracticeToggle) {
       showToast("Raw mode: Practice is unavailable.", 2200);
       return;
     }
-    if (isPlaying || waitingForFirstNote) {
-      showToast("Pause playback before toggling Practice.", 2400);
+    if (isPlaybackBusy()) {
+      showToast("Stop playback before toggling Practice.", 2400);
       return;
     }
+    // Mode switch: reset playback state (playhead/range/speed) to avoid races.
+    stopPlaybackTransport();
     practiceEnabled = !practiceEnabled;
     if (!practiceEnabled) {
       practiceRangeHint = "";
@@ -12206,6 +12312,9 @@ if ($btnPracticeToggle) {
     if (practiceEnabled && editorView) {
       try { editorView.focus(); } catch {}
       updatePracticeRangePreview();
+    }
+    if (!practiceEnabled) {
+      applyPlaybackPlanSpeed(buildTransportPlaybackPlan());
     }
     updatePracticeUi();
   });

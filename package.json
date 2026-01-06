@@ -38,6 +38,7 @@
   "build": {
     "appId": "com.abcarus.ABCarus",
     "productName": "ABCarus",
+    "icon": "assets/icons/icon.png",
     "files": [
       "**/*",
       "!dist/**",
@@ -57,6 +58,7 @@
       "third_party/python-embed/**"
     ],
     "directories": {
+      "buildResources": "assets/icons",
       "output": "dist/electron-builder"
     },
     "win": {

@@ -67,6 +67,7 @@ function reflowMeasuresInMusicLine(line, measuresPerLine) {
   let i = 0;
   let inQuote = false;
   let inDecoration = false;
+  let hasBarContent = false;
 
   while (i < src.length) {
     const ch = src[i];
@@ -111,8 +112,13 @@ function reflowMeasuresInMusicLine(line, measuresPerLine) {
     if (bar) {
       out.push(bar.text);
       i = bar.end;
-      count += 1;
-      const shouldBreak = (count % n === 0);
+      let didCount = false;
+      if (hasBarContent) {
+        count += 1;
+        didCount = true;
+      }
+      const shouldBreak = didCount && (count % n === 0);
+      hasBarContent = false;
       // Canonicalize whitespace after barlines so repeated reflows converge:
       // - if we don't break: collapse any horizontal whitespace to a single space (when there is remainder)
       // - if we break: drop leading whitespace on the next segment
@@ -140,6 +146,9 @@ function reflowMeasuresInMusicLine(line, measuresPerLine) {
       continue;
     }
 
+    // Count a bar only when there was some musical content since the previous barline.
+    // Include common rest tokens: z (rest), x (invisible rest), Z (multi-measure rest).
+    if (/[A-Ga-gzxZ]/.test(ch)) hasBarContent = true;
     out.push(ch);
     i += 1;
   }

@@ -85,20 +85,26 @@ async function runReflowRoundtripCase({ name, fixture, measuresPerLineA, measure
 }
 
 async function main() {
-  const cases = [
-    {
-      name: "TEST 1: Hasapia measures-per-line=1 (no blank lines)",
-      fixture: "hasapia-mandilatos.abc",
-      expected: "hasapia-mandilatos_mpl1.abc",
-      measuresPerLine: 1,
-    },
-    {
-      name: "TEST 2: begintext preserves blank lines (no blank lines outside)",
-      fixture: "begintext-blank-lines.abc",
-      expected: "begintext-blank-lines_mpl1.abc",
-      measuresPerLine: 1,
-    },
-  ];
+	  const cases = [
+	    {
+	      name: "TEST 1: Hasapia measures-per-line=1 (no blank lines)",
+	      fixture: "hasapia-mandilatos.abc",
+	      expected: "hasapia-mandilatos_mpl1.abc",
+	      measuresPerLine: 1,
+	    },
+	    {
+	      name: "TEST 2: begintext preserves blank lines (no blank lines outside)",
+	      fixture: "begintext-blank-lines.abc",
+	      expected: "begintext-blank-lines_mpl1.abc",
+	      measuresPerLine: 1,
+	    },
+	    {
+	      name: "TEST 3: leading |: is not treated as a full measure",
+	      fixture: "repeat-start.abc",
+	      expected: "repeat-start_mpl2.abc",
+	      measuresPerLine: 2,
+	    },
+	  ];
 
   for (const c of cases) {
     try {
@@ -115,20 +121,20 @@ async function main() {
     }
   }
 
-  try {
-    await runReflowRoundtripCase({
-      name: "TEST 3: reflow 1 bar/line -> 2 bars/line changes output",
-      fixture: "hasapia-mandilatos.abc",
-      measuresPerLineA: 1,
-      measuresPerLineB: 2,
-    });
-    console.log("% PASS TEST 3: reflow 1 bar/line -> 2 bars/line changes output");
-  } catch (e) {
-    console.log("% FAIL TEST 3: reflow 1 bar/line -> 2 bars/line changes output");
-    const msg = String(e && e.message ? e.message : e);
-    for (const line of msg.split(/\r\n|\n|\r/)) {
-      console.log(`% ${line}`);
-    }
+	  try {
+	    await runReflowRoundtripCase({
+	      name: "TEST 4: reflow 1 bar/line -> 2 bars/line changes output",
+	      fixture: "hasapia-mandilatos.abc",
+	      measuresPerLineA: 1,
+	      measuresPerLineB: 2,
+	    });
+	    console.log("% PASS TEST 4: reflow 1 bar/line -> 2 bars/line changes output");
+	  } catch (e) {
+	    console.log("% FAIL TEST 4: reflow 1 bar/line -> 2 bars/line changes output");
+	    const msg = String(e && e.message ? e.message : e);
+	    for (const line of msg.split(/\r\n|\n|\r/)) {
+	      console.log(`% ${line}`);
+	    }
     process.exitCode = 1;
   }
 }

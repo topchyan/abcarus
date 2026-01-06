@@ -59,12 +59,6 @@ body {
   flex-direction: column;
 }
 
-body.raw-mode #fileNameMeta::after {
-  content: "  [RAW]";
-  color: #b45309;
-  font-weight: 700;
-}
-
 body.raw-mode .right-split {
   grid-template-columns: 1fr;
 }
@@ -178,6 +172,11 @@ header {
   color: var(--button-text);
 }
 
+#fileHeaderToggle:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 #fileHeaderToggle:hover {
   background: var(--button-bg-hover);
 }
@@ -241,6 +240,11 @@ main {
   color: var(--button-text);
 }
 
+.soundfont-control select:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 #soundfontLabel.loading {
   font-weight: 700;
 }
@@ -253,6 +257,12 @@ main {
   background: var(--button-bg);
   color: var(--button-text);
   cursor: pointer;
+}
+
+#soundfontAdd:disabled,
+#soundfontRemove:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 #soundfontAdd:hover,
@@ -779,15 +789,6 @@ body.resizing * {
   gap: 6px;
 }
 
-.file-meta-bar {
-  padding: 8px 12px;
-  border-bottom: 1px solid #eee;
-  font-size: 13px;
-  font-weight: 700;
-  color: #222;
-  letter-spacing: 0.01em;
-}
-
 .file-header-panel.active {
   display: grid;
 }
@@ -802,6 +803,11 @@ body.resizing * {
   align-items: center;
   gap: 10px;
   min-width: 0;
+}
+
+.file-header-bar select:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .file-header-title {
@@ -1511,7 +1517,6 @@ body.print-mode .sidebar,
 body.print-mode .divider,
 body.print-mode .split-divider,
 body.print-mode .editor-pane,
-body.print-mode .file-meta-bar,
 body.print-mode .file-header-panel,
 body.print-mode .taskbar {
   display: none;
