@@ -66,6 +66,7 @@ For each component:
 
 Minimum:
 - Open a known-heavy ABC file and confirm render/playback works.
+- Confirm the default soundfont loads (no infinite "Loading…") and playback produces audible notes.
 - Re-run the known problematic debug dumps for repeats/meter changes.
 - Import/export via MusicXML using the bundled Python runtime (PBS).
 
@@ -87,3 +88,13 @@ When reporting bugs upstream, include:
 - Minimal reproduction tune (or a minimal excerpt).
 - Expected vs actual behavior.
 - abc2svg version (`third_party/abc2svg/version.txt`) and OS/runtime details.
+
+## Playback-focused upgrade smoke tests (abc2svg)
+
+These tests are designed to catch the exact regressions we've seen after abc2svg upgrades:
+
+- **Play starts**: click Play on a real-world file and ensure audio starts within ~1–2 seconds.
+- **No unhandled errors**: open a debug dump and ensure `debugLog` has no `unhandledrejection` entries from `third_party/abc2svg/*.js`.
+- **Soundfont load**: the default bundled SF2 should not get stuck in "Loading…" forever.
+- **Microtonal accidentals**: playback should tolerate common notations (e.g. `^3/4` / `_3/4` are normalized in compat mode).
+- **Drums**: if the tune uses `%%MIDI drum...`, confirm drums do not crash playback and are either audible or intentionally disabled by config.

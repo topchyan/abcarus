@@ -136,6 +136,21 @@ function stripAbc2svgVdate(text) {
   return filtered.join("\n");
 }
 
+function checkSndDrumContract(builtSndText) {
+  const src = String(builtSndText || "");
+  const callsDrum = src.includes("abc2svg.drum(");
+  const definesDrum = src.includes("abc2svg.drum=") || src.includes("abc2svg.drum =") || src.includes("function abc2svg.drum");
+  if (callsDrum && !definesDrum) {
+    return {
+      ok: false,
+      message:
+        "Built snd-1.js calls abc2svg.drum() but does not define it. " +
+        "Upgrading only snd-1.js may break playback unless abc2svg.drum exists elsewhere.",
+    };
+  }
+  return { ok: true, message: "" };
+}
+
 function atomicWriteFile(destPath, buf) {
   const dir = path.dirname(destPath);
   ensureDir(dir);
@@ -220,6 +235,12 @@ function main() {
     const builtPath = path.join(srcRoot, f);
     if (!fileExists(builtPath)) continue;
     const builtBuf = fs.readFileSync(builtPath);
+    if (f === "snd-1.js") {
+      const chk = checkSndDrumContract(builtBuf.toString("utf8"));
+      if (!chk.ok) {
+        console.error(`WARNING: ${chk.message}`);
+      }
+    }
 
     const destPath = path.join(destRoot, f);
     const localBuf = readMaybe(destPath);
@@ -265,4 +286,3 @@ try {
   console.error(e && e.message ? e.message : e);
   process.exit(1);
 }
-

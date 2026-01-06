@@ -11353,6 +11353,15 @@ async function preparePlayback() {
     lastPlaybackTuneInfo = { count: tunes.length };
   }
 
+  // Compatibility: some upstream abc2svg builds expect abc2svg.drum() to exist when drum features are enabled.
+  // Our playback pipeline can inject/expand drums independently, so missing abc2svg.drum should not hard-fail playback.
+  try {
+    if (window.abc2svg && typeof window.abc2svg.drum !== "function") {
+      window.abc2svg.drum = () => {};
+      playbackSanitizeWarnings.push({ kind: "playback-abc2svg-drum-missing-stubbed" });
+    }
+  } catch {}
+
   for (const t of tunes) {
     p.add(t[0], t[1], t[3]);
   }
