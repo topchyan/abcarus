@@ -11890,6 +11890,7 @@ function computePracticePlaybackRange(loopEnabled) {
   const selEnd = Math.max(anchor, head);
   const hasSelection = selEnd > selStart;
   const cursor = head;
+  const selectionReachesEnd = hasSelection && selEnd >= Math.max(0, max - 2);
 
   const measureIstarts = playbackState && Array.isArray(playbackState.measureIstarts)
     ? playbackState.measureIstarts
@@ -11949,14 +11950,14 @@ function computePracticePlaybackRange(loopEnabled) {
   }
 
   let snappedSelStart = snapStartToBarBoundaryAtOrAfter(selStart);
-  let snappedSelEnd = snapEnd(selEnd);
+  let snappedSelEnd = selectionReachesEnd ? null : snapEnd(selEnd);
   let selectionExpanded = false;
-  if (!(snappedSelEnd > snappedSelStart)) {
+  if (!(snappedSelEnd == null ? true : (snappedSelEnd > snappedSelStart))) {
     // Tolerant-read fallback: if the strict snap collapses (common when the user highlights "roughly" across bars),
     // expand to include all bars overlapped by the selection.
     const expandedStart = snapBarStartContaining(selStart);
-    const expandedEnd = snapEndToBarBoundaryAtOrAfter(selEnd);
-    if (expandedEnd > expandedStart) {
+    const expandedEnd = selectionReachesEnd ? null : snapEndToBarBoundaryAtOrAfter(selEnd);
+    if (expandedEnd == null || expandedEnd > expandedStart) {
       snappedSelStart = expandedStart;
       snappedSelEnd = expandedEnd;
       selectionExpanded = true;
@@ -11966,8 +11967,15 @@ function computePracticePlaybackRange(loopEnabled) {
   }
 
   const cursorInsideSelection = cursor >= selStart && cursor <= selEnd;
-  if (selectionExpanded) practiceRangeHint = canSnap ? "looping selection (expanded)" : "looping selection";
-  else practiceRangeHint = canSnap ? "looping selection (snapped)" : "looping selection";
+  if (snappedSelEnd == null) {
+    practiceRangeHint = selectionExpanded
+      ? (canSnap ? "looping selection → end (expanded)" : "looping selection → end")
+      : (canSnap ? "looping selection → end (snapped)" : "looping selection → end");
+  } else if (selectionExpanded) {
+    practiceRangeHint = canSnap ? "looping selection (expanded)" : "looping selection";
+  } else {
+    practiceRangeHint = canSnap ? "looping selection (snapped)" : "looping selection";
+  }
   return {
     startOffset: snappedSelStart,
     endOffset: snappedSelEnd,
