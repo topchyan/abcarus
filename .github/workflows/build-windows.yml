@@ -35,6 +35,50 @@ jobs:
       - name: Build Windows artifact
         run: npx electron-builder --win --x64 --publish never
 
+      - name: Create portable SFX (optional)
+        run: |
+          $src = "dist/electron-builder/win-unpacked"
+          $out = "dist/electron-builder/ABCarus-win-unpacked-x64.exe"
+          if (!(Test-Path $src)) { throw "Missing win-unpacked: $src" }
+
+          $sevenZip = @(
+            "C:\\Program Files\\7-Zip\\7z.exe",
+            "C:\\Program Files (x86)\\7-Zip\\7z.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          $sevenZipSfx = @(
+            "C:\\Program Files\\7-Zip\\7z.sfx",
+            "C:\\Program Files (x86)\\7-Zip\\7z.sfx"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (!$sevenZip -or !$sevenZipSfx) {
+            Write-Host "Skipping SFX build (7-Zip SFX not found on runner)."
+            exit 0
+          }
+
+          $tmp = Join-Path $env:TEMP ("abcarus-sfx-" + [System.Guid]::NewGuid().ToString("N"))
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+
+          $payload = Join-Path $tmp "payload.7z"
+          & $sevenZip a -t7z -mx=9 $payload "$src\\*" | Out-Host
+
+          $config = Join-Path $tmp "config.txt"
+          @"
+;!@Install@!UTF-8!
+Title="ABCarus (portable)"
+BeginPrompt="Extract ABCarus portable build to a folder. Do NOT run from inside a zip viewer."
+RunProgram="ABCarus.exe"
+;!@InstallEnd@!
+"@ | Out-File -Encoding utf8 $config
+
+          $bytes = New-Object System.Collections.Generic.List[byte]
+          $bytes.AddRange([System.IO.File]::ReadAllBytes($sevenZipSfx))
+          $bytes.AddRange([System.Text.Encoding]::UTF8.GetBytes((Get-Content -Raw $config)))
+          $bytes.AddRange([System.IO.File]::ReadAllBytes($payload))
+          [System.IO.File]::WriteAllBytes($out, $bytes.ToArray())
+
+          Write-Host "Created SFX: $out"
+
       - name: Sanity check win-unpacked
         run: |
           $root = "dist/electron-builder/win-unpacked"
