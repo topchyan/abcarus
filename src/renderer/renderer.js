@@ -186,6 +186,9 @@ let errorActivationHighlightRange = null; // {from,to} editor offsets
 let errorActivationHighlightVersion = 0;
 let suppressErrorActivationClear = false;
 let lastSvgErrorActivationEls = [];
+let practiceBarHighlightRange = null; // {from,to} editor offsets
+let practiceBarHighlightVersion = 0;
+let lastSvgPracticeBarEls = [];
 let activeErrorHighlight = null; // {id, from, to, tuneId, filePath, message, messageKey, lastSvgRenderIdx}
 let activeErrorNavIndex = -1;
 let lastNoErrorsToastAtMs = 0;
@@ -527,11 +530,58 @@ const errorActivationHighlightPlugin = ViewPlugin.fromClass(class {
   decorations: (v) => v.decorations,
 });
 
+function buildPracticeBarDecorations(state) {
+  const r = practiceBarHighlightRange;
+  if (!r) return Decoration.none;
+  const max = state.doc.length;
+  const from = Math.max(0, Math.min(Number(r.from), max));
+  const to = Math.max(from, Math.min(Number(r.to), max));
+  if (to <= from) return Decoration.none;
+  return Decoration.set([Decoration.mark({ class: "cm-practice-bar" }).range(from, to)]);
+}
+
+const practiceBarHighlightPlugin = ViewPlugin.fromClass(class {
+  constructor(view) {
+    this.version = practiceBarHighlightVersion;
+    this.decorations = buildPracticeBarDecorations(view.state);
+  }
+  update(update) {
+    if (update.docChanged) {
+      try {
+        this.decorations = this.decorations.map(update.changes);
+      } catch {}
+      if (practiceBarHighlightRange) {
+        try {
+          const max = update.state.doc.length;
+          const mappedFrom = update.changes.mapPos(Number(practiceBarHighlightRange.from), 1);
+          const mappedTo = update.changes.mapPos(Number(practiceBarHighlightRange.to), -1);
+          const from = Math.max(0, Math.min(mappedFrom, max));
+          const to = Math.max(from, Math.min(mappedTo, max));
+          practiceBarHighlightRange = (to > from) ? { from, to } : null;
+        } catch {}
+      }
+    }
+    if (update.docChanged || update.selectionSet || this.version !== practiceBarHighlightVersion) {
+      this.version = practiceBarHighlightVersion;
+      this.decorations = buildPracticeBarDecorations(update.state);
+    }
+  }
+}, {
+  decorations: (v) => v.decorations,
+});
+
 function clearSvgErrorActivationHighlight() {
   for (const el of lastSvgErrorActivationEls) {
     try { el.classList.remove("svg-error-activation"); } catch {}
   }
   lastSvgErrorActivationEls = [];
+}
+
+function clearSvgPracticeBarHighlight() {
+  for (const el of lastSvgPracticeBarEls) {
+    try { el.classList.remove("svg-practice-bar"); } catch {}
+  }
+  lastSvgPracticeBarEls = [];
 }
 
 function highlightSvgAtEditorOffset(editorOffset) {
@@ -1940,6 +1990,56 @@ function tuneMatchesText(tune, needle) {
   return false;
 }
 
+function highlightSvgPracticeBarAtEditorOffset(editorOffset) {
+  if (!$out || !$renderPane) return false;
+  if (!Number.isFinite(editorOffset)) return false;
+  if (!editorView) return false;
+  const renderOffset = (lastRenderPayload && Number.isFinite(lastRenderPayload.offset))
+    ? lastRenderPayload.offset
+    : 0;
+  const editorText = editorView.state.doc.toString();
+  const measure = findMeasureRangeAt(editorText, editorOffset);
+  const barEls = measure ? Array.from($out.querySelectorAll(".bar-hl")) : [];
+  if (measure && barEls.length) {
+    const start = measure.start + renderOffset;
+    const end = measure.end + renderOffset;
+    const hits = barEls.filter((el) => {
+      const s = Number(el.dataset && el.dataset.start);
+      return Number.isFinite(s) && s >= start && s < end;
+    });
+    if (hits.length) {
+      clearSvgPracticeBarHighlight();
+      lastSvgPracticeBarEls = hits;
+      for (const el of lastSvgPracticeBarEls) {
+        try { el.classList.add("svg-practice-bar"); } catch {}
+      }
+      return true;
+    }
+  }
+  clearSvgPracticeBarHighlight();
+  return false;
+}
+
+function setPracticeBarHighlight(range) {
+  const next = range && Number.isFinite(range.from) && Number.isFinite(range.to) && range.to > range.from
+    ? { from: range.from, to: range.to }
+    : null;
+  if (
+    practiceBarHighlightRange
+    && next
+    && practiceBarHighlightRange.from === next.from
+    && practiceBarHighlightRange.to === next.to
+  ) return;
+  if (!practiceBarHighlightRange && !next) return;
+  practiceBarHighlightRange = next;
+  practiceBarHighlightVersion += 1;
+  if (!editorView) return;
+  editorView.dispatch({
+    selection: editorView.state.selection,
+    scrollIntoView: false,
+  });
+}
+
 function applyLibraryTextFilter(files, query) {
   const needle = normalizeFilterValue(query);
   if (!needle) return files;
@@ -2418,7 +2518,7 @@ function initEditor() {
 	    { key: "Mod-F5", run: (view) => moveLineSelection(view, -1) },
 	    { key: "Tab", run: indentSelectionMore },
 	    { key: "Shift-Tab", run: indentSelectionLess },
-	    { key: "F5", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to play.", 2200); return true; } transportTogglePlayPause(); return true; } },
+	    { key: "F5", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to play.", 2200); return true; } togglePlayPauseEffective().catch(() => {}); return true; } },
 	    { key: "F6", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to navigate errors.", 2200); return true; } activateErrorByNav(-1); return true; } },
 	    { key: "F7", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to navigate errors.", 2200); return true; } activateErrorByNav(1); return true; } },
 	    { key: "F4", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to play.", 2200); return true; } startPlaybackAtIndex(0); return true; } },
@@ -2467,6 +2567,7 @@ function initEditor() {
       abcHighlight,
       measureErrorPlugin,
       errorActivationHighlightPlugin,
+      practiceBarHighlightPlugin,
       updateListener,
       customKeys,
       foldService.of(foldBeginTextBlocks),
@@ -9111,6 +9212,8 @@ function clearPlaybackNoteOnEls() {
 
 function resetPlaybackUiState() {
   clearPlaybackNoteOnEls();
+  clearSvgPracticeBarHighlight();
+  setPracticeBarHighlight(null);
   lastPlaybackUiRenderIdx = null;
   lastPlaybackUiEditorIdx = null;
   pendingPlaybackUiIstart = null;
@@ -9392,6 +9495,25 @@ function highlightSourceAt(idx, on) {
   }
 }
 
+function maybeScrollEditorToOffset(editorOffset) {
+  if (!editorView) return;
+  const max = editorView.state.doc.length;
+  const idx = Math.max(0, Math.min(Number(editorOffset) || 0, max));
+  const lineBlock = editorView.lineBlockAt(idx);
+  const lineTop = lineBlock.top;
+  const viewTop = editorView.scrollDOM.scrollTop;
+  const viewBottom = viewTop + editorView.scrollDOM.clientHeight;
+  const margin = Math.max(lineBlock.height * 4, 64);
+  if (lineTop < viewTop + margin) {
+    editorView.scrollDOM.scrollTop = Math.max(0, lineTop - margin);
+  } else if (lineTop > viewBottom - margin) {
+    editorView.scrollDOM.scrollTop = Math.max(
+      0,
+      lineTop - editorView.scrollDOM.clientHeight + margin
+    );
+  }
+}
+
 function schedulePlaybackUiUpdate(istart) {
   if (!Number.isFinite(istart)) return;
   pendingPlaybackUiIstart = istart;
@@ -9401,7 +9523,8 @@ function schedulePlaybackUiUpdate(istart) {
     const i = pendingPlaybackUiIstart;
     pendingPlaybackUiIstart = null;
     if (!isPlaying || isPreviewing) return;
-    if (!followPlayback) return;
+    const practiceActive = Boolean(activePlaybackRange && activePlaybackRange.origin === "practice");
+    if (!followPlayback && !practiceActive) return;
     if (!$out) return;
     if (!Number.isFinite(i)) return;
 
@@ -9427,6 +9550,40 @@ function schedulePlaybackUiUpdate(istart) {
     if (lastPlaybackUiEditorIdx === editorIdx && lastPlaybackUiRenderIdx === renderIdx) return;
     lastPlaybackUiEditorIdx = editorIdx;
     lastPlaybackUiRenderIdx = renderIdx;
+
+    if (practiceActive) {
+      clearPlaybackNoteOnEls();
+      const list = playbackState && Array.isArray(playbackState.measureIstarts)
+        ? playbackState.measureIstarts
+        : null;
+      if (list && list.length && editorView) {
+        const max = editorView.state.doc.length;
+        const measureIndex = findMeasureIndex(i);
+        const startI = list[Math.max(0, Math.min(list.length - 1, measureIndex))] || 0;
+        const endI = (measureIndex + 1 < list.length)
+          ? list[measureIndex + 1]
+          : (playbackIndexOffset + max);
+        const from = toEditorOffset(startI);
+        const to = toEditorOffset(endI);
+        if (Number.isFinite(from) && Number.isFinite(to) && to > from) {
+          setPracticeBarHighlight({ from, to });
+          highlightSvgPracticeBarAtEditorOffset(from);
+          if (followPlayback) {
+            maybeScrollEditorToOffset(from);
+            const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+            if (now - lastPlaybackUiScrollAt > 120 && lastSvgPracticeBarEls.length) {
+              const chosen = pickClosestNoteElement(lastSvgPracticeBarEls);
+              if (chosen) maybeScrollRenderToNote(chosen);
+              lastPlaybackUiScrollAt = now;
+            }
+          }
+          return;
+        }
+      }
+      setPracticeBarHighlight(null);
+      clearSvgPracticeBarHighlight();
+      return;
+    }
 
     clearPlaybackNoteOnEls();
     const els = $out.querySelectorAll("._" + renderIdx + "_");
