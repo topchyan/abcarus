@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-01-06
+### Added
+- abc2svg v1.22.35 update (includes MIDI drum support via `%%MIDI drum`, `%%MIDI drumon`, `%%MIDI drumbars`).
+### Changed
+- Docs: archive Codex task prompts and update packaging/build notes.
+### Fixed
+- Errors mode: enabling `Errors` now auto-runs “Scan for errors” for the active file.
+- Repeat-length warnings: handle inline meter changes and common pickup bars around repeat markers.
+- Playback: guard against a crash in abc2svg drum generation on some tunes.
+
 ## [0.16.3] - 2026-01-05
 ### Changed
 - CI: attach Linux/Windows artifacts to GitHub Releases on tags.

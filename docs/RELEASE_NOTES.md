@@ -1,5 +1,18 @@
 # Release Notes
 
+## [0.17.0] - 2026-01-06
+
+Range: v0.16.3..HEAD
+
+### Added
+- abc2svg v1.22.35 update (MIDI drums via `%%MIDI drum`).
+### Changed
+- Docs: update packaging/build notes; archive official Codex task prompts.
+### Fixed
+- Errors mode: enabling `Errors` auto-runs “Scan for errors” for the active file.
+- Repeat-length warnings: handle inline meter changes and common pickup bars around repeat markers.
+- Playback: guard against a crash in abc2svg drum generation on some tunes.
+
 ## [0.16.3] - 2026-01-05
 
 Range: v0.16.2..HEAD
