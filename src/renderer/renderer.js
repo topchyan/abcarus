@@ -179,6 +179,7 @@ let practiceStartFromCursor = false;
 let practiceTempoMultiplier = 0.75;
 let practiceStatusText = "";
 let practiceRangeHint = "";
+let practiceRangePreview = null; // {startOffset,endOffset}
 let currentPlaybackPlan = null;
 let pendingPlaybackPlan = null;
 let lastRhythmErrorSuggestion = null;
@@ -2551,6 +2552,10 @@ function initEditor() {
         updatePlaybackRangeFromSelection(update.state.selection, origin);
       } else {
         pendingPlaybackRangeOrigin = null;
+      }
+      if (practiceEnabled) {
+        updatePracticeRangePreview();
+        updatePracticeUi();
       }
     }
     if (update.selectionSet || update.docChanged) {
@@ -10211,7 +10216,19 @@ function updatePracticeUi() {
       const tempo = formatPracticeTempoLabel(practiceTempoMultiplier);
       const state = isPlaying ? "Playing" : (isPaused ? "Paused" : "Ready");
       const pending = pendingPlaybackPlan ? " (pending)" : "";
-      const hint = practiceRangeHint ? ` — ${practiceRangeHint}` : "";
+      let startHint = "";
+      if (practiceRangePreview && editorView) {
+        try {
+          const max = editorView.state.doc.length;
+          const start = Math.max(0, Math.min(Number(practiceRangePreview.startOffset) || 0, max));
+          const line = editorView.state.doc.lineAt(start);
+          startHint = `Start: L${line.number}`;
+        } catch {}
+      }
+      const hintParts = [];
+      if (practiceRangeHint) hintParts.push(practiceRangeHint);
+      if (startHint) hintParts.push(startHint);
+      const hint = hintParts.length ? ` — ${hintParts.join(" · ")}` : "";
       const text = tempo
         ? `Practice: ON (${tempo}) — ${state}${pending}${hint}`
         : `Practice: ON — ${state}${pending}${hint}`;
@@ -11938,6 +11955,19 @@ function computePracticePlaybackRange(loopEnabled) {
   };
 }
 
+function updatePracticeRangePreview() {
+  practiceRangePreview = null;
+  if (!practiceEnabled) return;
+  if (!editorView) return;
+  if (!playbackState || !Array.isArray(playbackState.measureIstarts) || !playbackState.measureIstarts.length) return;
+  const computed = computePracticePlaybackRange(true);
+  if (!computed) return;
+  practiceRangePreview = {
+    startOffset: Number(computed.startOffset) || 0,
+    endOffset: (computed.endOffset == null) ? null : Number(computed.endOffset),
+  };
+}
+
 async function startPlaybackFromRange(rangeOverride) {
   if (!editorView) return;
   let range = clonePlaybackRange(rangeOverride || playbackRange);
@@ -12159,8 +12189,13 @@ if ($btnPracticeToggle) {
     if (!practiceEnabled) {
       practiceStartFromCursor = false;
       practiceRangeHint = "";
+      practiceRangePreview = null;
     }
     syncPendingPlaybackPlan();
+    if (practiceEnabled && editorView) {
+      try { editorView.focus(); } catch {}
+      updatePracticeRangePreview();
+    }
     updatePracticeUi();
   });
 }
@@ -12177,6 +12212,7 @@ if ($btnPracticeFromCursor) {
     }
     practiceStartFromCursor = !practiceStartFromCursor;
     syncPendingPlaybackPlan();
+    updatePracticeRangePreview();
     updatePracticeUi();
   });
 }
