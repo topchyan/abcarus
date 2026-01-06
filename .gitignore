@@ -8,6 +8,9 @@ dist/
 scripts/local/
 debug_dumps/
 
+# Local-only chat exports
+docs/qa/chat-exports/
+
 # Bundled Python runtime
 third_party/python-embed/**
 !third_party/python-embed/**/
