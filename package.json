@@ -20,6 +20,7 @@
     "test:settings": "node devtools/settings_harness/run_tests.js",
     "size:report": "node devtools/size_report.js dist/appimage/AppDir",
     "version:show": "node scripts/show-version.mjs",
+    "thirdparty:review": "node scripts/third_party-review.mjs",
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
     "release:major": "node scripts/release.mjs major"
