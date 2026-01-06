@@ -32,6 +32,18 @@
       <div class="toolbar-sep" aria-hidden="true"></div>
       <button id="btnPlayPause" type="button" title="Play / Pause (F5)">Play</button>
       <button id="btnStop" type="button" title="Stop (Esc)">Stop</button>
+      <div class="practice-controls" aria-label="Practice controls">
+        <button id="btnPracticeToggle" type="button" title="Practice mode (loop + tempo override)" aria-pressed="false">Practice</button>
+        <label id="practiceTempoWrap" class="practice-tempo" hidden>
+          <span>Tempo</span>
+          <select id="practiceTempo" aria-label="Practice tempo">
+            <option value="0.5">50%</option>
+            <option value="0.75" selected>75%</option>
+            <option value="1">100%</option>
+          </select>
+        </label>
+        <div id="practiceStatus" class="practice-status" hidden aria-live="polite"></div>
+      </div>
       <div class="toolbar-sep" aria-hidden="true"></div>
       <button id="btnToggleErrors" type="button" title="Toggle errors features">Errors</button>
       <button id="btnToggleFollow" type="button" title="Toggle playback follow">Follow</button>

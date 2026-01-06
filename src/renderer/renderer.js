@@ -68,6 +68,10 @@ const $btnPlay = document.getElementById("btnPlay");
 const $btnPause = document.getElementById("btnPause");
 const $btnStop = document.getElementById("btnStop");
 const $btnPlayPause = document.getElementById("btnPlayPause");
+const $btnPracticeToggle = document.getElementById("btnPracticeToggle");
+const $practiceTempoWrap = document.getElementById("practiceTempoWrap");
+const $practiceTempo = document.getElementById("practiceTempo");
+const $practiceStatus = document.getElementById("practiceStatus");
 const $btnRestart = document.getElementById("btnRestart");
 const $btnPrevMeasure = document.getElementById("btnPrevMeasure");
 const $btnNextMeasure = document.getElementById("btnNextMeasure");
@@ -168,6 +172,10 @@ let lastTraceRunId = 0;
 let lastTracePlaybackIdx = null;
 let lastTraceTimestamp = null;
 let playbackTraceSeq = 0;
+
+let practiceEnabled = false;
+let practiceTempoMultiplier = 0.75;
+let practiceStatusText = "";
 let lastRhythmErrorSuggestion = null;
 let errorsEnabled = false;
 
@@ -9228,6 +9236,7 @@ function updatePlayButton() {
     else if (isPaused) $btnPlayPause.textContent = "Resume";
     else $btnPlayPause.textContent = "Play";
   }
+  updatePracticeUi();
 }
 
 async function transportTogglePlayPause() {
@@ -9867,6 +9876,43 @@ function updateFollowToggle() {
   $btnToggleFollow.classList.toggle("toggle-active", followPlayback);
   $btnToggleFollow.textContent = "Follow";
   $btnToggleFollow.setAttribute("aria-pressed", followPlayback ? "true" : "false");
+}
+
+function formatPracticeTempoLabel(multiplier) {
+  const v = Number(multiplier);
+  if (!Number.isFinite(v) || v <= 0) return "";
+  return `${Math.round(v * 100)}%`;
+}
+
+function updatePracticeUi() {
+  if ($btnPracticeToggle) {
+    $btnPracticeToggle.classList.toggle("toggle-active", practiceEnabled);
+    $btnPracticeToggle.setAttribute("aria-pressed", practiceEnabled ? "true" : "false");
+    const busy = Boolean(isPlaying || waitingForFirstNote);
+    $btnPracticeToggle.disabled = busy;
+  }
+
+  if ($practiceTempoWrap) $practiceTempoWrap.hidden = !practiceEnabled;
+  if ($practiceTempo && practiceEnabled) {
+    const value = String(practiceTempoMultiplier);
+    if ($practiceTempo.value !== value) $practiceTempo.value = value;
+  }
+
+  if ($practiceStatus) {
+    if (!practiceEnabled) {
+      $practiceStatus.hidden = true;
+      $practiceStatus.textContent = "";
+    } else {
+      const tempo = formatPracticeTempoLabel(practiceTempoMultiplier);
+      const state = isPlaying ? "Playing" : (isPaused ? "Paused" : "Ready");
+      const text = tempo ? `Practice: ON (${tempo}) — ${state}` : `Practice: ON — ${state}`;
+      if (practiceStatusText !== text) {
+        practiceStatusText = text;
+        $practiceStatus.textContent = text;
+      }
+      $practiceStatus.hidden = false;
+    }
+  }
 }
 
 function setFollowFromSettings(settings) {
@@ -11630,6 +11676,32 @@ if ($btnPlayPause) {
       setStatus("Error");
     }
   });
+}
+
+if ($btnPracticeToggle) {
+  $btnPracticeToggle.addEventListener("click", () => {
+    if (rawMode) {
+      showToast("Raw mode: Practice is unavailable.", 2200);
+      return;
+    }
+    if (isPlaying || waitingForFirstNote) {
+      showToast("Pause playback before toggling Practice.", 2400);
+      return;
+    }
+    practiceEnabled = !practiceEnabled;
+    updatePracticeUi();
+  });
+}
+
+if ($practiceTempo) {
+  $practiceTempo.addEventListener("change", () => {
+    const next = Number($practiceTempo.value);
+    if (!Number.isFinite(next)) return;
+    practiceTempoMultiplier = next;
+    updatePracticeUi();
+  });
+  const initial = Number($practiceTempo.value);
+  if (Number.isFinite(initial)) practiceTempoMultiplier = initial;
 }
 
 if ($btnPlay) {
