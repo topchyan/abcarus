@@ -1,7 +1,3 @@
-// abc2svg - ABC to SVG translator
-// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
-// Copyright (C) 2014-2025 Jean-François Moine - LGPL3+
-// swing.js - module to set a swing feel
 //swing.js-module to set a swing feel"use strict"
 if(typeof abc2svg=="undefined")
 var abc2svg={}

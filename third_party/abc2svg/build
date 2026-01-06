@@ -80,7 +80,7 @@ gen util/abcdoc.js > abcdoc-$MAJOR.js
 gen util/abcweb.js > abcweb-$MAJOR.js
 gen util/abcweb1.js > abcweb1-$MAJOR.js
 gen util/play.js util/sndgen.js util/sndaud.js util/sf2-parser.js\
- util/sndmid.js util/follow.js util/chord.js > snd-$MAJOR.js
+ util/drum.js util/sndmid.js util/follow.js util/chord.js > snd-$MAJOR.js
 
 sed "s+@MAJOR@+$MAJOR+" editor/edit.xhtml > edit-$MAJOR.xhtml
 sed "s+@MAJOR@+$MAJOR+" editor/abckbd.js > abckbd-$MAJOR.js

@@ -1,6 +1,6 @@
 // MIDI.js - module to handle the %%MIDI parameters
 //
-// Copyright (C) 2019-2025 Jean-Francois Moine
+// Copyright (C) 2019-2026 Jean-François Moine
 //
 // This file is part of abc2svg.
 //
@@ -32,6 +32,10 @@
 //	%%MIDI gchord <string>
 //	%%MIDI gchordon
 //	%%MIDI gchordoff
+//	%%MIDI drum <string> <pitches> <volumes>
+//	%%MIDI drumon
+//	%%MIDI drumoff
+//	%%MIDI drumbars n
 
 // Using %%MIDI drummap creates a voicemap named "MIDIdrum".
 // This name must be used if some print map is required:
@@ -124,6 +128,23 @@ abc2svg.MIDI = {
 //		break
 //	case "droneoff":	// %%MIDI droneoff
 //		break
+	case "drum":		// %%MIDI drum <string> <pitches> <volumes>
+	case "drumon":
+	case "drumoff":
+	case "drumbars":	// %%MIDI drumbars n
+		if (!curvoice)
+//fixme: error
+			break
+		cfmt.drum = 1
+		s = abc.new_block("mididrum")
+		s.play = s.invis = 1 //true
+		if (a[1][4] == 'o')
+			s.on = a[1][5] == 'n'
+		else if (a[1][4] == 'b')
+			s.nb = +a[2]
+		else
+			s.txt = a.slice(2)
+		break
 	case "gchord":		// %%MIDI gchord <list of letters and repeat numbers>
 //				//	z rest
 //				//	c chord

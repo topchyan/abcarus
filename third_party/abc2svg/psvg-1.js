@@ -1,8 +1,3 @@
-// abc2svg - ABC to SVG translator
-// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
-// Copyright (C) 2014-2025 Jean-François Moine - LGPL3+
-// wps.js
-// psvg.js - small PS to SVG convertor for abc2svg
 //wps.js
 function isQuoted(V){return V.q}
 function quote(V){V.q=true;return V}
@@ -31,7 +26,9 @@ L=L.join("");if(1==L.length&&member(L,"+-."))N=false;return N?(F?parseFloat(L):p
 function token(){skip();switch(peek()){case false:return undefined;case"%":return comment();case"[":return new Symbol(xchar());case"]":return new Symbol(xchar());case"{":Self.D++;return new Symbol(xchar());case"}":Self.D--;return new Symbol(xchar());case"/":xchar();var X=symbol();return quote(X);case"(":return text();case"<":xchar();if("<"!=peek())throw new Error("Encoded strings not implemented yet");xchar();return new Symbol("<<");case">":xchar();if(">"!=peek())throw new Error("Unexpected >");xchar();return new Symbol(">>");default:return symbol()}}
 PsParser.prototype.init=init;PsParser.prototype.peek=peek;PsParser.prototype.token=token;return this}
 function Ps0(Os,Ds,Es){function run(X,Z){if(isSymbol(X)&&!isQuoted(X)){var K=symbolName(X);var D=inDs(Ds,K);if(!D)
-throw new Error("bind error '"+K+"'");Es.push([false,D[K]])}else if(Z&&isArray(X)&&isQuoted(X)){if(0<X.length){var F=X[0];var R=quote(X.slice(1));if(0<R.length)Es.push([false,R]);run(F,false)}}else if("function"==typeof X)X();else Os.push(X)}
+{abc2svg.printErr("Unknown PS symbol '"+K+"'")
+return}
+Es.push([false,D[K]])}else if(Z&&isArray(X)&&isQuoted(X)){if(0<X.length){var F=X[0];var R=quote(X.slice(1));if(0<R.length)Es.push([false,R]);run(F,false)}}else if("function"==typeof X)X();else Os.push(X)}
 function exec(){var X=Os.pop();run(X,false)}
 function step(){var C=Es.pop();var L=C.shift();var X=C.pop();for(var I=0;I<C.length;I++)
 Os.push(C[I]);run(X,true)}

@@ -31,7 +31,6 @@ function set_ref(s) {
 	s.iend = parse.iend
 }
 
-
 // -- %% pseudo-comment
 
 // clef definition (%%clef, K: and V:)

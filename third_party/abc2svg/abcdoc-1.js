@@ -1,7 +1,3 @@
-// abc2svg - ABC to SVG translator
-// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
-// Copyright (C) 2014-2025 Jean-François Moine - LGPL3+
-//#javascript
 //#javascript
 var user
 (function(){window.onerror=function(msg,url,line){if(typeof msg=='string')

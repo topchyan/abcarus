@@ -1,7 +1,3 @@
-// abc2svg - ABC to SVG translator
-// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
-// Copyright (C) 2014-2025 Jean-François Moine - LGPL3+
-// equalbars.js - module to set equal spaced measure bars
 //equalbars.js-module to set equal spaced measure bars"use strict"
 if(typeof abc2svg=="undefined")
 var abc2svg={}

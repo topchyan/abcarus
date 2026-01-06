@@ -1,6 +1,6 @@
 // sndgen.js - sound generation
 //
-// Copyright (C) 2019-2025 Jean-Francois Moine
+// Copyright (C) 2019-2026 Jean-Francois Moine
 //
 // This file is part of abc2svg.
 //
@@ -404,6 +404,10 @@ function ToAudio() {
 	// if some chord stuff, set the accompaniment data
 	if (cfmt.chord)
 		abc2svg.chord(first, voice_tb, cfmt)
+
+	// if some drum stuff, generate the drum sequences
+	if (cfmt.drum)
+		abc2svg.drum(s, voice_tb, cfmt)
 
 	// if %%playbeats, create the sounds
 	s_m = first.p_v.meter			// current meter

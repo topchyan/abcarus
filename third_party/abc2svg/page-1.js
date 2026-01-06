@@ -1,8 +1,3 @@
-// abc2svg - ABC to SVG translator
-// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
-// Copyright (C) 2014-2025 Jean-François Moine - LGPL3+
-// page.js - module to generate pages
-// Port of strftime() by T. H. Doan (https://thdoan.github.io/strftime/)
 //page.js-module to generate pages
 if(typeof abc2svg=="undefined")
 var abc2svg={}

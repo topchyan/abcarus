@@ -1,7 +1,3 @@
-// abc2svg - ABC to SVG translator
-// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
-// Copyright (C) 2014-2025 Jean-François Moine - LGPL3+
-// jianpu.js - module to output jiănpŭ (简谱) music sheets
 //jianpu.js-module to output jiănpŭ(简谱)music sheets
 if(typeof abc2svg=="undefined")
 var abc2svg={}

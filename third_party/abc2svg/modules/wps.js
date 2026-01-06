@@ -157,7 +157,10 @@ function Ps0(Os, Ds, Es) {
       var K = symbolName(X);
       var D = inDs(Ds, K);
       if(!D)
-        throw new Error("bind error '" + K + "'");
+      {
+	abc2svg.printErr("Unknown PS symbol '"+K+"'")
+	return
+      }
       Es.push([false, D[K]]);
     } else if(Z && isArray(X) && isQuoted(X)) { // proc from Es
       if(0 < X.length) {

@@ -360,7 +360,8 @@ abc2svg.chord = function(first,		// first symbol in time
 	}
 
 	// loop on the symbols and add the accompaniment chords
-	gchon = cfmt.chord.gchon
+	if (cfmt.chord.gchon != false)
+		gchon = 1			// chordon by default
 	gchnb = cfmt.chord.gchnb || 1
 	s = first
 	bld_rhy(cfmt.chord.rhy			// chord rhythm

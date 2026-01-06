@@ -1,7 +1,3 @@
-// abc2svg - ABC to SVG translator
-// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
-// Copyright (C) 2014-2025 Jean-François Moine - LGPL3+
-// abc2svg - grid.js - module to insert a chord grid before or after a tune
 //abc2svg-grid.js-module to insert a chord grid before or after a tune
 if(typeof abc2svg=="undefined")
 var abc2svg={}

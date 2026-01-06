@@ -1,7 +1,3 @@
-// abc2svg - ABC to SVG translator
-// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
-// Copyright (C) 2014-2025 Jean-François Moine - LGPL3+
-// MIDI.js - module to handle the %%MIDI parameters
 //MIDI.js-module to handle the%%MIDI parameters
 if(typeof abc2svg=="undefined")
 var abc2svg={}
@@ -34,6 +30,18 @@ break}
 if(!cfmt.chord)
 cfmt.chord={}
 cfmt.chord.vol=v
+break
+case"drum":case"drumon":case"drumoff":case"drumbars":if(!curvoice)
+break
+cfmt.drum=1
+s=abc.new_block("mididrum")
+s.play=s.invis=1
+if(a[1][4]=='o')
+s.on=a[1][5]=='n'
+else if(a[1][4]=='b')
+s.nb=+a[2]
+else
+s.txt=a.slice(2)
 break
 case"gchord":case"gchordbars":case"gchordon":case"gchordoff":if(!cfmt.chord)
 cfmt.chord={}

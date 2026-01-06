@@ -2583,12 +2583,13 @@ function mrest_expand() {
 			s2.time = tim
 			while (s3.time < tim)
 				s3 = s3.ts_next	// bar at end of measure
-			if (s3.time == tim)
+			if (s3.time == tim) {
 				while (!s3.bar_type
 				    && s3.ts_next && s3.ts_next.time == tim)
 					s3 = s3.ts_next
 			while (s3 && s3.v < s.v && s3.type == C.BAR)
 				s3 = s3.ts_next	// keep in order
+			}
 			if (s3) {
 				if (s3.bar_type)
 					s3.seqst = 0 //false
@@ -2611,7 +2612,7 @@ function mrest_expand() {
 				delete s2.bar_num
 				s4 = s2.ts_prev
 			}
-			s2.bar_type = s4.bar_type || "|"
+			s2.bar_type = '|'
 			if (s4.bar_num && !s4.seqst)
 				delete s4.bar_num
 
@@ -2621,19 +2622,12 @@ function mrest_expand() {
 			delete s4.soln
 			delete s4.a_gch
 			delete s4.part
-			if (s2.next) {
-				s4.next = s2.next
-				s4.next.prev = s4
-			} else {
-				s4.next = null
-			}
-			s2.next = s4
-			s4.prev = s2
+			lkvsym(s4, s.next)	// before symbol after mrest
 			s4.time = tim
 
 			while (s3 && !s3.dur && s3.time == tim)
 				s3 = s3.ts_next
-			while (s3 && s3.v < s.v) {
+			while (s3 && s3.time == tim && s3.v < s.v) {
 				s3 = s3.ts_next	// keep in order
 				if (s3 && s3.seqst)
 					break

@@ -1,7 +1,3 @@
-// abc2svg - ABC to SVG translator
-// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
-// Copyright (C) 2014-2025 Jean-François Moine - LGPL3+
-// ambitus.js - module to insert an ambitus at start of a voice
 //ambitus.js-module to insert an ambitus at start of a voice
 if(typeof abc2svg=="undefined")
 var abc2svg={}

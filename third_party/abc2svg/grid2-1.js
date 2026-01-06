@@ -1,7 +1,3 @@
-// abc2svg - ABC to SVG translator
-// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
-// Copyright (C) 2014-2025 Jean-François Moine - LGPL3+
-// grid2.js - module to replace a voice in the music by a chord grid
 //grid2.js-module to replace a voice in the music by a chord grid
 if(typeof abc2svg=="undefined")
 var abc2svg={}
