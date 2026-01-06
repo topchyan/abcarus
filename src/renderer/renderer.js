@@ -6226,6 +6226,13 @@ function normalizeHeaderNoneSpacing(text) {
   return out.join("\n");
 }
 
+function normalizeAccThreeQuarterToneForAbc2svg(text) {
+  // abc2svg has built-in glyphs for quarter-tones as 1/2 semitone (acc-1_2) and 3/2 semitones (acc-3_2),
+  // but some real-world ABC uses 3/4 tone accidentals written as "_3/4" or "^3/4".
+  // For tolerant playback, normalize to the abc2svg-supported 3/2 semitone form (same musical intent).
+  return String(text || "").replace(/([_^])3\/4/g, "$13/2");
+}
+
 function assertCleanAbcText(text, originLabel) {
   const src = String(text || "");
   if (src.includes("[object Object]")) {
@@ -11283,7 +11290,12 @@ async function preparePlayback() {
       { skipMeasureRange: true }
     );
   }
-  const playbackText = normalizeHeaderNoneSpacing(playbackPayload.text);
+  let playbackText = normalizeHeaderNoneSpacing(playbackPayload.text);
+  if (/[\\^_]3\/4/.test(playbackText)) {
+    playbackSanitizeWarnings.push({ kind: "playback-acc-3_4-normalized" });
+    playbackText = normalizeAccThreeQuarterToneForAbc2svg(playbackText);
+    showToast("Playback: 3/4-tone accidentals normalized (compat mode).", 3600);
+  }
   abc.tosvg("play", playbackText);
 
   // Tolerant playback mode: many real-world ABC files contain lyric/barline mismatches that stricter engines reject.
