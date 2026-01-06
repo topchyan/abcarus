@@ -16,7 +16,8 @@
   - The selection is snapped to full bars:
     - start → bar boundary at/after selection start
     - end → bar boundary at/before selection end
-  - If the cursor is inside the original selection: range starts at the cursor (snapped), ends at the snapped selection end.
+  - Default: loops the snapped selection.
+  - Optional: `From Cursor` (Practice-only) starts the loop at the cursor (snapped) when the cursor is inside the original selection.
   - If the cursor is outside the selection: the selection remains authoritative.
   - If snapping yields an empty/invalid range: fallback to looping the whole tune.
 - Snapping prefers the parsed playback timeline (`abc2svg` symbol chain). If not available, it falls back to “no snapping”.

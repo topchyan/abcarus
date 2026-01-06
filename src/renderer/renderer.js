@@ -69,6 +69,7 @@ const $btnPause = document.getElementById("btnPause");
 const $btnStop = document.getElementById("btnStop");
 const $btnPlayPause = document.getElementById("btnPlayPause");
 const $btnPracticeToggle = document.getElementById("btnPracticeToggle");
+const $btnPracticeFromCursor = document.getElementById("btnPracticeFromCursor");
 const $practiceTempoWrap = document.getElementById("practiceTempoWrap");
 const $practiceTempo = document.getElementById("practiceTempo");
 const $practiceStatus = document.getElementById("practiceStatus");
@@ -174,6 +175,7 @@ let lastTraceTimestamp = null;
 let playbackTraceSeq = 0;
 
 let practiceEnabled = false;
+let practiceStartFromCursor = false;
 let practiceTempoMultiplier = 0.75;
 let practiceStatusText = "";
 let practiceRangeHint = "";
@@ -10152,6 +10154,13 @@ function updatePracticeUi() {
     $btnPracticeToggle.disabled = busy;
   }
 
+  if ($btnPracticeFromCursor) {
+    $btnPracticeFromCursor.hidden = !practiceEnabled;
+    $btnPracticeFromCursor.classList.toggle("toggle-active", practiceStartFromCursor);
+    $btnPracticeFromCursor.setAttribute("aria-pressed", practiceStartFromCursor ? "true" : "false");
+    $btnPracticeFromCursor.disabled = !practiceEnabled || Boolean(waitingForFirstNote);
+  }
+
   if ($practiceTempoWrap) $practiceTempoWrap.hidden = !practiceEnabled;
   if ($practiceTempo && practiceEnabled) {
     const value = String(practiceTempoMultiplier);
@@ -11834,23 +11843,29 @@ function computePracticePlaybackRange(loopEnabled) {
   }
 
   const cursorInsideSelection = cursor >= selStart && cursor <= selEnd;
-  if (!cursorInsideSelection) {
-    practiceRangeHint = canSnap ? "looping selection (snapped)" : "looping selection";
+  if (practiceStartFromCursor && cursorInsideSelection) {
+    const snappedCursor = snapStart(cursor);
+    if (!(snappedSelEnd > snappedCursor)) {
+      return fallbackWholeTune("selection invalid; looping whole tune");
+    }
+    practiceRangeHint = canSnap ? "looping selection from cursor (snapped)" : "looping selection from cursor";
     return {
-      startOffset: snappedSelStart,
+      startOffset: snappedCursor,
       endOffset: snappedSelEnd,
       origin: "practice",
       loop: Boolean(loopEnabled),
     };
   }
 
-  const snappedCursor = snapStart(cursor);
-  if (!(snappedSelEnd > snappedCursor)) {
-    return fallbackWholeTune("selection invalid; looping whole tune");
+  if (practiceStartFromCursor && !cursorInsideSelection) {
+    practiceRangeHint = canSnap
+      ? "looping selection (cursor outside; snapped)"
+      : "looping selection (cursor outside)";
+  } else {
+    practiceRangeHint = canSnap ? "looping selection (snapped)" : "looping selection";
   }
-  practiceRangeHint = canSnap ? "looping selection from cursor (snapped)" : "looping selection from cursor";
   return {
-    startOffset: snappedCursor,
+    startOffset: snappedSelStart,
     endOffset: snappedSelEnd,
     origin: "practice",
     loop: Boolean(loopEnabled),
@@ -12075,7 +12090,26 @@ if ($btnPracticeToggle) {
       return;
     }
     practiceEnabled = !practiceEnabled;
-    if (!practiceEnabled) practiceRangeHint = "";
+    if (!practiceEnabled) {
+      practiceStartFromCursor = false;
+      practiceRangeHint = "";
+    }
+    syncPendingPlaybackPlan();
+    updatePracticeUi();
+  });
+}
+
+if ($btnPracticeFromCursor) {
+  $btnPracticeFromCursor.addEventListener("click", () => {
+    if (rawMode) {
+      showToast("Raw mode: Practice is unavailable.", 2200);
+      return;
+    }
+    if (!practiceEnabled) {
+      showToast("Enable Practice first.", 2000);
+      return;
+    }
+    practiceStartFromCursor = !practiceStartFromCursor;
     syncPendingPlaybackPlan();
     updatePracticeUi();
   });
