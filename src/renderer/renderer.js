@@ -9767,6 +9767,20 @@ function ensurePlayer() {
       }
       if (shouldLoop) {
         queueMicrotask(() => {
+          if (pendingPlaybackPlan) {
+            const plan = pendingPlaybackPlan;
+            pendingPlaybackPlan = null;
+            currentPlaybackPlan = plan;
+            applyPlaybackPlanSpeed(plan);
+            startPlaybackFromRange({
+              startOffset: plan.rangeStart,
+              endOffset: plan.rangeEnd,
+              origin: plan.mode,
+              loop: plan.loopEnabled,
+            }).catch(() => {});
+            updatePracticeUi();
+            return;
+          }
           startPlaybackFromRange(activePlaybackRange).catch(() => {});
         });
       }
@@ -9800,6 +9814,20 @@ function ensurePlayer() {
         clearNoteSelection();
         if (activePlaybackRange && activePlaybackRange.loop) {
           queueMicrotask(() => {
+            if (pendingPlaybackPlan) {
+              const plan = pendingPlaybackPlan;
+              pendingPlaybackPlan = null;
+              currentPlaybackPlan = plan;
+              applyPlaybackPlanSpeed(plan);
+              startPlaybackFromRange({
+                startOffset: plan.rangeStart,
+                endOffset: plan.rangeEnd,
+                origin: plan.mode,
+                loop: plan.loopEnabled,
+              }).catch(() => {});
+              updatePracticeUi();
+              return;
+            }
             startPlaybackFromRange(activePlaybackRange).catch(() => {});
           });
         } else {
