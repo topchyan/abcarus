@@ -11912,6 +11912,14 @@ function computePracticePlaybackRange(loopEnabled) {
     const editor = boundary == null ? null : toEditorOffset(boundary);
     return Math.max(0, Math.min(Number.isFinite(editor) ? editor : max, max));
   };
+  const snapEndToBarBoundaryAtOrAfter = (editorOffset) => {
+    if (!canSnap) return Math.max(0, Math.min(Number(editorOffset) || 0, max));
+    const derived = toDerivedOffset(editorOffset);
+    const boundary = findBoundaryAtOrAfter(measureIstarts, derived);
+    if (boundary == null) return max;
+    const editor = toEditorOffset(boundary);
+    return Math.max(0, Math.min(Number.isFinite(editor) ? editor : max, max));
+  };
   const snapEnd = (editorOffset) => {
     if (!canSnap) return Math.max(0, Math.min(Number(editorOffset) || 0, max));
     const derived = toDerivedOffset(editorOffset);
@@ -11949,10 +11957,21 @@ function computePracticePlaybackRange(loopEnabled) {
     };
   }
 
-  const snappedSelStart = snapStartToBarBoundaryAtOrAfter(selStart);
-  const snappedSelEnd = snapEnd(selEnd);
+  let snappedSelStart = snapStartToBarBoundaryAtOrAfter(selStart);
+  let snappedSelEnd = snapEnd(selEnd);
+  let selectionExpanded = false;
   if (!(snappedSelEnd > snappedSelStart)) {
-    return fallbackWholeTune("selection invalid; looping whole tune");
+    // Tolerant-read fallback: if the strict snap collapses (common when the user highlights "roughly" across bars),
+    // expand to include all bars overlapped by the selection.
+    const expandedStart = snapBarStartContaining(selStart);
+    const expandedEnd = snapEndToBarBoundaryAtOrAfter(selEnd);
+    if (expandedEnd > expandedStart) {
+      snappedSelStart = expandedStart;
+      snappedSelEnd = expandedEnd;
+      selectionExpanded = true;
+    } else {
+      return fallbackWholeTune("selection invalid; looping whole tune");
+    }
   }
 
   const cursorInsideSelection = cursor >= selStart && cursor <= selEnd;
@@ -11977,7 +11996,8 @@ function computePracticePlaybackRange(loopEnabled) {
       ? "looping selection (cursor outside; snapped)"
       : "looping selection (cursor outside)";
   } else {
-    practiceRangeHint = canSnap ? "looping selection (snapped)" : "looping selection";
+    if (selectionExpanded) practiceRangeHint = canSnap ? "looping selection (expanded)" : "looping selection";
+    else practiceRangeHint = canSnap ? "looping selection (snapped)" : "looping selection";
   }
   return {
     startOffset: snappedSelStart,
