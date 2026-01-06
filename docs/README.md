@@ -31,7 +31,9 @@ Scripts are defined in `package.json`.
 - `assets/`: App icons.
 
 ## Packaging/build
-No packaging or build scripts are defined beyond `npm run start`. Any production packaging workflow is not present in this repository.
+Packaging scripts are available:
+- Linux AppImage: `npm run appimage` (see `scripts/build_appimage.sh` and `docs/packaging.md`)
+- Windows/macOS: `npm run dist:win` / `npm run dist:mac` (electron-builder; see `docs/packaging.md`)
 
 ## Detailed docs
 - `docs/features.md`: End-user features and behaviors.

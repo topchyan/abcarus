@@ -48,6 +48,7 @@ The library tree supports per-tune file operations:
   - Start over (F4) and play/pause (F5) (`src/main/menu.js`, `src/renderer/renderer.js`).
   - Previous/next measure via the Play menu (`src/main/menu.js`).
 - Playback highlights notes in both the rendered SVG and editor.
+- MIDI drums are supported via abc2svg (`%%MIDI drum`, `%%MIDI drumon`, `%%MIDI drumbars`).
 
 ## Transformations
 Transform actions are implemented natively in the renderer:
@@ -79,6 +80,6 @@ Editable settings include:
 
 ## Platform and scope notes
 - Desktop app only (Electron).
-- No automated tests are defined.
-- No packaging or distribution scripts are present.
+- No automated tests are defined (only small harness scripts for core transforms).
+- Packaging/build scripts exist for AppImage and electron-builder (see `docs/packaging.md`).
 - Network access is not used by default; external resources are local.

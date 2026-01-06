@@ -3537,6 +3537,26 @@ if ($scanErrorTunes) {
   });
 }
 
+function startScanForErrorsFromToolbarEnable() {
+  if (!errorsEnabled) return;
+  if (rawMode) return;
+  if (isPlaying || isPaused) {
+    showToast("Stop playback to scan errors");
+    return;
+  }
+  if (tuneErrorScanInFlight) return;
+  const entry = getActiveFileEntry();
+  if (!entry) return;
+  clearErrors();
+  tuneErrorFilter = true;
+  tuneErrorScanToken += 1;
+  tuneErrorScanInFlight = true;
+  buildTuneSelectOptions(entry);
+  setScanErrorButtonActive(true);
+  scanActiveFileForTuneErrors(entry).catch(() => {});
+  updateLibraryStatus();
+}
+
 if ($btnFileNew) {
   $btnFileNew.addEventListener("click", async () => {
     try {
@@ -3731,7 +3751,8 @@ function setErrorFocusMessage(entry, from) {
   msg = msg.replace(/\s+\(abc2svg\)\s*$/i, "").trim();
 
   let out = "";
-  if (parts && stats && Number.isFinite(stats.actualWhole)) {
+  const suppressBeatsPrefix = /^meter mismatch:/i.test(msg) || /^repeat marker\b/i.test(msg);
+  if (!suppressBeatsPrefix && parts && stats && Number.isFinite(stats.actualWhole)) {
     const expectedBeats = parts.num;
     const actualBeats = stats.actualWhole * parts.den;
     const diff = actualBeats - expectedBeats;
@@ -4604,12 +4625,15 @@ function detectMeterMismatchInBarlines(abcText) {
 
 function detectRepeatMarkerAfterShortBar(abcText) {
   const text = String(abcText || "");
-  const metreText = formatMetreFromText(text) || "";
-  if (!metreText) return null;
-  const metre = getMetre(text);
+  const headerMetreText = formatMetreFromText(text) || "";
+  if (!headerMetreText) return null;
+  const headerMetre = getMetre(text);
   const defaultLen = getDefaultLen(text);
-  if (!Number.isFinite(metre) || metre <= 0) return null;
+  if (!Number.isFinite(headerMetre) || headerMetre <= 0) return null;
   if (!Number.isFinite(defaultLen) && defaultLen !== "mcm_default") return null;
+
+  let currentMetre = headerMetre;
+  let currentMetreText = headerMetreText;
 
   const lines = text.split(/\r\n|\n|\r/);
   let inTextBlock = false;
@@ -4622,20 +4646,28 @@ function detectRepeatMarkerAfterShortBar(abcText) {
     const bar = buffer.trim();
     buffer = "";
     if (!bar) return null;
-    const len = getBarLength(bar, defaultLen, metre);
+    const len = getBarLength(bar, defaultLen, currentMetre);
     if (!Number.isFinite(len) || len <= 0) return null;
-    const ratio = len / metre;
+    const ratio = len / currentMetre;
     if (!Number.isFinite(ratio) || ratio <= 0) return null;
-    if (Math.abs(ratio - 1) <= 0.15) return null;
+    const isFullBar = Math.abs(ratio - 1) <= 0.15;
+    if (isFullBar) return null;
 
     const token = String(endToken || "").trim();
     if (!token.includes(":")) return null;
 
+    const isStartRepeatToken = token.includes("|:") || token.endsWith(":");
+    const isEndRepeatToken = token.startsWith(":|") || token.includes(":|");
+    // Treat a short bar immediately before a repeat marker as a valid incomplete bar:
+    // - before start-repeat: pickup/anacrusis (e.g. "|:" / "::" / ":|:")
+    // - before end-repeat: shortened closing bar (often balances an initial pickup)
+    if ((isStartRepeatToken || isEndRepeatToken) && ratio <= 0.8) return null;
+
     const ratioText = ratio.toFixed(2).replace(/\.?0+$/, "");
     return {
       kind: "repeat-short-bar",
-      detail: `Repeat marker "${token}" follows a bar of ~${ratioText}× length under M:${metreText}. Consider fixing bar lengths or changing M: locally.`,
-      metre: metreText,
+      detail: `Repeat marker "${token}" follows a bar of ~${ratioText}× length under M:${currentMetreText}. Consider fixing bar lengths or changing M: locally.`,
+      metre: currentMetreText,
       ratio,
       token,
       startToken: lastStartToken || null,
@@ -4658,6 +4690,17 @@ function detectRepeatMarkerAfterShortBar(abcText) {
     if (!trimmed) continue;
     if (/^%/.test(trimmed) && !/^%%/.test(trimmed)) continue;
     if (/^\s*%%/.test(rawLine)) continue;
+    // Allow meter changes in the tune body.
+    const bodyMeterMatch = trimmed.match(/^M:\s*(\d+)\s*\/\s*(\d+)/i);
+    if (bodyMeterMatch) {
+      const num = Number(bodyMeterMatch[1]);
+      const den = Number(bodyMeterMatch[2]);
+      if (Number.isFinite(num) && Number.isFinite(den) && num > 0 && den > 0) {
+        currentMetre = num / den;
+        currentMetreText = `${bodyMeterMatch[1]}/${bodyMeterMatch[2]}`;
+      }
+      continue;
+    }
     if (/^\s*[A-Za-z]:/.test(rawLine)) continue;
 
     let line = rawLine;
@@ -4685,6 +4728,17 @@ function detectRepeatMarkerAfterShortBar(abcText) {
         lastTokenLoc = loc;
         if (warn) return warn;
         continue;
+      }
+
+      // Track inline meter changes like [M:6/8] in-order (can appear after barlines on the same line).
+      const inlineMeterRe = /\[\s*M:\s*(\d+)\s*\/\s*(\d+)\s*\]/gi;
+      let mm;
+      while ((mm = inlineMeterRe.exec(p)) !== null) {
+        const num = Number(mm[1]);
+        const den = Number(mm[2]);
+        if (!Number.isFinite(num) || !Number.isFinite(den) || num <= 0 || den <= 0) continue;
+        currentMetre = num / den;
+        currentMetreText = `${mm[1]}/${mm[2]}`;
       }
       buffer += ` ${p}`;
     }
@@ -5405,14 +5459,17 @@ function renderErrorList() {
 function addError(message, locOverride, contextOverride) {
   if (!errorsEnabled) return;
   const renderLoc = locOverride || parseErrorLocation(message);
-  const context = contextOverride || (activeTuneMeta ? {
+  const baseContext = activeTuneMeta ? {
     tuneId: activeTuneMeta.id,
     filePath: activeTuneMeta.path || null,
     fileBasename: activeTuneMeta.basename || (activeTuneMeta.path ? safeBasename(activeTuneMeta.path) : ""),
     tuneLabel: buildErrorTuneLabel(activeTuneMeta),
     xNumber: activeTuneMeta.xNumber || "",
     title: activeTuneMeta.title || "",
-  } : null);
+  } : null;
+  const context = contextOverride
+    ? { ...(baseContext || {}), ...contextOverride }
+    : baseContext;
   const entry = {
     message: String(message),
     loc: renderLoc ? { line: renderLoc.line, col: renderLoc.col } : null,
@@ -11788,6 +11845,7 @@ if ($btnToggleErrors) {
     }
     // Enabling errors is session-only (not persisted).
     setErrorsEnabled(true, { triggerRefresh: true });
+    startScanForErrorsFromToolbarEnable();
   });
 }
 

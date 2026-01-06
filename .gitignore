@@ -33,6 +33,14 @@ third_party/python-embed/.cache/
 !third_party/python-embed/**/python-build-standalone.lock.json
 !third_party/python-embed/**/.gitkeep
 
+# Local update artifacts (never commit)
+third_party/_upd/
+
+# Stray abc2svg extracted files (repo root)
+/*-1.js
+/edit-1.xhtml
+/mei2svg-1.js
+
 # Soundfonts: keep only TimGM6mb.sf2 tracked
 third_party/sf2/*.sf2
 !third_party/sf2/TimGM6mb.sf2
