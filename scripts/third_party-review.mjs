@@ -4,18 +4,21 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import zlib from "zlib";
+import { spawnSync } from "child_process";
 
 function repoRoot() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 }
 
 function parseArgs(argv) {
-  const args = { candidate: null, outDir: null, json: false };
+  const args = { candidate: null, outDir: null, json: false, abc2svgBuild: false, keepWorkdir: false };
   for (let i = 2; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === "--json") args.json = true;
     else if (a === "--candidate") args.candidate = argv[++i] || null;
     else if (a === "--out-dir") args.outDir = argv[++i] || null;
+    else if (a === "--abc2svg-build") args.abc2svgBuild = true;
+    else if (a === "--keep-workdir") args.keepWorkdir = true;
     else if (a === "-h" || a === "--help") {
       args.help = true;
     }
@@ -51,6 +54,41 @@ function nowUtcCompact() {
   return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(
     d.getUTCMinutes()
   )}${pad(d.getUTCSeconds())}Z`;
+}
+
+function rmrf(dirPath) {
+  try {
+    fs.rmSync(dirPath, { recursive: true, force: true });
+  } catch {
+    // ignore
+  }
+}
+
+function ensureParent(filePath) {
+  ensureDir(path.dirname(filePath));
+}
+
+function toPosixPath(p) {
+  return p.replace(/\\/g, "/");
+}
+
+function looksLikeAbc2svgSourceTree(entries) {
+  const hasCore = entries.some((e) => e.includes("/core/abc2svg.js"));
+  const hasDist = entries.some((e) => e.endsWith("/abc2svg-1.js")) || entries.some((e) => e.endsWith("/snd-1.js"));
+  return hasCore && !hasDist;
+}
+
+function stripAbc2svgVdate(text) {
+  const lines = String(text || "").split(/\r?\n/);
+  const filtered = lines.filter((ln) => !/^\s*abc2svg\.version=.*abc2svg\.vdate=.*\s*$/.test(ln));
+  return filtered.join("\n");
+}
+
+function safeRel(entryName) {
+  const p = toPosixPath(entryName);
+  if (p.includes("..")) return null;
+  if (p.startsWith("/")) return null;
+  return p;
 }
 
 function readUInt64LE(buf, off) {
@@ -238,6 +276,7 @@ function candidateSummary(root, candidateZip, components) {
     warnings: [],
     keyFileComparisons: [],
     missingKeyFiles: [],
+    abc2svgBuild: null,
   };
 
   function suffixCandidates(rel) {
@@ -276,9 +315,7 @@ function candidateSummary(root, candidateZip, components) {
   }
 
   // Heuristic warnings for common mismatch cases (abc2svg source tree vs our vendored dist files).
-  const hasA2sDist = entries.some((e) => e.endsWith("/abc2svg-1.js")) || entries.some((e) => e.endsWith("/snd-1.js"));
-  const hasA2sCore = entries.some((e) => e.includes("/core/abc2svg.js"));
-  if (hasA2sCore && !hasA2sDist) {
+  if (looksLikeAbc2svgSourceTree(entries)) {
     out.warnings.push(
       "Candidate looks like an abc2svg source tree (core/abc2svg.js) without prebuilt dist files (abc2svg-1.js, snd-1.js). " +
         "Review is limited until dist artifacts are available or built (see upstream README: run ./build or ninja/samu)."
@@ -286,6 +323,135 @@ function candidateSummary(root, candidateZip, components) {
   }
 
   return out;
+}
+
+function extractZipToDir(zipPath, destDir) {
+  const zip = zipList(zipPath);
+  for (const e of zip.entries) {
+    const rel = safeRel(e.name);
+    if (!rel) continue;
+    if (rel.endsWith("/")) {
+      ensureDir(path.join(destDir, rel));
+      continue;
+    }
+    const buf = zipReadEntry(zip, e.name);
+    if (!buf) continue;
+    const abs = path.join(destDir, rel);
+    ensureParent(abs);
+    fs.writeFileSync(abs, buf);
+    // Make the build script runnable.
+    if (path.basename(abs) === "build") {
+      try {
+        fs.chmodSync(abs, 0o755);
+      } catch {
+        // ignore
+      }
+    }
+  }
+}
+
+function runAbc2svgBuildFromSource(root, zipPath, outDir, keepWorkdir) {
+  const stamp = nowUtcCompact();
+  const workDir = path.join(outDir, `_work-abc2svg-${stamp}`);
+  ensureDir(workDir);
+  extractZipToDir(zipPath, workDir);
+
+  // Find the extracted root containing version.txt/build.
+  const top = fs.readdirSync(workDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+  const candidateRoot = top.length === 1 ? path.join(workDir, top[0]) : workDir;
+  const buildScript = path.join(candidateRoot, "build");
+  const versionTxt = path.join(candidateRoot, "version.txt");
+  const distFiles = ["abc2svg-1.js", "snd-1.js", "MIDI-1.js"];
+
+  const result = {
+    workdir: path.relative(root, workDir),
+    extractedRoot: path.relative(root, candidateRoot),
+    buildRan: false,
+    buildOk: false,
+    buildStdout: "",
+    buildStderr: "",
+    builtFiles: {},
+    comparisons: [],
+    notes: [],
+  };
+
+  if (!fs.existsSync(buildScript)) {
+    result.notes.push(`Missing build script in candidate: ${path.relative(root, buildScript)}`);
+    if (!keepWorkdir) rmrf(workDir);
+    return result;
+  }
+  if (!fs.existsSync(versionTxt)) {
+    result.notes.push(`Missing version.txt in candidate: ${path.relative(root, versionTxt)}`);
+  }
+
+  const bash = process.platform === "win32" ? null : "bash";
+  if (!bash) {
+    result.notes.push("Build step skipped: bash not available on this platform.");
+    if (!keepWorkdir) rmrf(workDir);
+    return result;
+  }
+
+  const r = spawnSync(bash, ["./build"], { cwd: candidateRoot, encoding: "utf8" });
+  result.buildRan = true;
+  result.buildStdout = r.stdout || "";
+  result.buildStderr = r.stderr || "";
+  result.buildOk = r.status === 0;
+
+  for (const f of distFiles) {
+    const abs = path.join(candidateRoot, f);
+    if (!fs.existsSync(abs)) continue;
+    const buf = fs.readFileSync(abs);
+    result.builtFiles[f] = {
+      sha256: sha256Buffer(buf),
+      sha256Normalized:
+        f === "abc2svg-1.js" ? sha256Buffer(Buffer.from(stripAbc2svgVdate(buf.toString("utf8")), "utf8")) : null,
+    };
+  }
+
+  // Compare against our vendored runtime files.
+  const localRoot = path.join(root, "third_party", "abc2svg");
+  for (const f of distFiles) {
+    const built = result.builtFiles[f];
+    if (!built) continue;
+    const localPath = path.join(localRoot, f);
+    if (!fs.existsSync(localPath)) {
+      result.comparisons.push({ file: f, localExists: false, builtSha256: built.sha256, changed: true });
+      continue;
+    }
+    const localBuf = fs.readFileSync(localPath);
+    const localSha = sha256Buffer(localBuf);
+    let changed = localSha !== built.sha256;
+    let onlyDate = false;
+    if (f === "abc2svg-1.js") {
+      const localNorm = sha256Buffer(Buffer.from(stripAbc2svgVdate(localBuf.toString("utf8")), "utf8"));
+      const builtNorm = built.sha256Normalized;
+      if (builtNorm && localNorm === builtNorm && changed) {
+        onlyDate = true;
+        changed = false;
+      }
+      result.comparisons.push({
+        file: f,
+        localExists: true,
+        localSha256: localSha,
+        builtSha256: built.sha256,
+        localSha256Normalized: localNorm,
+        builtSha256Normalized: builtNorm,
+        changed,
+        onlyVdateDiff: onlyDate,
+      });
+    } else {
+      result.comparisons.push({
+        file: f,
+        localExists: true,
+        localSha256: localSha,
+        builtSha256: built.sha256,
+        changed,
+      });
+    }
+  }
+
+  if (!keepWorkdir) rmrf(workDir);
+  return result;
 }
 
 function renderMarkdown(report) {
@@ -344,6 +510,35 @@ function renderMarkdown(report) {
       }
       lines.push(``);
     }
+
+    if (report.candidate.abc2svgBuild) {
+      const b = report.candidate.abc2svgBuild;
+      lines.push(`## abc2svg build-from-source check`);
+      lines.push(`- buildRan: ${b.buildRan}`);
+      lines.push(`- buildOk: ${b.buildOk}`);
+      lines.push(`- extractedRoot: \`${b.extractedRoot}\``);
+      if (b.notes && b.notes.length) {
+        lines.push(``);
+        lines.push(`### Build notes`);
+        for (const n of b.notes) lines.push(`- ${n}`);
+      }
+      if (b.comparisons && b.comparisons.length) {
+        lines.push(``);
+        lines.push(`### Built dist vs vendored`);
+        for (const c of b.comparisons) {
+          if (!c.localExists) {
+            lines.push(`- \`${c.file}\`: missing locally, built ${String(c.builtSha256).slice(0, 12)}…`);
+            continue;
+          }
+          if (c.onlyVdateDiff) {
+            lines.push(`- \`${c.file}\`: content matches (only vdate differs)`);
+            continue;
+          }
+          lines.push(`- \`${c.file}\`: ${c.changed ? "DIFFERS" : "unchanged"}`);
+        }
+      }
+      lines.push(``);
+    }
   }
 
   lines.push(`## Verdict`);
@@ -356,7 +551,9 @@ function renderMarkdown(report) {
 async function main() {
   const args = parseArgs(process.argv);
   if (args.help) {
-    console.log(`Usage: node scripts/third_party-review.mjs [--candidate <zip>] [--out-dir <dir>] [--json]`);
+    console.log(
+      `Usage: node scripts/third_party-review.mjs [--candidate <zip>] [--out-dir <dir>] [--json] [--abc2svg-build] [--keep-workdir]`
+    );
     process.exit(0);
   }
 
@@ -375,6 +572,28 @@ async function main() {
   const defaultOut = path.join(root, "scripts", "local", "third-party-reviews");
   const outDir = args.outDir ? path.resolve(root, args.outDir) : defaultOut;
   ensureDir(outDir);
+
+  if (args.candidate && args.abc2svgBuild) {
+    const zipAbs = path.resolve(root, args.candidate);
+    let candidates = [];
+    try {
+      const zip = zipList(zipAbs);
+      candidates = zip.entries.map((e) => e.name);
+    } catch (e) {
+      candidates = [];
+    }
+    if (looksLikeAbc2svgSourceTree(candidates)) {
+      report.candidate.abc2svgBuild = runAbc2svgBuildFromSource(root, zipAbs, outDir, args.keepWorkdir);
+    } else {
+      report.candidate.abc2svgBuild = {
+        buildRan: false,
+        buildOk: false,
+        extractedRoot: "",
+        notes: ["Skipped: candidate already contains dist files, or does not look like an abc2svg source tree."],
+        comparisons: [],
+      };
+    }
+  }
 
   const stamp = nowUtcCompact();
   const outBase = path.join(outDir, `third-party-review-${stamp}`);

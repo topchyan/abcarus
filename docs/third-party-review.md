@@ -36,6 +36,10 @@ Run:
 To include a specific candidate archive:
 - `node scripts/third_party-review.mjs --candidate third_party/_upd/<file>.zip`
 
+If the candidate is an `abc2svg` **source** archive (no `abc2svg-1.js` / `snd-1.js`), you can also build the dist
+files from the archive and compare them to the currently vendored runtime files:
+- `node scripts/third_party-review.mjs --candidate third_party/_upd/<abc2svg>.zip --abc2svg-build`
+
 Outputs are written to `scripts/local/third-party-reviews/` by default (not committed).
 
 ### 3) Review checklist (what to look for)
