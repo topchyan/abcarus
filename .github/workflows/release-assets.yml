@@ -110,70 +110,19 @@ jobs:
           if (Test-Path $zip) { Remove-Item -Force $zip }
           Compress-Archive -Path "$src/*" -DestinationPath $zip
 
-      - name: Create portable SFX (optional)
-        run: |
-          $repo = $env:GITHUB_WORKSPACE
-          if (!$repo) { $repo = (Get-Location).Path }
-          $src = Join-Path $repo "dist/electron-builder/win-unpacked"
-          $out = Join-Path $repo "dist/electron-builder/ABCarus-win-unpacked-x64.exe"
-          if (!(Test-Path $src)) { throw "Missing win-unpacked: $src" }
-
-          $sevenZip = @(
-            "C:\\Program Files\\7-Zip\\7z.exe",
-            "C:\\Program Files (x86)\\7-Zip\\7z.exe"
-            "C:\\ProgramData\\chocolatey\\bin\\7z.exe"
-          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-          $sevenZipSfx = @(
-            "C:\\Program Files\\7-Zip\\7z.sfx",
-            "C:\\Program Files (x86)\\7-Zip\\7z.sfx"
-            "C:\\ProgramData\\chocolatey\\lib\\7zip\\tools\\7z.sfx"
-          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-          if (!$sevenZip -or !$sevenZipSfx) {
-            Write-Host "Skipping SFX build (7-Zip SFX not found on runner)."
-            exit 0
-          }
-
-          $tmp = Join-Path $env:TEMP ("abcarus-sfx-" + [System.Guid]::NewGuid().ToString("N"))
-          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-
-          $payload = Join-Path $tmp "payload.7z"
-          $srcAbs = (Resolve-Path $src).Path
-          & $sevenZip a -t7z -mx=9 $payload (Join-Path $srcAbs "*") | Out-Host
-          if ($LASTEXITCODE -ne 0) { throw "7z failed building payload (exit $LASTEXITCODE)" }
-
-          $config = Join-Path $tmp "config.txt"
-          $configText = @(
-            ';!@Install@!UTF-8!',
-            'Title="ABCarus (portable)"',
-            'BeginPrompt="Extract ABCarus portable build to a folder. Do NOT run from inside a zip viewer."',
-            'RunProgram="ABCarus.exe"',
-            ';!@InstallEnd@!'
-          ) -join "`r`n"
-          $configText | Out-File -Encoding utf8 $config
-
-          $bytes = New-Object System.Collections.Generic.List[byte]
-          $bytes.AddRange([System.IO.File]::ReadAllBytes($sevenZipSfx))
-          $bytes.AddRange([System.Text.Encoding]::UTF8.GetBytes((Get-Content -Raw $config)))
-          $bytes.AddRange([System.IO.File]::ReadAllBytes($payload))
-          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $out) | Out-Null
-          [System.IO.File]::WriteAllBytes($out, $bytes.ToArray())
-
-          Write-Host "Created SFX: $out"
-
       - name: Compute SHA256
         run: |
           $setup = Get-ChildItem -Path "dist/electron-builder" -Filter "*Setup*.exe" | Select-Object -First 1
           if (-not $setup) { throw "Setup exe not found under dist/electron-builder" }
           $zip = "dist/electron-builder/ABCarus-win-unpacked-x64.zip"
-          $sfx = "dist/electron-builder/ABCarus-win-unpacked-x64.exe"
+          $portable = Get-ChildItem -Path "dist/electron-builder" -Filter "*.exe" | Where-Object {
+            $_.Name -notmatch "Setup" -and $_.Name -notmatch "win-unpacked"
+          } | Sort-Object Length -Descending | Select-Object -First 1
+          if (-not $portable) { throw "Portable exe not found under dist/electron-builder" }
           $lines = @()
           $lines += "$( (Get-FileHash -Algorithm SHA256 $setup.FullName).Hash.ToLower() )  $($setup.Name)"
           $lines += "$( (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower() )  $(Split-Path -Leaf $zip)"
-          if (Test-Path $sfx) {
-            $lines += "$( (Get-FileHash -Algorithm SHA256 $sfx).Hash.ToLower() )  $(Split-Path -Leaf $sfx)"
-          }
+          $lines += "$( (Get-FileHash -Algorithm SHA256 $portable.FullName).Hash.ToLower() )  $($portable.Name)"
           $lines | Out-File -Encoding ascii "dist/electron-builder/SHA256SUMS-windows.txt"
 
       - name: Upload to GitHub Release
@@ -182,5 +131,5 @@ jobs:
           files: |
             dist/electron-builder/*Setup*.exe
             dist/electron-builder/ABCarus-win-unpacked-x64.zip
-            dist/electron-builder/ABCarus-win-unpacked-x64.exe
+            dist/electron-builder/*Portable*.exe
             dist/electron-builder/SHA256SUMS-windows.txt
