@@ -3533,6 +3533,20 @@ document.addEventListener("keydown", (e) => {
   toggleErrorsPopover(false);
 }, true);
 
+// Global Stop shortcut (Esc): stop playback if it is active.
+// Note: other Esc handlers (search, popovers, inputs) run in capture phase and will preventDefault/stopPropagation.
+document.addEventListener("keydown", (e) => {
+  if (e.defaultPrevented) return;
+  if (e.key !== "Escape") return;
+  if (!(isPlaying || isPaused || waitingForFirstNote)) return;
+  // Avoid surprising behavior when typing in inputs (Escape is often used to clear/close UI).
+  const el = e.target;
+  const tag = el && el.tagName ? String(el.tagName).toLowerCase() : "";
+  if (tag === "input" || tag === "textarea" || (el && el.isContentEditable)) return;
+  e.preventDefault();
+  stopPlaybackTransport();
+});
+
 if ($errorsListPopover) {
   $errorsListPopover.addEventListener("click", (e) => {
     const row = e.target && e.target.closest ? e.target.closest(".errors-row") : null;
