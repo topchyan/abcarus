@@ -10222,7 +10222,15 @@ function updatePracticeUi() {
           const max = editorView.state.doc.length;
           const start = Math.max(0, Math.min(Number(practiceRangePreview.startOffset) || 0, max));
           const line = editorView.state.doc.lineAt(start);
-          startHint = `Start: L${line.number}`;
+          let measureHint = "";
+          if (playbackState && Array.isArray(playbackState.measureIstarts) && playbackState.measureIstarts.length) {
+            const derived = toDerivedOffset(start);
+            if (Number.isFinite(derived)) {
+              const idx = findMeasureIndex(derived);
+              measureHint = Number.isFinite(idx) ? `M${idx + 1}` : "";
+            }
+          }
+          startHint = `Start: L${line.number}${measureHint ? ` · ${measureHint}` : ""}`;
         } catch {}
       }
       const hintParts = [];
@@ -12001,6 +12009,7 @@ async function startPlaybackFromRange(rangeOverride) {
   if (range.origin === "practice") {
     const computed = computePracticePlaybackRange(range.loop);
     if (computed) range = clonePlaybackRange(computed);
+    practiceRangePreview = { startOffset: range.startOffset, endOffset: range.endOffset };
     updatePracticeUi();
   }
 
