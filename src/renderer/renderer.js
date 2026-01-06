@@ -9852,7 +9852,15 @@ function ensurePlayer() {
           stopPlaybackFromGuard("Trace run id mismatch.");
           return;
         }
-        if (activePlaybackRange && activePlaybackRange.loop && playbackRange.startOffset !== activePlaybackRange.startOffset) {
+        // Guard loop invariance only when PlaybackRange and the active loop range are expected to match.
+        // In Practice mode, the active range may be snapped/derived from selection/cursor, while the editor's
+        // PlaybackRange remains cursor/selection-based. That mismatch is intentional and should not abort playback.
+        if (
+          activePlaybackRange
+          && activePlaybackRange.loop
+          && activePlaybackRange.origin === playbackRange.origin
+          && playbackRange.startOffset !== activePlaybackRange.startOffset
+        ) {
           stopPlaybackFromGuard("Loop invariance violated: PlaybackRange.startOffset mutated.");
           return;
         }
