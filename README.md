@@ -102,7 +102,7 @@ Major third-party components used by ABCarus:
 - Python — https://www.python.org/
 - TimGM6mb.sf2 (soundfont) — https://timbrechbill.com/saxguru/
 
-See `NOTICE` for licenses and attribution details.
+See `NOTICE.md` for licenses and attribution details.
 
 ### Inspiration
 
@@ -122,4 +122,4 @@ Projects that inspired ABCarus:
 ABCarus source code is licensed under the MIT License.
 
 This project uses third-party components, including abc2svg (LGPL) and CodeMirror (MIT).
-See NOTICE for details.
+See `NOTICE.md` for details.
