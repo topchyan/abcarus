@@ -176,6 +176,7 @@ let playbackTraceSeq = 0;
 let practiceEnabled = false;
 let practiceTempoMultiplier = 0.75;
 let practiceStatusText = "";
+let practiceRangeHint = "";
 let currentPlaybackPlan = null;
 let pendingPlaybackPlan = null;
 let lastRhythmErrorSuggestion = null;
@@ -9980,9 +9981,10 @@ function updatePracticeUi() {
       const tempo = formatPracticeTempoLabel(practiceTempoMultiplier);
       const state = isPlaying ? "Playing" : (isPaused ? "Paused" : "Ready");
       const pending = pendingPlaybackPlan ? " (pending)" : "";
+      const hint = practiceRangeHint ? ` — ${practiceRangeHint}` : "";
       const text = tempo
-        ? `Practice: ON (${tempo}) — ${state}${pending}`
-        : `Practice: ON — ${state}${pending}`;
+        ? `Practice: ON (${tempo}) — ${state}${pending}${hint}`
+        : `Practice: ON — ${state}${pending}${hint}`;
       if (practiceStatusText !== text) {
         practiceStatusText = text;
         $practiceStatus.textContent = text;
@@ -11546,9 +11548,133 @@ function resolvePlaybackEndAbcOffset(range, startAbcOffset) {
   return sym.istart;
 }
 
+function findBoundaryAtOrAfter(sorted, target) {
+  if (!Array.isArray(sorted) || !sorted.length) return null;
+  const t = Number(target);
+  if (!Number.isFinite(t)) return null;
+  let lo = 0;
+  let hi = sorted.length - 1;
+  let best = null;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const v = sorted[mid];
+    if (v >= t) {
+      best = v;
+      hi = mid - 1;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  return best;
+}
+
+function findBoundaryAtOrBefore(sorted, target) {
+  if (!Array.isArray(sorted) || !sorted.length) return null;
+  const t = Number(target);
+  if (!Number.isFinite(t)) return null;
+  let lo = 0;
+  let hi = sorted.length - 1;
+  let best = null;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const v = sorted[mid];
+    if (v <= t) {
+      best = v;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return best;
+}
+
+function computePracticePlaybackRange(loopEnabled) {
+  if (!editorView) return null;
+  const max = editorView.state.doc.length;
+  const sel = editorView.state.selection ? editorView.state.selection.main : null;
+  if (!sel) return null;
+
+  const anchor = Math.max(0, Math.min(Number(sel.anchor) || 0, max));
+  const head = Math.max(0, Math.min(Number(sel.head) || 0, max));
+  const selStart = Math.min(anchor, head);
+  const selEnd = Math.max(anchor, head);
+  const hasSelection = selEnd > selStart;
+  const cursor = head;
+
+  const measureIstarts = playbackState && Array.isArray(playbackState.measureIstarts)
+    ? playbackState.measureIstarts
+    : null;
+  const canSnap = Boolean(measureIstarts && measureIstarts.length);
+
+  const snapStart = (editorOffset) => {
+    if (!canSnap) return Math.max(0, Math.min(Number(editorOffset) || 0, max));
+    const derived = toDerivedOffset(editorOffset);
+    const boundary = findBoundaryAtOrAfter(measureIstarts, derived);
+    const editor = boundary == null ? null : toEditorOffset(boundary);
+    return Math.max(0, Math.min(Number.isFinite(editor) ? editor : max, max));
+  };
+  const snapEnd = (editorOffset) => {
+    if (!canSnap) return Math.max(0, Math.min(Number(editorOffset) || 0, max));
+    const derived = toDerivedOffset(editorOffset);
+    const boundary = findBoundaryAtOrBefore(measureIstarts, derived);
+    const editor = boundary == null ? null : toEditorOffset(boundary);
+    return Math.max(0, Math.min(Number.isFinite(editor) ? editor : 0, max));
+  };
+
+  const fallbackWholeTune = (hint) => {
+    practiceRangeHint = hint || "looping whole tune";
+    return {
+      startOffset: 0,
+      endOffset: null,
+      origin: "practice",
+      loop: Boolean(loopEnabled),
+    };
+  };
+
+  if (!hasSelection) {
+    const startOffset = snapStart(cursor);
+    practiceRangeHint = canSnap ? "looping from cursor (snapped)" : "looping from cursor";
+    return {
+      startOffset,
+      endOffset: null,
+      origin: "practice",
+      loop: Boolean(loopEnabled),
+    };
+  }
+
+  const snappedSelStart = snapStart(selStart);
+  const snappedSelEnd = snapEnd(selEnd);
+  if (!(snappedSelEnd > snappedSelStart)) {
+    return fallbackWholeTune("selection invalid; looping whole tune");
+  }
+
+  const cursorInsideSelection = cursor >= selStart && cursor <= selEnd;
+  if (!cursorInsideSelection) {
+    practiceRangeHint = canSnap ? "looping selection (snapped)" : "looping selection";
+    return {
+      startOffset: snappedSelStart,
+      endOffset: snappedSelEnd,
+      origin: "practice",
+      loop: Boolean(loopEnabled),
+    };
+  }
+
+  const snappedCursor = snapStart(cursor);
+  if (!(snappedSelEnd > snappedCursor)) {
+    return fallbackWholeTune("selection invalid; looping whole tune");
+  }
+  practiceRangeHint = canSnap ? "looping selection from cursor (snapped)" : "looping selection from cursor";
+  return {
+    startOffset: snappedCursor,
+    endOffset: snappedSelEnd,
+    origin: "practice",
+    loop: Boolean(loopEnabled),
+  };
+}
+
 async function startPlaybackFromRange(rangeOverride) {
   if (!editorView) return;
-  const range = clonePlaybackRange(rangeOverride || playbackRange);
+  let range = clonePlaybackRange(rangeOverride || playbackRange);
   const max = editorView.state.doc.length;
   if (!Number.isFinite(range.startOffset) || range.startOffset < 0 || range.startOffset > max) {
     showToast("Playback range start is invalid.", 2600);
@@ -11574,6 +11700,12 @@ async function startPlaybackFromRange(rangeOverride) {
   } else {
     await ensureSoundfontReady();
     stopPlaybackForRestart();
+  }
+
+  if (range.origin === "practice") {
+    const computed = computePracticePlaybackRange(range.loop);
+    if (computed) range = clonePlaybackRange(computed);
+    updatePracticeUi();
   }
 
   const startAbcOffset = toDerivedOffset(range.startOffset);
@@ -11758,6 +11890,7 @@ if ($btnPracticeToggle) {
       return;
     }
     practiceEnabled = !practiceEnabled;
+    if (!practiceEnabled) practiceRangeHint = "";
     syncPendingPlaybackPlan();
     updatePracticeUi();
   });
