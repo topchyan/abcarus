@@ -26,7 +26,10 @@ if (process.platform === "linux" && process.env.ABCARUS_USE_PORTAL === "1") {
 
 function resolveAppIconPath() {
   const appRoot = app.getAppPath();
-  return path.join(appRoot, "assets", "icons", "abcarus_512.png");
+  if (process.platform === "win32") {
+    return path.join(appRoot, "assets", "icons", "abcarus.ico");
+  }
+  return path.join(appRoot, "assets", "icons", "abcarus_256.png");
 }
 
 function getDefaultSettings() {
@@ -561,6 +564,7 @@ async function withPrintWindow(svgMarkup, action, options) {
   const win = new BrowserWindow({
     show: Boolean(options && options.show),
     autoHideMenuBar: true,
+    icon: resolveAppIconPath(),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
