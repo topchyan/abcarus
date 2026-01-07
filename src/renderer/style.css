@@ -77,14 +77,6 @@ header {
   gap: var(--space-3);
 }
 
-.app-icon {
-  width: 18px;
-  height: 18px;
-  margin-right: 2px;
-  display: inline-block;
-  object-fit: contain;
-}
-
 .header-row {
   display: flex;
   align-items: center;
