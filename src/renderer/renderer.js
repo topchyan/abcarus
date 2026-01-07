@@ -7246,7 +7246,7 @@ async function dumpDebugToFile(filePathArg) {
           const rendererDir = window.api.pathDirname(p);
           const srcDir = window.api.pathDirname(rendererDir);
           const rootDir = window.api.pathDirname(srcDir);
-          suggestedDir = window.api.pathJoin(rootDir, "debug_dumps");
+          suggestedDir = window.api.pathJoin(rootDir, "scripts", "local", "debug_dumps");
         }
       }
     } catch {}
