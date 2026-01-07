@@ -2503,6 +2503,68 @@ async function leaveRawModeForAction(contextLabel) {
   return true;
 }
 
+function toggleLineComments(view) {
+  if (!view) return false;
+  if (isPlaying || isPaused || waitingForFirstNote) {
+    showToast("Playback active: stop before editing.", 2400);
+    return true;
+  }
+
+  const doc = view.state.doc;
+  const ranges = view.state.selection.ranges || [];
+  if (!ranges.length) return false;
+
+  const lineNumbers = new Set();
+  for (const r of ranges) {
+    const from = Math.min(r.from, r.to);
+    const to = Math.max(r.from, r.to);
+    const fromLine = doc.lineAt(from);
+    const toLine = doc.lineAt(to);
+    for (let n = fromLine.number; n <= toLine.number; n += 1) {
+      lineNumbers.add(n);
+    }
+  }
+  const lines = Array.from(lineNumbers).sort((a, b) => a - b);
+  if (!lines.length) return false;
+
+  const lineInfo = lines.map((n) => doc.line(n));
+  const isCommented = (lineText) => {
+    const m = /^[\t ]*/.exec(lineText);
+    const i = m ? m[0].length : 0;
+    return lineText[i] === "%";
+  };
+  const allCommented = lineInfo.every((ln) => isCommented(ln.text));
+
+  const changes = [];
+  for (let idx = lineInfo.length - 1; idx >= 0; idx -= 1) {
+    const ln = lineInfo[idx];
+    const text = ln.text;
+    const m = /^[\t ]*/.exec(text);
+    const indentLen = m ? m[0].length : 0;
+    const at = ln.from + indentLen;
+    if (allCommented) {
+      if (text[indentLen] === "%") {
+        const next = text[indentLen + 1];
+        const removeLen = next === " " ? 2 : 1;
+        changes.push({ from: at, to: at + removeLen, insert: "" });
+      }
+    } else {
+      changes.push({ from: at, to: at, insert: "% " });
+    }
+  }
+
+  if (!changes.length) return true;
+  view.dispatch({ changes });
+  return true;
+}
+
+function getFocusedEditorView() {
+  const activeEl = document.activeElement;
+  if (headerEditorView && headerEditorView.dom && activeEl && headerEditorView.dom.contains(activeEl)) return headerEditorView;
+  if (editorView && editorView.dom && activeEl && editorView.dom.contains(activeEl)) return editorView;
+  return editorView || headerEditorView || null;
+}
+
 function initEditor() {
   if (editorView || !$editorHost) return;
   const customKeys = keymap.of([
@@ -2516,15 +2578,16 @@ function initEditor() {
     { key: "Mod-g", run: gotoLine },
     { key: "Ctrl-F7", run: (view) => moveLineSelection(view, 1) },
     { key: "Mod-F7", run: (view) => moveLineSelection(view, 1) },
-	    { key: "Ctrl-F5", run: (view) => moveLineSelection(view, -1) },
-	    { key: "Mod-F5", run: (view) => moveLineSelection(view, -1) },
-	    { key: "Tab", run: indentSelectionMore },
-	    { key: "Shift-Tab", run: indentSelectionLess },
-	    { key: "F5", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to play.", 2200); return true; } togglePlayPauseEffective().catch(() => {}); return true; } },
-	    { key: "F6", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to navigate errors.", 2200); return true; } activateErrorByNav(-1); return true; } },
-	    { key: "F7", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to navigate errors.", 2200); return true; } activateErrorByNav(1); return true; } },
-	    { key: "F4", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to play.", 2200); return true; } startPlaybackAtIndex(0); return true; } },
-	    { key: "F8", run: () => { resetLayout(); return true; } },
+		    { key: "Ctrl-F5", run: (view) => moveLineSelection(view, -1) },
+		    { key: "Mod-F5", run: (view) => moveLineSelection(view, -1) },
+		    { key: "Tab", run: indentSelectionMore },
+		    { key: "Shift-Tab", run: indentSelectionLess },
+		    { key: "Mod-/", run: toggleLineComments },
+		    { key: "F5", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to play.", 2200); return true; } togglePlayPauseEffective().catch(() => {}); return true; } },
+		    { key: "F6", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to navigate errors.", 2200); return true; } activateErrorByNav(-1); return true; } },
+		    { key: "F7", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to navigate errors.", 2200); return true; } activateErrorByNav(1); return true; } },
+		    { key: "F4", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to play.", 2200); return true; } startPlaybackAtIndex(0); return true; } },
+		    { key: "F8", run: () => { resetLayout(); return true; } },
 	    { key: "F9", run: () => { refreshErrorsNow(); return true; } },
 	  ]);
   const updateListener = EditorView.updateListener.of((update) => {
@@ -2705,6 +2768,7 @@ function initHeaderEditor() {
     extensions: [
       basicSetup,
       abcHighlight,
+      keymap.of([{ key: "Mod-/", run: toggleLineComments }]),
       updateListener,
       EditorState.tabSize.of(2),
       indentUnit.of("  "),
@@ -8844,6 +8908,10 @@ function wireMenuActions() {
       else if (actionType === "find" && editorView) openFindPanel(editorView);
       else if (actionType === "replace" && editorView) openReplacePanel(editorView);
       else if (actionType === "gotoLine" && editorView) gotoLine(editorView);
+      else if (actionType === "toggleComment") {
+        const view = getFocusedEditorView();
+        if (view) toggleLineComments(view);
+      }
       else if (actionType === "clearLibraryFilter") clearLibraryFilter();
       else if (actionType === "playStart") await startPlaybackAtIndex(0);
       else if (actionType === "playPrev") await startPlaybackAtMeasureOffset(-1);

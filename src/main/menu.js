@@ -98,6 +98,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
         { label: "Find…", accelerator: "CmdOrCtrl+F", click: () => sendMenuAction("find") },
         { label: "Replace…", accelerator: "CmdOrCtrl+H", click: () => sendMenuAction("replace") },
         { label: "Go to Line…", accelerator: "CmdOrCtrl+G", click: () => sendMenuAction("gotoLine") },
+        { label: "Toggle Comment", accelerator: "CmdOrCtrl+/", click: () => sendMenuAction("toggleComment") },
         { type: "separator" },
         { role: "cut" },
         { role: "copy" },

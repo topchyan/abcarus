@@ -13,6 +13,7 @@ try {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const iconPath = path.join(root, "assets", "brand", "abcarus-icon.svg");
+const iconSmallPath = path.join(root, "assets", "brand", "abcarus-icon-small.svg");
 const outDir = path.join(root, "assets", "brand", "png");
 const sizes = [16, 24, 32, 48, 64, 96, 128, 256, 512, 1024];
 const legacyIconsDir = path.join(root, "assets", "icons");
@@ -60,14 +61,21 @@ if (!fs.existsSync(iconPath)) {
   throw new Error(`Icon SVG not found: ${iconPath}`);
 }
 
-const svg = fs.readFileSync(iconPath, "utf8");
-assertNoDisallowedSvg(svg);
+const svgLarge = fs.readFileSync(iconPath, "utf8");
+assertNoDisallowedSvg(svgLarge);
+
+let svgSmall = null;
+if (fs.existsSync(iconSmallPath)) {
+  svgSmall = fs.readFileSync(iconSmallPath, "utf8");
+  assertNoDisallowedSvg(svgSmall);
+}
 
 fs.mkdirSync(outDir, { recursive: true });
 
 const iconBuffers = new Map();
 
 for (const size of sizes) {
+  const svg = svgSmall && size <= 16 ? svgSmall : svgLarge;
   const resvg = new Resvg(svg, { fitTo: { mode: "width", value: size } });
   const pngData = resvg.render();
   const buffer = pngData.asPng();

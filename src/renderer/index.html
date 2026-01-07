@@ -20,50 +20,54 @@
 </head>
 
 <body>
-  <header>
-    <div class="controls">
-      <button id="btnToggleLibrary" title="Toggle Library Tree (Ctrl+L). Shift-click: Library Catalog (Ctrl+Shift+L)">Library</button>
-      <div class="controls-sep" aria-hidden="true"></div>
-      <button id="btnFileNew" type="button" title="New file (Ctrl+N)">New File</button>
-      <button id="btnFileOpen" type="button" title="Open (Ctrl+O)">Open</button>
-      <button id="btnFileSave" type="button" title="Save (Ctrl+S)">Save</button>
-      <button id="btnFileClose" type="button" title="Close file (Ctrl+W)">Close</button>
-      <button id="btnToggleRaw" type="button" title="Toggle raw file mode">Raw</button>
-      <div class="toolbar-sep" aria-hidden="true"></div>
-      <button id="btnPlayPause" type="button" title="Play / Pause (F5)">Play</button>
-      <button id="btnStop" type="button" title="Stop (Esc)">Stop</button>
-      <div class="practice-controls" aria-label="Practice controls">
-        <button id="btnPracticeToggle" type="button" title="Practice mode (loop + tempo override)" aria-pressed="false">Practice</button>
-        <label id="practiceTempoWrap" class="practice-tempo" hidden>
-	          <span>Tempo</span>
-	          <select id="practiceTempo" aria-label="Practice tempo">
-	            <option value="0.5">50%</option>
-	            <option value="0.6">60%</option>
-	            <option value="0.7">70%</option>
-	            <option value="0.8" selected>80%</option>
-	            <option value="0.9">90%</option>
-	            <option value="1">100%</option>
-	            <option value="1.1">110%</option>
-	            <option value="1.2">120%</option>
-	          </select>
-	        </label>
+	  <header>
+	    <div class="header-row header-row-top">
+	      <div class="controls">
+	        <button id="btnToggleLibrary" title="Toggle Library Tree (Ctrl+L). Shift-click: Library Catalog (Ctrl+Shift+L)">Library</button>
+	        <div class="controls-sep" aria-hidden="true"></div>
+	        <button id="btnFileNew" type="button" title="New file (Ctrl+N)">New File</button>
+	        <button id="btnFileOpen" type="button" title="Open (Ctrl+O)">Open</button>
+	        <button id="btnFileSave" type="button" title="Save (Ctrl+S)">Save</button>
+	        <button id="btnFileClose" type="button" title="Close file (Ctrl+W)">Close</button>
+	        <button id="btnToggleRaw" type="button" title="Toggle raw file mode">Raw</button>
+	        <div class="toolbar-sep" aria-hidden="true"></div>
+	        <button id="btnPlayPause" type="button" title="Play / Pause (F5)">Play</button>
+	        <button id="btnStop" type="button" title="Stop (Esc)">Stop</button>
+	        <div class="practice-controls" aria-label="Practice controls">
+	          <button id="btnPracticeToggle" type="button" title="Practice mode (loop + tempo override)" aria-pressed="false">Practice</button>
+	          <label id="practiceTempoWrap" class="practice-tempo" hidden>
+	            <span>Tempo</span>
+	            <select id="practiceTempo" aria-label="Practice tempo">
+	              <option value="0.5">50%</option>
+	              <option value="0.6">60%</option>
+	              <option value="0.7">70%</option>
+	              <option value="0.8" selected>80%</option>
+	              <option value="0.9">90%</option>
+	              <option value="1">100%</option>
+	              <option value="1.1">110%</option>
+	              <option value="1.2">120%</option>
+	            </select>
+	          </label>
+	        </div>
 	      </div>
-      <div class="toolbar-sep" aria-hidden="true"></div>
-      <button id="btnToggleErrors" type="button" title="Toggle errors features">Errors</button>
-      <button id="btnToggleFollow" type="button" title="Toggle playback follow">Follow</button>
-      <button id="btnToggleGlobals" type="button" title="Toggle global header">Globals</button>
-    </div>
-    <div class="right-controls">
-      <label class="soundfont-control">
-        <span id="soundfontLabel">Soundfont:</span>
-        <select id="soundfontSelect" aria-label="Soundfont"></select>
-      </label>
-      <button id="soundfontAdd" title="Add soundfont">Add</button>
-      <button id="soundfontRemove" title="Remove soundfont">Remove</button>
-      <div class="controls-sep" aria-hidden="true"></div>
-      <button id="btnResetLayout" title="Reset layout (F8)">Reset</button>
-    </div>
-  </header>
+	      <div class="right-controls">
+	        <label class="soundfont-control">
+	          <span id="soundfontLabel">Soundfont:</span>
+	          <select id="soundfontSelect" aria-label="Soundfont"></select>
+	        </label>
+	        <button id="soundfontAdd" title="Add soundfont">Add</button>
+	        <button id="soundfontRemove" title="Remove soundfont">Remove</button>
+	        <div class="controls-sep" aria-hidden="true"></div>
+	        <button id="btnResetLayout" title="Reset layout (F8)">Reset</button>
+	      </div>
+	    </div>
+
+	    <div class="header-row header-row-bottom controls" aria-label="Mode toggles">
+	      <button id="btnToggleErrors" type="button" title="Toggle errors features">Errors</button>
+	      <button id="btnToggleFollow" type="button" title="Toggle playback follow">Follow</button>
+	      <button id="btnToggleGlobals" type="button" title="Toggle global header">Globals</button>
+	    </div>
+	  </header>
 
   <main>
 	    <aside class="sidebar">

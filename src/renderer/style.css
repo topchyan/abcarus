@@ -70,11 +70,26 @@ body.raw-mode .render-pane {
 
 header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px var(--space-3);
+  flex-direction: column;
+  align-items: stretch;
+  padding: 10px var(--space-3) 8px;
   border-bottom: 1px solid var(--border-color);
   gap: var(--space-3);
+}
+
+.header-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.header-row-top {
+  justify-content: space-between;
+}
+
+.header-row-bottom {
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .practice-controls {
@@ -83,7 +98,7 @@ header {
   gap: 8px;
 }
 
-.practice-tempo {
+.practice-tempo:not([hidden]) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
