@@ -68,6 +68,9 @@ const $btnPlay = document.getElementById("btnPlay");
 const $btnPause = document.getElementById("btnPause");
 const $btnStop = document.getElementById("btnStop");
 const $btnPlayPause = document.getElementById("btnPlayPause");
+const $btnPracticeToggle = document.getElementById("btnPracticeToggle");
+const $practiceTempoWrap = document.getElementById("practiceTempoWrap");
+const $practiceTempo = document.getElementById("practiceTempo");
 const $btnRestart = document.getElementById("btnRestart");
 const $btnPrevMeasure = document.getElementById("btnPrevMeasure");
 const $btnNextMeasure = document.getElementById("btnNextMeasure");
@@ -168,6 +171,14 @@ let lastTraceRunId = 0;
 let lastTracePlaybackIdx = null;
 let lastTraceTimestamp = null;
 let playbackTraceSeq = 0;
+
+let practiceEnabled = false;
+let practiceTempoMultiplier = 0.8;
+let practiceStatusText = "";
+let practiceRangeHint = "";
+let practiceRangePreview = null; // {startOffset,endOffset}
+let currentPlaybackPlan = null;
+let pendingPlaybackPlan = null;
 let lastRhythmErrorSuggestion = null;
 let errorsEnabled = false;
 
@@ -175,6 +186,9 @@ let errorActivationHighlightRange = null; // {from,to} editor offsets
 let errorActivationHighlightVersion = 0;
 let suppressErrorActivationClear = false;
 let lastSvgErrorActivationEls = [];
+let practiceBarHighlightRange = null; // {from,to} editor offsets
+let practiceBarHighlightVersion = 0;
+let lastSvgPracticeBarEls = [];
 let activeErrorHighlight = null; // {id, from, to, tuneId, filePath, message, messageKey, lastSvgRenderIdx}
 let activeErrorNavIndex = -1;
 let lastNoErrorsToastAtMs = 0;
@@ -516,11 +530,58 @@ const errorActivationHighlightPlugin = ViewPlugin.fromClass(class {
   decorations: (v) => v.decorations,
 });
 
+function buildPracticeBarDecorations(state) {
+  const r = practiceBarHighlightRange;
+  if (!r) return Decoration.none;
+  const max = state.doc.length;
+  const from = Math.max(0, Math.min(Number(r.from), max));
+  const to = Math.max(from, Math.min(Number(r.to), max));
+  if (to <= from) return Decoration.none;
+  return Decoration.set([Decoration.mark({ class: "cm-practice-bar" }).range(from, to)]);
+}
+
+const practiceBarHighlightPlugin = ViewPlugin.fromClass(class {
+  constructor(view) {
+    this.version = practiceBarHighlightVersion;
+    this.decorations = buildPracticeBarDecorations(view.state);
+  }
+  update(update) {
+    if (update.docChanged) {
+      try {
+        this.decorations = this.decorations.map(update.changes);
+      } catch {}
+      if (practiceBarHighlightRange) {
+        try {
+          const max = update.state.doc.length;
+          const mappedFrom = update.changes.mapPos(Number(practiceBarHighlightRange.from), 1);
+          const mappedTo = update.changes.mapPos(Number(practiceBarHighlightRange.to), -1);
+          const from = Math.max(0, Math.min(mappedFrom, max));
+          const to = Math.max(from, Math.min(mappedTo, max));
+          practiceBarHighlightRange = (to > from) ? { from, to } : null;
+        } catch {}
+      }
+    }
+    if (update.docChanged || update.selectionSet || this.version !== practiceBarHighlightVersion) {
+      this.version = practiceBarHighlightVersion;
+      this.decorations = buildPracticeBarDecorations(update.state);
+    }
+  }
+}, {
+  decorations: (v) => v.decorations,
+});
+
 function clearSvgErrorActivationHighlight() {
   for (const el of lastSvgErrorActivationEls) {
     try { el.classList.remove("svg-error-activation"); } catch {}
   }
   lastSvgErrorActivationEls = [];
+}
+
+function clearSvgPracticeBarHighlight() {
+  for (const el of lastSvgPracticeBarEls) {
+    try { el.classList.remove("svg-practice-bar"); } catch {}
+  }
+  lastSvgPracticeBarEls = [];
 }
 
 function highlightSvgAtEditorOffset(editorOffset) {
@@ -1381,17 +1442,16 @@ function setFileNameMeta(name) {
   updateWindowTitle();
 }
 
-function updateWindowTitle() {
-  const base = ($fileNameMeta && $fileNameMeta.textContent) ? $fileNameMeta.textContent : "Untitled";
-  const tuneDirty = Boolean(currentDoc && currentDoc.dirty);
-  const hasHeader = computeHeaderPresence() === "present";
-  const headerTag = hasHeader ? (headerDirty ? " [Header*]" : " [Header]") : "";
-  const tuneTag = tuneDirty ? " *" : "";
-  const root = libraryIndex && libraryIndex.root ? String(libraryIndex.root) : "";
-  const rootShort = formatPathTail(root, 3);
-  const rootTag = rootShort ? ` — ${rootShort}` : "";
-  document.title = `ABCarus — ${base}${headerTag}${tuneTag}${rootTag}`;
-}
+	function updateWindowTitle() {
+	  const tuneDirty = Boolean(currentDoc && currentDoc.dirty);
+	  const dirtyTag = (tuneDirty || headerDirty) ? "*" : "";
+	  const filePath = (currentDoc && currentDoc.path) ? String(currentDoc.path) : "";
+	  const fileNameWithExt = filePath ? safeBasename(filePath) : "Untitled.abc";
+	  const dirPath = filePath ? safeDirname(filePath) : (libraryIndex && libraryIndex.root ? String(libraryIndex.root) : "");
+	  const dirShort = formatPathTail(dirPath, 3);
+	  const display = dirShort ? `${dirShort}/${fileNameWithExt}` : fileNameWithExt;
+	  document.title = `ABCarus — ${display}${dirtyTag}`;
+	}
 
 function buildTuneMetaLabel(metadata) {
   if (!metadata) return "Untitled";
@@ -1929,6 +1989,59 @@ function tuneMatchesText(tune, needle) {
   return false;
 }
 
+function highlightSvgPracticeBarAtEditorOffset(editorOffset) {
+  if (!$out || !$renderPane) return false;
+  if (!Number.isFinite(editorOffset)) return false;
+  if (!editorView) return false;
+  const renderOffset = (lastRenderPayload && Number.isFinite(lastRenderPayload.offset))
+    ? lastRenderPayload.offset
+    : 0;
+  const editorText = editorView.state.doc.toString();
+  const measure = findMeasureRangeAt(editorText, editorOffset);
+  const barEls = measure ? Array.from($out.querySelectorAll(".bar-hl")) : [];
+  if (measure && barEls.length) {
+    const start = measure.start + renderOffset;
+    const end = measure.end + renderOffset;
+    const hits = barEls.filter((el) => {
+      const s = Number(el.dataset && el.dataset.start);
+      const e = Number(el.dataset && el.dataset.end);
+      if (!Number.isFinite(s)) return false;
+      const stop = Number.isFinite(e) ? e : s + 1;
+      return s < end && stop > start;
+    });
+    if (hits.length) {
+      clearSvgPracticeBarHighlight();
+      lastSvgPracticeBarEls = hits;
+      for (const el of lastSvgPracticeBarEls) {
+        try { el.classList.add("svg-practice-bar"); } catch {}
+      }
+      return true;
+    }
+  }
+  clearSvgPracticeBarHighlight();
+  return false;
+}
+
+function setPracticeBarHighlight(range) {
+  const next = range && Number.isFinite(range.from) && Number.isFinite(range.to) && range.to > range.from
+    ? { from: range.from, to: range.to }
+    : null;
+  if (
+    practiceBarHighlightRange
+    && next
+    && practiceBarHighlightRange.from === next.from
+    && practiceBarHighlightRange.to === next.to
+  ) return;
+  if (!practiceBarHighlightRange && !next) return;
+  practiceBarHighlightRange = next;
+  practiceBarHighlightVersion += 1;
+  if (!editorView) return;
+  editorView.dispatch({
+    selection: editorView.state.selection,
+    scrollIntoView: false,
+  });
+}
+
 function applyLibraryTextFilter(files, query) {
   const needle = normalizeFilterValue(query);
   if (!needle) return files;
@@ -2407,7 +2520,7 @@ function initEditor() {
 	    { key: "Mod-F5", run: (view) => moveLineSelection(view, -1) },
 	    { key: "Tab", run: indentSelectionMore },
 	    { key: "Shift-Tab", run: indentSelectionLess },
-	    { key: "F5", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to play.", 2200); return true; } transportTogglePlayPause(); return true; } },
+	    { key: "F5", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to play.", 2200); return true; } togglePlayPauseEffective().catch(() => {}); return true; } },
 	    { key: "F6", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to navigate errors.", 2200); return true; } activateErrorByNav(-1); return true; } },
 	    { key: "F7", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to navigate errors.", 2200); return true; } activateErrorByNav(1); return true; } },
 	    { key: "F4", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to play.", 2200); return true; } startPlaybackAtIndex(0); return true; } },
@@ -2436,6 +2549,10 @@ function initEditor() {
       } else {
         pendingPlaybackRangeOrigin = null;
       }
+      if (practiceEnabled) {
+        updatePracticeRangePreview();
+        updatePracticeUi();
+      }
     }
     if (update.selectionSet || update.docChanged) {
       const pos = update.state.selection.main.head;
@@ -2456,6 +2573,7 @@ function initEditor() {
       abcHighlight,
       measureErrorPlugin,
       errorActivationHighlightPlugin,
+      practiceBarHighlightPlugin,
       updateListener,
       customKeys,
       foldService.of(foldBeginTextBlocks),
@@ -3410,6 +3528,20 @@ document.addEventListener("keydown", (e) => {
   e.stopPropagation();
   toggleErrorsPopover(false);
 }, true);
+
+// Global Stop shortcut (Esc): stop playback if it is active.
+// Note: other Esc handlers (search, popovers, inputs) run in capture phase and will preventDefault/stopPropagation.
+document.addEventListener("keydown", (e) => {
+  if (e.defaultPrevented) return;
+  if (e.key !== "Escape") return;
+  if (!(isPlaying || isPaused || waitingForFirstNote)) return;
+  // Avoid surprising behavior when typing in inputs (Escape is often used to clear/close UI).
+  const el = e.target;
+  const tag = el && el.tagName ? String(el.tagName).toLowerCase() : "";
+  if (tag === "input" || tag === "textarea" || (el && el.isContentEditable)) return;
+  e.preventDefault();
+  stopPlaybackTransport();
+});
 
 if ($errorsListPopover) {
   $errorsListPopover.addEventListener("click", (e) => {
@@ -8604,6 +8736,24 @@ function wireMenuActions() {
   window.api.onMenuAction(async (action) => {
     try {
       const actionType = typeof action === "string" ? action : action && action.type;
+      const busy = isPlaybackBusy();
+      if (busy) {
+        const allowed = new Set([
+          "playStart",
+          "playPrev",
+          "playToggle",
+          "playNext",
+          "resetLayout",
+          "zoomIn",
+          "zoomOut",
+          "zoomReset",
+          "quit",
+        ]);
+        if (!allowed.has(actionType)) {
+          showToast("Playback active: stop before changing files/settings/tools.", 2400);
+          return;
+        }
+      }
       if (rawMode) {
         const blocked = new Set([
           "playStart",
@@ -8697,7 +8847,7 @@ function wireMenuActions() {
       else if (actionType === "clearLibraryFilter") clearLibraryFilter();
       else if (actionType === "playStart") await startPlaybackAtIndex(0);
       else if (actionType === "playPrev") await startPlaybackAtMeasureOffset(-1);
-      else if (actionType === "playToggle") { await transportTogglePlayPause(); }
+      else if (actionType === "playToggle") { await togglePlayPauseEffective(); }
       else if (actionType === "playNext") await startPlaybackAtMeasureOffset(1);
       else if (actionType === "resetLayout") resetLayout();
       else if (actionType === "helpGuide") await openExternal("https://abcplus.sourceforge.net/abcplus_en.pdf");
@@ -9053,6 +9203,7 @@ let player = null;
 var isPlaying = false;
 let isPaused = false;
 let suppressOnEnd = false;
+let desiredPlayerSpeed = 1;
 let lastPlaybackIdx = null;
 let lastRenderIdx = null;
 let lastStartPlaybackIdx = 0;
@@ -9089,6 +9240,7 @@ let lastMeterMismatchToastKey = null;
 let lastPlaybackMeterMismatchWarning = null;
 let lastRepeatShortBarToastKey = null;
 let lastPlaybackRepeatShortBarWarning = null;
+let playbackStartToken = 0;
 
 function clearPlaybackNoteOnEls() {
   for (const el of lastPlaybackNoteOnEls) {
@@ -9099,6 +9251,8 @@ function clearPlaybackNoteOnEls() {
 
 function resetPlaybackUiState() {
   clearPlaybackNoteOnEls();
+  clearSvgPracticeBarHighlight();
+  setPracticeBarHighlight(null);
   lastPlaybackUiRenderIdx = null;
   lastPlaybackUiEditorIdx = null;
   pendingPlaybackUiIstart = null;
@@ -9114,6 +9268,7 @@ function playbackGuardError(message) {
 
 function stopPlaybackFromGuard(message) {
   playbackGuardError(message);
+  playbackStartToken += 1;
   if (player && (isPlaying || isPaused) && typeof player.stop === "function") {
     suppressOnEnd = true;
     try { player.stop(); } catch {}
@@ -9125,6 +9280,8 @@ function stopPlaybackFromGuard(message) {
   activePlaybackRange = null;
   activePlaybackEndAbcOffset = null;
   playbackStartArmed = false;
+  currentPlaybackPlan = null;
+  pendingPlaybackPlan = null;
   setStatus("OK");
   updatePlayButton();
   clearNoteSelection();
@@ -9228,6 +9385,122 @@ function updatePlayButton() {
     else if (isPaused) $btnPlayPause.textContent = "Resume";
     else $btnPlayPause.textContent = "Play";
   }
+  updatePlaybackInteractionLock();
+  updatePracticeUi();
+}
+
+function isPlaybackBusy() {
+  return Boolean(isPlaying || isPaused || waitingForFirstNote);
+}
+
+function updatePlaybackInteractionLock() {
+  const busy = isPlaybackBusy();
+  const disable = (el, allowWhileBusy = false) => {
+    if (!el) return;
+    el.disabled = busy && !allowWhileBusy;
+  };
+
+  // Allowlist during playback: transport controls + view-only controls (zoom is via menu).
+  disable($btnPlay, true);
+  disable($btnPause, true);
+  disable($btnPlayPause, true);
+  disable($btnStop, true);
+  disable($btnResetLayout, true);
+
+  // Block file/library/tool actions while playing/paused/loading to prevent state races.
+  disable($btnToggleLibrary);
+  disable($btnLibraryRefresh);
+  disable($btnLibraryClearFilter);
+  disable($groupBy);
+  disable($sortBy);
+  disable($librarySearch);
+  disable($fileTuneSelect);
+
+  disable($btnFileNew);
+  disable($btnFileOpen);
+  disable($btnFileSave);
+  disable($btnFileClose);
+  disable($btnToggleRaw);
+
+  disable($btnToggleErrors);
+  disable($btnToggleFollow);
+  disable($btnToggleGlobals);
+  disable($fileHeaderToggle);
+  disable($fileHeaderSave);
+  disable($fileHeaderReload);
+
+  disable($btnPracticeToggle);
+  disable($practiceTempo);
+
+  disable($soundfontSelect);
+  disable($soundfontAdd);
+  disable($soundfontRemove);
+
+  disable($xIssuesAutoFix);
+  disable($xIssuesJump);
+  disable($xIssuesCopy);
+  disable($xIssuesClose, true);
+}
+
+function buildTransportPlaybackPlan() {
+  return {
+    mode: "transport",
+    rangeStart: 0,
+    rangeEnd: null,
+    loopEnabled: false,
+    tempoMultiplier: 1,
+  };
+}
+
+function buildPracticePlaybackPlan() {
+  const tempo = Number(practiceTempoMultiplier);
+  return {
+    mode: "practice",
+    rangeStart: 0,
+    rangeEnd: null,
+    loopEnabled: true,
+    tempoMultiplier: (Number.isFinite(tempo) && tempo > 0) ? tempo : 0.8,
+  };
+}
+
+function buildDefaultPlaybackPlan() {
+  return practiceEnabled ? buildPracticePlaybackPlan() : buildTransportPlaybackPlan();
+}
+
+function syncPendingPlaybackPlan() {
+  pendingPlaybackPlan = buildDefaultPlaybackPlan();
+}
+
+function applyPlaybackPlanSpeed(plan) {
+  const next = Number(plan && plan.tempoMultiplier);
+  desiredPlayerSpeed = (Number.isFinite(next) && next > 0) ? next : 1;
+  if (player && typeof player.set_speed === "function") {
+    try { player.set_speed(desiredPlayerSpeed); } catch {}
+  }
+}
+
+async function togglePlayPauseEffective() {
+  if (isPlaying) {
+    pausePlayback();
+    return;
+  }
+
+  if (isPaused) {
+    applyPlaybackPlanSpeed(currentPlaybackPlan || buildTransportPlaybackPlan());
+    await startPlaybackFromRange();
+    return;
+  }
+
+  const plan = pendingPlaybackPlan || buildDefaultPlaybackPlan();
+  pendingPlaybackPlan = null;
+  currentPlaybackPlan = plan;
+  applyPlaybackPlanSpeed(plan);
+  await startPlaybackFromRange({
+    startOffset: plan.rangeStart,
+    endOffset: plan.rangeEnd,
+    origin: plan.mode,
+    loop: plan.loopEnabled,
+  });
 }
 
 async function transportTogglePlayPause() {
@@ -9235,18 +9508,21 @@ async function transportTogglePlayPause() {
     pausePlayback();
     return;
   }
-  if (!isPaused && editorView) {
-    updatePlaybackRangeFromSelection(editorView.state.selection, null);
+  if (isPaused) {
+    await startPlaybackFromRange();
+    return;
   }
-  await startPlaybackFromRange();
+  // Transport always starts from 0 (not from cursor/selection).
+  await startPlaybackFromRange({ startOffset: 0, endOffset: null, origin: "transport", loop: false });
 }
 
 async function transportPlay() {
   if (isPlaying) return;
-  if (!isPaused && editorView) {
-    updatePlaybackRangeFromSelection(editorView.state.selection, null);
+  if (isPaused) {
+    await startPlaybackFromRange();
+    return;
   }
-  await startPlaybackFromRange();
+  await startPlaybackFromRange({ startOffset: 0, endOffset: null, origin: "transport", loop: false });
 }
 
 async function transportPause() {
@@ -9260,6 +9536,7 @@ async function transportPause() {
 }
 
 function resetPlaybackState() {
+  playbackStartToken += 1;
   stopPlaybackForRestart();
   suppressOnEnd = false;
   isPlaying = false;
@@ -9275,6 +9552,8 @@ function resetPlaybackState() {
   activePlaybackRange = null;
   activePlaybackEndAbcOffset = null;
   playbackStartArmed = false;
+  currentPlaybackPlan = null;
+  pendingPlaybackPlan = null;
   clearNoteSelection();
   resetPlaybackUiState();
   updatePlayButton();
@@ -9311,6 +9590,25 @@ function highlightSourceAt(idx, on) {
   }
 }
 
+function maybeScrollEditorToOffset(editorOffset) {
+  if (!editorView) return;
+  const max = editorView.state.doc.length;
+  const idx = Math.max(0, Math.min(Number(editorOffset) || 0, max));
+  const lineBlock = editorView.lineBlockAt(idx);
+  const lineTop = lineBlock.top;
+  const viewTop = editorView.scrollDOM.scrollTop;
+  const viewBottom = viewTop + editorView.scrollDOM.clientHeight;
+  const margin = Math.max(lineBlock.height * 4, 64);
+  if (lineTop < viewTop + margin) {
+    editorView.scrollDOM.scrollTop = Math.max(0, lineTop - margin);
+  } else if (lineTop > viewBottom - margin) {
+    editorView.scrollDOM.scrollTop = Math.max(
+      0,
+      lineTop - editorView.scrollDOM.clientHeight + margin
+    );
+  }
+}
+
 function schedulePlaybackUiUpdate(istart) {
   if (!Number.isFinite(istart)) return;
   pendingPlaybackUiIstart = istart;
@@ -9320,7 +9618,8 @@ function schedulePlaybackUiUpdate(istart) {
     const i = pendingPlaybackUiIstart;
     pendingPlaybackUiIstart = null;
     if (!isPlaying || isPreviewing) return;
-    if (!followPlayback) return;
+    const practiceActive = Boolean(activePlaybackRange && activePlaybackRange.origin === "practice");
+    if (!followPlayback && !practiceActive) return;
     if (!$out) return;
     if (!Number.isFinite(i)) return;
 
@@ -9346,6 +9645,40 @@ function schedulePlaybackUiUpdate(istart) {
     if (lastPlaybackUiEditorIdx === editorIdx && lastPlaybackUiRenderIdx === renderIdx) return;
     lastPlaybackUiEditorIdx = editorIdx;
     lastPlaybackUiRenderIdx = renderIdx;
+
+    if (practiceActive) {
+      clearPlaybackNoteOnEls();
+      const list = playbackState && Array.isArray(playbackState.measureIstarts)
+        ? playbackState.measureIstarts
+        : null;
+      if (list && list.length && editorView) {
+        const max = editorView.state.doc.length;
+        const measureIndex = findMeasureIndex(i);
+        const startI = list[Math.max(0, Math.min(list.length - 1, measureIndex))] || 0;
+        const endI = (measureIndex + 1 < list.length)
+          ? list[measureIndex + 1]
+          : (playbackIndexOffset + max);
+        const from = toEditorOffset(startI);
+        const to = toEditorOffset(endI);
+        if (Number.isFinite(from) && Number.isFinite(to) && to > from) {
+          setPracticeBarHighlight({ from, to });
+          highlightSvgPracticeBarAtEditorOffset(from);
+          if (followPlayback) {
+            maybeScrollEditorToOffset(from);
+            const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+            if (now - lastPlaybackUiScrollAt > 120 && lastSvgPracticeBarEls.length) {
+              const chosen = pickClosestNoteElement(lastSvgPracticeBarEls);
+              if (chosen) maybeScrollRenderToNote(chosen);
+              lastPlaybackUiScrollAt = now;
+            }
+          }
+          return;
+        }
+      }
+      setPracticeBarHighlight(null);
+      clearSvgPracticeBarHighlight();
+      return;
+    }
 
     clearPlaybackNoteOnEls();
     const els = $out.querySelectorAll("._" + renderIdx + "_");
@@ -9503,6 +9836,7 @@ function ensurePlayer() {
         return;
       }
       const shouldLoop = Boolean(activePlaybackRange && activePlaybackRange.loop);
+      const loopRange = shouldLoop ? activePlaybackRange : null;
       isPlaying = false;
       isPaused = false;
       waitingForFirstNote = false;
@@ -9515,18 +9849,8 @@ function ensurePlayer() {
         activePlaybackRange = null;
         activePlaybackEndAbcOffset = null;
         playbackStartArmed = false;
-        // After playback completes naturally, reset the playhead to the tune start.
-        try {
-          setPlaybackRange({ startOffset: 0, endOffset: null, origin: "cursor", loop: false });
-          if (editorView) {
-            suppressPlaybackRangeSelectionSync = true;
-            try {
-              editorView.dispatch({ selection: { anchor: 0, head: 0 } });
-            } finally {
-              suppressPlaybackRangeSelectionSync = false;
-            }
-          }
-        } catch {}
+        currentPlaybackPlan = null;
+        // Transport: end-of-tune behaves like Stop (playhead=0).
       }
       if (shouldLoop && followPlayback && lastRenderIdx != null && editorView) {
         // When looping, keep the visual follow-cursor without mutating PlaybackRange (loop invariance).
@@ -9539,7 +9863,22 @@ function ensurePlayer() {
       }
       if (shouldLoop) {
         queueMicrotask(() => {
-          startPlaybackFromRange(activePlaybackRange).catch(() => {});
+          if (!loopRange || activePlaybackRange !== loopRange) return;
+          if (pendingPlaybackPlan) {
+            const plan = pendingPlaybackPlan;
+            pendingPlaybackPlan = null;
+            currentPlaybackPlan = plan;
+            applyPlaybackPlanSpeed(plan);
+            startPlaybackFromRange({
+              startOffset: plan.rangeStart,
+              endOffset: plan.rangeEnd,
+              origin: plan.mode,
+              loop: plan.loopEnabled,
+            }).catch(() => {});
+            updatePracticeUi();
+            return;
+          }
+          startPlaybackFromRange(loopRange).catch(() => {});
         });
       }
     },
@@ -9571,26 +9910,32 @@ function ensurePlayer() {
         updatePlayButton();
         clearNoteSelection();
         if (activePlaybackRange && activePlaybackRange.loop) {
+          const loopRange = activePlaybackRange;
           queueMicrotask(() => {
-            startPlaybackFromRange(activePlaybackRange).catch(() => {});
+            if (!loopRange || activePlaybackRange !== loopRange) return;
+            if (pendingPlaybackPlan) {
+              const plan = pendingPlaybackPlan;
+              pendingPlaybackPlan = null;
+              currentPlaybackPlan = plan;
+              applyPlaybackPlanSpeed(plan);
+              startPlaybackFromRange({
+                startOffset: plan.rangeStart,
+                endOffset: plan.rangeEnd,
+                origin: plan.mode,
+                loop: plan.loopEnabled,
+              }).catch(() => {});
+              updatePracticeUi();
+              return;
+            }
+            startPlaybackFromRange(loopRange).catch(() => {});
           });
         } else {
           resumeStartIdx = null;
           activePlaybackRange = null;
           activePlaybackEndAbcOffset = null;
           playbackStartArmed = false;
-          // When a bounded playback range finishes (selection / error-loop off), reset the playhead to tune start.
-          try {
-            setPlaybackRange({ startOffset: 0, endOffset: null, origin: "cursor", loop: false });
-            if (editorView) {
-              suppressPlaybackRangeSelectionSync = true;
-              try {
-                editorView.dispatch({ selection: { anchor: 0, head: 0 } });
-              } finally {
-                suppressPlaybackRangeSelectionSync = false;
-              }
-            }
-          } catch {}
+          currentPlaybackPlan = null;
+          // Transport: end-of-range behaves like Stop (playhead=0).
         }
         return;
       }
@@ -9604,7 +9949,15 @@ function ensurePlayer() {
           stopPlaybackFromGuard("Trace run id mismatch.");
           return;
         }
-        if (activePlaybackRange && activePlaybackRange.loop && playbackRange.startOffset !== activePlaybackRange.startOffset) {
+        // Guard loop invariance only when PlaybackRange and the active loop range are expected to match.
+        // In Practice mode, the active range may be snapped/derived from selection/cursor, while the editor's
+        // PlaybackRange remains cursor/selection-based. That mismatch is intentional and should not abort playback.
+        if (
+          activePlaybackRange
+          && activePlaybackRange.loop
+          && activePlaybackRange.origin === playbackRange.origin
+          && playbackRange.startOffset !== activePlaybackRange.startOffset
+        ) {
           stopPlaybackFromGuard("Loop invariance violated: PlaybackRange.startOffset mutated.");
           return;
         }
@@ -9656,8 +10009,11 @@ function ensurePlayer() {
   // Expose for debugging in the console:
   window.p = player;
 
-  // Guard against NaN speed from localStorage:
-  if (typeof player.set_speed === "function") player.set_speed(1);
+  // Guard against NaN speed from localStorage (and allow Practice to override speed deterministically):
+  if (typeof player.set_speed === "function") {
+    const next = Number(desiredPlayerSpeed);
+    player.set_speed(Number.isFinite(next) && next > 0 ? next : 1);
+  }
 
   // Key: tell snd-1.js to use SF2 from window.abc2svg.sf2
   if (typeof player.set_sfu === "function") player.set_sfu(soundfontSource || "abc2svg.sf2");
@@ -9682,6 +10038,13 @@ function buildPlaybackState(firstSymbol) {
   let guard = 0;
   let preferredVoiceId = null;
   let preferredVoiceIndex = null;
+  const editorLen = editorView ? editorView.state.doc.length : 0;
+  const editorMaxIstart = (Number.isFinite(playbackIndexOffset) ? playbackIndexOffset : 0) + (Number.isFinite(editorLen) ? editorLen : 0);
+  const isInjectedSymbol = (symbol) => {
+    if (!symbol || !Number.isFinite(symbol.istart)) return false;
+    if (!editorLen) return false;
+    return symbol.istart >= editorMaxIstart;
+  };
   const considerVoice = (symbol) => {
     if (!symbol || !symbol.p_v) return;
     const id = symbol.p_v.id ? String(symbol.p_v.id) : null;
@@ -9703,19 +10066,47 @@ function buildPlaybackState(firstSymbol) {
     }
   };
 
-  if (s) pushUnique(symbols, s);
-  if (s) pushUnique(measures, s);
+  if (s && !isInjectedSymbol(s)) pushUnique(symbols, s);
+  if (s && !isInjectedSymbol(s)) pushUnique(measures, s);
 
   while (s && guard < 200000) {
-    pushUnique(symbols, s);
-    if (isBarLikeSymbol(s) && s.ts_next) {
-      pushUnique(measures, s.ts_next);
-      barIstarts.push(s.istart);
+    if (!isInjectedSymbol(s)) {
+      pushUnique(symbols, s);
+      if (isBarLikeSymbol(s) && s.ts_next) {
+        // In some abc2svg timelines (multi-voice + injected DRUM), a barline's ts_next may point into
+        // the injected tail. For bar-snapping/highlighting we want the next *editor-visible* symbol.
+        let next = s.ts_next;
+        let hop = 0;
+        while (next && isInjectedSymbol(next) && hop < 64) {
+          next = next.ts_next;
+          hop += 1;
+        }
+        if (next && !isInjectedSymbol(next)) {
+          pushUnique(measures, next);
+        }
+        barIstarts.push(s.istart);
+      }
+      if (isPlayableSymbol(s)) considerVoice(s);
     }
-    if (isPlayableSymbol(s)) considerVoice(s);
     s = s.ts_next;
     guard += 1;
   }
+
+  // Sort by istart (text position) so binary searches behave deterministically even with multi-voice timelines.
+  // Note: injected/appended voices (e.g. DRUM) are filtered out above, so these maps reflect editor-visible ABC.
+  symbols.sort((a, b) => a.istart - b.istart);
+  measures.sort((a, b) => a.istart - b.istart);
+
+  const uniqSorted = (arr) => {
+    const out = [];
+    let last = null;
+    for (const v of arr.slice().sort((a, b) => a - b)) {
+      if (!Number.isFinite(v)) continue;
+      if (last == null || v !== last) out.push(v);
+      last = v;
+    }
+    return out;
+  };
 
   const symbolIstarts = symbols.map((item) => item.istart);
   const measureIstarts = measures.map((item) => item.istart);
@@ -9743,9 +10134,9 @@ function buildPlaybackState(firstSymbol) {
     preferredVoiceIndex,
     symbols,
     measures,
-    symbolIstarts,
-    measureIstarts,
-    barIstarts,
+    symbolIstarts: uniqSorted(symbolIstarts),
+    measureIstarts: uniqSorted(measureIstarts),
+    barIstarts: uniqSorted(barIstarts),
     timeline,
   };
 }
@@ -9828,13 +10219,14 @@ function findMeasureIndex(idx) {
 function stopPlaybackForRestart() {
   if (player && typeof player.stop === "function") {
     suppressOnEnd = true;
-    player.stop();
+    try { player.stop(); } catch {}
   }
   clearNoteSelection();
   resetPlaybackUiState();
 }
 
 function stopPlaybackTransport() {
+  playbackStartToken += 1;
   if (player && (isPlaying || isPaused || waitingForFirstNote) && typeof player.stop === "function") {
     suppressOnEnd = true;
     try { player.stop(); } catch {}
@@ -9846,25 +10238,14 @@ function stopPlaybackTransport() {
   activePlaybackRange = null;
   activePlaybackEndAbcOffset = null;
   playbackStartArmed = false;
+  currentPlaybackPlan = null;
   setStatus("OK");
   updatePlayButton();
   clearNoteSelection();
   resetPlaybackUiState();
   setSoundfontCaption();
 
-  // After an explicit Stop, reset the playhead back to the start (like a classic transport).
-  // The user can then move the cursor/selection to choose a new start location.
-  try {
-    setPlaybackRange({ startOffset: 0, endOffset: null, origin: "cursor", loop: false });
-    if (editorView) {
-      suppressPlaybackRangeSelectionSync = true;
-      try {
-        editorView.dispatch({ selection: { anchor: 0, head: 0 } });
-      } finally {
-        suppressPlaybackRangeSelectionSync = false;
-      }
-    }
-  } catch {}
+  // Transport: explicit Stop resets internal playhead to 0.
 }
 
 function toDerivedOffset(editorOffset) {
@@ -9898,6 +10279,64 @@ function updateFollowToggle() {
   $btnToggleFollow.classList.toggle("toggle-active", followPlayback);
   $btnToggleFollow.textContent = "Follow";
   $btnToggleFollow.setAttribute("aria-pressed", followPlayback ? "true" : "false");
+}
+
+function formatPracticeTempoLabel(multiplier) {
+  const v = Number(multiplier);
+  if (!Number.isFinite(v) || v <= 0) return "";
+  return `${Math.round(v * 100)}%`;
+}
+
+function updatePracticeUi() {
+  if ($btnPracticeToggle) {
+    $btnPracticeToggle.classList.toggle("toggle-active", practiceEnabled);
+    $btnPracticeToggle.setAttribute("aria-pressed", practiceEnabled ? "true" : "false");
+    const busy = Boolean(isPlaying || waitingForFirstNote);
+    $btnPracticeToggle.disabled = busy;
+  }
+
+  if ($practiceTempoWrap) $practiceTempoWrap.hidden = !practiceEnabled;
+  if ($practiceTempo && practiceEnabled) {
+    const value = String(practiceTempoMultiplier);
+    if ($practiceTempo.value !== value) $practiceTempo.value = value;
+  }
+
+  if ($btnPracticeToggle) {
+    if (!practiceEnabled) {
+      practiceStatusText = "";
+      $btnPracticeToggle.title = "Practice mode (loop + tempo override)";
+    } else {
+      const tempo = formatPracticeTempoLabel(practiceTempoMultiplier);
+      const state = isPlaying ? "Playing" : (isPaused ? "Paused" : "Ready");
+      const pending = pendingPlaybackPlan ? " (pending)" : "";
+      let startHint = "";
+      if (practiceRangePreview && editorView) {
+        try {
+          const max = editorView.state.doc.length;
+          const start = Math.max(0, Math.min(Number(practiceRangePreview.startOffset) || 0, max));
+          const line = editorView.state.doc.lineAt(start);
+          let measureHint = "";
+          if (playbackState && Array.isArray(playbackState.measureIstarts) && playbackState.measureIstarts.length) {
+            const derived = toDerivedOffset(start);
+            if (Number.isFinite(derived)) {
+              const idx = findMeasureIndex(derived);
+              measureHint = Number.isFinite(idx) ? `M${idx + 1}` : "";
+            }
+          }
+          startHint = `Start: L${line.number}${measureHint ? ` · ${measureHint}` : ""}`;
+        } catch {}
+      }
+      const hintParts = [];
+      if (practiceRangeHint) hintParts.push(practiceRangeHint);
+      if (startHint) hintParts.push(startHint);
+      const hint = hintParts.length ? ` — ${hintParts.join(" · ")}` : "";
+      const text = tempo
+        ? `Practice: ON (${tempo}) — ${state}${pending}${hint}`
+        : `Practice: ON — ${state}${pending}${hint}`;
+      if (practiceStatusText !== text) practiceStatusText = text;
+      $btnPracticeToggle.title = practiceStatusText;
+    }
+  }
 }
 
 function setFollowFromSettings(settings) {
@@ -11454,12 +11893,190 @@ function resolvePlaybackEndAbcOffset(range, startAbcOffset) {
   return sym.istart;
 }
 
+function findBoundaryAtOrAfter(sorted, target) {
+  if (!Array.isArray(sorted) || !sorted.length) return null;
+  const t = Number(target);
+  if (!Number.isFinite(t)) return null;
+  let lo = 0;
+  let hi = sorted.length - 1;
+  let best = null;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const v = sorted[mid];
+    if (v >= t) {
+      best = v;
+      hi = mid - 1;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  return best;
+}
+
+function findBoundaryAtOrBefore(sorted, target) {
+  if (!Array.isArray(sorted) || !sorted.length) return null;
+  const t = Number(target);
+  if (!Number.isFinite(t)) return null;
+  let lo = 0;
+  let hi = sorted.length - 1;
+  let best = null;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const v = sorted[mid];
+    if (v <= t) {
+      best = v;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return best;
+}
+
+function findBarStartContaining(sortedMeasureIstarts, target) {
+  if (!Array.isArray(sortedMeasureIstarts) || !sortedMeasureIstarts.length) return null;
+  const t = Number(target);
+  if (!Number.isFinite(t)) return null;
+  let lo = 0;
+  let hi = sortedMeasureIstarts.length - 1;
+  let best = sortedMeasureIstarts[0];
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const v = sortedMeasureIstarts[mid];
+    if (v <= t) {
+      best = v;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return best;
+}
+
+function computePracticePlaybackRange(loopEnabled) {
+  if (!editorView) return null;
+  const max = editorView.state.doc.length;
+  const sel = editorView.state.selection ? editorView.state.selection.main : null;
+  if (!sel) return null;
+
+  const anchor = Math.max(0, Math.min(Number(sel.anchor) || 0, max));
+  const head = Math.max(0, Math.min(Number(sel.head) || 0, max));
+  const selStart = Math.min(anchor, head);
+  const selEnd = Math.max(anchor, head);
+  const hasSelection = selEnd > selStart;
+  const cursor = head;
+  const selectionReachesEnd = hasSelection && selEnd >= Math.max(0, max - 2);
+
+  const measureIstarts = playbackState && Array.isArray(playbackState.measureIstarts)
+    ? playbackState.measureIstarts
+    : null;
+  const canSnap = Boolean(measureIstarts && measureIstarts.length);
+
+  const snapStartToBarBoundaryAtOrAfter = (editorOffset) => {
+    if (!canSnap) return Math.max(0, Math.min(Number(editorOffset) || 0, max));
+    const derived = toDerivedOffset(editorOffset);
+    const boundary = findBoundaryAtOrAfter(measureIstarts, derived);
+    const editor = boundary == null ? null : toEditorOffset(boundary);
+    return Math.max(0, Math.min(Number.isFinite(editor) ? editor : max, max));
+  };
+  const snapEndToBarBoundaryAtOrAfter = (editorOffset) => {
+    if (!canSnap) return Math.max(0, Math.min(Number(editorOffset) || 0, max));
+    const derived = toDerivedOffset(editorOffset);
+    const boundary = findBoundaryAtOrAfter(measureIstarts, derived);
+    if (boundary == null) return max;
+    const editor = toEditorOffset(boundary);
+    return Math.max(0, Math.min(Number.isFinite(editor) ? editor : max, max));
+  };
+  const snapEnd = (editorOffset) => {
+    if (!canSnap) return Math.max(0, Math.min(Number(editorOffset) || 0, max));
+    const derived = toDerivedOffset(editorOffset);
+    const boundary = findBoundaryAtOrBefore(measureIstarts, derived);
+    const editor = boundary == null ? null : toEditorOffset(boundary);
+    return Math.max(0, Math.min(Number.isFinite(editor) ? editor : 0, max));
+  };
+  const snapBarStartContaining = (editorOffset) => {
+    if (!canSnap) return Math.max(0, Math.min(Number(editorOffset) || 0, max));
+    const derived = toDerivedOffset(editorOffset);
+    const boundary = findBarStartContaining(measureIstarts, derived);
+    const editor = boundary == null ? null : toEditorOffset(boundary);
+    return Math.max(0, Math.min(Number.isFinite(editor) ? editor : 0, max));
+  };
+
+  const fallbackWholeTune = (hint) => {
+    practiceRangeHint = hint || "looping whole tune";
+    return {
+      startOffset: 0,
+      endOffset: null,
+      origin: "practice",
+      loop: Boolean(loopEnabled),
+    };
+  };
+
+  if (!hasSelection) {
+    // In Practice, starting "from cursor" means the start of the bar containing the cursor.
+    const startOffset = snapBarStartContaining(cursor);
+    practiceRangeHint = canSnap ? "looping from cursor bar" : "looping from cursor";
+    return {
+      startOffset,
+      endOffset: null,
+      origin: "practice",
+      loop: Boolean(loopEnabled),
+    };
+  }
+
+  // Selection always means "whole bars": from the start of the first selected bar
+  // to the end of the last selected bar (next bar boundary), or tune end if selection reaches the end.
+  const snappedSelStart = snapBarStartContaining(selStart);
+  const snappedSelEnd = selectionReachesEnd ? null : snapEndToBarBoundaryAtOrAfter(selEnd);
+  if (!(snappedSelEnd == null ? true : (snappedSelEnd > snappedSelStart))) {
+    return fallbackWholeTune("selection invalid; looping whole tune");
+  }
+
+  if (snappedSelEnd == null) {
+    practiceRangeHint = canSnap ? "looping selection → end" : "looping selection → end";
+  } else {
+    practiceRangeHint = canSnap ? "looping selection (bars)" : "looping selection";
+  }
+  return {
+    startOffset: snappedSelStart,
+    endOffset: snappedSelEnd,
+    origin: "practice",
+    loop: Boolean(loopEnabled),
+  };
+}
+
+function updatePracticeRangePreview() {
+  practiceRangePreview = null;
+  if (!practiceEnabled) return;
+  if (!editorView) return;
+  if (!playbackState || !Array.isArray(playbackState.measureIstarts) || !playbackState.measureIstarts.length) return;
+  const computed = computePracticePlaybackRange(true);
+  if (!computed) return;
+  practiceRangePreview = {
+    startOffset: Number(computed.startOffset) || 0,
+    endOffset: (computed.endOffset == null) ? null : Number(computed.endOffset),
+  };
+}
+
 async function startPlaybackFromRange(rangeOverride) {
   if (!editorView) return;
-  const range = clonePlaybackRange(rangeOverride || playbackRange);
+  const startToken = (playbackStartToken += 1);
+  const abortStart = (message) => {
+    if (startToken !== playbackStartToken) return;
+    waitingForFirstNote = false;
+    isPlaying = false;
+    isPaused = false;
+    setStatus("OK");
+    updatePlayButton();
+    clearNoteSelection();
+    resetPlaybackUiState();
+    setSoundfontCaption();
+    if (message) showToast(message, 2600);
+  };
+  let range = clonePlaybackRange(rangeOverride || playbackRange);
   const max = editorView.state.doc.length;
   if (!Number.isFinite(range.startOffset) || range.startOffset < 0 || range.startOffset > max) {
-    showToast("Playback range start is invalid.", 2600);
+    abortStart("Playback range start is invalid.");
     return;
   }
 
@@ -11473,26 +12090,39 @@ async function startPlaybackFromRange(rangeOverride) {
   const sourceKey = getPlaybackSourceKey();
   const canReuse = playbackState && lastPreparedPlaybackKey && lastPreparedPlaybackKey === sourceKey && player;
   waitingForFirstNote = true;
-  if (!canReuse) {
-    stopPlaybackForRestart();
-    const desired = soundfontName || "TimGM6mb.sf2";
-    setSoundfontCaption("Loading...");
-    updateSoundfontLoadingStatus(desired);
-    await preparePlayback();
-  } else {
-    await ensureSoundfontReady();
-    stopPlaybackForRestart();
+  try {
+    if (!canReuse) {
+      stopPlaybackForRestart();
+      const desired = soundfontName || "TimGM6mb.sf2";
+      setSoundfontCaption("Loading...");
+      updateSoundfontLoadingStatus(desired);
+      await preparePlayback();
+    } else {
+      await ensureSoundfontReady();
+      stopPlaybackForRestart();
+    }
+  } catch (e) {
+    stopPlaybackFromGuard(`Playback start failed: ${(e && e.message) ? e.message : String(e)}`);
+    showToast("Playback failed to start. Try again.", 3200);
+    return;
+  }
+  if (startToken !== playbackStartToken) return;
+
+  if (range.origin === "practice") {
+    const computed = computePracticePlaybackRange(range.loop);
+    if (computed) range = clonePlaybackRange(computed);
+    practiceRangePreview = { startOffset: range.startOffset, endOffset: range.endOffset };
+    updatePracticeUi();
   }
 
   const startAbcOffset = toDerivedOffset(range.startOffset);
   if (!Number.isFinite(startAbcOffset)) {
-    showToast("Playback range start is invalid.", 2600);
+    abortStart("Playback range start is invalid.");
     return;
   }
   const startSym = findSymbolAtOrAfter(startAbcOffset);
   if (!startSym || !Number.isFinite(startSym.istart)) {
-    showToast("Playback start is not mappable.", 2600);
-    waitingForFirstNote = false;
+    abortStart("Playback start is not mappable.");
     return;
   }
 
@@ -11515,7 +12145,13 @@ async function startPlaybackFromRange(rangeOverride) {
   playbackTraceSeq = 0;
 
   playbackStartArmed = true;
-  startPlaybackFromPrepared(startSym.istart);
+  try {
+    startPlaybackFromPrepared(startSym.istart);
+  } catch (e) {
+    stopPlaybackFromGuard(`Playback start failed: ${(e && e.message) ? e.message : String(e)}`);
+    showToast("Playback failed to start. Try again.", 3200);
+    return;
+  }
   playbackStartArmed = false;
 }
 
@@ -11647,20 +12283,53 @@ if ($btnPlayPause) {
         showToast("Raw mode: switch to tune mode to play.", 2200);
         return;
       }
-      if (isPlaying) {
-        pausePlayback();
-        return;
-      }
-      if (isPaused) {
-        await startPlaybackFromRange();
-        return;
-      }
-      await startPlaybackFromRange();
+      await togglePlayPauseEffective();
     } catch (e) {
       logErr((e && e.stack) ? e.stack : String(e));
       setStatus("Error");
     }
   });
+}
+
+if ($btnPracticeToggle) {
+  $btnPracticeToggle.addEventListener("click", () => {
+    if (rawMode) {
+      showToast("Raw mode: Practice is unavailable.", 2200);
+      return;
+    }
+    if (isPlaybackBusy()) {
+      showToast("Stop playback before toggling Practice.", 2400);
+      return;
+    }
+    // Mode switch: reset playback state (playhead/range/speed) to avoid races.
+    stopPlaybackTransport();
+    practiceEnabled = !practiceEnabled;
+    if (!practiceEnabled) {
+      practiceRangeHint = "";
+      practiceRangePreview = null;
+    }
+    syncPendingPlaybackPlan();
+    if (practiceEnabled && editorView) {
+      try { editorView.focus(); } catch {}
+      updatePracticeRangePreview();
+    }
+    if (!practiceEnabled) {
+      applyPlaybackPlanSpeed(buildTransportPlaybackPlan());
+    }
+    updatePracticeUi();
+  });
+}
+
+if ($practiceTempo) {
+  $practiceTempo.addEventListener("change", () => {
+    const next = Number($practiceTempo.value);
+    if (!Number.isFinite(next)) return;
+    practiceTempoMultiplier = next;
+    if (practiceEnabled) syncPendingPlaybackPlan();
+    updatePracticeUi();
+  });
+  const initial = Number($practiceTempo.value);
+  if (Number.isFinite(initial)) practiceTempoMultiplier = initial;
 }
 
 if ($btnPlay) {

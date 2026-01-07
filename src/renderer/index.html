@@ -32,6 +32,22 @@
       <div class="toolbar-sep" aria-hidden="true"></div>
       <button id="btnPlayPause" type="button" title="Play / Pause (F5)">Play</button>
       <button id="btnStop" type="button" title="Stop (Esc)">Stop</button>
+      <div class="practice-controls" aria-label="Practice controls">
+        <button id="btnPracticeToggle" type="button" title="Practice mode (loop + tempo override)" aria-pressed="false">Practice</button>
+        <label id="practiceTempoWrap" class="practice-tempo" hidden>
+	          <span>Tempo</span>
+	          <select id="practiceTempo" aria-label="Practice tempo">
+	            <option value="0.5">50%</option>
+	            <option value="0.6">60%</option>
+	            <option value="0.7">70%</option>
+	            <option value="0.8" selected>80%</option>
+	            <option value="0.9">90%</option>
+	            <option value="1">100%</option>
+	            <option value="1.1">110%</option>
+	            <option value="1.2">120%</option>
+	          </select>
+	        </label>
+	      </div>
       <div class="toolbar-sep" aria-hidden="true"></div>
       <button id="btnToggleErrors" type="button" title="Toggle errors features">Errors</button>
       <button id="btnToggleFollow" type="button" title="Toggle playback follow">Follow</button>
@@ -100,14 +116,11 @@
 
     <div class="divider" id="paneDivider" role="separator" aria-orientation="vertical" tabindex="0"></div>
 
-    <section class="pane right">
-      <div class="file-meta-bar">
-        <div id="fileNameMeta">Untitled</div>
-      </div>
-      <div class="file-header-panel" id="fileHeaderPanel">
-        <div class="file-header-bar">
-          <button id="fileHeaderToggle" class="file-header-title header-state" type="button" title="No file header in this file.">
-            <span class="header-state-label">Header</span>
+	    <section class="pane right">
+	      <div class="file-header-panel" id="fileHeaderPanel">
+	        <div class="file-header-bar">
+	          <button id="fileHeaderToggle" class="file-header-title header-state" type="button" title="No file header in this file.">
+	            <span class="header-state-label">Header</span>
             <span id="headerStateMarker" class="header-state-marker" aria-hidden="true">—</span>
           </button>
           <select id="fileTuneSelect"></select>

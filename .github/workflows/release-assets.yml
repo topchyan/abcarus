@@ -88,7 +88,19 @@ jobs:
       - name: Build Windows artifact
         run: npx electron-builder --win --x64 --publish never
 
-      - name: Create portable zip
+      - name: Capture single-file portable exe
+        run: |
+          $portable = Get-ChildItem -Path "dist/electron-builder" -Filter "*.exe" | Where-Object {
+            $_.Name -notmatch "Setup" -and $_.Name -notmatch "win-unpacked"
+          } | Sort-Object Length -Descending | Select-Object -First 1
+          if (-not $portable) {
+            Write-Host "Top-level in dist/electron-builder:"
+            Get-ChildItem -Force -Path "dist/electron-builder" | ForEach-Object { Write-Host ("  - " + $_.Name) }
+            throw "Portable exe not found under dist/electron-builder"
+          }
+          Copy-Item -Force $portable.FullName "dist/electron-builder/ABCarus-portable-x64.exe"
+
+      - name: Create win-unpacked zip
         run: |
           $src = "dist/electron-builder/win-unpacked"
           $zip = "dist/electron-builder/ABCarus-win-unpacked-x64.zip"
@@ -102,6 +114,9 @@ jobs:
             "ABCarus portable build (Windows)",
             "",
             "IMPORTANT:",
+            "  - This zip is a full folder-based build (win-unpacked).",
+            "  - For a single-file portable build, use: ABCarus-portable-x64.exe",
+            "",
             "  - Extract the entire zip to a folder before running.",
             "  - Do NOT run ABCarus.exe directly from inside the zip viewer,",
             "    otherwise required DLLs (e.g. ffmpeg.dll) may not be found."
@@ -115,9 +130,7 @@ jobs:
           $setup = Get-ChildItem -Path "dist/electron-builder" -Filter "*Setup*.exe" | Select-Object -First 1
           if (-not $setup) { throw "Setup exe not found under dist/electron-builder" }
           $zip = "dist/electron-builder/ABCarus-win-unpacked-x64.zip"
-          $portable = Get-ChildItem -Path "dist/electron-builder" -Filter "*.exe" | Where-Object {
-            $_.Name -notmatch "Setup" -and $_.Name -notmatch "win-unpacked"
-          } | Sort-Object Length -Descending | Select-Object -First 1
+          $portable = Get-ChildItem -Path "dist/electron-builder" -Filter "ABCarus-portable-x64.exe" | Select-Object -First 1
           if (-not $portable) { throw "Portable exe not found under dist/electron-builder" }
           $lines = @()
           $lines += "$( (Get-FileHash -Algorithm SHA256 $setup.FullName).Hash.ToLower() )  $($setup.Name)"
@@ -131,5 +144,5 @@ jobs:
           files: |
             dist/electron-builder/*Setup*.exe
             dist/electron-builder/ABCarus-win-unpacked-x64.zip
-            dist/electron-builder/*Portable*.exe
+            dist/electron-builder/ABCarus-portable-x64.exe
             dist/electron-builder/SHA256SUMS-windows.txt

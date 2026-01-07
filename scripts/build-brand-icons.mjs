@@ -14,7 +14,22 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const iconPath = path.join(root, "assets", "brand", "abcarus-icon.svg");
 const outDir = path.join(root, "assets", "brand", "png");
-const sizes = [16, 24, 32, 48, 64, 128, 256, 512];
+const sizes = [16, 24, 32, 48, 64, 96, 128, 256, 512, 1024];
+const legacyIconsDir = path.join(root, "assets", "icons");
+const iconsetDir = path.join(legacyIconsDir, "ABCarus.iconset");
+
+const ICONSET_ENTRIES = [
+  { src: 16, name: "icon_16x16.png" },
+  { src: 32, name: "icon_16x16@2x.png" },
+  { src: 32, name: "icon_32x32.png" },
+  { src: 64, name: "icon_32x32@2x.png" },
+  { src: 128, name: "icon_128x128.png" },
+  { src: 256, name: "icon_128x128@2x.png" },
+  { src: 256, name: "icon_256x256.png" },
+  { src: 512, name: "icon_256x256@2x.png" },
+  { src: 512, name: "icon_512x512.png" },
+  { src: 1024, name: "icon_512x512@2x.png" },
+];
 
 function assertNoDisallowedSvg(svg) {
   const checks = [
@@ -50,15 +65,39 @@ assertNoDisallowedSvg(svg);
 
 fs.mkdirSync(outDir, { recursive: true });
 
+const iconBuffers = new Map();
+
 for (const size of sizes) {
   const resvg = new Resvg(svg, { fitTo: { mode: "width", value: size } });
   const pngData = resvg.render();
   const buffer = pngData.asPng();
+  iconBuffers.set(size, buffer);
   const outPath = path.join(outDir, `icon-${size}.png`);
   fs.writeFileSync(outPath, buffer);
   const dims = readPngSize(buffer);
   if (dims.width !== size || dims.height !== size) {
     throw new Error(`Unexpected PNG size for ${outPath}: ${dims.width}x${dims.height}`);
+  }
+}
+
+if (process.env.ABCARUS_WRITE_LEGACY_ICONS === "1") {
+  fs.mkdirSync(legacyIconsDir, { recursive: true });
+  for (const size of sizes) {
+    const buffer = iconBuffers.get(size);
+    if (!buffer) continue;
+    const outPath = path.join(legacyIconsDir, `abcarus_${size}.png`);
+    fs.writeFileSync(outPath, buffer);
+  }
+  const icon512 = iconBuffers.get(512);
+  if (icon512) {
+    fs.writeFileSync(path.join(legacyIconsDir, "icon.png"), icon512);
+  }
+
+  fs.mkdirSync(iconsetDir, { recursive: true });
+  for (const entry of ICONSET_ENTRIES) {
+    const buffer = iconBuffers.get(entry.src);
+    if (!buffer) continue;
+    fs.writeFileSync(path.join(iconsetDir, entry.name), buffer);
   }
 }
 

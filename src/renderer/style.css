@@ -59,12 +59,6 @@ body {
   flex-direction: column;
 }
 
-body.raw-mode #fileNameMeta::after {
-  content: "  [RAW]";
-  color: #b45309;
-  font-weight: 700;
-}
-
 body.raw-mode .right-split {
   grid-template-columns: 1fr;
 }
@@ -81,6 +75,24 @@ header {
   padding: 10px var(--space-3);
   border-bottom: 1px solid var(--border-color);
   gap: var(--space-3);
+}
+
+.practice-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.practice-tempo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.practice-tempo select {
+  min-height: var(--button-height);
 }
 
 .toolbar-sep {
@@ -160,6 +172,11 @@ header {
   color: var(--button-text);
 }
 
+#fileHeaderToggle:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 #fileHeaderToggle:hover {
   background: var(--button-bg-hover);
 }
@@ -223,6 +240,11 @@ main {
   color: var(--button-text);
 }
 
+.soundfont-control select:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 #soundfontLabel.loading {
   font-weight: 700;
 }
@@ -235,6 +257,12 @@ main {
   background: var(--button-bg);
   color: var(--button-text);
   cursor: pointer;
+}
+
+#soundfontAdd:disabled,
+#soundfontRemove:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 #soundfontAdd:hover,
@@ -761,15 +789,6 @@ body.resizing * {
   gap: 6px;
 }
 
-.file-meta-bar {
-  padding: 8px 12px;
-  border-bottom: 1px solid #eee;
-  font-size: 13px;
-  font-weight: 700;
-  color: #222;
-  letter-spacing: 0.01em;
-}
-
 .file-header-panel.active {
   display: grid;
 }
@@ -784,6 +803,11 @@ body.resizing * {
   align-items: center;
   gap: 10px;
   min-width: 0;
+}
+
+.file-header-bar select:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .file-header-title {
@@ -1039,6 +1063,13 @@ svg {
   stroke-width: 1.3;
 }
 
+.bar-hl.svg-practice-bar {
+  fill: #7ef7b4;
+  fill-opacity: 0.16;
+  stroke: #2f855a;
+  stroke-width: 1.2;
+}
+
 .bar-hl {
   fill-opacity: 0;
   pointer-events: none;
@@ -1066,6 +1097,11 @@ svg {
 .cm-error-activation {
   background: rgba(255, 229, 100, 0.55);
   border-bottom: 1px solid rgba(180, 120, 0, 0.65);
+}
+
+.cm-practice-bar {
+  background: rgba(126, 247, 180, 0.2);
+  border-bottom: 1px solid rgba(47, 133, 90, 0.35);
 }
 
 .taskbar {
@@ -1481,7 +1517,6 @@ body.print-mode .sidebar,
 body.print-mode .divider,
 body.print-mode .split-divider,
 body.print-mode .editor-pane,
-body.print-mode .file-meta-bar,
 body.print-mode .file-header-panel,
 body.print-mode .taskbar {
   display: none;

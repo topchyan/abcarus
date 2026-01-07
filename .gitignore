@@ -18,6 +18,9 @@ third_party/python-embed/.cache/
 # Local update artifacts (never commit)
 third_party/_upd/
 
+# Brand drafts (never commit)
+assets/brand/_drafts/
+
 # Stray abc2svg extracted files (repo root)
 /*-1.js
 /edit-1.xhtml

@@ -7,7 +7,7 @@ appdir="${repo_root}/dist/appimage/AppDir"
 app_name="abcarus"
 desktop_id="com.abcarus.ABCarus"
 electron_dist="${repo_root}/node_modules/electron/dist"
-icon_path="${repo_root}/assets/icons/abcarus_512.png"
+icon_path="${repo_root}/assets/icons/icon.png"
 python_embed_root="${repo_root}/third_party/python-embed/linux-x64"
 clean=1
 
