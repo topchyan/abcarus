@@ -20,6 +20,8 @@ third_party/_upd/
 
 # Brand drafts (never commit)
 assets/brand/_drafts/
+assets/brand/png/
+assets/icons/ABCarus.iconset/
 
 # Stray abc2svg extracted files (repo root)
 /*-1.js
