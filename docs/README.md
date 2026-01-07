@@ -40,6 +40,8 @@ Packaging scripts are available:
 - `docs/architecture.md`: Main/renderer responsibilities, IPC, and data flow.
 - `docs/REQUIREMENTS.md`: Consolidated product + engineering requirements/invariants.
 - `docs/METHODOLOGY.md`: How we develop (chat-driven) without losing context.
+- `docs/abc-syntax-policy.md`: ABCarus rules for ABC syntax, linting, and safe transforms.
+- `docs/abc-standards.md`: ABC 2.1/2.2 references used for lint/transforms.
 - `docs/python-build-standalone.md`: Bundled Python policy + PBS install workflow.
 - `docs/packaging.md`: Packaging workflows per OS.
 - `docs/soundfonts.md`: Soundfont selection and local setup.
