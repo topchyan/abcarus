@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.2] - 2026-01-07
+### Added
+- Editor: toggle comment (`Cmd/Ctrl+/`).
+### Changed
+- Branding: update app icon assets.
+- Repo: keep internal-only “kitchen” artifacts out of GitHub.
+### Fixed
+- Windows: improve window icon selection.
+
 ## [0.17.1] - 2026-01-06
 ### Added
 - Developer tooling: third-party upgrade review (`npm run thirdparty:review`) and abc2svg upgrade helper (`npm run abc2svg:upgrade`).
