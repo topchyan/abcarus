@@ -969,10 +969,15 @@ if(rhy=='+')
 break
 nextim+=dt}
 set_dur(vch.last_sym,s.time+(s.dur||0))}}
-abc2svg.drum=function(first,voice_tb,cfmt){var c,i,on,n,nb,ss,v,str,pits,vols,l,dl,s=first,C=abc2svg.C,vdr={v:voice_tb.length,id:"_drum",time:0,sym:{type:C.BLOCK,subtype:"midiprog",chn:9,time:0,dur:0}},_sdr={v:vdr.v,p_v:vdr,type:C.NOTE,nhd:0}
+abc2svg.drum=function(first,voice_tb,cfmt){var c,i,on,n,nb,ss,v,str,pits,vols,l,dl,i_rst,j_rst,s=first,C=abc2svg.C,vdr={v:voice_tb.length,id:"_drum",time:0,sym:{type:C.BLOCK,subtype:"midiprog",chn:9,time:0,dur:0}},_sdr={v:vdr.v,p_v:vdr,type:C.NOTE,nhd:0}
 function gendr(ss,s){var c,i,j,sdr,s2,ti=ss.time,te=s.time+(s.dur||0),d=dl*nb/l
-while(ti<te){j=0
-for(i=0;i<str.length;i++){c=str[i]
+while(!ss.dur)
+ss=ss.next
+while(ti<te){if(ss.bar_type&&(ss.text>='2'&&ss.text<='9')){i=i_rst-1
+j=j_rst-2
+while(!ss.dur)
+ss=ss.ts_next}else{i=j=0}
+for(;i<str.length;i++){c=str[i]
 if(c=='z'){ti+=d
 c=str[i+1]
 if(c>='2'&&c<='9'){ti+=(+c-1)*d
@@ -993,11 +998,15 @@ sdr.prev=s2
 sdr.next.prev=sdr}else{vdr.last_sym.next=sdr
 sdr.prev=vdr.last_sym
 vdr.last_sym=sdr}
-while(s.time>ti)
-s=s.ts_prev
-while(s.time<ti)
+while(ss.time<ti){if(ss.wmeasure)
+dl=ss.wmeasure
+if(ss.bar_type&&ss.text&&ss.text=='1')
+i_rst=i,j_rst=j
+ss=ss.ts_next}
+s=ss
+while(!s.dur&&s.time==ti)
 s=s.ts_next
-while(s.time==ti&&s.v<sdr.v)
+while(s.dur&&s.time==ti&&s.v<sdr.v)
 s=s.ts_next
 sdr.ts_next=s
 sdr.ts_prev=s.ts_prev
