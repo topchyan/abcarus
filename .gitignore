@@ -7,6 +7,8 @@ dist/
 # Local-only helpers and artifacts
 scripts/local/
 debug_dumps/
+assets/brand/
+docs/qa/
 
 # Bundled Python runtime
 third_party/python-embed/**
@@ -20,6 +22,7 @@ third_party/_upd/
 
 # Brand drafts (never commit)
 assets/brand/_drafts/
+assets/brand/archives/
 assets/brand/png/
 assets/icons/ABCarus.iconset/
 

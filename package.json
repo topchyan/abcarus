@@ -6,7 +6,6 @@
   "scripts": {
     "start": "electron .",
     "appimage": "bash scripts/build_appimage.sh",
-    "build:brand": "node scripts/build-brand-icons.mjs",
     "pbs:check": "node scripts/check_pbs_lock.mjs",
     "pbs:check-runtime": "node scripts/check_pbs_runtime.mjs",
     "predist:dir": "node scripts/check_pbs_runtime.mjs",
@@ -28,7 +27,6 @@
     "release:major": "node scripts/release.mjs major"
   },
   "devDependencies": {
-    "@resvg/resvg-js": "^2.6.0",
     "electron": "^28.0.0",
     "electron-builder": "^24.13.3",
     "semver": "^7.6.3"
