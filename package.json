@@ -18,6 +18,7 @@
     "test:measures": "node devtools/measures_harness/run_tests.js",
     "test:transpose": "node devtools/transpose_harness/run_tests.js",
     "test:settings": "node devtools/settings_harness/run_tests.js",
+    "test:truth-scale": "node devtools/truth_scale_53_harness/run_tests.js",
     "size:report": "node devtools/size_report.js dist/appimage/AppDir",
     "version:show": "node scripts/show-version.mjs",
     "thirdparty:review": "node scripts/third_party-review.mjs",
