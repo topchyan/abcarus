@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-01-08
+### Added
+- CI: stable `/releases/latest/download/...` filenames for all release artifacts.
+- CI: Linux: portable folder build (`ABCarus-x86_64-portable.tar.gz`) alongside AppImage.
+- CI: macOS: DMG builds for both Apple Silicon (arm64) and Intel (x64).
+### Changed
+- CI: Windows: publish stable-named Setup/portable/zip artifacts and checksums.
+### Fixed
+- Icons: generate transparent app icons without losing colors; improve Linux window icon visibility (default gold, optional override).
+
 ## [0.17.2] - 2026-01-07
 ### Added
 - Editor: toggle comment (`Cmd/Ctrl+/`).
