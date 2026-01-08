@@ -63,10 +63,12 @@ mkdir -p "$OUT_DIR"
 
 make_one() {
   local src="$1"
-  local out="$2"
-  local size="$3"
-  local pad="$4"
+  local mask_src="$2"
+  local out="$3"
+  local size="$4"
+  local pad="$5"
   local target
+  local alpha_boost="1.0"
   target="$(python3 - <<PY
 import math
 size=int("$size")
@@ -76,20 +78,28 @@ print(max(1, int(round(size*pad))))
 PY
 )"
 
-  convert "$src" \
-    -trim +repage \
-    -resize "${target}x${target}" \
-    -background none \
-    -gravity center \
-    -extent "${size}x${size}" \
-    -define png:color-type=6 \
+  if [[ "$size" -le 16 ]]; then alpha_boost="2.2"
+  elif [[ "$size" -le 24 ]]; then alpha_boost="1.9"
+  elif [[ "$size" -le 32 ]]; then alpha_boost="1.6"
+  elif [[ "$size" -le 48 ]]; then alpha_boost="1.35"
+  else alpha_boost="1.15"
+  fi
+
+  # Generate a transparent icon by applying the alpha mask from the BW silhouette.
+  # We intentionally do NOT trim either input: keeping the original alignment avoids drift between src/mask.
+  # Apply the mask at the original resolution first, then scale down, to avoid washed-out alpha at tiny sizes.
+  convert \
+    -size "${size}x${size}" xc:none \
+    \( "$src" \( "$mask_src" -alpha extract \) -compose CopyOpacity -composite -resize "${target}x${target}" -channel A -evaluate multiply "${alpha_boost}" +channel \) \
+    -gravity center -composite \
+    -depth 8 -define png:color-type=6 \
     "$out"
 }
 
 echo "Generating transparent app icons from:"
 echo "  $APP_SRC"
 for s in "${sizes[@]}"; do
-  make_one "$APP_SRC" "$OUT_DIR/abcarus_${s}.png" "$s" "$PADDING"
+  make_one "$APP_SRC" "$MASK_SRC" "$OUT_DIR/abcarus_${s}.png" "$s" "$PADDING"
 done
 
 cp "$OUT_DIR/abcarus_512.png" "$OUT_DIR/icon.png"
