@@ -46,16 +46,37 @@ jobs:
       - name: Build AppImage
         run: bash scripts/build_appimage_release.sh
 
+      - name: Create portable tar.gz (AppDir)
+        run: |
+          cat > dist/appimage/AppDir/README-PORTABLE.txt <<'EOF'
+          ABCarus portable folder build (Linux)
+          
+          This tarball contains the AppImage "AppDir" folder, packaged as a portable directory.
+          
+          Usage:
+            1) Extract the entire tar.gz into a folder.
+            2) Run:
+                 ./AppRun
+               (or: ./usr/bin/abcarus)
+          
+          Notes:
+            - Keep the folder structure intact.
+            - If you prefer a single-file app, use the AppImage build instead.
+          EOF
+          chmod 0644 dist/appimage/AppDir/README-PORTABLE.txt
+          tar -C dist/appimage/AppDir -czf dist/appimage/ABCarus-x86_64-portable.tar.gz .
+
       - name: Compute SHA256
         run: |
           cd dist/appimage
-          sha256sum ABCarus-x86_64.AppImage > SHA256SUMS-linux.txt
+          sha256sum ABCarus-x86_64.AppImage ABCarus-x86_64-portable.tar.gz > SHA256SUMS-linux.txt
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/appimage/ABCarus-x86_64.AppImage
+            dist/appimage/ABCarus-x86_64-portable.tar.gz
             dist/appimage/SHA256SUMS-linux.txt
 
   windows-x64:
