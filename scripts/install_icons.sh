@@ -1,15 +1,16 @@
-APPDIR="$(cd "$(dirname "$0")/.." && pwd)"
+#!/usr/bin/env bash
+set -euo pipefail
+
+APPDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ICONDIR="$APPDIR/assets/icons"
+DEST_ROOT="${XDG_DATA_HOME:-"$HOME/.local/share"}/icons/hicolor"
 
-mkdir -p ~/.local/share/icons/hicolor/{16x16,24x24,32x32,48x48,64x64,96x96,128x128,256x256,512x512}/apps
-cp "$ICONDIR/abcarus_16.png"  ~/.local/share/icons/hicolor/16x16/apps/abcarus.png
-cp "$ICONDIR/abcarus_24.png"  ~/.local/share/icons/hicolor/24x24/apps/abcarus.png
-cp "$ICONDIR/abcarus_32.png"  ~/.local/share/icons/hicolor/32x32/apps/abcarus.png
-cp "$ICONDIR/abcarus_48.png"  ~/.local/share/icons/hicolor/48x48/apps/abcarus.png
-cp "$ICONDIR/abcarus_64.png"  ~/.local/share/icons/hicolor/64x64/apps/abcarus.png
-cp "$ICONDIR/abcarus_96.png"  ~/.local/share/icons/hicolor/96x96/apps/abcarus.png
-cp "$ICONDIR/abcarus_128.png" ~/.local/share/icons/hicolor/128x128/apps/abcarus.png
-cp "$ICONDIR/abcarus_256.png" ~/.local/share/icons/hicolor/256x256/apps/abcarus.png
-cp "$ICONDIR/abcarus_512.png" ~/.local/share/icons/hicolor/512x512/apps/abcarus.png
+sizes=(16 24 32 48 64 96 128 256 512)
 
-gtk-update-icon-cache -f ~/.local/share/icons/hicolor 2>/dev/null || true
+for size in "${sizes[@]}"; do
+  dir="$DEST_ROOT/${size}x${size}/apps"
+  mkdir -p "$dir"
+  install -m 0644 "$ICONDIR/abcarus_${size}.png" "$dir/abcarus.png"
+done
+
+gtk-update-icon-cache -f "$DEST_ROOT" 2>/dev/null || true
