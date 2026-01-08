@@ -61,12 +61,6 @@
 	        <button id="btnResetLayout" title="Reset layout (F8)">Reset</button>
 	      </div>
 	    </div>
-
-	    <div class="header-row header-row-bottom controls" aria-label="Mode toggles">
-	      <button id="btnToggleErrors" type="button" title="Toggle errors features">Errors</button>
-	      <button id="btnToggleFollow" type="button" title="Toggle playback follow">Follow</button>
-	      <button id="btnToggleGlobals" type="button" title="Toggle global header">Globals</button>
-	    </div>
 	  </header>
 
   <main>
@@ -133,6 +127,11 @@
             Errors: 0
           </button>
           <span id="errorsFocusMessage" class="errors-focus-message" hidden></span>
+          <div class="file-header-toggles controls" aria-label="Mode toggles">
+            <button id="btnToggleErrors" type="button" title="Toggle errors features">Errors</button>
+            <button id="btnToggleFollow" type="button" title="Toggle playback follow">Follow</button>
+            <button id="btnToggleGlobals" type="button" title="Toggle global header">Globals</button>
+          </div>
           <div class="file-header-meta">
             <div class="dirty-indicator" id="dirtyIndicator" aria-live="polite"></div>
           </div>

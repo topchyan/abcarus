@@ -87,11 +87,6 @@ header {
   justify-content: space-between;
 }
 
-.header-row-bottom {
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .practice-controls {
   display: inline-flex;
   align-items: center;
@@ -820,6 +815,13 @@ body.resizing * {
   min-width: 0;
 }
 
+.file-header-toggles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
 .file-header-bar select:disabled {
   opacity: 0.45;
   cursor: default;
@@ -844,10 +846,8 @@ body.resizing * {
   justify-content: flex-end;
   gap: 10px;
   min-width: 0;
-  flex: 1;
   font-size: 12px;
   color: #444;
-  margin-left: auto;
 }
 
 #fileTuneSelect {

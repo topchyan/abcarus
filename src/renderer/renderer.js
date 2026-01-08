@@ -701,20 +701,24 @@ let disclaimerShown = false;
 function buildAbcDecorations(state) {
   const builder = new RangeSetBuilder();
   let inTextBlock = false;
+  let lastNonEmptyKind = "";
 
   for (let lineNo = 1; lineNo <= state.doc.lines; lineNo += 1) {
     const line = state.doc.line(lineNo);
     const text = line.text;
+    const trimmed = text.trim();
 
     if (/^%%\s*begintext\b/i.test(text)) {
       builder.add(line.from, line.to, Decoration.mark({ class: "cm-abc-directive" }));
       inTextBlock = true;
+      lastNonEmptyKind = "directive";
       continue;
     }
 
     if (/^%%\s*endtext\b/i.test(text)) {
       builder.add(line.from, line.to, Decoration.mark({ class: "cm-abc-directive" }));
       inTextBlock = false;
+      lastNonEmptyKind = "directive";
       continue;
     }
 
@@ -727,31 +731,45 @@ function buildAbcDecorations(state) {
 
     if (/^%%/.test(text)) {
       builder.add(line.from, line.to, Decoration.mark({ class: "cm-abc-directive" }));
+      if (trimmed) lastNonEmptyKind = "directive";
       continue;
     }
 
     if (/^%/.test(text)) {
       builder.add(line.from, line.to, Decoration.mark({ class: "cm-abc-comment" }));
+      if (trimmed) lastNonEmptyKind = "comment";
       continue;
     }
 
     if (/^w:/.test(text)) {
       builder.add(line.from, line.to, Decoration.mark({ class: "cm-abc-lyric-inline" }));
+      if (trimmed) lastNonEmptyKind = "lyrics";
       continue;
     }
 
     if (/^W:/.test(text)) {
       builder.add(line.from, line.to, Decoration.mark({ class: "cm-abc-lyric-block" }));
+      if (trimmed) lastNonEmptyKind = "lyrics";
       continue;
     }
 
     if (/^[A-Z]:/.test(text)) {
       builder.add(line.from, line.to, Decoration.mark({ class: "cm-abc-header" }));
+      if (trimmed) lastNonEmptyKind = "header";
+      continue;
+    }
+
+    // Field continuation marker (ABC 2.1/2.2).
+    // If it continues a directive line (e.g. `%%MIDI ...`), highlight it as a directive; otherwise as a header field.
+    if (/^\s*\+:\s*/.test(text)) {
+      const cls = lastNonEmptyKind === "directive" ? "cm-abc-directive" : "cm-abc-header";
+      builder.add(line.from, line.to, Decoration.mark({ class: cls }));
       continue;
     }
 
     if (text.trim().length) {
       builder.add(line.from, line.to, Decoration.mark({ class: "cm-abc-notes" }));
+      if (trimmed) lastNonEmptyKind = "notes";
     }
   }
 
@@ -7186,12 +7204,28 @@ async function buildDebugDumpSnapshot() {
       followPlayback: Boolean(followPlayback),
       followVoiceId,
       followVoiceIndex,
+      practiceEnabled: Boolean(practiceEnabled),
+      practiceTempoMultiplier: Number.isFinite(Number(practiceTempoMultiplier)) ? Number(practiceTempoMultiplier) : null,
+      practiceRangeHint: practiceRangeHint || "",
+      practiceRangePreview: practiceRangePreview ? {
+        startOffset: Number(practiceRangePreview.startOffset) || 0,
+        endOffset: (practiceRangePreview.endOffset == null) ? null : Number(practiceRangePreview.endOffset),
+      } : null,
       soundfontName: soundfontName || null,
       soundfontSource: soundfontSource || null,
+      soundfontReadyName: soundfontReadyName || null,
+      lastSoundfontApplied: lastSoundfontApplied || null,
       playbackIndexOffset,
       playbackRange: clonePlaybackRange(playbackRange),
       activePlaybackRange: activePlaybackRange ? clonePlaybackRange(activePlaybackRange) : null,
       activePlaybackEndAbcOffset,
+      lastStartPlaybackIdx,
+      resumeStartIdx,
+      desiredPlayerSpeed: Number.isFinite(Number(desiredPlayerSpeed)) ? Number(desiredPlayerSpeed) : null,
+      currentPlaybackPlan,
+      pendingPlaybackPlan,
+      lastPlaybackGuardMessage,
+      lastPlaybackAbortMessage,
       payload: playbackPayload,
       debugState: playbackDebug && typeof playbackDebug.getState === "function" ? playbackDebug.getState() : null,
       timeline: playbackDebug && typeof playbackDebug.getTimeline === "function" ? playbackDebug.getTimeline() : null,
@@ -10897,25 +10931,53 @@ function extractDrumPlaybackBars(text) {
     }
     const drumMatch = line.match(/^%%MIDI\s+drum\s+(.+)$/i);
     if (drumMatch) {
-      const parts = drumMatch[1].trim().split(/\s+/);
-      const patternText = parts.shift();
-      const pattern = parseDrumPattern(patternText);
-      if (pattern) {
-        const nums = parts.map((n) => Number(n)).filter((n) => Number.isFinite(n));
-        const pitchCount = pattern.hitCount || 0;
-        const pitches = nums.slice(0, pitchCount);
-        const velocities = nums.slice(pitchCount, pitchCount * 2);
-        currentPattern = {
-          id: patterns.length + 1,
-          raw: patternText,
-          tokens: pattern.tokens,
-          totalUnits: pattern.totalUnits,
-          hitCount: pattern.hitCount,
-          pitches,
-          velocities,
-        };
-        patterns.push(currentPattern);
+      const rest = drumMatch[1].trim();
+      // Compatibility feature (ABCarus): allow continuation for long directives via `+:`.
+      // Example:
+      //   %%MIDI drum d3 d d z d
+      //   %%MIDI drum +: 36 37 37 37
+      //   %%MIDI drum +: 100 120 120 120
+      // abc2svg does not define this behavior, but users often write long drum directives this way.
+      if (/^\+:/i.test(rest)) {
+        if (!currentPattern || !currentPattern.hitCount) return;
+        const nums = rest.replace(/^\+:\s*/i, "").split(/\s+/).map((n) => Number(n)).filter((n) => Number.isFinite(n));
+        if (!nums.length) return;
+        const needed = Number(currentPattern.hitCount) || 0;
+        let i = 0;
+        while (i < nums.length && currentPattern.pitches.length < needed) currentPattern.pitches.push(nums[i++]);
+        while (i < nums.length && currentPattern.velocities.length < needed) currentPattern.velocities.push(nums[i++]);
+        return;
       }
+
+      const tokens = rest.split(/\s+/).filter(Boolean);
+      // Pattern is the concatenation of non-numeric tokens at the start.
+      // This makes `%%MIDI drum d3 d d z d` work as if it was `d3ddzd`.
+      const isInt = (t) => /^-?\d+$/.test(String(t || "").trim());
+      let firstNum = -1;
+      for (let i = 0; i < tokens.length; i += 1) {
+        if (isInt(tokens[i])) { firstNum = i; break; }
+      }
+      const patternTokens = (firstNum === -1 ? tokens : tokens.slice(0, firstNum)).filter((t) => t !== "+:");
+      const patternText = patternTokens.join("");
+      const pattern = parseDrumPattern(patternText);
+      if (!pattern) return;
+
+      const nums = (firstNum === -1 ? [] : tokens.slice(firstNum))
+        .map((n) => Number(n))
+        .filter((n) => Number.isFinite(n));
+      const pitchCount = pattern.hitCount || 0;
+      const pitches = nums.slice(0, pitchCount);
+      const velocities = nums.slice(pitchCount, pitchCount * 2);
+      currentPattern = {
+        id: patterns.length + 1,
+        raw: patternText,
+        tokens: pattern.tokens,
+        totalUnits: pattern.totalUnits,
+        hitCount: pattern.hitCount,
+        pitches,
+        velocities,
+      };
+      patterns.push(currentPattern);
     }
   }
   const applyInlineField = (field, value) => {
@@ -10968,6 +11030,13 @@ function extractDrumPlaybackBars(text) {
   for (const rawLine of lines) {
     const trimmed = rawLine.trim();
     if (!trimmed) continue;
+    // Compatibility feature (ABCarus): allow `+:` continuation lines for long directives.
+    // If users choose to omit repeating the directive prefix (e.g. `+: 36 37 ...` after `%%MIDI drum ...`),
+    // treat it as continuing the last `%%MIDI drum` line for drum extraction.
+    if (/^\+:/i.test(trimmed)) {
+      applyMidiDirective(`%%MIDI drum ${trimmed}`);
+      continue;
+    }
     // Inline field directives like "[P:...]" or "[M:...]" are not musical bars, but some of them
     // affect playback state (meter/unit/voice/body start), so we handle those and skip scanning.
     if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
@@ -12035,7 +12104,9 @@ function computePracticePlaybackRange(loopEnabled) {
   const head = Math.max(0, Math.min(Number(sel.head) || 0, max));
   const selStart = Math.min(anchor, head);
   const selEnd = Math.max(anchor, head);
-  const hasSelection = selEnd > selStart;
+  // CodeMirror selections can be a single-character "micro selection" (e.g., accidental drag or click quirks).
+  // In Practice, treat tiny selections as a cursor to avoid confusing one-character ranges with bar selections.
+  const hasSelection = (selEnd - selStart) > 1;
   const cursor = head;
   const selectionReachesEnd = hasSelection && selEnd >= Math.max(0, max - 2);
 
@@ -12193,6 +12264,22 @@ async function startPlaybackFromRange(rangeOverride) {
     if (computed) range = clonePlaybackRange(computed);
     practiceRangePreview = { startOffset: range.startOffset, endOffset: range.endOffset };
     updatePracticeUi();
+    try {
+      const end = (range.endOffset == null) ? null : Number(range.endOffset);
+      recordDebugLog("info", [{
+        event: "practice-start",
+        startOffset: Number(range.startOffset) || 0,
+        endOffset: end,
+        derivedStart: (Number(range.startOffset) || 0) + (playbackIndexOffset || 0),
+        derivedEnd: end == null ? null : end + (playbackIndexOffset || 0),
+        loop: Boolean(range.loop),
+        tempoMultiplier: Number.isFinite(Number(desiredPlayerSpeed)) ? Number(desiredPlayerSpeed) : null,
+        selection: editorView ? {
+          anchor: editorView.state.selection.main.anchor,
+          head: editorView.state.selection.main.head,
+        } : null,
+      }]);
+    } catch {}
   }
 
   const startAbcOffset = toDerivedOffset(range.startOffset);
