@@ -71,12 +71,11 @@ function resolveWindowIconPath() {
   if (process.platform === "linux") {
     const forced = String(process.env.ABCARUS_LINUX_WINDOW_ICON_VARIANT || "").trim().toLowerCase();
     const detected = detectLinuxPrefersDarkTheme();
-    // Default to the "dark" (gold) icon when we cannot reliably infer the titlebar theme,
-    // because it stays visible on both light and dark backgrounds.
+    // Linux desktop environments vary widely, and Electron's `nativeTheme` is not always reliable
+    // (especially for titlebar theme darkness). To avoid an invisible titlebar icon, default to
+    // the "dark" (gold) icon unless explicitly forced to "light".
     const shouldUseDark =
-      forced === "dark" ? true :
-      forced === "light" ? false :
-      (nativeTheme.shouldUseDarkColors ? true : (detected === false ? false : true));
+      forced === "light" ? false : true;
     const candidate = shouldUseDark
       ? path.join(appRoot, "assets", "icons", "abcarus_window_dark.png")
       : path.join(appRoot, "assets", "icons", "abcarus_window_light.png");
