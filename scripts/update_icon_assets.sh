@@ -69,14 +69,17 @@ make_one() {
   local pad="$5"
   local target
   local alpha_boost="1.0"
-  target="$(python3 - <<PY
-import math
-size=int("$size")
-pad=float("$pad")
-pad=max(0.0, min(1.0, pad))
-print(max(1, int(round(size*pad))))
-PY
-)"
+  local tmp
+  local alpha_cutoff="6%"
+  target="$(awk -v size="$size" -v pad="$pad" 'BEGIN{
+    if (pad < 0) pad = 0;
+    if (pad > 1) pad = 1;
+    v = size * pad;
+    # round to nearest integer
+    target = int(v + 0.5);
+    if (target < 1) target = 1;
+    print target;
+  }')"
 
   if [[ "$size" -le 16 ]]; then alpha_boost="2.2"
   elif [[ "$size" -le 24 ]]; then alpha_boost="1.9"
@@ -85,15 +88,34 @@ PY
   else alpha_boost="1.15"
   fi
 
-  # Generate a transparent icon by applying the alpha mask from the BW silhouette.
-  # We intentionally do NOT trim either input: keeping the original alignment avoids drift between src/mask.
-  # Apply the mask at the original resolution first, then scale down, to avoid washed-out alpha at tiny sizes.
+  if [[ "$size" -le 24 ]]; then alpha_cutoff="10%"
+  elif [[ "$size" -le 48 ]]; then alpha_cutoff="8%"
+  else alpha_cutoff="6%"
+  fi
+
+  tmp="$(mktemp)"
+
+  # Generate a transparent icon by applying the alpha mask from the BW silhouette,
+  # while preserving the source RGB colors.
+  #
+  # Apply the mask at the original resolution first, then scale down, to avoid
+  # washed-out alpha at tiny sizes.
+  convert \
+    "$src" \
+    \( "$mask_src" -alpha extract \) \
+    -compose CopyOpacity -composite \
+    -resize "${target}x${target}" \
+    -channel A -evaluate multiply "${alpha_boost}" -level "${alpha_cutoff}",100% +channel \
+    -depth 8 -define png:color-type=6 \
+    "$tmp"
+
   convert \
     -size "${size}x${size}" xc:none \
-    \( "$src" \( "$mask_src" -alpha extract \) -compose CopyOpacity -composite -resize "${target}x${target}" -channel A -evaluate multiply "${alpha_boost}" +channel \) \
-    -gravity center -composite \
+    "$tmp" -gravity center -composite \
     -depth 8 -define png:color-type=6 \
     "$out"
+
+  rm -f "$tmp"
 }
 
 echo "Generating transparent app icons from:"
@@ -123,10 +145,8 @@ convert "$MASK_SRC" \
   -size 256x256 xc:"#111827" mpr:mask -compose CopyOpacity -composite \
   -define png:color-type=6 "$OUT_DIR/abcarus_window_light.png"
 
-convert "$MASK_SRC" \
-  -alpha extract -trim +repage -resize 240x240 \
-  -write mpr:mask +delete \
-  -size 256x256 xc:"#E6EAF2" mpr:mask -compose CopyOpacity -composite \
-  -define png:color-type=6 "$OUT_DIR/abcarus_window_dark.png"
+# For dark titlebars, use the full-color transparent app icon (gold) for better branding,
+# while keeping the silhouette variant above for light themes where contrast matters more.
+cp "$OUT_DIR/abcarus_256.png" "$OUT_DIR/abcarus_window_dark.png"
 
 echo "Done."

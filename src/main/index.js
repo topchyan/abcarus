@@ -1,6 +1,7 @@
 // main.js
 const fs = require("fs");
 const path = require("path");
+const childProcess = require("child_process");
 const { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell, Menu, screen } = require("electron");
 const { applyMenu } = require("./menu");
 const { registerIpcHandlers } = require("./ipc");
@@ -32,12 +33,48 @@ function resolveAppIconPath() {
   return path.join(appRoot, "assets", "icons", "abcarus_256.png");
 }
 
+function detectLinuxPrefersDarkTheme() {
+  // Best-effort heuristic for Linux desktops where Electron may not reliably reflect GTK theme darkness.
+  // Returns true/false, or null if unknown.
+  const envTheme = String(process.env.GTK_THEME || "").toLowerCase();
+  if (envTheme) {
+    if (envTheme.includes("dark")) return true;
+    if (envTheme.includes("light")) return false;
+  }
+
+  try {
+    const raw = childProcess.execFileSync("gsettings", ["get", "org.gnome.desktop.interface", "color-scheme"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    // e.g. "'prefer-dark'" / "'default'"
+    if (raw && raw.toLowerCase().includes("prefer-dark")) return true;
+    if (raw && raw.toLowerCase().includes("default")) return false;
+  } catch {}
+
+  // Cinnamon usually encodes darkness in the GTK theme name, e.g. "Mint-Y-Dark".
+  try {
+    const raw = childProcess.execFileSync("gsettings", ["get", "org.cinnamon.desktop.interface", "gtk-theme"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    if (raw && raw.toLowerCase().includes("dark")) return true;
+  } catch {}
+
+  return null;
+}
+
 function resolveWindowIconPath() {
   const appRoot = app.getAppPath();
   // On Linux, the window icon must remain visible against both light/dark titlebar themes.
   // Use a flat monochrome silhouette for maximum contrast; fall back to the app icon.
   if (process.platform === "linux") {
-    const candidate = nativeTheme.shouldUseDarkColors
+    const forced = String(process.env.ABCARUS_LINUX_WINDOW_ICON_VARIANT || "").trim().toLowerCase();
+    const shouldUseDark =
+      forced === "dark" ? true :
+      forced === "light" ? false :
+      (nativeTheme.shouldUseDarkColors || detectLinuxPrefersDarkTheme() === true);
+    const candidate = shouldUseDark
       ? path.join(appRoot, "assets", "icons", "abcarus_window_dark.png")
       : path.join(appRoot, "assets", "icons", "abcarus_window_light.png");
     try {
@@ -1660,6 +1697,15 @@ function createWindow() {
   });
 
   mainWindow = win;
+  if (process.platform === "linux") {
+    // Best-effort: update the window icon if the OS theme flips light/dark.
+    // Not all Linux desktops propagate this to Electron consistently.
+    nativeTheme.on("updated", () => {
+      try {
+        if (typeof win.setIcon === "function") win.setIcon(resolveWindowIconPath());
+      } catch {}
+    });
+  }
   try { win.setAlwaysOnTop(false); } catch {}
   win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
   win.maximize();
