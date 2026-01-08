@@ -9309,6 +9309,8 @@ let lastPlaybackMeterMismatchWarning = null;
 let lastRepeatShortBarToastKey = null;
 let lastPlaybackRepeatShortBarWarning = null;
 let playbackStartToken = 0;
+let lastPlaybackGuardMessage = "";
+let lastPlaybackAbortMessage = "";
 
 function clearPlaybackNoteOnEls() {
   for (const el of lastPlaybackNoteOnEls) {
@@ -9335,6 +9337,8 @@ function playbackGuardError(message) {
 }
 
 function stopPlaybackFromGuard(message) {
+  lastPlaybackGuardMessage = String(message || "");
+  try { recordDebugLog("warn", [`Playback guard: ${lastPlaybackGuardMessage}`]); } catch {}
   playbackGuardError(message);
   playbackStartToken += 1;
   if (player && (isPlaying || isPaused) && typeof player.stop === "function") {
@@ -12083,6 +12087,9 @@ function computePracticePlaybackRange(loopEnabled) {
   if (!hasSelection) {
     // In Practice, starting "from cursor" means the start of the bar containing the cursor.
     const startOffset = snapBarStartContaining(cursor);
+    if (startOffset >= Math.max(0, max - 1)) {
+      return fallbackWholeTune("cursor at end; looping whole tune");
+    }
     practiceRangeHint = canSnap ? "looping from cursor bar" : "looping from cursor";
     return {
       startOffset,
@@ -12095,6 +12102,9 @@ function computePracticePlaybackRange(loopEnabled) {
   // Selection always means "whole bars": from the start of the first selected bar
   // to the end of the last selected bar (next bar boundary), or tune end if selection reaches the end.
   const snappedSelStart = snapBarStartContaining(selStart);
+  if (snappedSelStart >= Math.max(0, max - 1)) {
+    return fallbackWholeTune("selection at end; looping whole tune");
+  }
   const snappedSelEnd = selectionReachesEnd ? null : snapEndToBarBoundaryAtOrAfter(selEnd);
   if (!(snappedSelEnd == null ? true : (snappedSelEnd > snappedSelStart))) {
     return fallbackWholeTune("selection invalid; looping whole tune");
@@ -12131,6 +12141,8 @@ async function startPlaybackFromRange(rangeOverride) {
   const startToken = (playbackStartToken += 1);
   const abortStart = (message) => {
     if (startToken !== playbackStartToken) return;
+    lastPlaybackAbortMessage = String(message || "");
+    try { recordDebugLog("warn", [`Playback abort: ${lastPlaybackAbortMessage}`]); } catch {}
     waitingForFirstNote = false;
     isPlaying = false;
     isPaused = false;
