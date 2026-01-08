@@ -32,6 +32,21 @@ function resolveAppIconPath() {
   return path.join(appRoot, "assets", "icons", "abcarus_256.png");
 }
 
+function resolveWindowIconPath() {
+  const appRoot = app.getAppPath();
+  // On Linux, the window icon must remain visible against both light/dark titlebar themes.
+  // Use a flat monochrome silhouette for maximum contrast; fall back to the app icon.
+  if (process.platform === "linux") {
+    const candidate = nativeTheme.shouldUseDarkColors
+      ? path.join(appRoot, "assets", "icons", "abcarus_window_dark.png")
+      : path.join(appRoot, "assets", "icons", "abcarus_window_light.png");
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch {}
+  }
+  return resolveAppIconPath();
+}
+
 function getDefaultSettings() {
   // Source of truth: `src/main/settings_schema.js`.
   return getDefaultSettingsFromSchema();
@@ -564,7 +579,7 @@ async function withPrintWindow(svgMarkup, action, options) {
   const win = new BrowserWindow({
     show: Boolean(options && options.show),
     autoHideMenuBar: true,
-    icon: resolveAppIconPath(),
+    icon: resolveWindowIconPath(),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -1630,11 +1645,12 @@ async function scanLibrary(rootDir, sender, options = {}) {
 }
 
 function createWindow() {
-  nativeTheme.themeSource = "light";
+  // Default to following the OS theme (also used for picking a visible window icon on Linux).
+  nativeTheme.themeSource = "system";
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
-    icon: resolveAppIconPath(),
+    icon: resolveWindowIconPath(),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
