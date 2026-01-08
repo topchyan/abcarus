@@ -70,13 +70,28 @@ function resolveWindowIconPath() {
   // Use a flat monochrome silhouette for maximum contrast; fall back to the app icon.
   if (process.platform === "linux") {
     const forced = String(process.env.ABCARUS_LINUX_WINDOW_ICON_VARIANT || "").trim().toLowerCase();
+    const detected = detectLinuxPrefersDarkTheme();
+    // Default to the "dark" (gold) icon when we cannot reliably infer the titlebar theme,
+    // because it stays visible on both light and dark backgrounds.
     const shouldUseDark =
       forced === "dark" ? true :
       forced === "light" ? false :
-      (nativeTheme.shouldUseDarkColors || detectLinuxPrefersDarkTheme() === true);
+      (nativeTheme.shouldUseDarkColors ? true : (detected === false ? false : true));
     const candidate = shouldUseDark
       ? path.join(appRoot, "assets", "icons", "abcarus_window_dark.png")
       : path.join(appRoot, "assets", "icons", "abcarus_window_light.png");
+    if (process.env.ABCARUS_DEBUG_THEME === "1") {
+      try {
+        // eslint-disable-next-line no-console
+        console.log(
+          "[theme] nativeTheme.shouldUseDarkColors=%s detected=%s forced=%s icon=%s",
+          nativeTheme.shouldUseDarkColors,
+          detected,
+          forced || "(none)",
+          path.basename(candidate)
+        );
+      } catch {}
+    }
     try {
       if (fs.existsSync(candidate)) return candidate;
     } catch {}
