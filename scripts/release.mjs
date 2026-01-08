@@ -55,9 +55,22 @@ if (idx === -1) {
   process.exit(1);
 }
 
-const insertAt = idx + header.length;
-const entry = `\n\n## [${next}] - ${today}\n### Added\n- \n### Changed\n- \n### Fixed\n- \n### Removed\n- \n`;
-const updated = changelog.slice(0, insertAt) + entry + changelog.slice(insertAt);
+const headerEnd = idx + header.length;
+const nextHeaderIdx = changelog.indexOf("\n## [", headerEnd);
+const unreleasedBodyRaw = changelog.slice(headerEnd, nextHeaderIdx === -1 ? changelog.length : nextHeaderIdx);
+const unreleasedBody = unreleasedBodyRaw.replace(/^\s+/, "").replace(/\s+$/, "");
+
+if (!unreleasedBody) {
+  console.error("CHANGELOG.md Unreleased section is empty. Add release notes first.");
+  process.exit(1);
+}
+
+const entry = `\n\n## [${next}] - ${today}\n${unreleasedBody}\n`;
+const updated =
+  changelog.slice(0, headerEnd) +
+  "\n\n" +
+  entry +
+  (nextHeaderIdx === -1 ? "" : changelog.slice(nextHeaderIdx));
 fs.writeFileSync(changelogPath, updated);
 
 runGit(["add", "package.json", "package-lock.json", "CHANGELOG.md"]);
