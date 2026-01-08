@@ -79,6 +79,55 @@ jobs:
             dist/appimage/ABCarus-x86_64-portable.tar.gz
             dist/appimage/SHA256SUMS-linux.txt
 
+  macos-arm64:
+    name: macOS (arm64)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify PBS locks
+        run: npm run -s pbs:check
+
+      - name: Install bundled Python (PBS)
+        run: bash devtools/pbs/pbs-install-unix.sh darwin-arm64
+
+      - name: Build macOS artifact
+        run: npx electron-builder --mac --arm64 --publish never
+
+      - name: Capture stable-name dmg
+        run: |
+          dmg="$(ls -1 dist/electron-builder/*.dmg 2>/dev/null | head -n 1 || true)"
+          if [[ -z "${dmg}" ]]; then
+            echo "No .dmg found under dist/electron-builder"
+            ls -la dist/electron-builder || true
+            exit 1
+          fi
+          cp -f "${dmg}" dist/electron-builder/ABCarus-macos-arm64.dmg
+
+      - name: Compute SHA256
+        run: |
+          cd dist/electron-builder
+          shasum -a 256 ABCarus-macos-arm64.dmg > SHA256SUMS-macos-arm64.txt
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/electron-builder/ABCarus-macos-arm64.dmg
+            dist/electron-builder/SHA256SUMS-macos-arm64.txt
+
   windows-x64:
     name: Windows (x64)
     runs-on: windows-latest
@@ -146,10 +195,20 @@ jobs:
           if (Test-Path $zip) { Remove-Item -Force $zip }
           Compress-Archive -Path "$src/*" -DestinationPath $zip
 
-      - name: Compute SHA256
+      - name: Capture stable-name setup exe
         run: |
           $setup = Get-ChildItem -Path "dist/electron-builder" -Filter "*Setup*.exe" | Select-Object -First 1
-          if (-not $setup) { throw "Setup exe not found under dist/electron-builder" }
+          if (-not $setup) {
+            Write-Host "Top-level in dist/electron-builder:"
+            Get-ChildItem -Force -Path "dist/electron-builder" | ForEach-Object { Write-Host ("  - " + $_.Name) }
+            throw "Setup exe not found under dist/electron-builder"
+          }
+          Copy-Item -Force $setup.FullName "dist/electron-builder/ABCarus-setup-x64.exe"
+
+      - name: Compute SHA256
+        run: |
+          $setup = Get-ChildItem -Path "dist/electron-builder" -Filter "ABCarus-setup-x64.exe" | Select-Object -First 1
+          if (-not $setup) { throw "Stable setup exe not found under dist/electron-builder" }
           $zip = "dist/electron-builder/ABCarus-win-unpacked-x64.zip"
           $portable = Get-ChildItem -Path "dist/electron-builder" -Filter "ABCarus-portable-x64.exe" | Select-Object -First 1
           if (-not $portable) { throw "Portable exe not found under dist/electron-builder" }
@@ -163,7 +222,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/electron-builder/*Setup*.exe
+            dist/electron-builder/ABCarus-setup-x64.exe
             dist/electron-builder/ABCarus-win-unpacked-x64.zip
             dist/electron-builder/ABCarus-portable-x64.exe
             dist/electron-builder/SHA256SUMS-windows.txt
