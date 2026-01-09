@@ -651,6 +651,9 @@ function highlightSvgAtEditorOffset(editorOffset) {
 
 const debugLogBuffer = [];
 function recordDebugLog(level, args, stackOverride) {
+  // Debug log capture is opt-in to keep hot paths lean.
+  // Enable via DevTools: `window.__abcarusDebugLog = true` then reload.
+  if (window.__abcarusDebugLog !== true) return;
   const entry = {
     ts: new Date().toISOString(),
     level,
@@ -665,6 +668,9 @@ function recordDebugLog(level, args, stackOverride) {
 }
 
 (() => {
+  // Console wrapping is opt-in to avoid overhead and surprising global side effects.
+  // Enable via DevTools: `window.__abcarusDebugLog = true` then reload.
+  if (window.__abcarusDebugLog !== true) return;
   if (window.__abcarusConsoleWrapped) return;
   window.__abcarusConsoleWrapped = true;
   const origErr = console.error.bind(console);
@@ -10049,12 +10055,9 @@ function ensurePlayer() {
       const editorLen = editorView ? editorView.state.doc.length : 0;
       const fromInjected = editorLen && editorIdx >= editorLen;
       if (on && !fromInjected) {
-        const timestamp = typeof performance !== "undefined" ? performance.now() : Date.now();
-        const seq = (playbackTraceSeq += 1);
-        if (lastTraceRunId !== playbackRunId) {
-          stopPlaybackFromGuard("Trace run id mismatch.");
-          return;
-        }
+        // Playback per-note trace/diagnostics is opt-in to keep hot paths lean.
+        // Enable via DevTools: `window.__abcarusPlaybackTrace = true` (no reload required).
+        const traceEnabled = window.__abcarusPlaybackTrace === true;
         // Guard loop invariance only when PlaybackRange and the active loop range are expected to match.
         // In Practice mode, the active range may be snapped/derived from selection/cursor, while the editor's
         // PlaybackRange remains cursor/selection-based. That mismatch is intentional and should not abort playback.
@@ -10064,15 +10067,8 @@ function ensurePlayer() {
           && activePlaybackRange.origin === playbackRange.origin
           && playbackRange.startOffset !== activePlaybackRange.startOffset
         ) {
+          // Possibly correctness-critical: this guards against state races that can break subsequent playback.
           stopPlaybackFromGuard("Loop invariance violated: PlaybackRange.startOffset mutated.");
-          return;
-        }
-        if (lastTracePlaybackIdx != null && seq < lastTracePlaybackIdx) {
-          stopPlaybackFromGuard("Trace playbackIdx is not monotonic.");
-          return;
-        }
-        if (lastTraceTimestamp != null && timestamp < lastTraceTimestamp) {
-          stopPlaybackFromGuard("Trace timestamp is decreasing.");
           return;
         }
         if (activePlaybackRange && activePlaybackRange.endOffset != null) {
@@ -10082,22 +10078,41 @@ function ensurePlayer() {
             return;
           }
         }
-        lastTracePlaybackIdx = seq;
-        lastTraceTimestamp = timestamp;
-        const currentEditorOffset = toEditorOffset(i);
-        const rangeStartEditorOffset = activePlaybackRange ? activePlaybackRange.startOffset : playbackRange.startOffset;
-        appendPlaybackTrace({
-          rangeStartOffset: rangeStartEditorOffset,
-          currentAbcOffset: Number.isFinite(currentEditorOffset) ? currentEditorOffset : editorIdx,
-          rangeStartEditorOffset,
-          currentEditorOffset: Number.isFinite(currentEditorOffset) ? currentEditorOffset : editorIdx,
-          currentIstart: i,
-          origin: activePlaybackRange ? activePlaybackRange.origin : playbackRange.origin,
-          playbackIdx: seq,
-          editorIdx: Number.isFinite(currentEditorOffset) ? currentEditorOffset : editorIdx,
-          timestamp,
-          atMs: timestamp,
-        });
+        if (traceEnabled) {
+          const timestamp = typeof performance !== "undefined" ? performance.now() : Date.now();
+          const seq = (playbackTraceSeq += 1);
+
+          // Trace-only diagnostics: keep opt-in unless proven correctness-critical.
+          if (lastTraceRunId !== playbackRunId) {
+            stopPlaybackFromGuard("Trace run id mismatch.");
+            return;
+          }
+          if (lastTracePlaybackIdx != null && seq < lastTracePlaybackIdx) {
+            stopPlaybackFromGuard("Trace playbackIdx is not monotonic.");
+            return;
+          }
+          if (lastTraceTimestamp != null && timestamp < lastTraceTimestamp) {
+            stopPlaybackFromGuard("Trace timestamp is decreasing.");
+            return;
+          }
+
+          lastTracePlaybackIdx = seq;
+          lastTraceTimestamp = timestamp;
+          const currentEditorOffset = toEditorOffset(i);
+          const rangeStartEditorOffset = activePlaybackRange ? activePlaybackRange.startOffset : playbackRange.startOffset;
+          appendPlaybackTrace({
+            rangeStartOffset: rangeStartEditorOffset,
+            currentAbcOffset: Number.isFinite(currentEditorOffset) ? currentEditorOffset : editorIdx,
+            rangeStartEditorOffset,
+            currentEditorOffset: Number.isFinite(currentEditorOffset) ? currentEditorOffset : editorIdx,
+            currentIstart: i,
+            origin: activePlaybackRange ? activePlaybackRange.origin : playbackRange.origin,
+            playbackIdx: seq,
+            editorIdx: Number.isFinite(currentEditorOffset) ? currentEditorOffset : editorIdx,
+            timestamp,
+            atMs: timestamp,
+          });
+        }
       }
       // Important: never let injected voices (e.g. DRUM appended to payload) steal the pending UI update,
       // otherwise follow-highlight becomes "blinking"/pale because the RAF processes only the injected istart and returns.
