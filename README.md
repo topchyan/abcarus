@@ -39,13 +39,15 @@ See `docs/DISCLAIMER.md` and `CHANGELOG.md`.
 
 ### Development setup
 - Install dependencies: `npm install`
-- Ensure Python 3 is on your PATH (required for import/export tooling)
+- Run the app: `npm start`
+
+Python is not required for basic editing/rendering/playback in development. It is only needed for MusicXML import/export.
 
 ### Soundfonts
 ABCarus ships only one bundled soundfont (`TimGM6mb.sf2`). Additional soundfonts are optional and installed locally. See `docs/soundfonts.md`.
 
 ### Release builds
-Release AppImage builds bundle a local Python runtime at build time. See `scripts/README.md` for the release workflow and tooling.
+Release builds bundle a local Python runtime (PBS) for MusicXML import/export. See `docs/python-build-standalone.md` and `docs/python-runtime.md`.
 
 ### Core features
 
@@ -66,11 +68,6 @@ Release AppImage builds bundle a local Python runtime at build time. See `script
 - Long-term maintainability
 
 Playback and rendering are implemented to support reading and editing, not to replace musical interpretation.
-
-### Status
-
-ABCarus is under active development.  
-Internal APIs, UI layout, and feature set may change.
 
 ### Rendering notes
 
@@ -97,15 +94,17 @@ Import/Export uses external Python converters stored under `third_party/`:
 - `third_party/abc2xml/abc2xml.py` (ABC → MusicXML)
 - `third_party/xml2abc/xml2abc.py` (MusicXML → ABC)
 
-Python 3 must be available as `python3` or `python` on your PATH.
+By default, ABCarus prefers a bundled Python runtime (PBS). In development, install it with:
 
-MusicXML import/export requires Python 3 (system or bundled runtime, depending on packaging).
+- Linux: `bash devtools/pbs/pbs-install-unix.sh linux-x64`
+- macOS: `bash devtools/pbs/pbs-install-unix.sh darwin-arm64` or `bash devtools/pbs/pbs-install-unix.sh darwin-x64`
+- Windows: `pwsh -ExecutionPolicy Bypass -File devtools/pbs/pbs-install-windows.ps1 -Platform win-x64`
+
+System Python fallback is opt-in only via `ABCARUS_ALLOW_SYSTEM_PYTHON=1`.
 
 ### Platforms
 
-- Linux (actively developed and tested)
-- Windows (planned, not yet tested)
-- macOS (lowest priority; may not be implemented)
+- Linux, Windows, macOS (release builds provided; Linux is the primary development platform)
 
 ### Credits
 
