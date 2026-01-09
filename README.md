@@ -1,4 +1,4 @@
-# <img src="assets/icons/abcarus_128.png" alt="ABCarus" width="48" height="48" style="vertical-align: middle; margin-right: 10px;"> ABCarus
+# <img src="assets/icons/abcarus_128_badge.png" alt="ABCarus" width="48" height="48"> ABCarus
 
 ABCarus is a desktop application for working with music encoded in ABC notation.
 
