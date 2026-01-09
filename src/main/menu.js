@@ -97,7 +97,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
         { type: "separator" },
         { label: "Find…", accelerator: "CmdOrCtrl+F", click: () => sendMenuAction("find") },
         { label: "Replace…", accelerator: "CmdOrCtrl+H", click: () => sendMenuAction("replace") },
-        { label: "Go to Line…", accelerator: "CmdOrCtrl+G", click: () => sendMenuAction("gotoLine") },
+        { label: "Go to Line…", accelerator: "CmdOrCtrl+Alt+G", click: () => sendMenuAction("gotoLine") },
         { label: "Toggle Comment", accelerator: "CmdOrCtrl+/", click: () => sendMenuAction("toggleComment") },
         { type: "separator" },
         { role: "cut" },
@@ -121,6 +121,8 @@ function buildMenuTemplate(appState, sendMenuAction) {
         { label: "Reset Layout", accelerator: "F8", click: () => sendMenuAction("resetLayout") },
         { type: "separator" },
         { label: "Settings…", accelerator: "CmdOrCtrl+,", click: () => sendMenuAction("settings") },
+        { label: "Export Settings…", click: () => sendMenuAction("exportSettings") },
+        { label: "Import Settings…", click: () => sendMenuAction("importSettings") },
       ],
     },
     {
@@ -128,8 +130,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
       submenu: [
         { label: "Start Over", accelerator: "F4", click: () => sendMenuAction("playStart") },
         { label: "Play / Pause", accelerator: "F5", click: () => sendMenuAction("playToggle") },
-        { label: "Previous Measure", click: () => sendMenuAction("playPrev") },
-        { label: "Next Measure", click: () => sendMenuAction("playNext") },
+        { label: "Go to Measure…", accelerator: "CmdOrCtrl+G", click: () => sendMenuAction("playGotoMeasure") },
       ],
     },
     {
@@ -198,6 +199,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
       submenu: [
         { label: "ABC Guide (F1)", accelerator: "F1", click: () => sendMenuAction("helpGuide") },
         { type: "separator" },
+        { label: "Open Settings Folder", click: () => sendMenuAction("openSettingsFolder") },
         { label: "ABC Notation Homepage", click: () => sendMenuAction({ type: "helpLink", url: "https://abcnotation.com/" }) },
         { label: "ABCusers (Groups.io)", click: () => sendMenuAction({ type: "helpLink", url: "https://groups.io/g/abcusers/topics" }) },
         { label: "ABCNotation User Group (Facebook)", click: () => sendMenuAction({ type: "helpLink", url: "https://www.facebook.com/groups/498671610282070" }) },

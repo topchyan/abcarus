@@ -6,7 +6,8 @@ const { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell, Menu, screen } 
 const { applyMenu } = require("./menu");
 const { registerIpcHandlers } = require("./ipc");
 const { resolveThirdPartyRoot } = require("./conversion");
-const { getDefaultSettings: getDefaultSettingsFromSchema } = require("./settings_schema");
+const { getSettingsSchema, getDefaultSettings: getDefaultSettingsFromSchema } = require("./settings_schema");
+const { encodePropertiesFromSchema, parseSettingsPatchFromProperties } = require("./properties");
 
 let mainWindow = null;
 let isQuitting = false;
@@ -16,6 +17,11 @@ const appState = {
   recentFiles: [],
   recentFolders: [],
   settings: null,
+  settingsFile: {
+    mode: "internal", // "internal" | "file"
+    path: null,
+    lastKnownMtimeMs: 0,
+  },
 };
 
 // Optional Linux portal file chooser, controlled via:
@@ -114,6 +120,30 @@ function getSettingsPaths() {
   };
 }
 
+async function loadSettingsFromAttachedFile() {
+  if (!appState.settingsFile || appState.settingsFile.mode !== "file") return;
+  const filePath = appState.settingsFile.path ? String(appState.settingsFile.path) : "";
+  if (!filePath) {
+    appState.settingsFile.mode = "internal";
+    appState.settingsFile.path = null;
+    appState.settingsFile.lastKnownMtimeMs = 0;
+    return;
+  }
+  try {
+    const stat = await fs.promises.stat(filePath);
+    const raw = await fs.promises.readFile(filePath, "utf8");
+    const schema = getSettingsSchema();
+    const patch = parseSettingsPatchFromProperties(raw, schema);
+    updateSettingsFromFile(patch || {});
+    appState.settingsFile.lastKnownMtimeMs = stat.mtimeMs || 0;
+  } catch {
+    // Graceful fallback: keep last internal snapshot.
+    appState.settingsFile.mode = "internal";
+    appState.settingsFile.path = null;
+    appState.settingsFile.lastKnownMtimeMs = 0;
+  }
+}
+
 async function loadState() {
   try {
     const raw = await fs.promises.readFile(getStatePath(), "utf8");
@@ -123,6 +153,15 @@ async function loadState() {
       appState.recentTunes = Array.isArray(data.recentTunes) ? data.recentTunes : [];
       appState.recentFiles = Array.isArray(data.recentFiles) ? data.recentFiles : [];
       appState.recentFolders = Array.isArray(data.recentFolders) ? data.recentFolders : [];
+      if (data.settingsFile && typeof data.settingsFile === "object") {
+        const mode = data.settingsFile.mode === "file" ? "file" : "internal";
+        const p = data.settingsFile.path ? String(data.settingsFile.path) : null;
+        appState.settingsFile = {
+          mode,
+          path: p,
+          lastKnownMtimeMs: Number(data.settingsFile.lastKnownMtimeMs) || 0,
+        };
+      }
       if (data.settings && typeof data.settings === "object") {
         const merged = { ...getDefaultSettings(), ...data.settings };
         if (data.settings.zoomFactor && !data.settings.renderZoom && !data.settings.editorZoom) {
@@ -142,6 +181,9 @@ async function loadState() {
     }
   } catch {}
   if (!appState.settings) appState.settings = getDefaultSettings();
+  // If the user explicitly attached a properties file, prefer it as the source of truth.
+  // Missing/unreadable file should not prevent startup.
+  await loadSettingsFromAttachedFile();
 }
 
 async function pathExists(p) {
@@ -212,6 +254,7 @@ async function saveState() {
         recentFiles: appState.recentFiles,
         recentFolders: appState.recentFolders,
         settings: appState.settings,
+        settingsFile: appState.settingsFile,
       },
       null,
       2
@@ -760,7 +803,68 @@ function clampZoom(value) {
   return Math.min(8, Math.max(0.5, value));
 }
 
-function updateSettings(patch) {
+async function atomicWriteFileWithRetry(filePath, data, { attempts = 5 } = {}) {
+  const absPath = String(filePath || "");
+  if (!absPath) throw new Error("Missing file path.");
+  const dir = path.dirname(absPath);
+  const tmpPath = path.join(dir, `.${path.basename(absPath)}.${process.pid}.${Date.now()}.tmp`);
+  await fs.promises.writeFile(tmpPath, data, "utf8");
+  let lastErr = null;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      try {
+        await fs.promises.rename(tmpPath, absPath);
+        return;
+      } catch (e) {
+        try { await fs.promises.unlink(absPath); } catch {}
+        await fs.promises.rename(tmpPath, absPath);
+        return;
+      }
+    } catch (e) {
+      lastErr = e;
+      const code = e && e.code ? String(e.code) : "";
+      if (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES") break;
+      await new Promise((r) => setTimeout(r, 50 * (i + 1)));
+    }
+  }
+  try { await fs.promises.unlink(tmpPath); } catch {}
+  throw lastErr || new Error("Unable to write file.");
+}
+
+let attachedSettingsWriteTimer = null;
+let attachedSettingsWriteInFlight = false;
+async function persistAttachedSettingsFile() {
+  if (attachedSettingsWriteInFlight) return;
+  if (!appState.settingsFile || appState.settingsFile.mode !== "file") return;
+  const filePath = appState.settingsFile.path ? String(appState.settingsFile.path) : "";
+  if (!filePath) return;
+  const schema = getSettingsSchema();
+  const propsText = encodePropertiesFromSchema(appState.settings || getDefaultSettings(), schema);
+  attachedSettingsWriteInFlight = true;
+  try {
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    await atomicWriteFileWithRetry(filePath, propsText);
+    try {
+      const st = await fs.promises.stat(filePath);
+      appState.settingsFile.lastKnownMtimeMs = st.mtimeMs || 0;
+    } catch {}
+  } catch {
+    // Silent failure: user may have removed the file or directory; internal snapshot remains valid.
+  } finally {
+    attachedSettingsWriteInFlight = false;
+  }
+}
+
+function schedulePersistAttachedSettingsFile() {
+  if (!appState.settingsFile || appState.settingsFile.mode !== "file") return;
+  if (attachedSettingsWriteTimer) clearTimeout(attachedSettingsWriteTimer);
+  attachedSettingsWriteTimer = setTimeout(() => {
+    attachedSettingsWriteTimer = null;
+    persistAttachedSettingsFile().catch(() => {});
+  }, 250);
+}
+
+function applySettingsPatch(patch, { persistToSettingsFile = true } = {}) {
   const next = { ...getDefaultSettings(), ...appState.settings, ...patch };
   if (patch && patch.libraryUiStateByRoot && typeof patch.libraryUiStateByRoot === "object") {
     const prev = appState.settings && appState.settings.libraryUiStateByRoot && typeof appState.settings.libraryUiStateByRoot === "object"
@@ -787,12 +891,46 @@ function updateSettings(patch) {
   next.errorsEnabled = false;
   appState.settings = next;
   saveState();
+  if (persistToSettingsFile) schedulePersistAttachedSettingsFile();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("settings:changed", next);
   }
   return next;
 }
 
+function updateSettings(patch) {
+  return applySettingsPatch(patch, { persistToSettingsFile: true });
+}
+
+function updateSettingsFromFile(patch) {
+  // File-backed settings are the source of truth; applying them should not rewrite the file.
+  return applySettingsPatch(patch, { persistToSettingsFile: false });
+}
+
+async function maybeReloadSettingsFromAttachedFile() {
+  if (!appState.settingsFile || appState.settingsFile.mode !== "file") return false;
+  const filePath = appState.settingsFile.path ? String(appState.settingsFile.path) : "";
+  if (!filePath) return false;
+  try {
+    const stat = await fs.promises.stat(filePath);
+    const mtimeMs = stat && stat.mtimeMs ? Number(stat.mtimeMs) : 0;
+    if (!mtimeMs || mtimeMs <= (Number(appState.settingsFile.lastKnownMtimeMs) || 0)) return false;
+    const raw = await fs.promises.readFile(filePath, "utf8");
+    const schema = getSettingsSchema();
+    const patch = parseSettingsPatchFromProperties(raw, schema);
+    updateSettingsFromFile(patch || {});
+    appState.settingsFile.lastKnownMtimeMs = mtimeMs;
+    saveState();
+    return true;
+  } catch {
+    // Graceful fallback to internal snapshot.
+    appState.settingsFile.mode = "internal";
+    appState.settingsFile.path = null;
+    appState.settingsFile.lastKnownMtimeMs = 0;
+    saveState();
+    return false;
+  }
+}
 function addRecentTune(entry) {
   if (!entry || !entry.path || entry.startOffset == null || entry.endOffset == null) return;
   const key = `${entry.path}::${entry.startOffset}`;
@@ -1763,6 +1901,10 @@ function createWindow() {
     e.preventDefault();
     win.webContents.send("app:request-quit");
   });
+  win.on("focus", () => {
+    // Best-effort: if the canonical settings file was edited externally, reload it when the app regains focus.
+    maybeReloadSettingsFromAttachedFile().catch(() => {});
+  });
   win.on("closed", () => {
     if (mainWindow === win) mainWindow = null;
   });
@@ -1821,6 +1963,11 @@ registerIpcHandlers({
   addRecentFile,
   addRecentFolder,
   getSettingsPaths,
+  getSettingsFile: () => appState.settingsFile,
+  setSettingsFile: async (next) => {
+    appState.settingsFile = next;
+    await saveState();
+  },
   getSettings: () => appState.settings || getDefaultSettings(),
   updateSettings,
   getLastRecent: () => {

@@ -29,7 +29,15 @@ const FALLBACK_SCHEMA = [
   { key: "globalHeaderText", type: "string", default: "", section: "Header", label: "Global header", ui: { input: "code" } },
   { key: "usePortalFileDialogs", type: "boolean", default: true, section: "Dialogs", label: "Use portal file dialogs (Linux)", ui: { input: "checkbox" }, advanced: true },
   { key: "libraryAutoRenumberAfterMove", type: "boolean", default: false, section: "Library", label: "Auto-renumber X after move", ui: { input: "checkbox" } },
-  { key: "drumVelocityMap", type: "object", default: {}, section: "Playback", label: "Drum mixer", ui: { input: "drumVelocityMap" }, advanced: true },
+  { key: "followHighlightColor", type: "string", default: "#1e90ff", section: "Playback", label: "Follow highlight color", ui: { input: "color" } },
+  { key: "followHighlightBarOpacity", type: "number", default: 0.12, section: "Playback", label: "Follow bar opacity (%)", ui: { input: "percent", min: 0, max: 60, step: 1 }, advanced: true },
+  { key: "followPlayheadOpacity", type: "number", default: 0.7, section: "Playback", label: "Follow playhead opacity (%)", ui: { input: "percent", min: 0, max: 100, step: 1 }, advanced: true },
+  { key: "followPlayheadWidth", type: "number", default: 2, section: "Playback", label: "Follow playhead width (px)", ui: { input: "number", min: 1, max: 6, step: 1 }, advanced: true },
+  { key: "followPlayheadPad", type: "number", default: 8, section: "Playback", label: "Playhead extra height (px)", ui: { input: "number", min: 0, max: 24, step: 1 }, advanced: true },
+  { key: "followPlayheadBetweenNotesWeight", type: "number", default: 1, section: "Playback", label: "Playhead between notes (%)", ui: { input: "percent", min: 0, max: 100, step: 5 }, advanced: true },
+  { key: "followPlayheadShift", type: "number", default: 0, section: "Playback", label: "Playhead horizontal shift (px)", ui: { input: "number", min: -20, max: 20, step: 1 }, advanced: true },
+  { key: "followPlayheadFirstBias", type: "number", default: 6, section: "Playback", label: "First-note bias (px)", ui: { input: "number", min: 0, max: 20, step: 1 }, advanced: true },
+  { key: "drumVelocityMap", type: "object", default: {}, section: "Drums", label: "Drum mixer", ui: { input: "drumVelocityMap" }, advanced: true },
 ];
 
 function buildDefaults(schema) {
@@ -111,19 +119,21 @@ export function initSettings(api) {
     root.setProperty("--render-zoom", String(currentSettings.renderZoom));
     root.setProperty("--editor-zoom", String(currentSettings.editorZoom));
 
-    for (const [key, meta] of controlByKey.entries()) {
-      const entry = meta.entry;
-      if (!entry || !entry.ui) continue;
-      const kind = entry.ui.input;
-      const value = currentSettings[key];
-      if (kind === "checkbox" && meta.el) {
-        meta.el.checked = Boolean(value);
-      } else if (kind === "percent" && meta.el) {
-        meta.el.value = String(Math.round((Number(value) || 1) * 100));
-      } else if ((kind === "number" || kind === "text") && meta.el) {
-        meta.el.value = String(value == null ? "" : value);
-      }
-    }
+	    for (const [key, meta] of controlByKey.entries()) {
+	      const entry = meta.entry;
+	      if (!entry || !entry.ui) continue;
+	      const kind = entry.ui.input;
+	      const value = currentSettings[key];
+	      if (kind === "checkbox" && meta.el) {
+	        meta.el.checked = Boolean(value);
+	      } else if (kind === "percent" && meta.el) {
+	        meta.el.value = String(Math.round((Number(value) || 1) * 100));
+	      } else if (kind === "color" && meta.el) {
+	        meta.el.value = String(value || "#000000");
+	      } else if ((kind === "number" || kind === "text") && meta.el) {
+	        meta.el.value = String(value == null ? "" : value);
+	      }
+	    }
 
     if (globalHeaderView) {
       const nextText = String(currentSettings.globalHeaderText || "");
@@ -240,7 +250,7 @@ export function initSettings(api) {
     }
   }
 
-  function createRow(entry) {
+	  function createRow(entry) {
     const row = document.createElement("label");
     row.className = "settings-row";
     const labelSpan = document.createElement("span");
@@ -279,7 +289,7 @@ export function initSettings(api) {
       return row;
     }
 
-    if (kind === "text") {
+	    if (kind === "text") {
       input = document.createElement("input");
       input.type = "text";
       if (entry.ui.placeholder) input.placeholder = String(entry.ui.placeholder);
@@ -288,8 +298,20 @@ export function initSettings(api) {
       });
       row.appendChild(input);
       controlByKey.set(entry.key, { entry, el: input });
-      return row;
-    }
+	      return row;
+	    }
+
+	    if (kind === "color") {
+	      input = document.createElement("input");
+	      input.type = "color";
+	      input.addEventListener("change", () => {
+	        const v = String(input.value || "").trim();
+	        updateSettings({ [entry.key]: v }).catch(() => {});
+	      });
+	      row.appendChild(input);
+	      controlByKey.set(entry.key, { entry, el: input });
+	      return row;
+	    }
 
     // Other inputs are handled as custom sections.
     return null;
@@ -326,6 +348,16 @@ export function initSettings(api) {
         sections: ["General", "Editor", "Tools", "Library", "Dialogs"],
       },
       {
+        key: "playback",
+        label: "Playback",
+        sections: ["Playback"],
+      },
+      {
+        key: "drums",
+        label: "Drums",
+        sections: ["Drums"],
+      },
+      {
         key: "xml",
         label: "Import/Export",
         sections: ["Import/Export"],
@@ -334,11 +366,6 @@ export function initSettings(api) {
         key: "globals",
         label: "Header",
         sections: ["Header"],
-      },
-      {
-        key: "drums",
-        label: "Drums",
-        sections: ["Playback"],
       },
     ];
 

@@ -179,6 +179,9 @@ let practiceRangeHint = "";
 let practiceRangePreview = null; // {startOffset,endOffset}
 let currentPlaybackPlan = null;
 let pendingPlaybackPlan = null;
+let transportPlayheadOffset = 0; // editor offset used for next transport start
+let transportJumpHighlightActive = false;
+let suppressTransportJumpClearOnce = false;
 let lastRhythmErrorSuggestion = null;
 let errorsEnabled = false;
 
@@ -189,6 +192,10 @@ let lastSvgErrorActivationEls = [];
 let practiceBarHighlightRange = null; // {from,to} editor offsets
 let practiceBarHighlightVersion = 0;
 let lastSvgPracticeBarEls = [];
+let lastSvgFollowBarEls = [];
+let lastSvgPlayheadEl = null;
+let lastSvgPlayheadSvg = null;
+let lastSvgPlayheadXCenter = null;
 let activeErrorHighlight = null; // {id, from, to, tuneId, filePath, message, messageKey, lastSvgRenderIdx}
 let activeErrorNavIndex = -1;
 let lastNoErrorsToastAtMs = 0;
@@ -582,6 +589,127 @@ function clearSvgPracticeBarHighlight() {
     try { el.classList.remove("svg-practice-bar"); } catch {}
   }
   lastSvgPracticeBarEls = [];
+}
+
+function clearSvgFollowBarHighlight() {
+  for (const el of lastSvgFollowBarEls) {
+    try { el.classList.remove("svg-follow-bar"); } catch {}
+  }
+  lastSvgFollowBarEls = [];
+}
+
+function clearSvgPlayhead() {
+  if (lastSvgPlayheadEl) {
+    try { lastSvgPlayheadEl.remove(); } catch {}
+  }
+  lastSvgPlayheadEl = null;
+  lastSvgPlayheadSvg = null;
+  lastSvgPlayheadXCenter = null;
+}
+
+function highlightSvgFollowBarAtEditorOffset(editorOffset) {
+  if (!$out || !$renderPane) return false;
+  if (!Number.isFinite(editorOffset)) return false;
+  if (!editorView) return false;
+  const renderOffset = (lastRenderPayload && Number.isFinite(lastRenderPayload.offset))
+    ? lastRenderPayload.offset
+    : 0;
+  const editorText = editorView.state.doc.toString();
+  const measure = findMeasureRangeAt(editorText, editorOffset);
+  const barEls = measure ? Array.from($out.querySelectorAll(".bar-hl")) : [];
+  if (measure && barEls.length) {
+    const start = measure.start + renderOffset;
+    const end = measure.end + renderOffset;
+    const hits = barEls.filter((el) => {
+      const s = Number(el.dataset && el.dataset.start);
+      const e = Number(el.dataset && el.dataset.end);
+      if (!Number.isFinite(s)) return false;
+      const stop = Number.isFinite(e) ? e : s + 1;
+      return s < end && stop > start;
+    });
+    if (hits.length) {
+      clearSvgFollowBarHighlight();
+      lastSvgFollowBarEls = hits;
+      for (const el of lastSvgFollowBarEls) {
+        try { el.classList.add("svg-follow-bar"); } catch {}
+      }
+      return true;
+    }
+  }
+  clearSvgFollowBarHighlight();
+  return false;
+}
+
+function setSvgPlayheadFromElements(noteEl, preferredBarEl) {
+  if (!noteEl) {
+    clearSvgPlayhead();
+    return;
+  }
+  const svg = noteEl.ownerSVGElement;
+  if (!svg) return;
+
+  const xRaw = Number(noteEl.getAttribute("x"));
+  const wRaw = Number(noteEl.getAttribute("width"));
+  const yRaw = Number(noteEl.getAttribute("y"));
+  const hRaw = Number(noteEl.getAttribute("height"));
+  if (!Number.isFinite(xRaw)) return;
+  const xCenter = xRaw + (Number.isFinite(wRaw) ? (wRaw / 2) : 0);
+  const width = Number.isFinite(wRaw) ? wRaw : 0;
+
+  let y = Number.isFinite(yRaw) ? yRaw : 0;
+  let h = Number.isFinite(hRaw) ? hRaw : 0;
+  const barEl = preferredBarEl && preferredBarEl.ownerSVGElement === svg ? preferredBarEl : null;
+  if (barEl) {
+    const by = Number(barEl.getAttribute("y"));
+    const bh = Number(barEl.getAttribute("height"));
+    if (Number.isFinite(by)) y = by;
+    if (Number.isFinite(bh)) h = bh;
+  }
+  const pad = clampNumber(followPlayheadPad, 0, 24, 8);
+  const yTop = Math.max(0, y - pad);
+  const height = Math.max(1, h + pad * 2);
+
+  if (lastSvgPlayheadSvg && lastSvgPlayheadSvg !== svg) {
+    clearSvgPlayhead();
+  }
+  if (!lastSvgPlayheadEl || lastSvgPlayheadSvg !== svg) {
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("class", "svg-playhead-line");
+    rect.setAttribute("width", String(clampNumber(followPlayheadWidth, 1, 6, 2)));
+    rect.setAttribute("rx", "1");
+    rect.setAttribute("ry", "1");
+    rect.setAttribute("pointer-events", "none");
+    svg.appendChild(rect);
+    lastSvgPlayheadEl = rect;
+    lastSvgPlayheadSvg = svg;
+  }
+  try {
+    // Place the playhead between the previous and current note positions when possible.
+    // Fallback: bias slightly left of the current note for better readability.
+    const wSetting = clampNumber(followPlayheadWidth, 1, 6, 2);
+    const halfW = wSetting / 2;
+    const shift = clampNumber(followPlayheadShift, -20, 20, 0);
+    const betweenWeight = clampNumber(followPlayheadBetweenNotesWeight, 0, 1, 1);
+    const firstBias = clampNumber(followPlayheadFirstBias, 0, 20, 6);
+
+    let xTarget = xCenter;
+    if (Number.isFinite(lastSvgPlayheadXCenter)) {
+      const midpoint = (lastSvgPlayheadXCenter + xCenter) / 2;
+      xTarget = xCenter * (1 - betweenWeight) + midpoint * betweenWeight;
+    } else {
+      const autoBias = Math.max(4, Math.min(10, width * 0.35));
+      xTarget = xCenter - (Number.isFinite(firstBias) ? firstBias : autoBias);
+    }
+    xTarget += shift;
+    lastSvgPlayheadXCenter = xCenter;
+
+    lastSvgPlayheadEl.setAttribute("width", String(wSetting));
+    lastSvgPlayheadEl.setAttribute("rx", String(Math.max(0, Math.min(2, halfW))));
+    lastSvgPlayheadEl.setAttribute("ry", String(Math.max(0, Math.min(2, halfW))));
+    lastSvgPlayheadEl.setAttribute("x", String(xTarget - halfW));
+    lastSvgPlayheadEl.setAttribute("y", String(yTop));
+    lastSvgPlayheadEl.setAttribute("height", String(height));
+  } catch {}
 }
 
 function highlightSvgAtEditorOffset(editorOffset) {
@@ -2598,8 +2726,10 @@ function initEditor() {
     { key: "Mod-f", run: openFindPanel },
     { key: "Ctrl-h", run: openReplacePanel },
     { key: "Mod-h", run: openReplacePanel },
-    { key: "Ctrl-g", run: gotoLine },
-    { key: "Mod-g", run: gotoLine },
+    { key: "Ctrl-Alt-g", run: gotoLine },
+    { key: "Mod-Alt-g", run: gotoLine },
+    { key: "Ctrl-g", run: () => { goToMeasureFromMenu().catch(() => {}); return true; } },
+    { key: "Mod-g", run: () => { goToMeasureFromMenu().catch(() => {}); return true; } },
     { key: "Ctrl-F7", run: (view) => moveLineSelection(view, 1) },
     { key: "Mod-F7", run: (view) => moveLineSelection(view, 1) },
 		    { key: "Ctrl-F5", run: (view) => moveLineSelection(view, -1) },
@@ -2628,13 +2758,26 @@ function initEditor() {
     }
     if (!rawMode && update.selectionSet && !isPlaying) {
       const idx = update.state.selection.main.anchor;
-      highlightNoteAtIndex(idx);
+      if (followPlayback) {
+        scheduleCursorNoteHighlight(idx);
+      } else {
+        clearNoteSelection();
+      }
       if (!suppressPlaybackRangeSelectionSync) {
         const origin = pendingPlaybackRangeOrigin || "cursor";
         pendingPlaybackRangeOrigin = null;
         updatePlaybackRangeFromSelection(update.state.selection, origin);
       } else {
         pendingPlaybackRangeOrigin = null;
+      }
+      if (!practiceEnabled && transportJumpHighlightActive) {
+        if (suppressTransportJumpClearOnce) {
+          suppressTransportJumpClearOnce = false;
+        } else {
+          transportJumpHighlightActive = false;
+          setPracticeBarHighlight(null);
+          clearSvgPracticeBarHighlight();
+        }
       }
       if (practiceEnabled) {
         updatePracticeRangePreview();
@@ -5149,6 +5292,8 @@ const errorEntries = [];
 const errorEntryMap = new Map();
 const libraryErrorIndex = new Map();
 let lastNoteSelection = [];
+let pendingCursorNoteHighlightRaf = null;
+let pendingCursorNoteHighlightIdx = null;
 
 function showErrorsVisible(visible) {
   // Errors are surfaced via the always-visible "Errors: N" indicator + popover.
@@ -5609,6 +5754,249 @@ function findMeasureRangeAt(text, pos) {
   return { start: rangeStart, end: rangeEnd };
 }
 
+function findMeasureStartOffsetByNumber(text, measureNumber) {
+  const target = Number(measureNumber);
+  if (!Number.isFinite(target) || target < 1) return null;
+  const src = String(text || "");
+  if (!src.trim()) return null;
+  const len = src.length;
+
+  const isSkippableLine = (line) => {
+    const trimmed = String(line || "").trim();
+    if (!trimmed) return true;
+    if (trimmed.startsWith("%")) return true;
+    if (/^%%/.test(trimmed)) return true;
+    if (/^[A-Za-z]:/.test(trimmed)) return true;
+    return false;
+  };
+
+  const isBodyLine = (line) => {
+    const trimmed = String(line || "").trim();
+    if (!trimmed) return false;
+    if (trimmed.startsWith("%")) return false;
+    if (/^%%/.test(trimmed)) return false;
+    if (/^[A-Za-z]:/.test(trimmed)) return false;
+    return true;
+  };
+
+  let inTextBlock = false;
+  let started = false;
+  let currentMeasure = 1;
+  let currentStart = null;
+
+  const lineStarts = [0];
+  for (let i = 0; i < len; i += 1) {
+    if (src[i] === "\n") lineStarts.push(i + 1);
+  }
+  lineStarts.push(len + 1);
+
+  for (let li = 0; li < lineStarts.length - 1; li += 1) {
+    const lineStart = lineStarts[li];
+    const lineEnd = Math.min(len, lineStarts[li + 1] - 1);
+    const rawLine = src.slice(lineStart, lineEnd);
+    const trimmed = rawLine.trim();
+
+    if (/^%%\s*begintext\b/i.test(trimmed)) { inTextBlock = true; continue; }
+    if (/^%%\s*endtext\b/i.test(trimmed)) { inTextBlock = false; continue; }
+    if (inTextBlock) continue;
+    if (isSkippableLine(rawLine)) continue;
+    if (!started && !isBodyLine(rawLine)) continue;
+    if (!started) {
+      started = true;
+      // First measure begins at the first non-space character of the first body line.
+      const firstNonSpace = rawLine.search(/\S/);
+      currentStart = firstNonSpace >= 0 ? lineStart + firstNonSpace : lineStart;
+      if (target === 1) return currentStart;
+    }
+
+    let inQuote = false;
+    let inComment = false;
+    for (let i = lineStart; i < lineEnd; i += 1) {
+      const ch = src[i];
+      if (inComment) continue;
+      if (ch === "%" && src[i - 1] !== "\\") { inComment = true; continue; }
+      if (ch === "\"") { inQuote = !inQuote; continue; }
+      if (inQuote) continue;
+      if (ch !== "|") continue;
+
+      // Found a barline boundary. Next measure starts immediately after this boundary token sequence.
+      let j = i + 1;
+      while (j < lineEnd && /[:|\]\s]/.test(src[j])) j += 1;
+      currentMeasure += 1;
+      currentStart = j;
+      if (currentMeasure === target) return currentStart;
+    }
+  }
+
+  return null;
+}
+
+let goToMeasureModalEls = null;
+function getGoToMeasureModal() {
+  if (goToMeasureModalEls) return goToMeasureModalEls;
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "abcarus-modal-backdrop hidden";
+
+  const dialog = document.createElement("div");
+  dialog.className = "abcarus-modal";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+
+  const title = document.createElement("div");
+  title.className = "abcarus-modal-title";
+  title.textContent = "Go to Measure";
+
+  const body = document.createElement("div");
+  body.className = "abcarus-modal-body";
+
+  const label = document.createElement("label");
+  label.className = "abcarus-modal-label";
+  label.textContent = "Measure number (starting at 1):";
+
+  const input = document.createElement("input");
+  input.className = "abcarus-modal-input";
+  input.type = "number";
+  input.inputMode = "numeric";
+  input.min = "1";
+  input.step = "1";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+
+  label.appendChild(input);
+  body.appendChild(label);
+
+  const buttons = document.createElement("div");
+  buttons.className = "abcarus-modal-buttons";
+
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "btn abcarus-modal-btn";
+  cancel.textContent = "Cancel";
+
+  const ok = document.createElement("button");
+  ok.type = "button";
+  ok.className = "btn abcarus-modal-btn primary";
+  ok.textContent = "OK";
+
+  buttons.append(cancel, ok);
+  dialog.append(title, body, buttons);
+  backdrop.appendChild(dialog);
+  document.body.appendChild(backdrop);
+
+  goToMeasureModalEls = { backdrop, dialog, input, ok, cancel };
+  return goToMeasureModalEls;
+}
+
+async function promptGoToMeasureNumber() {
+  const { backdrop, dialog, input, ok, cancel } = getGoToMeasureModal();
+  backdrop.classList.remove("hidden");
+
+  const prevActive = document.activeElement;
+
+  const cleanup = () => {
+    backdrop.classList.add("hidden");
+    try {
+      if (prevActive && typeof prevActive.focus === "function") prevActive.focus();
+    } catch {}
+  };
+
+  return await new Promise((resolve) => {
+    const finish = (value) => {
+      teardown();
+      cleanup();
+      resolve(value);
+    };
+
+    const onBackdropMouseDown = (ev) => {
+      if (ev.target === backdrop) finish(null);
+    };
+    const onKeyDown = (ev) => {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        finish(null);
+        return;
+      }
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        finish(String(input.value || ""));
+      }
+    };
+    const onOk = () => finish(String(input.value || ""));
+    const onCancel = () => finish(null);
+
+    const teardown = () => {
+      backdrop.removeEventListener("mousedown", onBackdropMouseDown);
+      ok.removeEventListener("click", onOk);
+      cancel.removeEventListener("click", onCancel);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+
+    backdrop.addEventListener("mousedown", onBackdropMouseDown);
+    ok.addEventListener("click", onOk);
+    cancel.addEventListener("click", onCancel);
+    document.addEventListener("keydown", onKeyDown, true);
+
+    requestAnimationFrame(() => {
+      input.value = "";
+      input.focus();
+      input.select();
+      try {
+        dialog.scrollIntoView({ block: "center", inline: "center" });
+      } catch {}
+    });
+  });
+}
+
+async function goToMeasureFromMenu() {
+  if (!editorView) return;
+  if (rawMode) {
+    setStatus("Go to Measure is unavailable in Raw mode.");
+    return;
+  }
+  if (isPlaybackBusy()) {
+    setStatus("Stop playback first.");
+    return;
+  }
+  setStatus("Go to Measure…");
+  const raw = await promptGoToMeasureNumber();
+  if (raw == null) return;
+  const n = Number(String(raw).trim());
+  if (!Number.isFinite(n) || n < 1 || Math.floor(n) !== n) {
+    showToast("Invalid measure number.", 2400);
+    return;
+  }
+  const text = getEditorValue();
+  const idx = findMeasureStartOffsetByNumber(text, n);
+  if (idx == null) {
+    showToast(`Measure ${n} not found.`, 2600);
+    return;
+  }
+  const max = editorView.state.doc.length;
+  const pos = Math.max(0, Math.min(idx, max));
+  editorView.dispatch({ selection: { anchor: pos, head: pos }, scrollIntoView: true });
+
+  // Transport playhead: next Play starts from this measure (until Stop).
+  transportPlayheadOffset = pos;
+  if (!practiceEnabled) pendingPlaybackPlan = buildTransportPlaybackPlan();
+
+  // Visual feedback: highlight the target measure in both editor and score.
+  try {
+    const range = findMeasureRangeAt(text, pos);
+    if (range && Number.isFinite(range.start) && Number.isFinite(range.end) && range.end > range.start) {
+      setPracticeBarHighlight({ from: range.start, to: range.end });
+      highlightSvgPracticeBarAtEditorOffset(range.start);
+      const chosen = lastSvgPracticeBarEls.length ? pickClosestNoteElement(lastSvgPracticeBarEls) : null;
+      if (chosen) maybeScrollRenderToNote(chosen);
+      transportJumpHighlightActive = true;
+      suppressTransportJumpClearOnce = true;
+    } else {
+      highlightSvgAtEditorOffset(pos);
+    }
+  } catch {}
+  setStatus(`Go to measure: ${n}`);
+}
+
 function buildErrorTuneLabel(meta) {
   if (!meta) return "";
   const xPart = meta.xNumber ? `X:${meta.xNumber}` : "";
@@ -5804,6 +6192,21 @@ function highlightNoteAtIndex(idx) {
   for (const el of lastNoteSelection) el.classList.add("note-select");
   const chosen = pickClosestNoteElement(lastNoteSelection);
   if (chosen) maybeScrollRenderToNote(chosen);
+}
+
+function scheduleCursorNoteHighlight(idx) {
+  // Hot path: selection changes can fire frequently while typing/moving cursor.
+  // Avoid synchronous SVG-wide querySelectorAll on every change; throttle to RAF and keep it opt-in via Follow.
+  pendingCursorNoteHighlightIdx = idx;
+  if (pendingCursorNoteHighlightRaf != null) return;
+  pendingCursorNoteHighlightRaf = requestAnimationFrame(() => {
+    pendingCursorNoteHighlightRaf = null;
+    const next = pendingCursorNoteHighlightIdx;
+    pendingCursorNoteHighlightIdx = null;
+    if (!followPlayback) return;
+    if (rawMode || isPlaying) return;
+    highlightNoteAtIndex(next);
+  });
 }
 
 function highlightRenderNoteAtIndex(renderIdx) {
@@ -6143,14 +6546,24 @@ async function renderAbcToSvgMarkup(abcText, options = {}) {
     const noteSepFallback = sepStrip.replaced;
     const ready = await ensureAbc2svgModulesReady(renderText);
     if (!ready) return { ok: false, error: "ABC modules failed to load." };
-    const svgParts = [];
-    const context = options && options.errorContext ? options.errorContext : null;
-    const stopOnFirstError = Boolean(options && options.stopOnFirstError);
-    const noSvg = Boolean(options && options.noSvg);
-    const user = {
-      img_out: (s) => {
-        if (!noSvg) svgParts.push(s);
-      },
+	    const svgParts = [];
+	    const context = options && options.errorContext ? options.errorContext : null;
+	    const stopOnFirstError = Boolean(options && options.stopOnFirstError);
+	    const noSvg = Boolean(options && options.noSvg);
+	    if (errorsEnabled && tuneErrorScanInFlight) {
+	      const keyWarn = detectKeyFieldNotLastBeforeBody(renderText);
+	      if (keyWarn && keyWarn.detail) {
+	        const msg = `Warning: ${keyWarn.detail}`;
+	        errors.push({ message: msg, loc: keyWarn.loc || null });
+	        if (!options || !options.suppressGlobalErrors) {
+	          logErr(msg, keyWarn.loc || null, { ...(context || {}), skipMeasureRange: true });
+	        }
+	      }
+	    }
+	    const user = {
+	      img_out: (s) => {
+	        if (!noSvg) svgParts.push(s);
+	      },
       err: (msg) => {
         const entry = { message: String(msg) };
         errors.push(entry);
@@ -6815,6 +7228,15 @@ function renderNow() {
           highlightNoteAtIndex(anchor);
           if (errorActivationHighlightRange && Number.isFinite(errorActivationHighlightRange.from)) {
             highlightSvgAtEditorOffset(errorActivationHighlightRange.from);
+          }
+          if (!practiceEnabled && !isPlaybackBusy() && transportJumpHighlightActive && Number.isFinite(anchor)) {
+            try {
+              const editorText = editorView.state.doc.toString();
+              const measure = findMeasureRangeAt(editorText, anchor);
+              if (measure && Number.isFinite(measure.start)) {
+                highlightSvgPracticeBarAtEditorOffset(measure.start);
+              }
+            } catch {}
           }
         }
         if (sepFallbackUsed) {
@@ -8842,21 +9264,9 @@ function wireMenuActions() {
       const actionType = typeof action === "string" ? action : action && action.type;
       const busy = isPlaybackBusy();
       if (busy) {
-        const allowed = new Set([
-          "playStart",
-          "playPrev",
-          "playToggle",
-          "playNext",
-          "resetLayout",
-          "zoomIn",
-          "zoomOut",
-          "zoomReset",
-          "quit",
-        ]);
-        if (!allowed.has(actionType)) {
-          showToast("Playback active: stop before changing files/settings/tools.", 2400);
-          return;
-        }
+        // During Play/Pause, ignore menu actions (except Play/Pause itself, Reset Layout, and Quit).
+        const allowed = new Set(["playToggle", "resetLayout", "quit", "playGotoMeasure"]);
+        if (!allowed.has(actionType)) return;
       }
       if (rawMode) {
         const blocked = new Set([
@@ -8954,9 +9364,8 @@ function wireMenuActions() {
       }
       else if (actionType === "clearLibraryFilter") clearLibraryFilter();
       else if (actionType === "playStart") await startPlaybackAtIndex(0);
-      else if (actionType === "playPrev") await startPlaybackAtMeasureOffset(-1);
       else if (actionType === "playToggle") { await togglePlayPauseEffective(); }
-      else if (actionType === "playNext") await startPlaybackAtMeasureOffset(1);
+      else if (actionType === "playGotoMeasure") await goToMeasureFromMenu();
       else if (actionType === "resetLayout") resetLayout();
       else if (actionType === "helpGuide") await openExternal("https://abcplus.sourceforge.net/abcplus_en.pdf");
       else if (actionType === "helpLink" && action && action.url) await openExternal(action.url);
@@ -8969,12 +9378,51 @@ function wireMenuActions() {
         await applyAbc2abcTransform({ measuresPerLine: action.value });
       }
       else if (actionType === "alignBars") alignBarsInEditor();
-      else if (actionType === "dumpDebug") dumpDebugToFile().catch(() => {});
-      else if (actionType === "settings" && settingsController) settingsController.openSettings();
-      else if (actionType === "zoomIn" && settingsController) { if (!shouldIgnoreMenuZoomAction()) settingsController.zoomIn(); }
-      else if (actionType === "zoomOut" && settingsController) { if (!shouldIgnoreMenuZoomAction()) settingsController.zoomOut(); }
-      else if (actionType === "zoomReset" && settingsController) {
-        if (!shouldIgnoreMenuZoomAction()) {
+	      else if (actionType === "dumpDebug") dumpDebugToFile().catch(() => {});
+	      else if (actionType === "settings" && settingsController) settingsController.openSettings();
+	      else if (actionType === "exportSettings") {
+	        if (!window.api || typeof window.api.exportSettings !== "function") {
+	          showToast("Export not available.", 2400);
+	          return;
+	        }
+	        const res = await window.api.exportSettings();
+	        if (res && res.ok) {
+	          const note = res.exportedHeader ? " (incl. user_settings.abc)" : "";
+	          showToast(`Settings exported${note} and will be used next time.`, 4200);
+	        } else if (res && res.error && res.error !== "Canceled") {
+	          showToast(String(res.error), 3200);
+	        }
+	      }
+	      else if (actionType === "importSettings") {
+	        if (!window.api || typeof window.api.importSettings !== "function") {
+	          showToast("Import not available.", 2400);
+	          return;
+	        }
+	        const res = await window.api.importSettings();
+	        if (res && res.ok) {
+	          showToast(
+	            res.importedHeader
+	              ? "Settings imported (incl. user_settings.abc) and will be used next time."
+	              : "Settings imported and will be used next time.",
+	            4200
+	          );
+	          refreshHeaderLayers().catch(() => {});
+	        } else if (res && res.error && res.error !== "Canceled") {
+	          showToast(String(res.error), 3200);
+	        }
+	      }
+	      else if (actionType === "openSettingsFolder") {
+	        if (!window.api || typeof window.api.openSettingsFolder !== "function") {
+	          showToast("Not available.", 2400);
+	          return;
+	        }
+	        const res = await window.api.openSettingsFolder();
+	        if (res && res.ok) showToast("Opened settings folder.", 2000);
+	      }
+	      else if (actionType === "zoomIn" && settingsController) { if (!shouldIgnoreMenuZoomAction()) settingsController.zoomIn(); }
+	      else if (actionType === "zoomOut" && settingsController) { if (!shouldIgnoreMenuZoomAction()) settingsController.zoomOut(); }
+	      else if (actionType === "zoomReset" && settingsController) {
+	        if (!shouldIgnoreMenuZoomAction()) {
           settingsController.zoomReset();
           requestAnimationFrame(() => centerRenderPaneOnCurrentAnchor());
         }
@@ -9322,6 +9770,14 @@ let lastDrumPlaybackActive = false;
 let waitingForFirstNote = false;
 let isPreviewing = false;
 let followPlayback = true;
+let followHighlightColor = "#1e90ff";
+let followHighlightBarOpacity = 0.12;
+let followPlayheadOpacity = 0.7;
+let followPlayheadWidth = 2;
+let followPlayheadPad = 8;
+let followPlayheadBetweenNotesWeight = 1;
+let followPlayheadShift = 0;
+let followPlayheadFirstBias = 6;
 let followVoiceId = null;
 let followVoiceIndex = null;
 let drumVelocityMap = buildDefaultDrumVelocityMap();
@@ -9348,6 +9804,7 @@ let lastMeterMismatchToastKey = null;
 let lastPlaybackMeterMismatchWarning = null;
 let lastRepeatShortBarToastKey = null;
 let lastPlaybackRepeatShortBarWarning = null;
+let lastPlaybackKeyOrderWarning = null;
 let playbackStartToken = 0;
 let lastPlaybackGuardMessage = "";
 let lastPlaybackAbortMessage = "";
@@ -9361,6 +9818,8 @@ function clearPlaybackNoteOnEls() {
 
 function resetPlaybackUiState() {
   clearPlaybackNoteOnEls();
+  clearSvgPlayhead();
+  clearSvgFollowBarHighlight();
   clearSvgPracticeBarHighlight();
   setPracticeBarHighlight(null);
   lastPlaybackUiRenderIdx = null;
@@ -9557,7 +10016,7 @@ function updatePlaybackInteractionLock() {
 function buildTransportPlaybackPlan() {
   return {
     mode: "transport",
-    rangeStart: 0,
+    rangeStart: Math.max(0, Number(transportPlayheadOffset) || 0),
     rangeEnd: null,
     loopEnabled: false,
     tempoMultiplier: 1,
@@ -9624,8 +10083,8 @@ async function transportTogglePlayPause() {
     await startPlaybackFromRange();
     return;
   }
-  // Transport always starts from 0 (not from cursor/selection).
-  await startPlaybackFromRange({ startOffset: 0, endOffset: null, origin: "transport", loop: false });
+  const startOffset = Math.max(0, Number(transportPlayheadOffset) || 0);
+  await startPlaybackFromRange({ startOffset, endOffset: null, origin: "transport", loop: false });
 }
 
 async function transportPlay() {
@@ -9634,7 +10093,8 @@ async function transportPlay() {
     await startPlaybackFromRange();
     return;
   }
-  await startPlaybackFromRange({ startOffset: 0, endOffset: null, origin: "transport", loop: false });
+  const startOffset = Math.max(0, Number(transportPlayheadOffset) || 0);
+  await startPlaybackFromRange({ startOffset, endOffset: null, origin: "transport", loop: false });
 }
 
 async function transportPause() {
@@ -9792,20 +10252,50 @@ function schedulePlaybackUiUpdate(istart) {
       return;
     }
 
+    // Follow mode: emphasize bar + playhead line over per-note blinking.
     clearPlaybackNoteOnEls();
+
+    let barEl = null;
+    if (
+      followPlayback
+      && playbackState
+      && Array.isArray(playbackState.measureIstarts)
+      && playbackState.measureIstarts.length
+      && editorView
+    ) {
+      try {
+        const list = playbackState.measureIstarts;
+        const measureIndex = findMeasureIndex(i);
+        const startI = list[Math.max(0, Math.min(list.length - 1, measureIndex))] || 0;
+        const from = toEditorOffset(startI);
+        if (Number.isFinite(from)) {
+          highlightSvgFollowBarAtEditorOffset(from);
+          barEl = lastSvgFollowBarEls.length ? lastSvgFollowBarEls[0] : null;
+        }
+      } catch {}
+    }
+
     const els = $out.querySelectorAll("._" + renderIdx + "_");
-    if (!els || !els.length) {
+    const noteEls = els && els.length
+      ? Array.from(els).filter((el) => el.classList && el.classList.contains("note-hl"))
+      : [];
+    const chosen = noteEls.length ? pickClosestNoteElement(noteEls) : null;
+    if (chosen) {
+      if (barEl && barEl.ownerSVGElement && chosen.ownerSVGElement && barEl.ownerSVGElement !== chosen.ownerSVGElement) {
+        const sameSvg = lastSvgFollowBarEls.find((el) => el && el.ownerSVGElement === chosen.ownerSVGElement);
+        if (sameSvg) barEl = sameSvg;
+      }
+      setSvgPlayheadFromElements(chosen, barEl);
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      if (now - lastPlaybackUiScrollAt > 90) {
+        maybeScrollRenderToNote(chosen);
+        lastPlaybackUiScrollAt = now;
+      }
       highlightSourceAt(editorIdx, true);
       return;
     }
-    lastPlaybackNoteOnEls = Array.from(els);
-    for (const el of lastPlaybackNoteOnEls) el.classList.add("note-on");
-    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-    if (now - lastPlaybackUiScrollAt > 80) {
-      const chosen = pickClosestNoteElement(lastPlaybackNoteOnEls);
-      if (chosen) maybeScrollRenderToNote(chosen);
-      lastPlaybackUiScrollAt = now;
-    }
+
+    clearSvgPlayhead();
     highlightSourceAt(editorIdx, true);
   });
 }
@@ -10355,6 +10845,11 @@ function stopPlaybackTransport() {
   isPlaying = false;
   isPaused = false;
   waitingForFirstNote = false;
+  transportPlayheadOffset = 0;
+  transportJumpHighlightActive = false;
+  suppressTransportJumpClearOnce = false;
+  setPracticeBarHighlight(null);
+  clearSvgPracticeBarHighlight();
   resumeStartIdx = null;
   activePlaybackRange = null;
   activePlaybackEndAbcOffset = null;
@@ -10400,6 +10895,43 @@ function updateFollowToggle() {
   $btnToggleFollow.classList.toggle("toggle-active", followPlayback);
   $btnToggleFollow.textContent = "Follow";
   $btnToggleFollow.setAttribute("aria-pressed", followPlayback ? "true" : "false");
+  if (!followPlayback) {
+    clearSvgPlayhead();
+    clearSvgFollowBarHighlight();
+  }
+}
+
+function normalizeHexColor(value, fallback) {
+  const raw = String(value || "").trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw.toLowerCase();
+  return fallback;
+}
+
+function clampNumber(value, min, max, fallback) {
+  const v = Number(value);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.max(min, Math.min(max, v));
+}
+
+function applyFollowHighlightCssVars() {
+  const root = document.documentElement;
+  if (!root || !root.style) return;
+  root.style.setProperty("--abcarus-follow-color", followHighlightColor);
+  root.style.setProperty("--abcarus-follow-bar-opacity", String(followHighlightBarOpacity));
+  root.style.setProperty("--abcarus-follow-playhead-opacity", String(followPlayheadOpacity));
+}
+
+function setFollowHighlightFromSettings(settings) {
+  if (!settings || typeof settings !== "object") return;
+  followHighlightColor = normalizeHexColor(settings.followHighlightColor, followHighlightColor);
+  followHighlightBarOpacity = clampNumber(settings.followHighlightBarOpacity, 0, 1, followHighlightBarOpacity);
+  followPlayheadOpacity = clampNumber(settings.followPlayheadOpacity, 0, 1, followPlayheadOpacity);
+  followPlayheadWidth = clampNumber(settings.followPlayheadWidth, 1, 6, followPlayheadWidth);
+  followPlayheadPad = clampNumber(settings.followPlayheadPad, 0, 24, followPlayheadPad);
+  followPlayheadBetweenNotesWeight = clampNumber(settings.followPlayheadBetweenNotesWeight, 0, 1, followPlayheadBetweenNotesWeight);
+  followPlayheadShift = clampNumber(settings.followPlayheadShift, -20, 20, followPlayheadShift);
+  followPlayheadFirstBias = clampNumber(settings.followPlayheadFirstBias, 0, 20, followPlayheadFirstBias);
+  applyFollowHighlightCssVars();
 }
 
 function formatPracticeTempoLabel(multiplier) {
@@ -10462,6 +10994,7 @@ function updatePracticeUi() {
 
 function setFollowFromSettings(settings) {
   if (!settings || typeof settings !== "object") return;
+  setFollowHighlightFromSettings(settings);
   if (settings.followPlayback === undefined) return;
   followPlayback = settings.followPlayback !== false;
   updateFollowToggle();
@@ -11546,6 +12079,197 @@ function sanitizeAbcForPlayback(text) {
   return { text: out.join("\n"), warnings };
 }
 
+function detectKeyFieldNotLastBeforeBody(text) {
+  const lines = String(text || "").split(/\r\n|\n|\r/);
+  const isTuneStart = (line) => /^\s*X:/.test(line);
+  const isFieldLine = (line) => /^\s*[A-Za-z]:/.test(line);
+  const isInlineFieldLine = (line) => /^\s*\[\s*[A-Za-z]+:/.test(String(line || "").trim());
+  const isContinuationLine = (line) => /^\s*\+:\s*/.test(line);
+  const isKeyLine = (line) => /^\s*K:/.test(line);
+  const isCommentLine = (line) => /^\s*%/.test(line);
+  const isDirectiveLine = (line) => /^\s*%%/.test(line);
+  const beginsBlock = (trimmed) => {
+    if (!/^%%\s*begin/i.test(trimmed)) return null;
+    if (/^%%\s*begintext\b/i.test(trimmed)) return "text";
+    if (/^%%\s*beginsvg\b/i.test(trimmed)) return "svg";
+    if (/^%%\s*beginps\b/i.test(trimmed)) return "ps";
+    return "other";
+  };
+  const endsBlock = (trimmed, block) => {
+    if (!block) return false;
+    if (block === "text") return /^%%\s*endtext\b/i.test(trimmed);
+    if (block === "svg") return /^%%\s*endsvg\b/i.test(trimmed);
+    if (block === "ps") return /^%%\s*endps\b/i.test(trimmed);
+    if (block === "other") return /^%%\s*end/i.test(trimmed);
+    return false;
+  };
+
+  const scanTune = (start, end) => {
+    let kIdx = -1;
+    for (let i = start; i < end; i += 1) {
+      if (isKeyLine(lines[i])) { kIdx = i; break; }
+    }
+    if (kIdx < 0) return null;
+
+    let block = null;
+    let bodyStart = end;
+    for (let j = kIdx + 1; j < end; j += 1) {
+      const raw = lines[j];
+      const trimmed = raw.trim();
+      if (block) {
+        if (endsBlock(trimmed, block)) block = null;
+        continue;
+      }
+      const begin = beginsBlock(trimmed);
+      if (begin) {
+        block = begin;
+        continue;
+      }
+      if (!trimmed) continue;
+      if (isCommentLine(raw)) continue;
+      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw) || isInlineFieldLine(raw)) continue;
+      bodyStart = j;
+      break;
+    }
+
+    let firstOffender = null;
+    for (let j = kIdx + 1; j < bodyStart; j += 1) {
+      const raw = lines[j];
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+      if (isCommentLine(raw)) continue;
+      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw) || isInlineFieldLine(raw)) {
+        firstOffender = { line: j + 1, text: raw };
+        break;
+      }
+    }
+    if (!firstOffender) return null;
+
+    const tuneLabel = (() => {
+      for (let i = start; i < end; i += 1) {
+        const m = String(lines[i] || "").match(/^\s*X:\s*(\d+)/);
+        if (m) return `X:${m[1]}`;
+      }
+      return null;
+    })();
+
+    return {
+      kind: "abc2svg-k-field-not-last",
+      loc: { line: firstOffender.line, col: 1 },
+      detail: `${tuneLabel ? `${tuneLabel}: ` : ""}K: is not the last header field before the music. abc2svg playback may fail when directives/fields appear after K:.`,
+    };
+  };
+
+  let start = 0;
+  let sawTuneStart = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (isTuneStart(lines[i])) {
+      if (sawTuneStart) {
+        const warn = scanTune(start, i);
+        if (warn) return warn;
+        start = i;
+      } else {
+        sawTuneStart = true;
+        start = i;
+      }
+    }
+  }
+  const warn = scanTune(sawTuneStart ? start : 0, lines.length);
+  return warn || null;
+}
+
+function normalizeKeyFieldToBeLastBeforeBodyForPlayback(text) {
+  const lines = String(text || "").split(/\r\n|\n|\r/);
+  const isTuneStart = (line) => /^\s*X:/.test(line);
+  const isFieldLine = (line) => /^\s*[A-Za-z]:/.test(line);
+  const isInlineFieldLine = (line) => /^\s*\[\s*[A-Za-z]+:/.test(String(line || "").trim());
+  const isContinuationLine = (line) => /^\s*\+:\s*/.test(line);
+  const isKeyLine = (line) => /^\s*K:/.test(line);
+  const isCommentLine = (line) => /^\s*%/.test(line);
+  const isDirectiveLine = (line) => /^\s*%%/.test(line);
+  const beginsBlock = (trimmed) => {
+    if (!/^%%\s*begin/i.test(trimmed)) return null;
+    if (/^%%\s*begintext\b/i.test(trimmed)) return "text";
+    if (/^%%\s*beginsvg\b/i.test(trimmed)) return "svg";
+    if (/^%%\s*beginps\b/i.test(trimmed)) return "ps";
+    return "other";
+  };
+  const endsBlock = (trimmed, block) => {
+    if (!block) return false;
+    if (block === "text") return /^%%\s*endtext\b/i.test(trimmed);
+    if (block === "svg") return /^%%\s*endsvg\b/i.test(trimmed);
+    if (block === "ps") return /^%%\s*endps\b/i.test(trimmed);
+    if (block === "other") return /^%%\s*end/i.test(trimmed);
+    return false;
+  };
+
+  const normalizeTune = (start, end) => {
+    let kIdx = -1;
+    for (let i = start; i < end; i += 1) {
+      if (isKeyLine(lines[i])) { kIdx = i; break; }
+    }
+    if (kIdx < 0) return false;
+
+    let block = null;
+    let bodyStart = end;
+    for (let j = kIdx + 1; j < end; j += 1) {
+      const raw = lines[j];
+      const trimmed = raw.trim();
+      if (block) {
+        if (endsBlock(trimmed, block)) block = null;
+        continue;
+      }
+      const begin = beginsBlock(trimmed);
+      if (begin) {
+        block = begin;
+        continue;
+      }
+      if (!trimmed) continue;
+      if (isCommentLine(raw)) continue;
+      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw) || isInlineFieldLine(raw)) continue;
+      bodyStart = j;
+      break;
+    }
+    if (bodyStart <= kIdx + 1) return false;
+
+    let hasPostKeyHeader = false;
+    for (let j = kIdx + 1; j < bodyStart; j += 1) {
+      const raw = lines[j];
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+      if (isCommentLine(raw)) continue;
+      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw) || isInlineFieldLine(raw)) {
+        hasPostKeyHeader = true;
+        break;
+      }
+    }
+    if (!hasPostKeyHeader) return false;
+
+    const kLine = lines[kIdx];
+    lines.splice(kIdx, 1);
+    const insertAt = bodyStart - 1;
+    lines.splice(insertAt, 0, kLine);
+    return true;
+  };
+
+  let changed = false;
+  let start = 0;
+  let sawTuneStart = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (isTuneStart(lines[i])) {
+      if (sawTuneStart) {
+        if (normalizeTune(start, i)) changed = true;
+        start = i;
+      } else {
+        sawTuneStart = true;
+        start = i;
+      }
+    }
+  }
+  if (normalizeTune(sawTuneStart ? start : 0, lines.length)) changed = true;
+  return { text: lines.join("\n"), changed };
+}
+
 function stripLyricsForPlayback(text) {
   const lines = String(text || "").split(/\r\n|\n|\r/);
   const out = [];
@@ -11727,6 +12451,18 @@ function getPlaybackPayload() {
   playbackSanitizeWarnings = Array.isArray(sanitized.warnings) ? sanitized.warnings.slice(0, 200) : [];
   payload = { text: sanitized.text, offset: payload.offset };
 
+  lastPlaybackKeyOrderWarning = null;
+  const keyOrderWarn = detectKeyFieldNotLastBeforeBody(payload.text);
+  if (keyOrderWarn) {
+    lastPlaybackKeyOrderWarning = keyOrderWarn;
+    playbackSanitizeWarnings.push(keyOrderWarn);
+  }
+  const keyOrderNormalized = normalizeKeyFieldToBeLastBeforeBodyForPlayback(payload.text);
+  if (keyOrderNormalized && keyOrderNormalized.changed) {
+    payload = { text: keyOrderNormalized.text, offset: payload.offset };
+    playbackSanitizeWarnings.push({ kind: "playback-k-field-reordered" });
+  }
+
   lastPlaybackMeterMismatchWarning = null;
   lastPlaybackRepeatShortBarWarning = null;
   const meterWarn = detectMeterMismatchInBarlines(payload.text);
@@ -11882,6 +12618,13 @@ async function preparePlayback() {
     addError(
       `Warning: ${lastPlaybackRepeatShortBarWarning.detail}`,
       lastPlaybackRepeatShortBarWarning.loc || null,
+      { skipMeasureRange: true }
+    );
+  }
+  if (lastPlaybackKeyOrderWarning && lastPlaybackKeyOrderWarning.detail) {
+    addError(
+      `Warning: ${lastPlaybackKeyOrderWarning.detail}`,
+      lastPlaybackKeyOrderWarning.loc || null,
       { skipMeasureRange: true }
     );
   }

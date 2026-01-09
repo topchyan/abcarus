@@ -5,6 +5,7 @@ const {
 } = require("./conversion");
 const { resolvePythonExecutable, pythonEnvForExecutable } = require("./conversion/utils");
 const { getSettingsSchema } = require("./settings_schema");
+const { encodePropertiesFromSchema, parseSettingsPatchFromProperties } = require("./properties");
 
 const os = require("os");
 const { execFile } = require("child_process");
@@ -98,7 +99,7 @@ async function getPythonVersion() {
 }
 
 function registerIpcHandlers(ctx) {
-  const {
+	  const {
     ipcMain,
     app,
     dialog,
@@ -124,15 +125,18 @@ function registerIpcHandlers(ctx) {
     exportPdf,
     printViaPdf,
     getDialogParent,
-    prepareDialogParent,
-    addRecentTune,
-    addRecentFile,
-    addRecentFolder,
-    getSettings,
-    updateSettings,
-    requestQuit,
-    getLastRecent,
-  } = ctx;
+	    prepareDialogParent,
+	    addRecentTune,
+	    addRecentFile,
+	    addRecentFolder,
+	    getSettings,
+	    getSettingsPaths,
+	    getSettingsFile,
+	    setSettingsFile,
+	    updateSettings,
+	    requestQuit,
+	    getLastRecent,
+	  } = ctx;
 
   const getParentForDialog = (event, reason) => {
     try {
@@ -466,6 +470,114 @@ function registerIpcHandlers(ctx) {
   ipcMain.handle("settings:update", async (_event, patch) => {
     return updateSettings(patch || {});
   });
+  ipcMain.handle("settings:export", async (event) => {
+    try {
+      const parent = getParentForDialog(event, "export-settings");
+      const documentsDir = (app && typeof app.getPath === "function") ? app.getPath("documents") : "";
+      const suggestedDir = documentsDir ? path.join(documentsDir, "ABCarus") : "";
+      if (suggestedDir) {
+        try { await fs.promises.mkdir(suggestedDir, { recursive: true }); } catch {}
+      }
+      const defaultPath = suggestedDir ? path.join(suggestedDir, "abcarus.properties") : "abcarus.properties";
+      const result = await dialog.showSaveDialog(parent || undefined, {
+        modal: true,
+        title: "Export Settings",
+        defaultPath,
+        filters: [{ name: "Properties", extensions: ["properties"] }, { name: "All Files", extensions: ["*"] }],
+      });
+      if (!result || result.canceled || !result.filePath) return { ok: false, error: "Canceled" };
+      const filePath = String(result.filePath);
+
+      const schema = getSettingsSchema();
+      const current = getSettings();
+      const propsText = encodePropertiesFromSchema(current, schema);
+      await atomicWriteFileWithRetry(fs, path, filePath, propsText);
+      // Export implies: this file becomes the canonical source of truth.
+      if (typeof setSettingsFile === "function") {
+        let mtimeMs = 0;
+        try { mtimeMs = (await fs.promises.stat(filePath)).mtimeMs || 0; } catch {}
+        await setSettingsFile({ mode: "file", path: filePath, lastKnownMtimeMs: mtimeMs });
+      }
+
+      const paths = (typeof getSettingsPaths === "function") ? getSettingsPaths() : { userPath: "" };
+      const userHeaderPath = paths && paths.userPath ? String(paths.userPath) : "";
+      const exportDir = path.dirname(filePath);
+      const exportHeaderPath = path.join(exportDir, "user_settings.abc");
+      let userHeaderText = "";
+      try {
+        if (userHeaderPath) userHeaderText = await fs.promises.readFile(userHeaderPath, "utf8");
+      } catch {}
+      if (!userHeaderText && current && typeof current.globalHeaderText === "string" && current.globalHeaderText.trim()) {
+        userHeaderText = current.globalHeaderText;
+      }
+      if (userHeaderText && userHeaderText.trim()) {
+        await atomicWriteFileWithRetry(fs, path, exportHeaderPath, userHeaderText);
+      }
+      return { ok: true, path: filePath, exportedHeader: Boolean(userHeaderText && userHeaderText.trim()) };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("settings:import", async (event) => {
+    try {
+      const parent = getParentForDialog(event, "import-settings");
+      const documentsDir = (app && typeof app.getPath === "function") ? app.getPath("documents") : "";
+      const suggestedDir = documentsDir ? path.join(documentsDir, "ABCarus") : "";
+      const result = await dialog.showOpenDialog(parent || undefined, {
+        modal: true,
+        title: "Import Settings",
+        properties: ["openFile"],
+        defaultPath: suggestedDir || undefined,
+        filters: [{ name: "Properties", extensions: ["properties"] }, { name: "All Files", extensions: ["*"] }],
+      });
+      if (!result || result.canceled || !result.filePaths || !result.filePaths.length) return { ok: false, error: "Canceled" };
+      const filePath = String(result.filePaths[0]);
+      const raw = await fs.promises.readFile(filePath, "utf8");
+      const schema = getSettingsSchema();
+      const patch = parseSettingsPatchFromProperties(raw, schema);
+
+      const importDir = path.dirname(filePath);
+      const importedHeaderPath = path.join(importDir, "user_settings.abc");
+      const paths = (typeof getSettingsPaths === "function") ? getSettingsPaths() : { userPath: "" };
+      const userHeaderPath = paths && paths.userPath ? String(paths.userPath) : "";
+      let importedHeader = false;
+      try {
+        await fs.promises.access(importedHeaderPath, fs.constants.F_OK);
+        if (userHeaderPath) {
+          const text = await fs.promises.readFile(importedHeaderPath, "utf8");
+          await atomicWriteFileWithRetry(fs, path, userHeaderPath, text);
+          importedHeader = true;
+        }
+      } catch {}
+
+      const next = updateSettings(patch || {});
+      // Import implies: this file becomes the canonical source of truth.
+      if (typeof setSettingsFile === "function") {
+        let mtimeMs = 0;
+        try { mtimeMs = (await fs.promises.stat(filePath)).mtimeMs || 0; } catch {}
+        await setSettingsFile({ mode: "file", path: filePath, lastKnownMtimeMs: mtimeMs });
+      }
+      return { ok: true, path: filePath, importedHeader, settings: next };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("settings:open-folder", async () => {
+    try {
+      if (!app || typeof app.getPath !== "function") return { ok: false, error: "Unavailable." };
+      const userData = app.getPath("userData");
+      if (!userData) return { ok: false, error: "Unavailable." };
+      await shell.openPath(String(userData));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  // Note: we intentionally do not expose attach/detach/reload controls in the UI.
+  // The file-backed mode is activated by Export/Import and silently falls back to internal if the file disappears.
   ipcMain.handle("recent:last", async () => getLastRecent());
   ipcMain.handle("shell:open-external", async (_event, url) => {
     try {

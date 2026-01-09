@@ -89,6 +89,25 @@ When reporting bugs upstream, include:
 - Expected vs actual behavior.
 - abc2svg version (`third_party/abc2svg/version.txt`) and OS/runtime details.
 
+#### Known upstream behavior (abc2svg): `K:` must be last before music
+
+We have observed that `abc2svg` playback may fail (e.g. “Playback start failed … reading 'time'”) when a tune has
+header fields/directives after `K:` before the first music line, e.g.:
+
+```abc
+K:Dm
+%%MIDI drum ...
+|: ...
+```
+
+Real-world files often place `%%MIDI ...` after `K:`. ABCarus therefore:
+- Shows a warning in **Scan for Errors** when it detects this pattern.
+- Applies a **playback-only** normalization that moves `K:` below subsequent header lines (file is not modified).
+
+Suggested upstream report text:
+- “abc2svg playback appears to treat `K:` as the header/body boundary and rejects subsequent header lines (e.g. `%%MIDI`).”
+- “Could abc2svg accept header directives after `K:` or emit a clearer error?”
+
 ## Playback-focused upgrade smoke tests (abc2svg)
 
 These tests are designed to catch the exact regressions we've seen after abc2svg upgrades:

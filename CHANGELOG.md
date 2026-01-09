@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Playback: Follow mode now highlights the current bar and shows a vertical playhead line in the score (configurable in Settings).
+- Playback: Go to Measure… (Cmd/Ctrl+G) to jump the transport start to a specific bar.
+- Settings: import/export portable `.properties` settings (SciTE-style).
+
+### Changed
+- Settings: split Playback vs Drums sections to reduce confusion.
+- Edit: Go to Line moved to Cmd/Ctrl+Alt+G (Cmd/Ctrl+G is reserved for Go to Measure).
+- Diagnostics: gate verbose renderer diagnostics behind opt-in debug flags.
+
+### Fixed
+- Playback: more robust startup on some real-world ABC that violates strict K:-placement assumptions (playback-only workaround + warning).
+
 ## [0.18.0] - 2026-01-08
 ### Added
 - CI: stable `/releases/latest/download/...` filenames for all release artifacts.

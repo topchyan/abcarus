@@ -1085,6 +1085,18 @@ svg {
   stroke-width: 1.2;
 }
 
+.bar-hl.svg-follow-bar {
+  fill: var(--abcarus-follow-color, #1e90ff);
+  fill-opacity: var(--abcarus-follow-bar-opacity, 0.12);
+  stroke: none;
+}
+
+.svg-playhead-line {
+  fill: var(--abcarus-follow-color, #1e90ff);
+  fill-opacity: var(--abcarus-follow-playhead-opacity, 0.7);
+  shape-rendering: crispEdges;
+}
+
 .bar-hl {
   fill-opacity: 0;
   pointer-events: none;
@@ -1261,6 +1273,66 @@ svg {
 .toast.show {
   opacity: 1;
   transform: translateY(0);
+}
+
+.abcarus-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.abcarus-modal-backdrop.hidden {
+  display: none;
+}
+
+.abcarus-modal {
+  width: min(420px, 92vw);
+  background: var(--ui-bg, #fff);
+  color: var(--ui-fg, #111);
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  padding: 12px;
+}
+
+.abcarus-modal-title {
+  font-weight: 600;
+  margin: 0 0 10px 0;
+}
+
+.abcarus-modal-body {
+  margin: 0 0 12px 0;
+}
+
+.abcarus-modal-label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.abcarus-modal-input {
+  width: 100%;
+  font-size: 14px;
+  padding: 7px 9px;
+  border: 1px solid rgba(0, 0, 0, 0.22);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+}
+
+.abcarus-modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.abcarus-modal-btn.primary {
+  border: 1px solid rgba(0, 0, 0, 0.28);
 }
 
 .buffer-status {
