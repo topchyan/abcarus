@@ -6,6 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-01-09
 ### Added
 - Playback: Follow mode now highlights the current bar and shows a vertical playhead line in the score (configurable in Settings).
 - Playback: Go to Measure… (Cmd/Ctrl+G) to jump the transport start to a specific bar.
