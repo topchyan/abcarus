@@ -736,6 +736,10 @@ body.resizing * {
 .tree-label-text {
   flex: 1;
   text-align: left;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tree-count {
@@ -750,6 +754,13 @@ body.resizing * {
 .tree-file.active > .tree-label .tree-count {
   background: #d6e6ff;
   color: var(--accent);
+}
+
+.tree-label.tune-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tree-rename {

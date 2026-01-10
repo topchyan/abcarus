@@ -3212,6 +3212,7 @@ function renderLibraryTree(files = null) {
       const labelText = document.createElement("span");
       labelText.className = "tree-label-text";
       labelText.textContent = entry.label;
+      labelText.title = entry.label;
       const count = document.createElement("span");
       count.className = "tree-count";
       count.textContent = String(getEntryTuneCount(entry) || 0);
@@ -3289,6 +3290,7 @@ function renderLibraryTree(files = null) {
       const composer = tune.composer ? ` - ${tune.composer}` : "";
       const key = tune.key ? ` - ${tune.key}` : "";
       button.textContent = `${labelNumber}: ${title}${composer}${key}`.trim();
+      button.title = button.textContent;
       button.dataset.tuneId = tune.id;
       if (tune.id === activeTuneId) button.classList.add("active");
       button.addEventListener("dragstart", (ev) => {
