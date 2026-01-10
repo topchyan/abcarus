@@ -4,12 +4,6 @@ import {
   basicSetup,
   indentUnit,
 } from "../../third_party/codemirror/cm.js";
-import {
-  DRUM_INSTRUMENTS,
-  buildDefaultDrumVelocityMap,
-  clampVelocity,
-  DEFAULT_DRUM_VELOCITY,
-} from "./drums.js";
 import { createSettingsStore } from "./settings_store.js";
 
 const ZOOM_STEP = 0.1;
@@ -38,7 +32,6 @@ const FALLBACK_SCHEMA = [
   { key: "followPlayheadBetweenNotesWeight", type: "number", default: 1, section: "Playback", label: "Playhead between notes (%)", ui: { input: "percent", min: 0, max: 100, step: 5 }, advanced: true },
   { key: "followPlayheadShift", type: "number", default: 0, section: "Playback", label: "Playhead horizontal shift (px)", ui: { input: "number", min: -20, max: 20, step: 1 }, advanced: true },
   { key: "followPlayheadFirstBias", type: "number", default: 6, section: "Playback", label: "First-note bias (px)", ui: { input: "number", min: 0, max: 20, step: 1 }, advanced: true },
-  { key: "drumVelocityMap", type: "object", default: {}, section: "Drums", label: "Drum mixer", ui: { input: "drumVelocityMap" }, advanced: true },
 ];
 
 function buildDefaults(schema) {
@@ -46,10 +39,6 @@ function buildDefaults(schema) {
   for (const entry of schema) {
     if (!entry || !entry.key) continue;
     out[entry.key] = entry.default;
-  }
-  // Keep renderer-side defaults for computed maps.
-  if (out.drumVelocityMap && typeof out.drumVelocityMap === "object") {
-    // leave as-is (main may provide real values); normalization happens on apply.
   }
   return out;
 }
@@ -85,7 +74,7 @@ export function initSettings(api) {
   let defaultSettings = buildDefaults(schema);
   let currentSettings = { ...defaultSettings };
   let activePane = "render";
-  let lastActiveTab = "main";
+  let lastActiveTab = "general";
   let showAdvanced = false;
   let setActiveTab = null;
   let applySettingsFilter = null;
@@ -94,9 +83,6 @@ export function initSettings(api) {
   let globalHeaderView = null;
   let suppressGlobalUpdate = false;
   let globalUpdateTimer = null;
-  let drumVelocityMap = buildDefaultDrumVelocityMap();
-  const drumRowByPitch = new Map();
-  let drumUpdateTimer = null;
 
   function readUiState() {
     try {
@@ -115,18 +101,6 @@ export function initSettings(api) {
       const next = { ...prev, ...(patch || {}) };
       localStorage.setItem(SETTINGS_UI_STATE_KEY, JSON.stringify(next));
     } catch {}
-  }
-
-  function normalizeDrumVelocityMap(map) {
-    const base = buildDefaultDrumVelocityMap();
-    if (map && typeof map === "object") {
-      for (const [key, value] of Object.entries(map)) {
-        const pitch = Number(key);
-        if (!Number.isFinite(pitch)) continue;
-        base[pitch] = clampVelocity(value);
-      }
-    }
-    return base;
   }
 
   async function updateSettings(patch) {
@@ -173,8 +147,6 @@ export function initSettings(api) {
       }
     }
 
-    drumVelocityMap = normalizeDrumVelocityMap(currentSettings.drumVelocityMap);
-    renderDrumMixer();
   }
 
   function openSettings() {
@@ -210,80 +182,7 @@ export function initSettings(api) {
     updateSettings({ renderZoom: 1, editorZoom: 1 }).catch(() => {});
   }
 
-  function renderDrumMixer() {
-    const host = controlByKey.get("drumVelocityMap")?.host;
-    if (!host) return;
-    if (!host.hasChildNodes()) {
-      const table = document.createElement("table");
-      const thead = document.createElement("thead");
-      thead.innerHTML = "<tr><th>Pitch</th><th>Instrument</th><th>Velocity</th><th>Preview</th></tr>";
-      const tbody = document.createElement("tbody");
-      for (const item of DRUM_INSTRUMENTS) {
-        const row = document.createElement("tr");
-        const tdPitch = document.createElement("td");
-        tdPitch.className = "pitch";
-        tdPitch.textContent = String(item.pitch);
-        const tdName = document.createElement("td");
-        tdName.textContent = item.name;
-        const tdVelocity = document.createElement("td");
-        tdVelocity.className = "velocity";
-        const slider = document.createElement("input");
-        slider.type = "range";
-        slider.min = "0";
-        slider.max = "127";
-        slider.step = "1";
-        slider.value = String(drumVelocityMap[item.pitch] ?? DEFAULT_DRUM_VELOCITY);
-        const valueSpan = document.createElement("span");
-        valueSpan.className = "velocity-value";
-        valueSpan.textContent = String(slider.value);
-        slider.addEventListener("input", () => {
-          valueSpan.textContent = slider.value;
-        });
-        slider.addEventListener("change", () => {
-          const pitch = item.pitch;
-          const value = clampVelocity(slider.value);
-          drumVelocityMap = { ...drumVelocityMap, [pitch]: value };
-          if (drumUpdateTimer) clearTimeout(drumUpdateTimer);
-          drumUpdateTimer = setTimeout(() => {
-            updateSettings({ drumVelocityMap }).catch(() => {});
-          }, 200);
-        });
-        tdVelocity.appendChild(slider);
-        tdVelocity.appendChild(valueSpan);
-        const tdPreview = document.createElement("td");
-        tdPreview.className = "preview";
-        const button = document.createElement("button");
-        button.type = "button";
-        button.textContent = "Play";
-        button.addEventListener("click", () => {
-          const velocity = clampVelocity(slider.value);
-          document.dispatchEvent(new CustomEvent("drum:preview", {
-            detail: { pitch: item.pitch, velocity },
-          }));
-        });
-        tdPreview.appendChild(button);
-        row.appendChild(tdPitch);
-        row.appendChild(tdName);
-        row.appendChild(tdVelocity);
-        row.appendChild(tdPreview);
-        tbody.appendChild(row);
-        drumRowByPitch.set(item.pitch, { slider, valueSpan });
-      }
-      table.appendChild(thead);
-      table.appendChild(tbody);
-      host.appendChild(table);
-    }
-
-    for (const item of DRUM_INSTRUMENTS) {
-      const row = drumRowByPitch.get(item.pitch);
-      if (!row) continue;
-      const value = drumVelocityMap[item.pitch] ?? DEFAULT_DRUM_VELOCITY;
-      row.slider.value = String(value);
-      row.valueSpan.textContent = String(value);
-    }
-  }
-
-	  function createRow(entry) {
+  function createRow(entry) {
     const row = document.createElement("label");
     row.className = "settings-row";
     const labelSpan = document.createElement("span");
@@ -372,38 +271,33 @@ export function initSettings(api) {
     $settingsPanelsHost.textContent = "";
     controlByKey.clear();
 
-    const bySection = groupSchemaForModal(schema);
+    const bySectionRaw = groupSchemaForModal(schema);
+    const bySection = new Map();
+    for (const [sectionName, entries] of bySectionRaw.entries()) {
+      const filtered = (entries || []).filter((entry) => {
+        // Hide the Drums mixer from Settings for now; users can control velocities per tune.
+        if (!entry) return false;
+        if (entry.key === "drumVelocityMap") return false;
+        if (String(entry.section || "").toLowerCase() === "drums") return false;
+        return true;
+      });
+      if (filtered.length) bySection.set(sectionName, filtered);
+    }
 
     const panels = [
-      {
-        key: "main",
-        label: "Main",
-        sections: ["General", "Editor", "Tools", "Library", "Dialogs"],
-      },
-      {
-        key: "playback",
-        label: "Playback",
-        sections: ["Playback"],
-      },
-      {
-        key: "drums",
-        label: "Drums",
-        sections: ["Drums"],
-      },
-      {
-        key: "xml",
-        label: "Import/Export",
-        sections: ["Import/Export"],
-      },
-      {
-        key: "globals",
-        label: "Header",
-        sections: ["Header"],
-      },
+      { key: "general", label: "General", sections: ["General"] },
+      { key: "editor", label: "Editor", sections: ["Editor"] },
+      { key: "playback", label: "Playback", sections: ["Playback"] },
+      { key: "tools", label: "Tools", sections: ["Tools"] },
+      { key: "library", label: "Library", sections: ["Library"] },
+      { key: "dialogs", label: "Dialogs", sections: ["Dialogs"] },
+      { key: "xml", label: "Import/Export", sections: ["Import/Export"] },
+      { key: "header", label: "Header", sections: ["Header"] },
     ];
+    const panelKeys = new Set(panels.map((p) => p.key));
 
     setActiveTab = (name) => {
-      lastActiveTab = String(name || "main");
+      lastActiveTab = String(name || "general");
       writeUiState({ activeTab: lastActiveTab });
       const tabs = Array.from($settingsTabsHost.querySelectorAll("[data-settings-tab]"));
       const panels = Array.from($settingsPanelsHost.querySelectorAll("[data-settings-panel]"));
@@ -435,13 +329,12 @@ export function initSettings(api) {
 
       for (const sectionName of panel.sections) {
         const entries = bySection.get(sectionName) || [];
-        const normal = entries.filter((e) => !e.advanced && e.ui && e.ui.input !== "code" && e.ui.input !== "drumVelocityMap");
-        const advanced = entries.filter((e) => e.advanced && e.ui && e.ui.input !== "code" && e.ui.input !== "drumVelocityMap");
+        const normal = entries.filter((e) => !e.advanced && e.ui && e.ui.input !== "code");
+        const advanced = entries.filter((e) => e.advanced && e.ui && e.ui.input !== "code");
 
         const hasCode = entries.some((e) => e.ui && e.ui.input === "code");
-        const hasDrums = entries.some((e) => e.ui && e.ui.input === "drumVelocityMap");
 
-        if (normal.length || hasCode || hasDrums) {
+        if (normal.length || hasCode) {
           let groupHelp = null;
           if (sectionName === "Header") groupHelp = "Prepended before file headers and tunes during render/playback.";
           if (sectionName === "Playback") groupHelp = "Playback-related settings.";
@@ -497,20 +390,6 @@ export function initSettings(api) {
             }
           }
 
-          if (hasDrums) {
-            const drumEntry = entries.find((e) => e.key === "drumVelocityMap");
-            const help = document.createElement("div");
-            help.className = "settings-help";
-            help.textContent = drumEntry && drumEntry.help
-              ? String(drumEntry.help)
-              : "Default velocities for GM drum pitches.";
-            group.appendChild(help);
-            const mixer = document.createElement("div");
-            mixer.className = "drum-mixer";
-            group.appendChild(mixer);
-            controlByKey.set("drumVelocityMap", { entry: drumEntry, host: mixer });
-          }
-
           panelEl.appendChild(group);
         }
 
@@ -546,7 +425,11 @@ export function initSettings(api) {
     }
 
     const uiState = readUiState();
-    if (uiState && uiState.activeTab) lastActiveTab = String(uiState.activeTab || "main");
+    if (uiState && uiState.activeTab) {
+      const rawTab = String(uiState.activeTab || "");
+      const mapped = rawTab === "main" ? "general" : (rawTab === "globals" ? "header" : rawTab);
+      if (panelKeys.has(mapped)) lastActiveTab = mapped;
+    }
     setActiveTab(lastActiveTab);
 
     applySettingsFilter = (raw) => {
@@ -581,6 +464,22 @@ export function initSettings(api) {
         }
         const anyVisible = Boolean(d.querySelector(".settings-entry:not([style*='display: none'])"));
         d.style.display = anyVisible ? "" : "none";
+      }
+
+      if (needle && typeof setActiveTab === "function") {
+        const hasVisibleEntry = (panelKey) => {
+          const key = String(panelKey || "");
+          const panelEl = $settingsPanelsHost.querySelector(`[data-settings-panel="${key}"]`);
+          if (!panelEl) return false;
+          return Boolean(panelEl.querySelector(".settings-entry:not([style*='display: none'])"));
+        };
+
+        if (!hasVisibleEntry(lastActiveTab)) {
+          const firstMatch = panels.find((p) => hasVisibleEntry(p.key));
+          if (firstMatch && firstMatch.key && firstMatch.key !== lastActiveTab) {
+            setActiveTab(firstMatch.key);
+          }
+        }
       }
     };
   }
@@ -620,6 +519,8 @@ export function initSettings(api) {
       const patch = {};
       for (const entry of schema) {
         if (!entry || !entry.key || !entry.ui || !entry.ui.input || entry.legacy) continue;
+        if (entry.key === "drumVelocityMap") continue;
+        if (String(entry.section || "").toLowerCase() === "drums") continue;
         patch[entry.key] = entry.default;
       }
       updateSettings(patch).catch(() => {});

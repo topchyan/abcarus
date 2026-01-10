@@ -217,24 +217,28 @@
 			  </div>
 	
   <div class="modal" id="settingsModal" aria-hidden="true">
-		    <div class="modal-card settings-card" role="dialog" aria-label="Settings">
-	      <div class="modal-header">
-	        <div class="modal-title">Settings</div>
+    <div class="modal-card settings-card" role="dialog" aria-label="Settings">
+      <div class="modal-header">
+        <div class="modal-title">Settings</div>
         <button class="modal-close" id="settingsClose" type="button">Close</button>
       </div>
       <div class="modal-body">
-        <div class="settings-toolbar" aria-label="Settings toolbar">
-          <label class="settings-filter">
-            <span>Filter</span>
-            <input id="settingsFilter" type="text" placeholder="Zoom, follow, drums, XML…" />
-          </label>
-          <label class="settings-toggle">
-            <input id="settingsShowAdvanced" type="checkbox" />
-            <span>Show advanced</span>
-          </label>
+        <div class="settings-layout" aria-label="Settings layout">
+          <div class="settings-nav">
+            <label class="settings-filter">
+              <span>Search</span>
+              <input id="settingsFilter" type="text" placeholder="Zoom, follow, XML…" />
+            </label>
+            <label class="settings-toggle">
+              <input id="settingsShowAdvanced" type="checkbox" />
+              <span>Show advanced</span>
+            </label>
+            <div class="settings-tabs" id="settingsTabs" role="tablist" aria-label="Settings sections"></div>
+          </div>
+          <div class="settings-content">
+            <div class="settings-panels" id="settingsPanels"></div>
+          </div>
         </div>
-        <div class="settings-tabs" id="settingsTabs" role="tablist" aria-label="Settings sections"></div>
-        <div class="settings-panels" id="settingsPanels"></div>
       </div>
       <div class="modal-footer">
         <button id="settingsReset" type="button">Reset Defaults</button>
