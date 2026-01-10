@@ -15,14 +15,16 @@
   --editor-zoom: 1;
 
   --font-size-ui: 13px;
-  --line-height-ui: 1.35;
+  --font-size-sm: 12px;
+  --font-size-xs: 11px;
+  --line-height-ui: 1.28;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
 
-  --radius-1: 6px;
-  --radius-2: 10px;
+  --radius-1: 5px;
+  --radius-2: 8px;
   --border-color: #d0d0d0;
   --bg: #fff;
   --panel-bg: #fff;
@@ -30,10 +32,11 @@
   --muted-text: #666;
   --hover-bg: rgba(0, 0, 0, 0.04);
   --active-bg: rgba(0, 0, 0, 0.08);
-  --shadow-md: 0 8px 20px rgba(0, 0, 0, 0.12);
+  --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.16);
+  --overlay-bg: rgba(0, 0, 0, 0.26);
   --focus-ring: 0 0 0 3px rgba(27, 95, 191, 0.25);
 
-  --button-height: 30px;
+  --button-height: 28px;
   --button-radius: var(--radius-2);
   --button-border: var(--border-color);
   --button-bg: #f7f7f7;
@@ -72,7 +75,7 @@ header {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding: 10px var(--space-3) 8px;
+  padding: 8px var(--space-3) 6px;
   border-bottom: 1px solid var(--border-color);
   gap: var(--space-3);
 }
@@ -1336,7 +1339,7 @@ svg {
 }
 
 .buffer-status {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: #1b5fbf;
   background: #e6f1ff;
   padding: 2px 8px;
@@ -1347,7 +1350,7 @@ svg {
 }
 
 .cursor-status {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: #555;
 }
 
@@ -1357,13 +1360,13 @@ svg {
 
 .about-info {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   white-space: pre-wrap;
-  background: #f7f7f7;
-  border: 1px solid #e3e3e3;
-  padding: 10px;
-  border-radius: 8px;
-  color: #333;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  padding: 10px 12px;
+  border-radius: var(--radius-2);
+  color: var(--text);
 }
 
 .modal {
@@ -1372,7 +1375,7 @@ svg {
   display: none;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--overlay-bg);
   z-index: 20;
 }
 
@@ -1381,11 +1384,12 @@ svg {
 }
 
 .modal-card {
-  width: min(520px, 92vw);
-  max-height: 85vh;
-  background: #fff;
-  border-radius: 10px;
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.22);
+  width: min(560px, 94vw);
+  max-height: 88vh;
+  background: var(--panel-bg);
+  border-radius: var(--radius-2);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
 }
@@ -1401,15 +1405,15 @@ svg {
 
 .modal-header,
 .modal-footer {
-  padding: 12px 16px;
-  border-bottom: 1px solid #eee;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
 .modal-footer {
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--border-color);
   border-bottom: 0;
 }
 
@@ -1426,11 +1430,11 @@ svg {
 }
 
 .modal-body {
-  padding: 12px 16px 16px;
+  padding: 10px 12px 12px;
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   flex: 1;
 }
 
@@ -1550,7 +1554,7 @@ input,
 select,
 textarea {
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-ui);
 }
 
 .settings-advanced > summary {
