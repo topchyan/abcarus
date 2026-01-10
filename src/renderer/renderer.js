@@ -33,6 +33,7 @@ const $status = document.getElementById("status");
 const $cursorStatus = document.getElementById("cursorStatus");
 const $bufferStatus = document.getElementById("bufferStatus");
 const $toolStatus = document.getElementById("toolStatus");
+const $hoverStatus = document.getElementById("hoverStatus");
 const $main = document.querySelector("main");
 const $divider = document.getElementById("paneDivider");
 const $renderPane = document.querySelector(".render-pane");
@@ -3220,6 +3221,7 @@ function renderLibraryTree(files = null) {
       fileLabel.addEventListener("click", (ev) => {
         // Prevent accidental double-toggle when user double-clicks to load.
         if (entry.isFile && ev && ev.detail && ev.detail > 1) return;
+        showHoverStatus(entry.label);
         if (entry.isFile) {
           activeFilePath = entry.id;
           if (collapsedFiles.has(entry.id)) collapsedFiles.delete(entry.id);
@@ -3237,6 +3239,10 @@ function renderLibraryTree(files = null) {
         ev.stopPropagation();
         requestLoadLibraryFile(entry.id).catch(() => {});
       });
+      fileLabel.addEventListener("mouseenter", () => showHoverStatus(entry.label));
+      fileLabel.addEventListener("mouseleave", () => restoreHoverStatus());
+      fileLabel.addEventListener("focus", () => showHoverStatus(entry.label));
+      fileLabel.addEventListener("blur", () => restoreHoverStatus());
       fileLabel.addEventListener("contextmenu", (ev) => {
         if (!entry.isFile) return;
         ev.preventDefault();
@@ -3289,10 +3295,15 @@ function renderLibraryTree(files = null) {
       const title = tune.title || tune.preview || "";
       const composer = tune.composer ? ` - ${tune.composer}` : "";
       const key = tune.key ? ` - ${tune.key}` : "";
-      button.textContent = `${labelNumber}: ${title}${composer}${key}`.trim();
-      button.title = button.textContent;
+      const tuneLabel = `${labelNumber}: ${title}${composer}${key}`.trim();
+      button.textContent = tuneLabel;
+      button.title = tuneLabel;
       button.dataset.tuneId = tune.id;
       if (tune.id === activeTuneId) button.classList.add("active");
+      button.addEventListener("mouseenter", () => showHoverStatus(tuneLabel));
+      button.addEventListener("mouseleave", () => restoreHoverStatus());
+      button.addEventListener("focus", () => showHoverStatus(tuneLabel));
+      button.addEventListener("blur", () => restoreHoverStatus());
       button.addEventListener("dragstart", (ev) => {
         ev.dataTransfer.setData("text/plain", tune.id);
         ev.dataTransfer.effectAllowed = "move";
@@ -3309,6 +3320,7 @@ function renderLibraryTree(files = null) {
 		        showContextMenuAt(ev.clientX, ev.clientY, { type: "tune", tuneId: tune.id });
 		      });
       button.addEventListener("click", () => {
+        pinHoverStatus(tuneLabel);
         const targetPath = entry.isFile
           ? entry.id
           : String(tune.id || "").split("::")[0];
@@ -4085,6 +4097,30 @@ function setStatus(s) {
   $status.textContent = s;
   const loading = String(s || "").toLowerCase().startsWith("loading the sound font");
   $status.classList.toggle("status-loading", loading);
+}
+
+let pinnedHoverStatusText = "";
+
+function setHoverStatus(text) {
+  if (!$hoverStatus) return;
+  const next = String(text || "");
+  $hoverStatus.textContent = next;
+  $hoverStatus.title = next;
+}
+
+function pinHoverStatus(text) {
+  pinnedHoverStatusText = String(text || "");
+  setHoverStatus(pinnedHoverStatusText);
+}
+
+function showHoverStatus(text) {
+  const next = String(text || "");
+  if (next) setHoverStatus(next);
+  else setHoverStatus(pinnedHoverStatusText);
+}
+
+function restoreHoverStatus() {
+  setHoverStatus(pinnedHoverStatusText);
 }
 
 function setBufferStatus(text) {

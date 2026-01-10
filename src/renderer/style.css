@@ -1177,6 +1177,20 @@ svg {
   gap: 10px;
 }
 
+.hover-status {
+  font-size: var(--font-size-sm);
+  color: var(--muted-text);
+  max-width: min(720px, 55vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: none;
+}
+
+.hover-status:not(:empty) {
+  display: block;
+}
+
 .errors-indicator{
   font-size: 11px;
   padding: 2px 10px;
