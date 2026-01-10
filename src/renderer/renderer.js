@@ -1790,18 +1790,71 @@ function getNavigableTuneIdsFromFileSelect() {
 }
 
 async function navigateTuneByDelta(delta) {
-  const ids = getNavigableTuneIdsFromFileSelect();
-  if (!ids.length) {
-    showToast(tuneErrorFilter ? "No error tunes in selection." : "No tunes to navigate.", 2000);
-    return;
+  // Prefer file order navigation based on the active tune metadata.
+  // This stays stable even if the tune `<select>` temporarily drifts (filters, rebuilds, etc).
+  const filePath = (activeTuneMeta && activeTuneMeta.path)
+    ? String(activeTuneMeta.path)
+    : (activeFilePath ? String(activeFilePath) : "");
+  const fileEntry = (filePath && libraryIndex && Array.isArray(libraryIndex.files))
+    ? (libraryIndex.files.find((f) => pathsEqual(f && f.path, filePath)) || null)
+    : null;
+
+  const orderedTunes = fileEntry && Array.isArray(fileEntry.tunes)
+    ? fileEntry.tunes.slice().sort((a, b) => (Number(a.startOffset) || 0) - (Number(b.startOffset) || 0))
+    : [];
+
+  const selectedValue = ($fileTuneSelect && $fileTuneSelect.value != null) ? String($fileTuneSelect.value) : "";
+  const findCurrentInOrdered = () => {
+    if (!orderedTunes.length) return -1;
+    if (activeTuneId) {
+      const idx = orderedTunes.findIndex((t) => t && t.id === activeTuneId);
+      if (idx >= 0) return idx;
+    }
+    if (activeTuneMeta && Number.isFinite(Number(activeTuneMeta.startOffset))) {
+      const off = Number(activeTuneMeta.startOffset);
+      const idx = orderedTunes.findIndex((t) => Number(t && t.startOffset) === off);
+      if (idx >= 0) return idx;
+    }
+    if (selectedValue) {
+      const idx = orderedTunes.findIndex((t) => t && t.id === selectedValue);
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
+
+  let nextId = "";
+  if (orderedTunes.length) {
+    const currentIdx = findCurrentInOrdered();
+    const startIdx = currentIdx >= 0 ? currentIdx : (delta > 0 ? 0 : orderedTunes.length - 1);
+    const nextIdx = Math.max(0, Math.min(orderedTunes.length - 1, startIdx + delta));
+    const nextTune = orderedTunes[nextIdx];
+    nextId = nextTune && nextTune.id ? String(nextTune.id) : "";
+    if (!nextId) return;
+    if (currentIdx === nextIdx) {
+      showToast(delta > 0 ? "Already at last tune." : "Already at first tune.", 1400);
+      return;
+    }
+  } else {
+    // Fallback: navigate within the tune `<select>` (respects error filtering).
+    const ids = getNavigableTuneIdsFromFileSelect();
+    if (!ids.length) {
+      showToast(tuneErrorFilter ? "No error tunes in selection." : "No tunes to navigate.", 2000);
+      return;
+    }
+    const selectedIsNavigable = selectedValue && ids.includes(selectedValue);
+    const activeIsNavigable = activeTuneId && ids.includes(activeTuneId);
+    const current = selectedIsNavigable ? selectedValue : (activeIsNavigable ? activeTuneId : "");
+    const currentIdx = current ? ids.indexOf(current) : -1;
+    const startIdx = currentIdx >= 0 ? currentIdx : (delta > 0 ? 0 : ids.length - 1);
+    const nextIdx = Math.max(0, Math.min(ids.length - 1, startIdx + delta));
+    nextId = ids[nextIdx];
+    if (!nextId) return;
+    if (currentIdx === nextIdx) {
+      showToast(delta > 0 ? "Already at last tune." : "Already at first tune.", 1400);
+      return;
+    }
   }
-  const current = activeTuneId || ($fileTuneSelect && $fileTuneSelect.value ? String($fileTuneSelect.value) : "");
-  const currentIdx = current ? ids.indexOf(current) : -1;
-  const startIdx = currentIdx >= 0 ? currentIdx : (delta > 0 ? 0 : ids.length - 1);
-  const nextIdx = Math.max(0, Math.min(ids.length - 1, startIdx + delta));
-  const nextId = ids[nextIdx];
-  if (!nextId) return;
-  if (currentIdx === nextIdx) return;
+
   if (rawMode) {
     if ($fileTuneSelect) $fileTuneSelect.value = nextId;
     setActiveTuneInRaw(nextId);
@@ -3374,6 +3427,9 @@ async function selectTune(tuneId, options = {}) {
 
   const tuneText = content.slice(selected.startOffset, selected.endOffset);
   activeTuneId = tuneId;
+  if ($fileTuneSelect && !$fileTuneSelect.disabled) {
+    try { $fileTuneSelect.value = tuneId; } catch {}
+  }
   markActiveTuneButton(tuneId);
   setActiveTuneText(tuneText, {
     id: selected.id,
@@ -6877,8 +6933,16 @@ function assertCleanAbcText(text, originLabel) {
 
 function stripSepForRender(text) {
   const value = String(text || "");
-  const stripped = value.replace(/^[ \t]*%%sep\b.*$/gmi, "% %%sep disabled");
-  return { text: stripped, replaced: stripped !== value };
+  let replaced = false;
+  // Important: keep the output string length identical to the input.
+  // The SVG <-> editor mapping uses character offsets; changing length breaks follow/highlight after a %%sep line.
+  const stripped = value.replace(/^[ \t]*%%sep\b.*$/gmi, (line) => {
+    replaced = true;
+    const len = String(line || "").length;
+    if (len <= 0) return "%";
+    return `%${" ".repeat(Math.max(0, len - 1))}`;
+  });
+  return { text: stripped, replaced };
 }
 
 function parseBarToken(rawToken) {
@@ -11969,11 +12033,6 @@ function normalizeDollarLineBreaksForPlayback(text) {
         continue;
       }
       if (!inQuote && ch === "$") {
-        const rest = rawLine.slice(i);
-        if (/^\$\s*%/.test(rest)) {
-          // Drop the rest of the line.
-          break;
-        }
         lineOut += " ";
         continue;
       }
@@ -11990,7 +12049,7 @@ function normalizeBlankLinesForPlayback(text) {
   const out = [];
   let inTextBlock = false;
   let inBody = false;
-  const isInlineFieldLine = (line) => /^\s*\[\s*[A-Za-z]+:/.test(String(line || "").trim());
+  const isInlineFieldLine = (line) => isInlineFieldOnlyLine(line);
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     const trimmed = line.trim();
@@ -12036,8 +12095,10 @@ function sanitizeAbcForPlayback(text) {
     if (inTextBlock || !inBody) {
       // Still remove line-continuation backslashes outside text blocks even before body;
       // they are never meaningful for playback parsing.
-      const cleaned = rawLine.replace(/[ \t]*\\\s*$/, "");
-      if (cleaned !== rawLine) warnings.push({ kind: "line-continuation", line: lineIndex + 1 });
+      const cleaned = rawLine.replace(/[ \t]*\\\s*$/, (m) => {
+        warnings.push({ kind: "line-continuation", line: lineIndex + 1 });
+        return " ".repeat(String(m || "").length);
+      });
       out.push(cleaned);
       continue;
     }
@@ -12054,17 +12115,18 @@ function sanitizeAbcForPlayback(text) {
     }
 
     // 1) Remove trailing line-continuation backslash: `...\` -> `...`
-    const noCont = musicPart.replace(/[ \t]*\\\s*$/, "");
-    if (noCont !== musicPart) warnings.push({ kind: "line-continuation", line: lineIndex + 1 });
-    musicPart = noCont;
+    musicPart = musicPart.replace(/[ \t]*\\\s*$/, (m) => {
+      warnings.push({ kind: "line-continuation", line: lineIndex + 1 });
+      return " ".repeat(String(m || "").length);
+    });
 
     // 2) Make multi-repeat tokens more stable: `|:::` -> `|::`, `:::` -> `::`, `:::|` -> `::|`
     // Keep `::` unchanged (common boundary repeat); only collapse 3+ down to the double-repeat form.
     const beforeRepeats = musicPart;
     musicPart = musicPart
-      .replace(/\|:{3,}/g, "|::")
-      .replace(/:{3,}\|/g, "::|")
-      .replace(/:{3,}/g, "::");
+      .replace(/\|:{3,}/g, (m) => `|::${" ".repeat(Math.max(0, String(m || "").length - 3))}`)
+      .replace(/:{3,}\|/g, (m) => `::|${" ".repeat(Math.max(0, String(m || "").length - 3))}`)
+      .replace(/:{3,}/g, (m) => `::${" ".repeat(Math.max(0, String(m || "").length - 2))}`);
     if (musicPart !== beforeRepeats) warnings.push({ kind: "multi-repeat-simplified", line: lineIndex + 1 });
 
     // 3) Replace spacer rests `y` with normal rests `z` (playback-only stability).
@@ -12079,11 +12141,28 @@ function sanitizeAbcForPlayback(text) {
   return { text: out.join("\n"), warnings };
 }
 
+function isInlineFieldOnlyLine(rawLine) {
+  const trimmed = String(rawLine || "").trim();
+  if (!trimmed.startsWith("[")) return false;
+  let rest = trimmed;
+  // Consume one or more leading inline fields: `[P:...] [M:...] ...`
+  while (true) {
+    const m = rest.match(/^\[\s*[A-Za-z]+\s*:\s*[^\]]*\]\s*/);
+    if (!m) break;
+    rest = rest.slice(m[0].length);
+  }
+  const tail = rest.trim();
+  if (!tail) return true;
+  // Treat "only comment after inline field" as header-like (no music content).
+  if (tail.startsWith("%")) return true;
+  return false;
+}
+
 function detectKeyFieldNotLastBeforeBody(text) {
   const lines = String(text || "").split(/\r\n|\n|\r/);
   const isTuneStart = (line) => /^\s*X:/.test(line);
   const isFieldLine = (line) => /^\s*[A-Za-z]:/.test(line);
-  const isInlineFieldLine = (line) => /^\s*\[\s*[A-Za-z]+:/.test(String(line || "").trim());
+  const isInlineFieldLine = (line) => isInlineFieldOnlyLine(line);
   const isContinuationLine = (line) => /^\s*\+:\s*/.test(line);
   const isKeyLine = (line) => /^\s*K:/.test(line);
   const isCommentLine = (line) => /^\s*%/.test(line);
@@ -12182,7 +12261,7 @@ function normalizeKeyFieldToBeLastBeforeBodyForPlayback(text) {
   const lines = String(text || "").split(/\r\n|\n|\r/);
   const isTuneStart = (line) => /^\s*X:/.test(line);
   const isFieldLine = (line) => /^\s*[A-Za-z]:/.test(line);
-  const isInlineFieldLine = (line) => /^\s*\[\s*[A-Za-z]+:/.test(String(line || "").trim());
+  const isInlineFieldLine = (line) => isInlineFieldOnlyLine(line);
   const isContinuationLine = (line) => /^\s*\+:\s*/.test(line);
   const isKeyLine = (line) => /^\s*K:/.test(line);
   const isCommentLine = (line) => /^\s*%/.test(line);
@@ -12304,7 +12383,7 @@ function normalizeBarsForPlayback(text) {
       continue;
     }
     // Leave directives untouched.
-    if (/^\s*%%/.test(rawLine) || /^\s*[A-Za-z]:/.test(rawLine) || /^\s*\[\s*[A-Za-z]+:/.test(trimmed)) {
+    if (/^\s*%%/.test(rawLine) || /^\s*[A-Za-z]:/.test(rawLine) || isInlineFieldOnlyLine(rawLine)) {
       out.push(rawLine);
       continue;
     }
@@ -12347,7 +12426,7 @@ function extractBarSignatureFromText(text) {
     // Skip directives/fields that may contain ':' but are not musical bars.
     if (/^\s*%%/.test(rawLine)) continue;
     if (/^\s*[A-Za-z]:/.test(rawLine)) continue;
-    if (/^\s*\[\s*[A-Za-z]+:/.test(trimmed)) continue;
+    if (isInlineFieldOnlyLine(rawLine)) continue;
     if (/^%/.test(trimmed) && !/^%%/.test(trimmed)) continue;
     let line = rawLine;
     const idx = line.indexOf("%");

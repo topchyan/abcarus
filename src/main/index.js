@@ -80,8 +80,12 @@ function resolveWindowIconPath() {
     // Linux desktop environments vary widely, and Electron's `nativeTheme` is not always reliable
     // (especially for titlebar theme darkness). To avoid an invisible titlebar icon, default to
     // the "dark" (gold) icon unless explicitly forced to "light".
-    const shouldUseDark =
-      forced === "light" ? false : true;
+    let shouldUseDark;
+    if (forced === "light") shouldUseDark = false;
+    else if (forced === "dark") shouldUseDark = true;
+    else if (detected === true) shouldUseDark = true;
+    else if (detected === false) shouldUseDark = false;
+    else shouldUseDark = Boolean(nativeTheme.shouldUseDarkColors);
     const candidate = shouldUseDark
       ? path.join(appRoot, "assets", "icons", "abcarus_window_dark.png")
       : path.join(appRoot, "assets", "icons", "abcarus_window_light.png");
@@ -1863,14 +1867,28 @@ function createWindow() {
   win.maximize();
   win.webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
-    if (input.alt && !input.control && !input.meta && !input.shift) {
-      const key = input.key;
-      if (key === "PageUp") {
+    // Use best-effort key handling for tune navigation.
+    // Notes:
+    // - Some platforms/layouts may report AltGr as Ctrl+Alt.
+    // - `input.key` may be "PageDown"/"PageUp" or legacy "Next"/"Prior".
+    // - Prefer not to require `!input.control` to avoid "stuck Ctrl" edge cases after accelerators.
+    if (input.alt && !input.meta && !input.shift) {
+      const key = String(input.key || "");
+      const code = String(input.code || "");
+      const isPgUp = key === "PageUp" || key === "Prior" || code === "PageUp";
+      const isPgDn = key === "PageDown" || key === "Next" || code === "PageDown";
+      if (process.env.ABCARUS_DEBUG_KEYS === "1") {
+        try {
+          // eslint-disable-next-line no-console
+          console.log("[keys] alt=%s ctrl=%s shift=%s meta=%s key=%s code=%s", input.alt, input.control, input.shift, input.meta, key, code);
+        } catch {}
+      }
+      if (isPgUp) {
         event.preventDefault();
         sendMenuAction("navTunePrev");
         return;
       }
-      if (key === "PageDown") {
+      if (isPgDn) {
         event.preventDefault();
         sendMenuAction("navTuneNext");
         return;
