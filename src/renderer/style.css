@@ -100,8 +100,8 @@ header {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  color: #6b7280;
+  font-size: var(--font-size-sm);
+  color: var(--muted-text);
 }
 
 .practice-tempo select {
@@ -118,45 +118,15 @@ header {
 .right-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   justify-content: flex-end;
-}
-
-.controls button {
-  min-height: var(--button-height);
-  padding: 6px 10px;
-  border-radius: var(--button-radius);
-  border: 1px solid transparent;
-  background: transparent;
-  color: #6b7280;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.controls button:hover {
-  border-color: var(--button-border);
-  background: var(--hover-bg);
-  color: #374151;
-}
-
-.controls button:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.controls button.toggle-active,
-.controls button.active {
-  color: #111;
-  border-color: #111;
-  background: transparent;
-  font-weight: 600;
 }
 
 .controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
@@ -213,12 +183,14 @@ main {
 .modal-close,
 .settings-tab {
   min-height: var(--button-height);
-  padding: 6px 12px;
+  padding: 5px 10px;
   border-radius: var(--button-radius);
   border: 1px solid var(--button-border);
   background: var(--button-bg);
   color: var(--button-text);
   cursor: pointer;
+  font-size: var(--font-size-sm);
+  line-height: 1.2;
 }
 
 .controls button:hover,
@@ -234,6 +206,37 @@ main {
   background: #111;
   color: #fff;
   border-color: #111;
+}
+
+.segmented {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--button-border);
+  border-radius: var(--radius-1);
+  overflow: hidden;
+  background: var(--button-bg);
+}
+
+.segmented button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  min-height: var(--button-height);
+  padding: 5px 10px;
+  margin: 0;
+}
+
+.segmented button + button {
+  border-left: 1px solid var(--button-border);
+}
+
+.segmented button:hover {
+  background: var(--button-bg-hover);
+}
+
+.segmented button.toggle-active {
+  background: var(--accent);
+  color: #fff;
 }
 
 .soundfont-control {
@@ -375,7 +378,7 @@ main {
 .sidebar {
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #e0e0e0;
+  border-right: 1px solid var(--border-color);
   overflow: hidden;
 }
 
@@ -393,12 +396,12 @@ body.library-hidden .divider {
 }
 
 .sidebar-header {
-  padding: 10px 12px;
-  border-bottom: 1px solid #eee;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
 }
 
 .library-root-row {
@@ -409,9 +412,9 @@ body.library-hidden .divider {
 }
 
 .library-root {
-  font-size: 12px;
-  font-weight: 700;
-  color: #333;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -420,8 +423,8 @@ body.library-hidden .divider {
 }
 
 .scan-status {
-  font-size: 11px;
-  color: #666;
+  font-size: var(--font-size-xs);
+  color: var(--muted-text);
   width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -431,13 +434,13 @@ body.library-hidden .divider {
 .sidebar-controls {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   align-items: flex-start;
   min-width: 0;
 }
 
 .sidebar-action {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
 }
 
 .sidebar-action:hover {
@@ -458,38 +461,49 @@ body.library-hidden .divider {
 }
 
 .sidebar-label {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #444;
-  min-width: 70px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted-text);
+  min-width: 66px;
 }
 
 #groupBy {
-  font-size: 11px;
-  padding: 2px 4px;
+  font-size: var(--font-size-sm);
+  padding: 4px 8px;
   width: 100%;
   flex: 1;
   min-width: 0;
+  min-height: var(--button-height);
+  border-radius: var(--radius-1);
+  border: 1px solid var(--button-border);
+  background: var(--button-bg);
+  color: var(--button-text);
 }
 
 #sortBy {
-  font-size: 11px;
-  padding: 2px 4px;
+  font-size: var(--font-size-sm);
+  padding: 4px 8px;
   width: 100%;
   flex: 1;
   min-width: 0;
+  min-height: var(--button-height);
+  border-radius: var(--radius-1);
+  border: 1px solid var(--button-border);
+  background: var(--button-bg);
+  color: var(--button-text);
 }
 
 .sidebar-search input {
-  font-size: 12px;
-  padding: 6px 8px;
-  border: 1px solid #d0d0d0;
-  border-radius: 6px;
+  font-size: var(--font-size-sm);
+  padding: 4px 8px;
+  border: 1px solid var(--button-border);
+  border-radius: var(--radius-1);
   width: 100%;
   flex: 1;
   min-width: 0;
+  min-height: var(--button-height);
 }
 
 .scan-error-button {
@@ -544,9 +558,9 @@ body.resizing * {
 }
 
 .tree {
-  padding: 8px 6px 12px;
+  padding: 6px 6px 8px;
   overflow: auto;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   min-height: 0;
   height: 100%;
 }
@@ -653,13 +667,13 @@ body.resizing * {
 }
 
 .tree-file {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .tree-file > .tree-label {
   font-weight: 600;
-  margin: 6px 6px 4px;
-  color: #333;
+  margin: 4px 4px 2px;
+  color: var(--text);
 }
 
 .tree-file.active > .tree-label {
@@ -695,17 +709,18 @@ body.resizing * {
   text-align: left;
   border: 0;
   background: none;
-  padding: 4px 6px;
+  padding: 3px 6px;
   cursor: pointer;
-  color: #333;
-  border-radius: 4px;
+  color: var(--text);
+  border-radius: var(--radius-1);
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-height: 24px;
 }
 
 .tree-label:hover {
-  background: #f2f2f2;
+  background: var(--hover-bg);
 }
 
 .tree-label.active {
@@ -725,8 +740,8 @@ body.resizing * {
 
 .tree-count {
   font-size: 10px;
-  color: #666;
-  background: #f0f0f0;
+  color: var(--muted-text);
+  background: rgba(0, 0, 0, 0.06);
   border-radius: 999px;
   padding: 1px 6px;
 }
@@ -796,8 +811,8 @@ body.resizing * {
 }
 
 .file-header-panel {
-  padding: 8px 12px;
-  border-bottom: 1px solid #eee;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-color);
   display: none;
   gap: 6px;
 }
@@ -814,14 +829,11 @@ body.resizing * {
 .file-header-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .file-header-toggles {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   margin-left: auto;
 }
 
@@ -854,13 +866,16 @@ body.resizing * {
 }
 
 #fileTuneSelect {
-  font-size: 12px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  border: 1px solid #d0d0d0;
+  font-size: var(--font-size-sm);
+  padding: 4px 8px;
+  border-radius: var(--radius-1);
+  border: 1px solid var(--button-border);
   min-width: 180px;
   max-width: 45%;
   flex: 0 1 280px;
+  min-height: var(--button-height);
+  background: var(--button-bg);
+  color: var(--button-text);
 }
 
 #fileTuneSelect.error-filter-active{
