@@ -2986,7 +2986,59 @@ function applySearchPanelHints(view) {
       const replaceAllBtn = panel.querySelector("button[name='replaceAll']");
       if (replaceAllBtn) replaceAllBtn.title = "Replace all (Ctrl+Shift+Enter / Alt+Enter)";
     } catch {}
+    try {
+      wireSearchPanelHotkeys(panel);
+    } catch {}
   }, 0);
+}
+
+function wireSearchPanelHotkeys(panel) {
+  if (!panel || !panel.dataset) return;
+  if (panel.dataset.abcarusHotkeys === "1") return;
+  panel.dataset.abcarusHotkeys = "1";
+
+  const clickNamed = (name) => {
+    const btn = panel.querySelector(`button[name='${name}']`);
+    if (!btn || btn.disabled) return false;
+    btn.click();
+    return true;
+  };
+
+  panel.addEventListener("keydown", (ev) => {
+    if (!ev) return;
+    const key = String(ev.key || "");
+
+    if (key === "F3") {
+      if (ev.shiftKey) {
+        if (clickNamed("prev")) ev.preventDefault();
+      } else if (clickNamed("next")) {
+        ev.preventDefault();
+      }
+      return;
+    }
+
+    if (key !== "Enter") return;
+    const hasCtrl = Boolean(ev.ctrlKey || ev.metaKey);
+
+    // Search navigation.
+    if (!hasCtrl && !ev.altKey) {
+      if (ev.shiftKey) {
+        if (clickNamed("prev")) ev.preventDefault();
+      } else if (clickNamed("next")) {
+        ev.preventDefault();
+      }
+      return;
+    }
+
+    // Replace actions.
+    if (hasCtrl || ev.altKey) {
+      if (ev.shiftKey || ev.altKey) {
+        if (clickNamed("replaceAll")) ev.preventDefault();
+      } else if (clickNamed("replace")) {
+        ev.preventDefault();
+      }
+    }
+  }, true);
 }
 
 function initHeaderEditor() {
