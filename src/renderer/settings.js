@@ -13,6 +13,7 @@ import {
 import { createSettingsStore } from "./settings_store.js";
 
 const ZOOM_STEP = 0.1;
+const SETTINGS_UI_STATE_KEY = "abcarus.settings.uiState.v1";
 
 const FALLBACK_SCHEMA = [
   { key: "renderZoom", type: "number", default: 1, section: "General", label: "Score zoom (%)", ui: { input: "percent", min: 50, max: 800, step: 5 } },
@@ -73,6 +74,8 @@ export function initSettings(api) {
   const $settingsModal = document.getElementById("settingsModal");
   const $settingsClose = document.getElementById("settingsClose");
   const $settingsReset = document.getElementById("settingsReset");
+  const $settingsFilter = document.getElementById("settingsFilter");
+  const $settingsShowAdvanced = document.getElementById("settingsShowAdvanced");
   const $settingsTabsHost = document.getElementById("settingsTabs");
   const $settingsPanelsHost = document.getElementById("settingsPanels");
   const $renderPane = document.querySelector(".render-pane");
@@ -82,6 +85,10 @@ export function initSettings(api) {
   let defaultSettings = buildDefaults(schema);
   let currentSettings = { ...defaultSettings };
   let activePane = "render";
+  let lastActiveTab = "main";
+  let showAdvanced = false;
+  let setActiveTab = null;
+  let applySettingsFilter = null;
 
   const controlByKey = new Map(); // key -> { entry, el, kind }
   let globalHeaderView = null;
@@ -90,6 +97,25 @@ export function initSettings(api) {
   let drumVelocityMap = buildDefaultDrumVelocityMap();
   const drumRowByPitch = new Map();
   let drumUpdateTimer = null;
+
+  function readUiState() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_UI_STATE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeUiState(patch) {
+    try {
+      const prev = readUiState() || {};
+      const next = { ...prev, ...(patch || {}) };
+      localStorage.setItem(SETTINGS_UI_STATE_KEY, JSON.stringify(next));
+    } catch {}
+  }
 
   function normalizeDrumVelocityMap(map) {
     const base = buildDefaultDrumVelocityMap();
@@ -155,6 +181,13 @@ export function initSettings(api) {
     if (!$settingsModal) return;
     $settingsModal.classList.add("open");
     $settingsModal.setAttribute("aria-hidden", "false");
+    if (typeof setActiveTab === "function") setActiveTab(lastActiveTab);
+    setTimeout(() => {
+      if ($settingsFilter) {
+        $settingsFilter.focus();
+        $settingsFilter.select();
+      }
+    }, 0);
   }
 
   function closeSettings() {
@@ -369,7 +402,9 @@ export function initSettings(api) {
       },
     ];
 
-    const setActiveTab = (name) => {
+    setActiveTab = (name) => {
+      lastActiveTab = String(name || "main");
+      writeUiState({ activeTab: lastActiveTab });
       const tabs = Array.from($settingsTabsHost.querySelectorAll("[data-settings-tab]"));
       const panels = Array.from($settingsPanelsHost.querySelectorAll("[data-settings-panel]"));
       tabs.forEach((tab) => {
@@ -413,13 +448,18 @@ export function initSettings(api) {
           const group = createGroup(sectionName, groupHelp);
           for (const entry of normal) {
             const row = createRow(entry);
-            if (row) group.appendChild(row);
+            if (!row) continue;
+            const block = document.createElement("div");
+            block.className = "settings-entry";
+            block.dataset.settingsSearch = `${entry.key} ${entry.label || ""} ${sectionName}`.toLowerCase();
+            block.appendChild(row);
             if (entry.help) {
               const help = document.createElement("div");
               help.className = "settings-help";
               help.textContent = String(entry.help);
-              group.appendChild(help);
+              block.appendChild(help);
             }
+            group.appendChild(block);
           }
 
           if (hasCode) {
@@ -484,13 +524,18 @@ export function initSettings(api) {
           inner.className = "settings-group";
           for (const entry of advanced) {
             const row = createRow(entry);
-            if (row) inner.appendChild(row);
+            if (!row) continue;
+            const block = document.createElement("div");
+            block.className = "settings-entry";
+            block.dataset.settingsSearch = `${entry.key} ${entry.label || ""} ${sectionName}`.toLowerCase();
+            block.appendChild(row);
             if (entry.help) {
               const help = document.createElement("div");
               help.className = "settings-help";
               help.textContent = String(entry.help);
-              inner.appendChild(help);
+              block.appendChild(help);
             }
+            inner.appendChild(block);
           }
           details.appendChild(inner);
           panelEl.appendChild(details);
@@ -500,7 +545,31 @@ export function initSettings(api) {
       $settingsPanelsHost.appendChild(panelEl);
     }
 
-    setActiveTab("main");
+    const uiState = readUiState();
+    if (uiState && uiState.activeTab) lastActiveTab = String(uiState.activeTab || "main");
+    setActiveTab(lastActiveTab);
+
+    applySettingsFilter = (raw) => {
+      const needle = String(raw || "").trim().toLowerCase();
+      const blocks = Array.from($settingsPanelsHost.querySelectorAll(".settings-entry"));
+      const groups = Array.from($settingsPanelsHost.querySelectorAll(".settings-group"));
+      const advancedBlocks = Array.from($settingsPanelsHost.querySelectorAll(".settings-advanced"));
+
+      const openAdvanced = Boolean(needle) || showAdvanced;
+      for (const d of advancedBlocks) d.open = openAdvanced;
+
+      for (const block of blocks) {
+        const hay = String(block.dataset.settingsSearch || "");
+        const ok = !needle || hay.includes(needle);
+        block.style.display = ok ? "" : "none";
+      }
+
+      for (const group of groups) {
+        const title = group.querySelector(".settings-title");
+        const anyVisible = Boolean(group.querySelector(".settings-entry:not([style*='display: none'])"));
+        if (title) title.style.display = anyVisible ? "" : "none";
+      }
+    };
   }
 
   if ($settingsClose) {
@@ -509,6 +578,27 @@ export function initSettings(api) {
   if ($settingsModal) {
     $settingsModal.addEventListener("click", (e) => {
       if (e.target === $settingsModal) closeSettings();
+    });
+    $settingsModal.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeSettings();
+      }
+    });
+  }
+  if ($settingsFilter) {
+    $settingsFilter.addEventListener("input", () => {
+      if (applySettingsFilter) applySettingsFilter($settingsFilter.value);
+    });
+  }
+  if ($settingsShowAdvanced) {
+    const uiState = readUiState();
+    showAdvanced = Boolean(uiState && uiState.showAdvanced);
+    $settingsShowAdvanced.checked = showAdvanced;
+    $settingsShowAdvanced.addEventListener("change", () => {
+      showAdvanced = Boolean($settingsShowAdvanced.checked);
+      writeUiState({ showAdvanced });
+      if (applySettingsFilter) applySettingsFilter($settingsFilter ? $settingsFilter.value : "");
     });
   }
   if ($settingsReset) {
@@ -541,6 +631,7 @@ export function initSettings(api) {
     buildSettingsUi();
     const settings = await store.get().catch(() => null);
     if (settings) applySettings(settings);
+    if (applySettingsFilter && $settingsFilter) applySettingsFilter($settingsFilter.value);
   })();
 
   return {

@@ -1538,8 +1538,43 @@ svg {
 
 .settings-tabs {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
+}
+
+.settings-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.settings-filter {
+  display: grid;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--muted-text);
+  min-width: min(520px, 100%);
+}
+
+.settings-filter input {
+  min-height: var(--button-height);
+  padding: 4px 8px;
+  border-radius: var(--radius-1);
+  border: 1px solid var(--button-border);
+  background: var(--button-bg);
+  color: var(--button-text);
+  font-size: var(--font-size-sm);
+}
+
+.settings-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+  font-size: var(--font-size-sm);
+  color: var(--button-text);
 }
 
 .settings-tab {
@@ -1576,6 +1611,12 @@ svg {
 .settings-help {
   font-size: 12px;
   color: var(--muted-text);
+}
+
+.settings-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .settings-editor {
@@ -1673,31 +1714,42 @@ textarea {
 }
 
 .settings-title {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #444;
+  font-size: var(--font-size-xs);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted-text);
   font-weight: 600;
 }
 
 .settings-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 260px;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   font-size: 13px;
 }
 
+.settings-row > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-row input[type="checkbox"] {
+  justify-self: end;
+}
+
 .settings-row input[type="text"],
 .settings-row input[type="number"] {
-  width: 260px;
-  max-width: 60vw;
+  width: 100%;
+  max-width: min(520px, 60vw);
   padding: 6px 8px;
 }
 
 .settings-row select {
-  width: 260px;
-  max-width: 60vw;
+  width: 100%;
+  max-width: min(520px, 60vw);
   padding: 6px 8px;
 }
 
