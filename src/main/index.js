@@ -438,14 +438,25 @@ function showSaveDialog(suggestedName, suggestedDir, senderOrEvent) {
   const parent = prepareDialogParent(senderOrEvent, "save-file");
   const defaultName = suggestedName || "Untitled.abc";
   const defaultPath = suggestedDir ? path.join(suggestedDir, defaultName) : defaultName;
+  const ext = path.extname(defaultName || "").replace(/^\./, "").trim().toLowerCase();
+  const filters = (() => {
+    if (ext === "json") {
+      return [
+        { name: "JSON", extensions: ["json"] },
+        { name: "ABC", extensions: ["abc"] },
+        { name: "All Files", extensions: ["*"] },
+      ];
+    }
+    return [
+      { name: "ABC", extensions: ["abc"] },
+      { name: "All Files", extensions: ["*"] },
+    ];
+  })();
   return dialog.showSaveDialog(parent || undefined, {
     modal: true,
     title: "Save As",
     defaultPath,
-    filters: [
-      { name: "ABC", extensions: ["abc"] },
-      { name: "All Files", extensions: ["*"] },
-    ],
+    filters,
   }).then((result) => {
     if (!result || result.canceled) return null;
     return result.filePath || null;
