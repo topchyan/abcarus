@@ -202,7 +202,7 @@ main {
   background: var(--button-bg-hover);
 }
 
-.controls button.toggle-active {
+.controls button.toggle-active:not(:disabled) {
   background: #111;
   color: #fff;
   border-color: #111;
@@ -237,7 +237,16 @@ main {
   background: var(--button-bg-hover);
 }
 
-.segmented button.toggle-active {
+.segmented button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.segmented button:disabled:hover {
+  background: transparent;
+}
+
+.segmented button.toggle-active:not(:disabled) {
   background: var(--accent);
   color: #fff;
 }
