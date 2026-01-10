@@ -30,7 +30,10 @@
             </button>
 	        </div>
 	        <div class="segmented" aria-label="File">
-	          <button id="btnFileNew" type="button" title="New file (Ctrl+N)"><span class="btn-text">New File</span></button>
+	          <button id="btnFileNew" type="button" title="New file (Ctrl+N)">
+              <span class="btn-icon icon-file-plus" aria-hidden="true"></span>
+              <span class="btn-text">New File</span>
+            </button>
 	          <button id="btnFileOpen" type="button" title="Open (Ctrl+O)">
               <span class="btn-icon icon-folder-open" aria-hidden="true"></span>
               <span class="btn-text">Open</span>
@@ -39,8 +42,14 @@
               <span class="btn-icon icon-save" aria-hidden="true"></span>
               <span class="btn-text">Save</span>
             </button>
-	          <button id="btnFileClose" type="button" title="Close file (Ctrl+W)"><span class="btn-text">Close</span></button>
-	          <button id="btnToggleRaw" type="button" title="Toggle raw file mode">Raw</button>
+	          <button id="btnFileClose" type="button" title="Close file (Ctrl+W)">
+              <span class="btn-icon icon-file-x" aria-hidden="true"></span>
+              <span class="btn-text">Close</span>
+            </button>
+	          <button id="btnToggleRaw" type="button" title="Toggle raw file mode">
+              <span class="btn-icon icon-file-code" aria-hidden="true"></span>
+              <span class="btn-text">Raw</span>
+            </button>
 	        </div>
 	        <div class="segmented" aria-label="Transport">
 	          <button id="btnPlayPause" type="button" title="Play / Pause (F5)">
@@ -54,7 +63,10 @@
             </button>
 	        </div>
 	        <div class="practice-controls" aria-label="Practice controls">
-	          <button id="btnPracticeToggle" type="button" title="Practice mode (loop + tempo override)" aria-pressed="false">Practice</button>
+	          <button id="btnPracticeToggle" type="button" title="Practice mode (loop + tempo override)" aria-pressed="false">
+              <span class="btn-icon icon-repeat" aria-hidden="true"></span>
+              <span class="btn-text">Practice</span>
+            </button>
 	          <label id="practiceTempoWrap" class="practice-tempo" hidden>
 	            <span>Tempo</span>
 	            <select id="practiceTempo" aria-label="Practice tempo">
@@ -76,8 +88,14 @@
 	          <select id="soundfontSelect" aria-label="Soundfont"></select>
 	        </label>
 	        <div class="segmented" aria-label="Soundfont actions">
-	          <button id="soundfontAdd" title="Add soundfont"><span class="btn-text">Add</span></button>
-	          <button id="soundfontRemove" title="Remove soundfont"><span class="btn-text">Remove</span></button>
+	          <button id="soundfontAdd" title="Add soundfont">
+              <span class="btn-icon icon-plus" aria-hidden="true"></span>
+              <span class="btn-text">Add</span>
+            </button>
+	          <button id="soundfontRemove" title="Remove soundfont">
+              <span class="btn-icon icon-minus" aria-hidden="true"></span>
+              <span class="btn-text">Remove</span>
+            </button>
 	        </div>
 	        <div class="segmented" aria-label="Layout">
 	          <button id="btnResetLayout" title="Reset layout (F8)">

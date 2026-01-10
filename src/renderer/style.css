@@ -257,12 +257,18 @@ main {
 }
 
 .icon-library { -webkit-mask-image: url("../../assets/icons/ui/library-big.svg"); mask-image: url("../../assets/icons/ui/library-big.svg"); }
+.icon-file-plus { -webkit-mask-image: url("../../assets/icons/ui/file-plus.svg"); mask-image: url("../../assets/icons/ui/file-plus.svg"); }
+.icon-file-x { -webkit-mask-image: url("../../assets/icons/ui/file-x.svg"); mask-image: url("../../assets/icons/ui/file-x.svg"); }
+.icon-file-code { -webkit-mask-image: url("../../assets/icons/ui/file-code.svg"); mask-image: url("../../assets/icons/ui/file-code.svg"); }
 .icon-folder-open { -webkit-mask-image: url("../../assets/icons/ui/folder-open.svg"); mask-image: url("../../assets/icons/ui/folder-open.svg"); }
 .icon-save { -webkit-mask-image: url("../../assets/icons/ui/save.svg"); mask-image: url("../../assets/icons/ui/save.svg"); }
 .icon-play { -webkit-mask-image: url("../../assets/icons/ui/play.svg"); mask-image: url("../../assets/icons/ui/play.svg"); }
 .icon-pause { -webkit-mask-image: url("../../assets/icons/ui/pause.svg"); mask-image: url("../../assets/icons/ui/pause.svg"); }
 .icon-stop { -webkit-mask-image: url("../../assets/icons/ui/square.svg"); mask-image: url("../../assets/icons/ui/square.svg"); }
 .icon-reset { -webkit-mask-image: url("../../assets/icons/ui/rotate-ccw.svg"); mask-image: url("../../assets/icons/ui/rotate-ccw.svg"); }
+.icon-repeat { -webkit-mask-image: url("../../assets/icons/ui/repeat.svg"); mask-image: url("../../assets/icons/ui/repeat.svg"); }
+.icon-plus { -webkit-mask-image: url("../../assets/icons/ui/plus.svg"); mask-image: url("../../assets/icons/ui/plus.svg"); }
+.icon-minus { -webkit-mask-image: url("../../assets/icons/ui/minus.svg"); mask-image: url("../../assets/icons/ui/minus.svg"); }
 
 #btnPlayPause .icon-pause { display: none; }
 #btnPlayPause.is-playing .icon-play { display: none; }
