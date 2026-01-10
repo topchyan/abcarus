@@ -569,6 +569,19 @@ export function initSettings(api) {
         const anyVisible = Boolean(group.querySelector(".settings-entry:not([style*='display: none'])"));
         if (title) title.style.display = anyVisible ? "" : "none";
       }
+
+      for (const d of advancedBlocks) {
+        if (!openAdvanced) {
+          d.style.display = "none";
+          continue;
+        }
+        if (!needle) {
+          d.style.display = "";
+          continue;
+        }
+        const anyVisible = Boolean(d.querySelector(".settings-entry:not([style*='display: none'])"));
+        d.style.display = anyVisible ? "" : "none";
+      }
     };
   }
 

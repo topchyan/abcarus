@@ -1493,12 +1493,17 @@ svg {
 }
 
 .modal-card.settings-card {
+  width: min(920px, 94vw);
   resize: both;
   overflow: hidden;
   min-width: 420px;
   min-height: 320px;
   max-width: 96vw;
   max-height: 92vh;
+}
+
+.modal-card.settings-card .modal-body {
+  overflow: hidden;
 }
 
 .modal-header,
@@ -1540,6 +1545,17 @@ svg {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.settings-tabs .settings-tab {
+  border-radius: 999px;
+  padding: 5px 10px;
+}
+
+.settings-tabs .settings-tab.active {
+  background: #111;
+  color: #fff;
+  border-color: #111;
 }
 
 .settings-toolbar {
@@ -1592,6 +1608,8 @@ svg {
   flex-direction: column;
   gap: 16px;
   flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .settings-panel {
@@ -1614,9 +1632,22 @@ svg {
 }
 
 .settings-entry {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 320px;
+  column-gap: 12px;
+  row-gap: 4px;
+  align-items: center;
+  font-size: var(--font-size-sm);
+}
+
+/* Let the entry grid own layout; the row becomes a lightweight container. */
+.settings-entry > .settings-row {
+  display: contents;
+}
+
+.settings-entry > .settings-help {
+  grid-column: 1 / 2;
+  margin-top: -2px;
 }
 
 .settings-editor {
@@ -1703,6 +1734,31 @@ textarea {
   color: var(--muted-text);
 }
 
+.settings-advanced {
+  border-top: 1px solid var(--border-color);
+  padding-top: 10px;
+}
+
+.settings-advanced > summary {
+  list-style: none;
+}
+
+.settings-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-advanced > summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 12px;
+  margin-right: 6px;
+  color: var(--muted-text);
+}
+
+.settings-advanced[open] > summary::before {
+  content: "▾";
+}
+
 .settings-group {
   display: flex;
   flex-direction: column;
@@ -1722,11 +1778,7 @@ textarea {
 }
 
 .settings-row {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) 260px;
-  align-items: center;
-  gap: 12px;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
 }
 
 .settings-row > span:first-child {
