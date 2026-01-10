@@ -97,10 +97,10 @@
               <span class="btn-text">Remove</span>
             </button>
 	        </div>
-	        <div class="segmented" aria-label="Layout">
-	          <button id="btnResetLayout" title="Reset layout (F8)">
+	        <div class="segmented" aria-label="View">
+	          <button id="btnResetLayout" title="Reset view (layout + zoom) (F8)" aria-label="Reset view (layout and zoom)">
               <span class="btn-icon icon-reset" aria-hidden="true"></span>
-              <span class="btn-text">Reset</span>
+              <span class="btn-text">Reset view</span>
             </button>
 	        </div>
 	      </div>
@@ -217,24 +217,28 @@
 			  </div>
 	
   <div class="modal" id="settingsModal" aria-hidden="true">
-		    <div class="modal-card settings-card" role="dialog" aria-label="Settings">
-	      <div class="modal-header">
-	        <div class="modal-title">Settings</div>
+    <div class="modal-card settings-card" role="dialog" aria-label="Settings">
+      <div class="modal-header">
+        <div class="modal-title">Settings</div>
         <button class="modal-close" id="settingsClose" type="button">Close</button>
       </div>
       <div class="modal-body">
-        <div class="settings-toolbar" aria-label="Settings toolbar">
-          <label class="settings-filter">
-            <span>Filter</span>
-            <input id="settingsFilter" type="text" placeholder="Zoom, follow, drums, XML…" />
-          </label>
-          <label class="settings-toggle">
-            <input id="settingsShowAdvanced" type="checkbox" />
-            <span>Show advanced</span>
-          </label>
+        <div class="settings-layout" aria-label="Settings layout">
+          <div class="settings-nav">
+            <label class="settings-filter">
+              <span>Search</span>
+              <input id="settingsFilter" type="text" placeholder="Zoom, follow, XML…" />
+            </label>
+            <label class="settings-toggle">
+              <input id="settingsShowAdvanced" type="checkbox" />
+              <span>Show advanced</span>
+            </label>
+            <div class="settings-tabs" id="settingsTabs" role="tablist" aria-label="Settings sections"></div>
+          </div>
+          <div class="settings-content">
+            <div class="settings-panels" id="settingsPanels"></div>
+          </div>
         </div>
-        <div class="settings-tabs" id="settingsTabs" role="tablist" aria-label="Settings sections"></div>
-        <div class="settings-panels" id="settingsPanels"></div>
       </div>
       <div class="modal-footer">
         <button id="settingsReset" type="button">Reset Defaults</button>
@@ -255,7 +259,7 @@
         </label>
       </div>
       <div class="modal-footer">
-        <button id="moveTuneApply" type="button">Move</button>
+        <button id="moveTuneApply" class="primary" type="button">Move</button>
         <button id="moveTuneCancel" type="button">Cancel</button>
       </div>
     </div>
@@ -302,7 +306,7 @@
         <p>ABCarus is functional but still under active development. Expect changes and keep backups.</p>
       </div>
       <div class="modal-footer">
-        <button id="disclaimerOk" type="button">OK</button>
+        <button id="disclaimerOk" class="primary" type="button">OK</button>
       </div>
     </div>
   </div>

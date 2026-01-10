@@ -1546,13 +1546,14 @@ function updateLibraryRootUI() {
   $libraryRoot.title = root;
 }
 
-function setScanStatus(text) {
+function setScanStatus(text, title) {
   const value = String(text || "");
+  const titleValue = title == null ? value : String(title || "");
   updateLibraryRootUI();
   const display = value || "";
   if ($scanStatus) {
     $scanStatus.textContent = display;
-    $scanStatus.title = display;
+    $scanStatus.title = titleValue;
   }
   if (/^Done\b/i.test(value)) {
     setStatus(value);
@@ -2167,7 +2168,8 @@ function updateLibraryStatus() {
     return;
   }
   if (libraryIndex) {
-    setScanStatus(`Done (${(libraryIndex.files || []).length} files)`);
+    const count = (libraryIndex.files || []).length;
+    setScanStatus("Ready", `Ready (${count} files)`);
     return;
   }
   setScanStatus("Idle");
@@ -4138,16 +4140,16 @@ if (window.api && typeof window.api.onLibraryProgress === "function") {
         if (scanStatusClearTimer) clearTimeout(scanStatusClearTimer);
         scanStatusClearTimer = setTimeout(() => {
           scanStatusClearTimer = null;
-          setScanStatus("");
+          updateLibraryStatus();
         }, 600);
       }
     } else if (payload.phase === "done") {
       const filesFound = payload.filesFound || 0;
-      setScanStatus(`Done (${filesFound} files)`);
+      setScanStatus("Ready", `Ready (${filesFound} files)`);
       if (scanStatusClearTimer) clearTimeout(scanStatusClearTimer);
       scanStatusClearTimer = setTimeout(() => {
         scanStatusClearTimer = null;
-        setScanStatus("");
+        updateLibraryStatus();
       }, 900);
     }
   });
@@ -8158,6 +8160,19 @@ if ($xIssuesAutoFix) {
   });
 }
 
+if ($xIssuesModal) {
+  $xIssuesModal.addEventListener("click", (e) => {
+    if (e.target === $xIssuesModal) closeXIssuesModal();
+  });
+  $xIssuesModal.addEventListener("keydown", (e) => {
+    if (!e) return;
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeXIssuesModal();
+  });
+}
+
 function showDisclaimerIfNeeded(settings) {
   if (disclaimerShown) return;
   if (!$disclaimerModal || !$disclaimerOk) return;
@@ -9869,6 +9884,21 @@ if ($moveTuneModal) {
   $moveTuneModal.addEventListener("click", (e) => {
     if (e.target === $moveTuneModal) closeMoveTuneModal();
   });
+  $moveTuneModal.addEventListener("keydown", (e) => {
+    if (!e) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeMoveTuneModal();
+      return;
+    }
+    if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (!$moveTuneApply || $moveTuneApply.disabled) return;
+      e.preventDefault();
+      e.stopPropagation();
+      $moveTuneApply.click();
+    }
+  });
 }
 
 if ($aboutClose) {
@@ -9880,6 +9910,13 @@ if ($aboutClose) {
 if ($aboutModal) {
   $aboutModal.addEventListener("click", (e) => {
     if (e.target === $aboutModal) closeAbout();
+  });
+  $aboutModal.addEventListener("keydown", (e) => {
+    if (!e) return;
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeAbout();
   });
 }
 
@@ -9901,6 +9938,17 @@ if ($aboutCopy) {
 if ($disclaimerOk) {
   $disclaimerOk.addEventListener("click", () => {
     dismissDisclaimer();
+  });
+}
+
+if ($disclaimerModal) {
+  $disclaimerModal.addEventListener("keydown", (e) => {
+    if (!e) return;
+    if (e.key === "Escape" || e.key === "Enter") {
+      e.preventDefault();
+      e.stopPropagation();
+      dismissDisclaimer();
+    }
   });
 }
 
