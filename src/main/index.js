@@ -73,9 +73,13 @@ function detectLinuxPrefersDarkTheme() {
 function resolveWindowIconPath() {
   const appRoot = app.getAppPath();
   // On Linux, the window icon must remain visible against both light/dark titlebar themes.
-  // Use a flat monochrome silhouette for maximum contrast; fall back to the app icon.
+  // Prefer the regular app icon for consistency across launchers/panels/taskbars.
+  // When needed, allow forcing a flat monochrome silhouette via `ABCARUS_LINUX_WINDOW_ICON_VARIANT=dark|light`.
   if (process.platform === "linux") {
     const forced = String(process.env.ABCARUS_LINUX_WINDOW_ICON_VARIANT || "").trim().toLowerCase();
+    if (forced !== "dark" && forced !== "light") {
+      return resolveAppIconPath();
+    }
     const detected = detectLinuxPrefersDarkTheme();
     // Linux desktop environments vary widely, and Electron's `nativeTheme` is not always reliable
     // (especially for titlebar theme darkness). To avoid an invisible titlebar icon, default to
@@ -438,14 +442,25 @@ function showSaveDialog(suggestedName, suggestedDir, senderOrEvent) {
   const parent = prepareDialogParent(senderOrEvent, "save-file");
   const defaultName = suggestedName || "Untitled.abc";
   const defaultPath = suggestedDir ? path.join(suggestedDir, defaultName) : defaultName;
+  const ext = path.extname(defaultName || "").replace(/^\./, "").trim().toLowerCase();
+  const filters = (() => {
+    if (ext === "json") {
+      return [
+        { name: "JSON", extensions: ["json"] },
+        { name: "ABC", extensions: ["abc"] },
+        { name: "All Files", extensions: ["*"] },
+      ];
+    }
+    return [
+      { name: "ABC", extensions: ["abc"] },
+      { name: "All Files", extensions: ["*"] },
+    ];
+  })();
   return dialog.showSaveDialog(parent || undefined, {
     modal: true,
     title: "Save As",
     defaultPath,
-    filters: [
-      { name: "ABC", extensions: ["abc"] },
-      { name: "All Files", extensions: ["*"] },
-    ],
+    filters,
   }).then((result) => {
     if (!result || result.canceled) return null;
     return result.filePath || null;

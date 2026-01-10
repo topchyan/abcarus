@@ -1,7 +1,7 @@
 .lib-overlay{
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.45);
+  background: var(--overlay-bg, rgba(0, 0, 0, 0.3));
   z-index: 9999;
 }
 .lib-overlay[hidden]{
@@ -14,13 +14,13 @@
   max-height: 92vh;
   min-width: 820px;
   min-height: 420px;
-  background: #fff;
-  border-radius: 12px;
+  background: var(--panel-bg, #fff);
+  border-radius: var(--radius-2, 8px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border: 1px solid #cfcfcf;
-  box-shadow: 0 18px 60px rgba(0,0,0,.35);
+  border: 1px solid var(--border-color, #cfcfcf);
+  box-shadow: var(--shadow-md, 0 18px 60px rgba(0,0,0,.35));
   position: absolute;
   left: 50%;
   top: 50%;
@@ -28,22 +28,22 @@
 }
 .lib-header,.lib-footer{
   flex: 0 0 auto;
-  padding: 12px 14px;
-  border-bottom: 1px solid #ddd;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color, #ddd);
 }
 .lib-header{
-  background: #fbfbfb;
+  background: transparent;
 }
 .lib-footer{
   border-bottom: none;
-  border-top: 1px solid #ddd;
+  border-top: 1px solid var(--border-color, #ddd);
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 .lib-status{
-  font-size: 12px;
-  color: #555;
+  font-size: var(--font-size-sm, 12px);
+  color: var(--muted-text, #555);
   min-height: 16px;
 }
 .lib-status.error{
@@ -61,19 +61,20 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  margin-top: 10px;
+  margin-top: 6px;
 }
-.lib-title{ font-size: 18px; font-weight: 600; margin: 0; }
-.lib-controls{ display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
-.lib-label{ font-size: 12px; color: #444; display: grid; gap: 4px; }
-.lib-input{ height: 30px; min-width: 360px; padding: 4px 8px; }
-.lib-btn{ height: 32px; padding: 0 12px; }
+.lib-title{ font-size: 15px; font-weight: 600; margin: 0; color: var(--text, #111); }
+.lib-controls{ display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.lib-label{ font-size: var(--font-size-xs, 11px); color: var(--muted-text, #444); display: grid; gap: 4px; }
+.lib-input{ height: var(--button-height, 28px); min-width: 320px; padding: 4px 8px; border-radius: var(--radius-1, 6px); border: 1px solid var(--button-border, #d0d0d0); }
+.lib-btn{ height: var(--button-height, 28px); padding: 0 10px; border-radius: var(--radius-1, 6px); border: 1px solid var(--button-border, #d0d0d0); background: var(--button-bg, #f7f7f7); color: var(--button-text, #333); }
+.lib-btn:hover{ background: var(--button-bg-hover, #ededed); }
 .lib-btn.primary{ font-weight: 600; }
-.lib-body{ flex: 1 1 auto; min-height: 0; padding: 10px 14px; }
+.lib-body{ flex: 1 1 auto; min-height: 0; padding: 8px 10px; }
 .lib-table{ width: 100%; height: 100%; }
 .lib-hint{
-  font-size: 12px;
-  color: #555;
+  font-size: var(--font-size-sm, 12px);
+  color: var(--muted-text, #555);
 }
 .lib-hint.error{
   color: #b00020;
@@ -83,15 +84,15 @@
 .lib-x{
   width: 34px;
   height: 34px;
-  border-radius: 10px;
-  border: 1px solid #d0d0d0;
-  background: #fff;
-  color: #333;
+  border-radius: var(--radius-2, 8px);
+  border: 1px solid var(--button-border, #d0d0d0);
+  background: var(--button-bg, #fff);
+  color: var(--button-text, #333);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
 }
-.lib-x:hover{ background: #f3f3f3; }
+.lib-x:hover{ background: var(--button-bg-hover, #f3f3f3); }
 
 .lib-modal.lib-resizing,
 .lib-modal.lib-resizing *{
@@ -113,13 +114,32 @@
 .lib-resize-handle.sw{ bottom: -4px; left: -4px; width: 14px; height: 14px; cursor: nesw-resize; }
 
 .lib-modal .tabulator{
-  border: 1px solid #e5e5e5;
-  border-radius: 8px;
+  border: 1px solid var(--border-color, #e5e5e5);
+  border-radius: var(--radius-2, 8px);
+  font-size: var(--font-size-sm, 12px);
 }
 
 .lib-modal .tabulator .tabulator-cell.lib-tags-cell{
   white-space: normal;
   line-height: 1.2;
+}
+
+.lib-modal .tabulator .tabulator-header{
+  background: var(--button-bg, #f7f7f7);
+  border-bottom: 1px solid var(--border-color, #e5e5e5);
+}
+
+.lib-modal .tabulator .tabulator-col{
+  padding: 4px 6px;
+}
+
+.lib-modal .tabulator-row .tabulator-cell{
+  padding: 3px 6px;
+}
+
+.lib-modal .tabulator-row.tabulator-selected{
+  background: var(--accent-soft, #e6f1ff) !important;
+  color: var(--text, #111);
 }
 
 body.library-list-open #libraryTree{

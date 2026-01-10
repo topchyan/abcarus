@@ -23,18 +23,50 @@
 	  <header>
 	    <div class="header-row header-row-top">
 	      <div class="controls">
-	        <button id="btnToggleLibrary" title="Toggle Library Tree (Ctrl+L). Shift-click: Library Catalog (Ctrl+Shift+L)">Library</button>
-	        <div class="controls-sep" aria-hidden="true"></div>
-	        <button id="btnFileNew" type="button" title="New file (Ctrl+N)">New File</button>
-	        <button id="btnFileOpen" type="button" title="Open (Ctrl+O)">Open</button>
-	        <button id="btnFileSave" type="button" title="Save (Ctrl+S)">Save</button>
-	        <button id="btnFileClose" type="button" title="Close file (Ctrl+W)">Close</button>
-	        <button id="btnToggleRaw" type="button" title="Toggle raw file mode">Raw</button>
-	        <div class="toolbar-sep" aria-hidden="true"></div>
-	        <button id="btnPlayPause" type="button" title="Play / Pause (F5)">Play</button>
-	        <button id="btnStop" type="button" title="Stop (Esc)">Stop</button>
+	        <div class="segmented" aria-label="Library">
+	          <button id="btnToggleLibrary" title="Toggle Library Tree (Ctrl+L). Shift-click: Library Catalog (Ctrl+Shift+L)">
+              <span class="btn-icon icon-library" aria-hidden="true"></span>
+              <span class="btn-text">Library</span>
+            </button>
+	        </div>
+	        <div class="segmented" aria-label="File">
+	          <button id="btnFileNew" type="button" title="New file (Ctrl+N)">
+              <span class="btn-icon icon-file-plus" aria-hidden="true"></span>
+              <span class="btn-text">New File</span>
+            </button>
+	          <button id="btnFileOpen" type="button" title="Open (Ctrl+O)">
+              <span class="btn-icon icon-folder-open" aria-hidden="true"></span>
+              <span class="btn-text">Open</span>
+            </button>
+	          <button id="btnFileSave" type="button" title="Save (Ctrl+S)">
+              <span class="btn-icon icon-save" aria-hidden="true"></span>
+              <span class="btn-text">Save</span>
+            </button>
+	          <button id="btnFileClose" type="button" title="Close file (Ctrl+W)">
+              <span class="btn-icon icon-file-x" aria-hidden="true"></span>
+              <span class="btn-text">Close</span>
+            </button>
+	          <button id="btnToggleRaw" type="button" title="Toggle raw file mode">
+              <span class="btn-icon icon-file-code" aria-hidden="true"></span>
+              <span class="btn-text">Raw</span>
+            </button>
+	        </div>
+	        <div class="segmented" aria-label="Transport">
+	          <button id="btnPlayPause" type="button" title="Play / Pause (F5)">
+              <span class="btn-icon icon-play" aria-hidden="true"></span>
+              <span class="btn-icon icon-pause" aria-hidden="true"></span>
+              <span class="btn-text">Play</span>
+            </button>
+	          <button id="btnStop" type="button" title="Stop (Esc)">
+              <span class="btn-icon icon-stop" aria-hidden="true"></span>
+              <span class="btn-text">Stop</span>
+            </button>
+	        </div>
 	        <div class="practice-controls" aria-label="Practice controls">
-	          <button id="btnPracticeToggle" type="button" title="Practice mode (loop + tempo override)" aria-pressed="false">Practice</button>
+	          <button id="btnPracticeToggle" type="button" title="Practice mode (loop + tempo override)" aria-pressed="false">
+              <span class="btn-icon icon-repeat" aria-hidden="true"></span>
+              <span class="btn-text">Practice</span>
+            </button>
 	          <label id="practiceTempoWrap" class="practice-tempo" hidden>
 	            <span>Tempo</span>
 	            <select id="practiceTempo" aria-label="Practice tempo">
@@ -55,10 +87,22 @@
 	          <span id="soundfontLabel">Soundfont:</span>
 	          <select id="soundfontSelect" aria-label="Soundfont"></select>
 	        </label>
-	        <button id="soundfontAdd" title="Add soundfont">Add</button>
-	        <button id="soundfontRemove" title="Remove soundfont">Remove</button>
-	        <div class="controls-sep" aria-hidden="true"></div>
-	        <button id="btnResetLayout" title="Reset layout (F8)">Reset</button>
+	        <div class="segmented" aria-label="Soundfont actions">
+	          <button id="soundfontAdd" title="Add soundfont">
+              <span class="btn-icon icon-plus" aria-hidden="true"></span>
+              <span class="btn-text">Add</span>
+            </button>
+	          <button id="soundfontRemove" title="Remove soundfont">
+              <span class="btn-icon icon-minus" aria-hidden="true"></span>
+              <span class="btn-text">Remove</span>
+            </button>
+	        </div>
+	        <div class="segmented" aria-label="Layout">
+	          <button id="btnResetLayout" title="Reset layout (F8)">
+              <span class="btn-icon icon-reset" aria-hidden="true"></span>
+              <span class="btn-text">Reset</span>
+            </button>
+	        </div>
 	      </div>
 	    </div>
 	  </header>
@@ -127,7 +171,7 @@
             Errors: 0
           </button>
           <span id="errorsFocusMessage" class="errors-focus-message" hidden></span>
-          <div class="file-header-toggles controls" aria-label="Mode toggles">
+          <div class="file-header-toggles controls segmented" aria-label="Mode toggles">
             <button id="btnToggleErrors" type="button" title="Toggle errors features">Errors</button>
             <button id="btnToggleFollow" type="button" title="Toggle playback follow">Follow</button>
             <button id="btnToggleGlobals" type="button" title="Toggle global header">Globals</button>
@@ -157,6 +201,7 @@
 	  <footer class="taskbar">
 	    <div class="taskbar-left">
 	      <div id="status">Ready</div>
+	      <div id="hoverStatus" class="hover-status" aria-live="polite"></div>
 	      <div id="toolStatus" class="tool-status" aria-live="polite"></div>
 	    </div>
 	    <div id="cursorStatus" class="cursor-status"></div>
@@ -178,6 +223,16 @@
         <button class="modal-close" id="settingsClose" type="button">Close</button>
       </div>
       <div class="modal-body">
+        <div class="settings-toolbar" aria-label="Settings toolbar">
+          <label class="settings-filter">
+            <span>Filter</span>
+            <input id="settingsFilter" type="text" placeholder="Zoom, follow, drums, XML…" />
+          </label>
+          <label class="settings-toggle">
+            <input id="settingsShowAdvanced" type="checkbox" />
+            <span>Show advanced</span>
+          </label>
+        </div>
         <div class="settings-tabs" id="settingsTabs" role="tablist" aria-label="Settings sections"></div>
         <div class="settings-panels" id="settingsPanels"></div>
       </div>
