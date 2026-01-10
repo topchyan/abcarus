@@ -103,3 +103,34 @@ The canonical list lives in `.gitignore`; this section documents intent.
 
 **Linux window icon selection**
 - `ABCARUS_LINUX_WINDOW_ICON_VARIANT=dark|light` — force window icon variant (debug/override).
+
+## Debug playbook (when something breaks)
+
+When reporting a bug, try to include: app version (About), OS/desktop, minimal ABC snippet/file, and exact repro steps.
+
+**Where logs go**
+- Electron main process logs go to the terminal you launched `npm start` from.
+- Renderer logs go to DevTools Console (View → Toggle Developer Tools).
+
+**Keyboard shortcuts / key routing**
+```bash
+ABCARUS_DEBUG_KEYS=1 npm start
+```
+Reproduce and copy the `[keys] ...` lines from the terminal.
+
+**Playback issues (parse errors, Follow, “cannot start”)**
+- In DevTools Console (no rebuild needed):
+  - `window.__abcarusDebugPlayback = true` (prints playback payload/head + parsed previews)
+  - `window.__abcarusPlaybackTrace = true` (per-note trace; no reload required)
+  - `window.__abcarusDebugDrums = true` (prints drum-related payload lines)
+- Optional toggles (set before starting playback, then try again):
+  - `window.__abcarusPlaybackStripChordSymbols = true`
+  - `window.__abcarusPlaybackExpandRepeats = true`
+- Useful dump helpers:
+  - `window.__abcarusPlaybackDebug?.getState()`
+  - `window.__abcarusPlaybackDebug?.getDiagnostics()`
+  - `window.__abcarusPlaybackDebug?.getTrace().slice(-50)`
+
+**Icons (Linux)**
+- Install/update local icons: `bash scripts/install_icons.sh`
+- If the DE still shows the old icon, re-run `gtk-update-icon-cache` for your hicolor dir (the script already tries).
