@@ -33,3 +33,7 @@ This repo is a small Electron app for working with ABC notation.
   - read-only file / permission errors
   - file modified on disk between index and write
   - paths with spaces and non-ASCII characters
+
+## Quick workflow reference
+For day-to-day commands (dev + release), “what we commit”, and important debug flags, see:
+- `WORKFLOW.md`

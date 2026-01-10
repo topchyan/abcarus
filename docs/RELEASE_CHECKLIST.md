@@ -2,6 +2,18 @@
 
 This is a step-by-step guide for making a release build and pushing it to GitHub.
 
+## TL;DR (3–5 commands)
+
+1) Update `CHANGELOG.md` under `## [Unreleased]`.
+2) Run one:
+   - `npm run release:patch`
+   - `npm run release:minor`
+   - `npm run release:major`
+3) Push commit + tag:
+   - `git push`
+   - `git push origin vX.Y.Z`
+4) Verify the GitHub Actions run for tag `vX.Y.Z` is green (all jobs), then do a quick sanity check.
+
 Where to find:
 - High-level policy: `docs/RELEASES.md`
 - This checklist: `docs/RELEASE_CHECKLIST.md`
@@ -38,8 +50,11 @@ Example:
 
 ## 2) Update CHANGELOG (and optional local devlog)
 
-The repository release flow is driven by `scripts/release.mjs` (via `npm run release:*`) and
-`scripts/generate-release-docs.mjs` (to update `CHANGELOG.md` and `docs/RELEASE_NOTES.md`).
+The repository release flow is driven by `scripts/release.mjs` (via `npm run release:*`), which:
+- bumps versions in `package.json` (+ `package-lock.json`)
+- moves the current `CHANGELOG.md` `## [Unreleased]` section into a dated `## [X.Y.Z] - YYYY-MM-DD` entry
+- creates an annotated git tag `vX.Y.Z`
+- requires a clean git working tree (no uncommitted changes)
 
 Manual (optional):
 - Append local devlog entry:
@@ -63,9 +78,8 @@ This flow bumps the version, updates release docs, commits, and creates a tag:
    - `git push origin vX.Y.Z`
 
 Notes:
-- Release notes are generated from git history and written to:
-  - `CHANGELOG.md`
-  - `docs/RELEASE_NOTES.md`
+- The user-facing release notes are the `CHANGELOG.md` entry for `vX.Y.Z`.
+- Tag pushes trigger GitHub Actions (including `.github/workflows/release-assets.yml`) which builds and uploads artifacts to the GitHub Release for that tag.
 
 ## 4) Push (if skipped earlier)
 
@@ -77,7 +91,7 @@ Notes:
 1) Go to the GitHub repository.
 2) Create a new Release from tag `vX.Y.Z`.
 3) Paste the release notes from `CHANGELOG.md` section `## [X.Y.Z] - ...`.
-4) Upload `dist/appimage/Abcarus-x86_64.AppImage`.
+4) (Optional) Wait for CI: `.github/workflows/release-assets.yml` uploads the platform artifacts for that tag.
 
 ## 6) Troubleshooting AppImage build
 

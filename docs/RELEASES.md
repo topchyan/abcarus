@@ -22,6 +22,8 @@ This project uses Semantic Versioning (SemVer) and Keep a Changelog.
    - `git push`
    - `git push origin vX.Y.Z`
 5) Create a GitHub Release from the new CHANGELOG section.
+   - CI builds and uploads artifacts on tag push via `.github/workflows/release-assets.yml`.
+   - You typically only need to write/paste the release notes; artifacts are uploaded automatically to the GitHub Release for that tag.
 
 ## Practical checklist
 For a step-by-step “one-shot” release workflow (deploy + AppImage + push), see:

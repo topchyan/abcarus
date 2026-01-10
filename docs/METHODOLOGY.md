@@ -2,6 +2,10 @@
 
 This project is developed iteratively via chat sessions. To prevent “context loss”, we treat chat history as *raw input* and maintain explicit, version-controlled sources of truth.
 
+## Quick workflow
+For the day-to-day “how we work” commands (dev + release), what we commit vs keep local, and the key debug env vars, see:
+- `WORKFLOW.md`
+
 ## Sources of truth (ordered)
 1) Code + `git` history (canonical).
 2) ADRs in `docs/adr/` (architectural decisions + constraints).

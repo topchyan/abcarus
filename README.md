@@ -30,10 +30,19 @@ See `docs/DISCLAIMER.md` and `CHANGELOG.md`.
   - macOS (x64): https://github.com/topchyan/abcarus/releases/latest/download/SHA256SUMS-macos-x64.txt
 
 ## Project docs (recommended starting points)
+- Quick workflow (dev + release): `WORKFLOW.md`
+- Detailed release checklist: `docs/RELEASE_CHECKLIST.md`
 - `docs/README.md` (developer documentation index)
 - `docs/REQUIREMENTS.md` (product + engineering invariants)
 - `docs/METHODOLOGY.md` (chat-driven workflow without losing context)
 - `docs/qa/manual-merge-checklist.md` (manual QA for risky changes)
+
+## Quick workflow
+
+See `WORKFLOW.md` for:
+- 3–5-command release flow (version → tag → push → verify)
+- What we commit / keep local (e.g. `scripts/local/**`)
+- Useful debug env vars (e.g. `ABCARUS_DEBUG_KEYS=1`)
 
 ## Quick start (development)
 
