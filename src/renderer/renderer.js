@@ -4094,8 +4094,11 @@ function createBlankDocument() {
 let t = null;
 
 function setStatus(s) {
-  $status.textContent = s;
-  const loading = String(s || "").toLowerCase().startsWith("loading the sound font");
+  const raw = String(s || "");
+  const normalized = raw.trim();
+  const display = normalized === "OK" ? "Ready" : raw;
+  $status.textContent = display;
+  const loading = String(display || "").toLowerCase().startsWith("loading the sound font");
   $status.classList.toggle("status-loading", loading);
 }
 
@@ -4792,7 +4795,9 @@ async function updateSoundfontLoadingStatus(name) {
 
 function setCursorStatus(line, col, offset, totalLines, totalChars) {
   if (!$cursorStatus) return;
-  $cursorStatus.textContent = `Ln ${line}/${totalLines}, Col ${col}  •  Ch ${offset}/${totalChars}`;
+  const text = `Ln ${line}/${totalLines}, Col ${col}  •  Ch ${offset}/${totalChars}`;
+  $cursorStatus.textContent = text;
+  $cursorStatus.title = text;
 }
 
 function applyTransformedText(text) {

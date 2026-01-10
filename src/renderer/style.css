@@ -1175,6 +1175,12 @@ svg {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.buffer-status {
+  flex: 0 0 auto;
 }
 
 .hover-status {
@@ -1392,6 +1398,14 @@ svg {
 .cursor-status {
   font-size: var(--font-size-xs);
   color: #555;
+  flex: 0 0 260px;
+  min-width: 260px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .buffer-status:empty {
