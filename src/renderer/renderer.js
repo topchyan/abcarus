@@ -2402,6 +2402,25 @@ function resetLayout() {
   resetRightPaneSplit();
 }
 
+let startupLayoutResetDone = false;
+let startupLayoutResetScheduled = false;
+
+function scheduleStartupLayoutReset() {
+  if (startupLayoutResetDone || startupLayoutResetScheduled) return;
+  startupLayoutResetScheduled = true;
+  requestAnimationFrame(() => {
+    startupLayoutResetScheduled = false;
+    if (startupLayoutResetDone) return;
+    startupLayoutResetDone = true;
+    try {
+      resetLayout();
+    } catch {}
+    requestAnimationFrame(() => {
+      try { centerRenderPaneOnCurrentAnchor(); } catch {}
+    });
+  });
+}
+
 function refreshErrorsNow() {
   if (rawMode) {
     showToast("Raw mode: switch to tune mode for errors.", 2200);
@@ -9565,6 +9584,7 @@ if (window.api && typeof window.api.getSettings === "function") {
       loadSoundfontSelectOptions();
       refreshHeaderLayers().catch(() => {});
       showDisclaimerIfNeeded(settings);
+      scheduleStartupLayoutReset();
     }
     suppressLibraryPrefsWrite = false;
   }).catch(() => { suppressLibraryPrefsWrite = false; });
