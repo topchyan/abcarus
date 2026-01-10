@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed
+- Settings: redesign dialog with left navigation and stable desktop layout; hide Drums page for now.
+- UI: make modal footers consistent and add standard Esc/Enter behaviors.
+- Toolbar: clarify “Reset view” (layout + zoom) label/tooltip.
+- Library: simplify post-scan status text (count kept in tooltip only).
 
 ## [0.19.1] - 2026-01-09
 ### Changed
