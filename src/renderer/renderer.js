@@ -8158,6 +8158,19 @@ if ($xIssuesAutoFix) {
   });
 }
 
+if ($xIssuesModal) {
+  $xIssuesModal.addEventListener("click", (e) => {
+    if (e.target === $xIssuesModal) closeXIssuesModal();
+  });
+  $xIssuesModal.addEventListener("keydown", (e) => {
+    if (!e) return;
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeXIssuesModal();
+  });
+}
+
 function showDisclaimerIfNeeded(settings) {
   if (disclaimerShown) return;
   if (!$disclaimerModal || !$disclaimerOk) return;
@@ -9869,6 +9882,21 @@ if ($moveTuneModal) {
   $moveTuneModal.addEventListener("click", (e) => {
     if (e.target === $moveTuneModal) closeMoveTuneModal();
   });
+  $moveTuneModal.addEventListener("keydown", (e) => {
+    if (!e) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeMoveTuneModal();
+      return;
+    }
+    if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (!$moveTuneApply || $moveTuneApply.disabled) return;
+      e.preventDefault();
+      e.stopPropagation();
+      $moveTuneApply.click();
+    }
+  });
 }
 
 if ($aboutClose) {
@@ -9880,6 +9908,13 @@ if ($aboutClose) {
 if ($aboutModal) {
   $aboutModal.addEventListener("click", (e) => {
     if (e.target === $aboutModal) closeAbout();
+  });
+  $aboutModal.addEventListener("keydown", (e) => {
+    if (!e) return;
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeAbout();
   });
 }
 
@@ -9901,6 +9936,17 @@ if ($aboutCopy) {
 if ($disclaimerOk) {
   $disclaimerOk.addEventListener("click", () => {
     dismissDisclaimer();
+  });
+}
+
+if ($disclaimerModal) {
+  $disclaimerModal.addEventListener("keydown", (e) => {
+    if (!e) return;
+    if (e.key === "Escape" || e.key === "Enter") {
+      e.preventDefault();
+      e.stopPropagation();
+      dismissDisclaimer();
+    }
   });
 }
 

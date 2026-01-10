@@ -1452,10 +1452,27 @@ svg {
 .modal-footer {
   border-top: 1px solid var(--border-color);
   border-bottom: 0;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .modal-footer button {
   padding: 6px 12px;
+}
+
+.modal-footer .modal-footer-left {
+  margin-right: auto;
+}
+
+.modal-footer button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.modal-footer button.primary:hover {
+  background: #174f9d;
+  border-color: #174f9d;
 }
 
 .modal-title {
@@ -1473,6 +1490,19 @@ svg {
   flex-direction: column;
   gap: 12px;
   flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.modal input[type="text"],
+.modal input[type="number"],
+.modal select,
+.modal textarea {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-1);
+  background: #fff;
+  color: var(--text);
+  box-sizing: border-box;
 }
 
 .settings-layout {
@@ -1730,6 +1760,13 @@ textarea {
 
 .settings-row {
   font-size: var(--font-size-sm);
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(240px, 420px);
+  column-gap: 12px;
+  row-gap: 4px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
 }
 
 .settings-row > span:first-child {
@@ -1777,6 +1814,10 @@ textarea {
   }
 
   .settings-entry {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-row {
     grid-template-columns: 1fr;
   }
 
