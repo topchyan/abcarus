@@ -4121,6 +4121,14 @@ function setStatus(s) {
   $status.classList.toggle("status-loading", loading);
 }
 
+function setButtonText(button, text) {
+  if (!button) return;
+  const span = button.querySelector ? button.querySelector(".btn-text") : null;
+  const value = String(text || "");
+  if (span) span.textContent = value;
+  else button.textContent = value;
+}
+
 let pinnedHoverStatusText = "";
 
 function setHoverStatus(text) {
@@ -10079,9 +10087,10 @@ function updatePlayButton() {
   if ($btnPlayPause) {
     $btnPlayPause.classList.toggle("active", Boolean(isPlaying || isPaused));
     $btnPlayPause.disabled = false;
-    if (isPlaying) $btnPlayPause.textContent = "Pause";
-    else if (isPaused) $btnPlayPause.textContent = "Resume";
-    else $btnPlayPause.textContent = "Play";
+    $btnPlayPause.classList.toggle("is-playing", Boolean(isPlaying));
+    if (isPlaying) setButtonText($btnPlayPause, "Pause");
+    else if (isPaused) setButtonText($btnPlayPause, "Resume");
+    else setButtonText($btnPlayPause, "Play");
   }
   updatePlaybackInteractionLock();
   updatePracticeUi();

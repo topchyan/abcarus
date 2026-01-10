@@ -224,6 +224,9 @@ main {
   min-height: var(--button-height);
   padding: 5px 10px;
   margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .segmented button + button {
@@ -238,6 +241,32 @@ main {
   background: var(--accent);
   color: #fff;
 }
+
+.btn-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  flex: none;
+}
+
+.icon-library { -webkit-mask-image: url("../../assets/icons/ui/library-big.svg"); mask-image: url("../../assets/icons/ui/library-big.svg"); }
+.icon-folder-open { -webkit-mask-image: url("../../assets/icons/ui/folder-open.svg"); mask-image: url("../../assets/icons/ui/folder-open.svg"); }
+.icon-save { -webkit-mask-image: url("../../assets/icons/ui/save.svg"); mask-image: url("../../assets/icons/ui/save.svg"); }
+.icon-play { -webkit-mask-image: url("../../assets/icons/ui/play.svg"); mask-image: url("../../assets/icons/ui/play.svg"); }
+.icon-pause { -webkit-mask-image: url("../../assets/icons/ui/pause.svg"); mask-image: url("../../assets/icons/ui/pause.svg"); }
+.icon-stop { -webkit-mask-image: url("../../assets/icons/ui/square.svg"); mask-image: url("../../assets/icons/ui/square.svg"); }
+.icon-reset { -webkit-mask-image: url("../../assets/icons/ui/rotate-ccw.svg"); mask-image: url("../../assets/icons/ui/rotate-ccw.svg"); }
+
+#btnPlayPause .icon-pause { display: none; }
+#btnPlayPause.is-playing .icon-play { display: none; }
+#btnPlayPause.is-playing .icon-pause { display: inline-block; }
 
 .soundfont-control {
   display: flex;
