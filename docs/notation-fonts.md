@@ -51,7 +51,16 @@ Why this path works:
 - UI sets up a CSS `@font-face` for `font-family: "music"` in `src/renderer/style.css`, pointing at `third_party/abc2svg/abc2svg.ttf`.
 - However, abc2svg also embeds its own default font via `data:` URL unless overridden by `%%musicfont`.
 
+## UI support (Settings)
+
+ABCarus can optionally inject font directives automatically based on Settings:
+- Settings → Header → `Notation font` (maps to `%%musicfont ...`)
+- Settings → Header → `Text font` (maps to common `%%...font` directives like `%%textfont`, `%%titlefont`, etc.)
+
+These overrides are:
+- applied after the user/global header layers,
+- but still overridable per file / per tune by placing the relevant directives in ABC headers.
+
 If we later add a “Notation font” selector in Settings, the safest approach is:
 - keep abc2svg upstream untouched,
 - and implement selection by injecting an appropriate `%%musicfont ...` line via the existing global header mechanism.
-

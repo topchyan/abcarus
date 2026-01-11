@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld("api", {
   getSettings: async () => ipcRenderer.invoke("settings:get"),
   getSettingsSchema: async () => ipcRenderer.invoke("settings:schema"),
   updateSettings: async (patch) => ipcRenderer.invoke("settings:update", patch),
+  listFonts: async () => ipcRenderer.invoke("fonts:list"),
   getSettingsPaths: async () => ipcRenderer.invoke("settings:paths"),
   exportSettings: async () => ipcRenderer.invoke("settings:export"),
   importSettings: async () => ipcRenderer.invoke("settings:import"),

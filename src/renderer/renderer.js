@@ -1099,6 +1099,8 @@ let globalHeaderEnabled = true;
 let globalHeaderLocalText = "";
 let globalHeaderUserText = "";
 let globalHeaderGlobalText = "";
+let abc2svgNotationFontFile = "";
+let abc2svgTextFontFile = "";
 let soundfontName = "TimGM6mb.sf2";
 let soundfontSource = "abc2svg.sf2";
 let soundfontReadyName = null;
@@ -9650,6 +9652,7 @@ if (window.api && typeof window.api.getSettings === "function") {
     if (settings) {
       latestSettingsSnapshot = settings;
       setGlobalHeaderFromSettings(settings);
+      setAbc2svgFontsFromSettings(settings);
       setSoundfontFromSettings(settings);
       setDrumVelocityFromSettings(settings);
       setFollowFromSettings(settings);
@@ -9667,9 +9670,10 @@ if (window.api && typeof window.api.getSettings === "function") {
 if (window.api && typeof window.api.onSettingsChanged === "function") {
   window.api.onSettingsChanged((settings) => {
     latestSettingsSnapshot = settings || null;
-    const prevHeader = `${globalHeaderEnabled}|${globalHeaderText}`;
+    const prevHeader = `${globalHeaderEnabled}|${globalHeaderText}|${abc2svgNotationFontFile}|${abc2svgTextFontFile}`;
     const prevSoundfont = soundfontName;
     setGlobalHeaderFromSettings(settings);
+    setAbc2svgFontsFromSettings(settings);
     setSoundfontFromSettings(settings);
     setDrumVelocityFromSettings(settings);
     setFollowFromSettings(settings);
@@ -9679,7 +9683,9 @@ if (window.api && typeof window.api.onSettingsChanged === "function") {
     loadSoundfontSelectOptions();
     refreshHeaderLayers().catch(() => {});
     showDisclaimerIfNeeded(settings);
-    if (settings && prevHeader !== `${globalHeaderEnabled}|${globalHeaderText}`) scheduleRenderNow();
+    if (settings && prevHeader !== `${globalHeaderEnabled}|${globalHeaderText}|${abc2svgNotationFontFile}|${abc2svgTextFontFile}`) {
+      scheduleRenderNow();
+    }
     if (settings && prevSoundfont !== soundfontName) {
       resetSoundfontCache();
       if (player && typeof player.stop === "function") {
@@ -11119,6 +11125,60 @@ function setGlobalHeaderFromSettings(settings) {
   globalHeaderEnabled = settings.globalHeaderEnabled !== false;
 }
 
+function sanitizeFontAssetName(name) {
+  const raw = String(name || "").trim();
+  if (!raw) return "";
+  if (raw.includes("/") || raw.includes("\\") || raw.includes("..")) return "";
+  if (!/^[A-Za-z0-9._-]+\.(otf|ttf|woff2?)$/i.test(raw)) return "";
+  return raw;
+}
+
+function setAbc2svgFontsFromSettings(settings) {
+  if (!settings || typeof settings !== "object") return;
+  abc2svgNotationFontFile = sanitizeFontAssetName(settings.abc2svgNotationFontFile);
+  abc2svgTextFontFile = sanitizeFontAssetName(settings.abc2svgTextFontFile);
+}
+
+function buildAbc2svgFontHeaderLayer() {
+  const lines = [];
+  const comment = "% ABCarus: font overrides (auto)";
+
+  if (abc2svgNotationFontFile) {
+    const url = `../../assets/fonts/notation/${abc2svgNotationFontFile}`;
+    lines.push(`%%musicfont url("${url}") *`);
+  }
+
+  if (abc2svgTextFontFile) {
+    const url = `../../assets/fonts/notation/${abc2svgTextFontFile}`;
+    const directives = [
+      "annotationfont",
+      "footerfont",
+      "headerfont",
+      "historyfont",
+      "infofont",
+      "titlefont",
+      "subtitlefont",
+      "composerfont",
+      "partsfont",
+      "textfont",
+      "gchordfont",
+      "tempofont",
+      "tupletfont",
+      "voicefont",
+      "vocalfont",
+      "wordsfont",
+      "measurefont",
+      "repeatfont",
+    ];
+    for (const d of directives) {
+      lines.push(`%%${d} url("${url}") *`);
+    }
+  }
+
+  if (!lines.length) return "";
+  return `${comment}\n${lines.join("\n")}`;
+}
+
 function updateGlobalHeaderToggle() {
   if (!$btnToggleGlobals) return;
   $btnToggleGlobals.classList.toggle("toggle-active", globalHeaderEnabled);
@@ -11349,18 +11409,30 @@ const SINGLETON_HEADER_FIELDS = new Set([
 ]);
 
 const SINGLETON_HEADER_DIRECTIVES = new Set([
+  "musicfont",
   "oneperpage",
   "pagewidth",
   "pageheight",
   "staffwidth",
   "scale",
+  "annotationfont",
+  "footerfont",
+  "headerfont",
+  "historyfont",
+  "infofont",
   "titlefont",
   "subtitlefont",
   "composerfont",
   "partsfont",
   "textfont",
   "gchordfont",
+  "tempofont",
+  "tupletfont",
+  "voicefont",
   "vocalfont",
+  "wordsfont",
+  "measurefont",
+  "repeatfont",
   "measurenb",
   "landscape",
   "papersize",
@@ -11490,6 +11562,8 @@ function buildHeaderPrefix(entryHeader, includeCheckbars, tuneText) {
     if (userHeaderRaw) layers.push(userHeaderRaw);
     const legacyHeaderRaw = normalizeHeaderLayer(globalHeaderText);
     if (legacyHeaderRaw) layers.push(legacyHeaderRaw);
+    const fontLayerRaw = buildAbc2svgFontHeaderLayer();
+    if (fontLayerRaw) layers.push(fontLayerRaw);
   }
   const fileHeaderRaw = String(entryHeader || "");
   if (fileHeaderRaw.trim()) layers.push(fileHeaderRaw.replace(/[\r\n]+$/, ""));

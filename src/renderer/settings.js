@@ -78,6 +78,7 @@ export function initSettings(api) {
   let showAdvanced = false;
   let setActiveTab = null;
   let applySettingsFilter = null;
+  let cachedFontLists = { notation: [], text: [] };
 
   const controlByKey = new Map(); // key -> { entry, el, kind }
   let globalHeaderView = null;
@@ -130,6 +131,8 @@ export function initSettings(api) {
 	        meta.el.value = String(Math.round((Number(value) || 1) * 100));
 	      } else if (kind === "color" && meta.el) {
 	        meta.el.value = String(value || "#000000");
+	      } else if (kind === "select" && meta.el) {
+	        meta.el.value = String(value || "");
 	      } else if ((kind === "number" || kind === "text") && meta.el) {
 	        meta.el.value = String(value == null ? "" : value);
 	      }
@@ -232,6 +235,33 @@ export function initSettings(api) {
       controlByKey.set(entry.key, { entry, el: input });
 	      return row;
 	    }
+
+    if (kind === "select") {
+      input = document.createElement("select");
+      const optionsKey = entry.ui && entry.ui.options ? String(entry.ui.options) : "";
+      let files = [];
+      if (optionsKey === "notationFonts") files = cachedFontLists.notation || [];
+      else if (optionsKey === "textFonts") files = cachedFontLists.text || [];
+      else if (Array.isArray(entry.ui && entry.ui.options)) files = entry.ui.options;
+
+      const optDefault = document.createElement("option");
+      optDefault.value = "";
+      optDefault.textContent = "Default";
+      input.appendChild(optDefault);
+
+      for (const name of files) {
+        const option = document.createElement("option");
+        option.value = String(name || "");
+        option.textContent = String(name || "").replace(/\.(otf|ttf|woff2?)$/i, "");
+        input.appendChild(option);
+      }
+      input.addEventListener("change", () => {
+        updateSettings({ [entry.key]: input.value || "" }).catch(() => {});
+      });
+      row.appendChild(input);
+      controlByKey.set(entry.key, { entry, el: input });
+      return row;
+    }
 
 	    if (kind === "color") {
 	      input = document.createElement("input");
@@ -541,6 +571,15 @@ export function initSettings(api) {
   (async () => {
     const schemaRes = await store.getSchema().catch(() => null);
     if (schemaRes && schemaRes.ok && Array.isArray(schemaRes.schema)) schema = schemaRes.schema;
+    if (api && typeof api.listFonts === "function") {
+      const res = await api.listFonts().catch(() => null);
+      if (res && res.ok) {
+        cachedFontLists = {
+          notation: Array.isArray(res.notation) ? res.notation : [],
+          text: Array.isArray(res.text) ? res.text : [],
+        };
+      }
+    }
     defaultSettings = buildDefaults(schema);
     buildSettingsUi();
     const settings = await store.get().catch(() => null);

@@ -463,6 +463,30 @@ function registerIpcHandlers(ctx) {
       return { ok: false, error: e && e.message ? e.message : String(e) };
     }
   });
+  ipcMain.handle("fonts:list", async () => {
+    try {
+      const appRoot = (app && typeof app.getAppPath === "function") ? app.getAppPath() : process.cwd();
+      const fontsDir = path.join(appRoot, "assets", "fonts", "notation");
+      let names = [];
+      try {
+        names = await fs.promises.readdir(fontsDir);
+      } catch {
+        names = [];
+      }
+      const files = (names || [])
+        .map((name) => String(name || ""))
+        .filter((name) => /\.(otf|ttf|woff2?)$/i.test(name))
+        .filter((name) => !name.startsWith("."))
+        .sort((a, b) => a.localeCompare(b));
+
+      const isTextFont = (name) => /text|script/i.test(String(name || ""));
+      const notation = files.filter((f) => !isTextFont(f));
+      const text = files.filter((f) => isTextFont(f));
+      return { ok: true, notation, text };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e), notation: [], text: [] };
+    }
+  });
   ipcMain.handle("settings:paths", async () => {
     if (ctx && typeof ctx.getSettingsPaths === "function") return ctx.getSettingsPaths();
     return { globalPath: "", userPath: "" };
