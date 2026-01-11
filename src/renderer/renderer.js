@@ -10315,7 +10315,11 @@ function debugAutoScroll(tag, detail) {
   if (now - playbackAutoScrollDebugLastAt < 600) return;
   playbackAutoScrollDebugLastAt = now;
   try {
-    console.log(`[abcarus][autoscroll] ${tag}`, detail || "");
+    const debug = { ...(detail || {}) };
+    if (debug && typeof debug === "object") {
+      debug.zoom = Math.round(getRenderZoomFactor() * 100) / 100;
+    }
+    console.log(`[abcarus][autoscroll] ${tag}`, debug || "");
   } catch {}
 }
 
@@ -10391,6 +10395,13 @@ function animateRenderPaneScrollTo(targetTop, targetLeft, durationMs) {
 
 function getRenderZoomFactor() {
   try {
+    // Source of truth: the CSS custom property (set by Settings and Focus mode).
+    const raw = getComputedStyle(document.documentElement).getPropertyValue("--render-zoom");
+    const v = Number(String(raw || "").trim());
+    if (Number.isFinite(v) && v > 0) return v;
+  } catch {}
+  try {
+    // Fallback for environments where CSS custom properties may not be readable (should be rare).
     if ($out) {
       const raw = getComputedStyle($out).zoom;
       const v = Number(String(raw || "").trim());
