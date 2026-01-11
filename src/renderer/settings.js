@@ -32,7 +32,22 @@ const FALLBACK_SCHEMA = [
   { key: "followPlayheadBetweenNotesWeight", type: "number", default: 1, section: "Playback", label: "Playhead between notes (%)", ui: { input: "percent", min: 0, max: 100, step: 5 }, advanced: true },
   { key: "followPlayheadShift", type: "number", default: 0, section: "Playback", label: "Playhead horizontal shift (px)", ui: { input: "number", min: -20, max: 20, step: 1 }, advanced: true },
   { key: "followPlayheadFirstBias", type: "number", default: 6, section: "Playback", label: "First-note bias (px)", ui: { input: "number", min: 0, max: 20, step: 1 }, advanced: true },
-  { key: "playbackAutoScrollMode", type: "string", default: "Keep Visible", section: "Playback", label: "Playback auto-scroll", ui: { input: "select", options: ["Off", "Keep Visible", "Page Turn", "Centered"] } },
+	  {
+	    key: "playbackAutoScrollMode",
+	    type: "string",
+	    default: "Keep Visible",
+	    section: "Playback",
+	    label: "Playback auto-scroll",
+	    ui: {
+	      input: "select",
+	      options: [
+	        { value: "Off", label: "Off" },
+	        { value: "Keep Visible", label: "Keep Cursor Visible" },
+	        { value: "Page Turn", label: "Smooth Follow" },
+	        { value: "Centered", label: "Center Cursor" },
+	      ],
+	    },
+	  },
   { key: "playbackAutoScrollHorizontal", type: "boolean", default: true, section: "Playback", label: "Allow horizontal auto-scroll", ui: { input: "checkbox" }, advanced: true },
   { key: "playbackAutoScrollPauseMs", type: "number", default: 1800, section: "Playback", label: "Auto-scroll pause after manual scroll (ms)", ui: { input: "number", min: 0, max: 5000, step: 100 }, advanced: true },
   { key: "soundfontName", type: "string", default: "TimGM6mb.sf2", section: "Fonts", label: "Soundfont (SF2)", ui: { input: "select", options: "soundfonts" } },
@@ -464,10 +479,13 @@ export function initSettings(api) {
         optDefault.value = "";
         optDefault.textContent = "Default";
         select.appendChild(optDefault);
-        for (const name of entry.ui.options) {
+        for (const rawOpt of entry.ui.options) {
+          const isObj = rawOpt && typeof rawOpt === "object";
+          const value = isObj ? rawOpt.value : rawOpt;
+          const label = isObj ? (rawOpt.label != null ? rawOpt.label : rawOpt.value) : rawOpt;
           const option = document.createElement("option");
-          option.value = String(name || "");
-          option.textContent = String(name || "");
+          option.value = String(value || "");
+          option.textContent = String(label || "");
           select.appendChild(option);
         }
       }

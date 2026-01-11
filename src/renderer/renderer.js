@@ -10174,6 +10174,7 @@ let playbackAutoScrollManualUntil = 0;
 let playbackAutoScrollAnim = null; // {raf,startAt,duration,fromTop,fromLeft,toTop,toLeft}
 let playbackAutoScrollProgrammatic = false;
 let playbackAutoScrollLastAt = 0;
+let playbackAutoScrollDebugLastAt = 0;
 let followVoiceId = null;
 let followVoiceIndex = null;
 let drumVelocityMap = buildDefaultDrumVelocityMap();
@@ -10308,6 +10309,16 @@ function normalizeAutoScrollMode(raw) {
   return "keep";
 }
 
+function debugAutoScroll(tag, detail) {
+  if (!window.__abcarusDebugAutoscroll) return;
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  if (now - playbackAutoScrollDebugLastAt < 600) return;
+  playbackAutoScrollDebugLastAt = now;
+  try {
+    console.log(`[abcarus][autoscroll] ${tag}`, detail || "");
+  } catch {}
+}
+
 function initPlaybackAutoScrollListeners() {
   if (!$renderPane) return;
   const markManual = () => {
@@ -10398,18 +10409,42 @@ function getRenderZoomFactor() {
 
 function maybeAutoScrollRenderToCursor(el) {
   if (!$renderPane) return;
-  if (!el) return;
-  if (!isPlaybackBusy()) return;
+  if (!el) {
+    debugAutoScroll("skip:no-el");
+    return;
+  }
+  if (!isPlaybackBusy()) {
+    debugAutoScroll("skip:not-busy");
+    return;
+  }
 
   const mode = normalizeAutoScrollMode(playbackAutoScrollMode);
-  if (mode === "off") return;
+  if (mode === "off") {
+    debugAutoScroll("skip:mode-off");
+    return;
+  }
 
   const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-  if (now < playbackAutoScrollManualUntil) return;
-  if (now - playbackAutoScrollLastAt < 80) return;
+  if (now < playbackAutoScrollManualUntil) {
+    debugAutoScroll("skip:manual-pause", {
+      mode,
+      remainingMs: Math.round(playbackAutoScrollManualUntil - now),
+      programmatic: Boolean(playbackAutoScrollProgrammatic),
+      animating: Boolean(playbackAutoScrollAnim && playbackAutoScrollAnim.raf != null),
+    });
+    return;
+  }
+  if (now - playbackAutoScrollLastAt < 80) {
+    debugAutoScroll("skip:throttle", { mode });
+    return;
+  }
   playbackAutoScrollLastAt = now;
 
   const targetEl = lastSvgPlayheadEl || el;
+  if (!targetEl) {
+    debugAutoScroll("skip:no-target-el", { mode });
+    return;
+  }
   const containerRect = $renderPane.getBoundingClientRect();
   const targetRect = targetEl.getBoundingClientRect();
   const scale = getRenderZoomFactor();
@@ -10469,6 +10504,14 @@ function maybeAutoScrollRenderToCursor(el) {
   }
 
   const duration = mode === "page" ? 420 : (mode === "center" ? 160 : 260);
+  debugAutoScroll("scroll", {
+    mode,
+    zoom: Math.round(scale * 100) / 100,
+    fromTop: Math.round(viewTop),
+    toTop: Math.round(nextTop),
+    fromLeft: Math.round(viewLeft),
+    toLeft: Math.round(nextLeft),
+  });
   animateRenderPaneScrollTo(nextTop, nextLeft, duration);
 }
 

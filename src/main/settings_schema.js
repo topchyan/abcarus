@@ -111,15 +111,23 @@ function getSettingsSchema() {
       ui: { input: "number", min: 0, max: 20, step: 1 },
       advanced: true,
     },
-    {
-      key: "playbackAutoScrollMode",
-      type: "string",
-      default: "Keep Visible",
-      section: "Playback",
-      label: "Playback auto-scroll",
-      help: "Keeps the playhead visible while playing, scrolling the score automatically.",
-      ui: { input: "select", options: ["Off", "Keep Visible", "Page Turn", "Centered"] },
-    },
+	    {
+	      key: "playbackAutoScrollMode",
+	      type: "string",
+	      default: "Keep Visible",
+	      section: "Playback",
+	      label: "Playback auto-scroll",
+	      help: "Keeps the playhead visible while playing, scrolling the score automatically.",
+	      ui: {
+	        input: "select",
+	        options: [
+	          { value: "Off", label: "Off" },
+	          { value: "Keep Visible", label: "Keep Cursor Visible" },
+	          { value: "Page Turn", label: "Smooth Follow" },
+	          { value: "Centered", label: "Center Cursor" },
+	        ],
+	      },
+	    },
     {
       key: "playbackAutoScrollHorizontal",
       type: "boolean",
