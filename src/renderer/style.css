@@ -72,7 +72,12 @@ body.raw-mode .render-pane {
 }
 
 body.focus-mode main {
-  grid-template-columns: 1fr;
+  grid-template-columns: 0px 0px 1fr;
+}
+
+body.focus-mode .pane.right {
+  grid-column: 3;
+  grid-row: 1;
 }
 
 body.focus-mode .sidebar,
