@@ -6037,20 +6037,22 @@ function buildMeasureStartsByNumberFromAbc2svg(firstSymbol) {
   };
   const isBarLikeSymbol = (symbol) => !!(symbol && (symbol.bar_type || symbol.type === 14));
 
-  // Provide a best-effort "measure 0/1 starts here" mapping: the first symbol with an istart in the tune body.
+  // Measure 1 start should point at the first playable symbol, not at header tokens like Q:/K:/etc.
+  // abc2svg's bar_num typically labels the barline *ending* measure 1 as 2, so we may not get a natural
+  // (bar_num=1) mapping from barlines; we seed measure 1 explicitly.
   let s = firstSymbol;
   let guard = 0;
-  let firstStart = null;
+  let firstPlayableStart = null;
   while (s && guard < 200000) {
-    if (Number.isFinite(s.istart)) { firstStart = s.istart; break; }
+    const playable = Number.isFinite(s.dur) && s.dur > 0;
+    if (playable && Number.isFinite(s.istart)) { firstPlayableStart = s.istart; break; }
     s = s.ts_next;
     guard += 1;
   }
-  if (firstStart != null) {
-    // Many files use 1-based numbering, but some (pickup/anacrusis) effectively have a bar 0.
-    // We include both: callers can decide which one to use.
-    push(0, firstStart);
-    push(1, firstStart);
+  if (firstPlayableStart != null) {
+    // Also expose as bar 0 for pickup-heavy sources.
+    push(0, firstPlayableStart);
+    push(1, firstPlayableStart);
   }
 
   s = firstSymbol;
