@@ -45,4 +45,5 @@ Packaging scripts are available:
 - `docs/python-build-standalone.md`: Bundled Python policy + PBS install workflow.
 - `docs/packaging.md`: Packaging workflows per OS.
 - `docs/soundfonts.md`: Soundfont selection and local setup.
+- `docs/notation-fonts.md`: Notation font (SMuFL / `%%musicfont`) notes and how to add more.
 - `docs/adr/`: Architecture decision records (ADRs).
