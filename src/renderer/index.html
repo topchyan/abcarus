@@ -68,14 +68,14 @@
               <span class="btn-text">Practice</span>
             </button>
 	          <label id="practiceTempoWrap" class="practice-tempo" hidden>
-	            <span>Tempo</span>
-	            <select id="practiceTempo" aria-label="Practice tempo">
+	            <span>Speed</span>
+	            <select id="practiceTempo" aria-label="Playback speed">
 	              <option value="0.5">50%</option>
 	              <option value="0.6">60%</option>
 	              <option value="0.7">70%</option>
-	              <option value="0.8" selected>80%</option>
+	              <option value="0.8">80%</option>
 	              <option value="0.9">90%</option>
-	              <option value="1">100%</option>
+	              <option value="1" selected>100%</option>
 	              <option value="1.1">110%</option>
 	              <option value="1.2">120%</option>
 	            </select>
@@ -89,7 +89,10 @@
 	              <span class="btn-text">Fonts</span>
 	            </button>
 		        </div>
-		        <div class="segmented" aria-label="View">
+	        <div class="segmented" aria-label="View">
+		          <button id="btnFocusMode" title="Playback focus mode (F7)" aria-label="Playback focus mode" aria-pressed="false">
+	              <span class="btn-text">Focus</span>
+	            </button>
 		          <button id="btnResetLayout" title="Reset view (layout + zoom) (F8)" aria-label="Reset view (layout and zoom)">
 	              <span class="btn-icon icon-reset" aria-hidden="true"></span>
 	              <span class="btn-text">Reset view</span>

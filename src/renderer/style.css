@@ -71,6 +71,28 @@ body.raw-mode .render-pane {
   display: none;
 }
 
+body.focus-mode main {
+  grid-template-columns: 0px 0px 1fr;
+}
+
+body.focus-mode .sidebar,
+body.focus-mode .divider {
+  display: none;
+}
+
+body.focus-mode .file-header-panel {
+  display: none;
+}
+
+body.focus-mode .right-split {
+  grid-template-columns: 1fr;
+}
+
+body.focus-mode .split-divider,
+body.focus-mode .editor-pane {
+  display: none;
+}
+
 header {
   display: flex;
   flex-direction: column;

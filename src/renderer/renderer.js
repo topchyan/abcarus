@@ -73,13 +73,14 @@ const $btnPracticeToggle = document.getElementById("btnPracticeToggle");
 const $practiceTempoWrap = document.getElementById("practiceTempoWrap");
 const $practiceTempo = document.getElementById("practiceTempo");
 const $btnRestart = document.getElementById("btnRestart");
-const $btnPrevMeasure = document.getElementById("btnPrevMeasure");
-const $btnNextMeasure = document.getElementById("btnNextMeasure");
-const $btnResetLayout = document.getElementById("btnResetLayout");
-const $btnFonts = document.getElementById("btnFonts");
-const $btnToggleFollow = document.getElementById("btnToggleFollow");
-const $btnToggleGlobals = document.getElementById("btnToggleGlobals");
-const $btnToggleErrors = document.getElementById("btnToggleErrors");
+	const $btnPrevMeasure = document.getElementById("btnPrevMeasure");
+	const $btnNextMeasure = document.getElementById("btnNextMeasure");
+	const $btnResetLayout = document.getElementById("btnResetLayout");
+	const $btnFocusMode = document.getElementById("btnFocusMode");
+	const $btnFonts = document.getElementById("btnFonts");
+	const $btnToggleFollow = document.getElementById("btnToggleFollow");
+	const $btnToggleGlobals = document.getElementById("btnToggleGlobals");
+	const $btnToggleErrors = document.getElementById("btnToggleErrors");
 const $soundfontLabel = document.getElementById("soundfontLabel");
 const $rightSplit = document.querySelector(".right-split");
 const $splitDivider = document.getElementById("splitDivider");
@@ -172,7 +173,7 @@ let lastTraceTimestamp = null;
 let playbackTraceSeq = 0;
 
 let practiceEnabled = false;
-let practiceTempoMultiplier = 0.8;
+let practiceTempoMultiplier = 1;
 let practiceStatusText = "";
 let practiceRangeHint = "";
 let practiceRangePreview = null; // {startOffset,endOffset}
@@ -2473,6 +2474,7 @@ function setEditorValue(text) {
 
 function setRawModeUI(enabled) {
   rawMode = Boolean(enabled);
+  if (rawMode && focusModeEnabled) setFocusModeEnabled(false);
   document.body.classList.toggle("raw-mode", rawMode);
   if ($btnToggleRaw) $btnToggleRaw.classList.toggle("toggle-active", rawMode);
   if ($rightSplit) {
@@ -9601,7 +9603,7 @@ function wireMenuActions() {
       const busy = isPlaybackBusy();
       if (busy) {
         // During Play/Pause, ignore menu actions (except Play/Pause itself, Reset Layout, and Quit).
-        const allowed = new Set(["playToggle", "resetLayout", "quit", "playGotoMeasure"]);
+        const allowed = new Set(["playToggle", "resetLayout", "quit", "playGotoMeasure", "toggleFocusMode"]);
         if (!allowed.has(actionType)) return;
       }
       if (rawMode) {
@@ -9679,6 +9681,7 @@ function wireMenuActions() {
         openLibraryListFromCurrentLibraryIndex();
       }
       else if (actionType === "toggleLibrary") toggleLibrary();
+      else if (actionType === "toggleFocusMode") toggleFocusMode();
       else if (actionType === "renumberXInFile") await renumberXInActiveFile();
       else if (actionType === "navTunePrev") await navigateTuneByDelta(-1);
       else if (actionType === "navTuneNext") await navigateTuneByDelta(1);
@@ -10204,6 +10207,74 @@ let lastPlaybackGuardMessage = "";
 let lastPlaybackAbortMessage = "";
 let playbackNeedsReprepare = false;
 
+let focusModeEnabled = false;
+let focusPrevRenderZoom = null;
+
+function setRenderZoomCss(zoom) {
+  const v = Number(zoom);
+  if (!Number.isFinite(v) || v <= 0) return;
+  try { document.documentElement.style.setProperty("--render-zoom", String(v)); } catch {}
+}
+
+function readRenderZoomCss() {
+  try {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue("--render-zoom");
+    const v = Number(String(raw || "").trim());
+    if (Number.isFinite(v) && v > 0) return v;
+  } catch {}
+  return getRenderZoomFactor();
+}
+
+function computeFocusFitZoom() {
+  if (!$renderPane || !$out) return null;
+  const svg = $out.querySelector("svg");
+  if (!svg) return null;
+  const currentZoom = getRenderZoomFactor();
+  if (!Number.isFinite(currentZoom) || currentZoom <= 0) return null;
+  const svgRect = svg.getBoundingClientRect();
+  const paneWidth = $renderPane.clientWidth || 0;
+  if (!(svgRect && svgRect.width > 10) || paneWidth < 50) return null;
+  const intrinsicWidth = svgRect.width / currentZoom;
+  if (!Number.isFinite(intrinsicWidth) || intrinsicWidth <= 10) return null;
+  const target = Math.max(100, paneWidth - 24);
+  const next = target / intrinsicWidth;
+  return clampNumber(next, 0.5, 8, currentZoom);
+}
+
+function updateFocusModeUi() {
+  document.body.classList.toggle("focus-mode", focusModeEnabled);
+  if ($btnFocusMode) {
+    $btnFocusMode.classList.toggle("toggle-active", focusModeEnabled);
+    $btnFocusMode.setAttribute("aria-pressed", focusModeEnabled ? "true" : "false");
+  }
+  updatePracticeUi();
+}
+
+function setFocusModeEnabled(nextEnabled) {
+  const next = Boolean(nextEnabled);
+  if (focusModeEnabled === next) return;
+  if (rawMode && next) {
+    showToast("Exit Raw mode to use Focus.", 2200);
+    return;
+  }
+  focusModeEnabled = next;
+  if (focusModeEnabled) {
+    focusPrevRenderZoom = readRenderZoomCss();
+    requestAnimationFrame(() => {
+      const fit = computeFocusFitZoom();
+      if (fit != null) setRenderZoomCss(fit);
+    });
+  } else if (focusPrevRenderZoom != null) {
+    setRenderZoomCss(focusPrevRenderZoom);
+    focusPrevRenderZoom = null;
+  }
+  updateFocusModeUi();
+}
+
+function toggleFocusMode() {
+  setFocusModeEnabled(!focusModeEnabled);
+}
+
 function clearPlaybackNoteOnEls() {
   for (const el of lastPlaybackNoteOnEls) {
     try { el.classList.remove("note-on"); } catch {}
@@ -10548,6 +10619,7 @@ function updatePlaybackInteractionLock() {
   disable($btnPlayPause, true);
   disable($btnStop, true);
   disable($btnResetLayout, true);
+  disable($btnFocusMode, true);
 
   // Block file/library/tool actions while playing/paused/loading to prevent state races.
   disable($btnToggleLibrary);
@@ -10588,7 +10660,9 @@ function buildTransportPlaybackPlan() {
     rangeStart: Math.max(0, Number(transportPlayheadOffset) || 0),
     rangeEnd: null,
     loopEnabled: false,
-    tempoMultiplier: 1,
+    tempoMultiplier: focusModeEnabled
+      ? (Number.isFinite(Number(practiceTempoMultiplier)) ? Number(practiceTempoMultiplier) : 1)
+      : 1,
   };
 }
 
@@ -11633,8 +11707,8 @@ function updatePracticeUi() {
     $btnPracticeToggle.disabled = busy;
   }
 
-  if ($practiceTempoWrap) $practiceTempoWrap.hidden = !practiceEnabled;
-  if ($practiceTempo && practiceEnabled) {
+  if ($practiceTempoWrap) $practiceTempoWrap.hidden = !(practiceEnabled || focusModeEnabled);
+  if ($practiceTempo && (practiceEnabled || focusModeEnabled)) {
     const value = String(practiceTempoMultiplier);
     if ($practiceTempo.value !== value) $practiceTempo.value = value;
   }
@@ -13988,10 +14062,22 @@ if ($practiceTempo) {
     if (!Number.isFinite(next)) return;
     practiceTempoMultiplier = next;
     if (practiceEnabled) syncPendingPlaybackPlan();
+    if (focusModeEnabled && !practiceEnabled) {
+      if (isPlaybackBusy() && player && typeof player.set_speed === "function") {
+        desiredPlayerSpeed = next;
+        try { player.set_speed(desiredPlayerSpeed); } catch {}
+      }
+    }
     updatePracticeUi();
   });
   const initial = Number($practiceTempo.value);
   if (Number.isFinite(initial)) practiceTempoMultiplier = initial;
+}
+
+if ($btnFocusMode) {
+  $btnFocusMode.addEventListener("click", () => {
+    toggleFocusMode();
+  });
 }
 
 if ($btnPlay) {
