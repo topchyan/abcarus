@@ -9,6 +9,15 @@ npm install
 npm start
 ```
 
+### Gotcha: `ELECTRON_RUN_AS_NODE`
+
+If `ELECTRON_RUN_AS_NODE=1` leaks into your environment, Electron starts in "Node mode" and the app will not open (main process crashes early; e.g. `app.whenReady` is undefined).
+
+- Check: `env | grep ELECTRON_RUN_AS_NODE`
+- Fix (current shell): `unset ELECTRON_RUN_AS_NODE`
+
+For local dev runs, `scripts/local/run.sh` defensively unsets it.
+
 ## Release (3–5 commands)
 
 1) Update `CHANGELOG.md` under `## [Unreleased]` (make sure it’s not empty).
