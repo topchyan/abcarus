@@ -90,12 +90,17 @@ body.focus-mode .file-header-panel {
 }
 
 body.focus-mode .right-split {
-  grid-template-columns: 1fr;
+  display: flex;
 }
 
 body.focus-mode .split-divider,
 body.focus-mode .editor-pane {
   display: none;
+}
+
+body.focus-mode .render-pane {
+  flex: 1;
+  min-width: 0;
 }
 
 header {
