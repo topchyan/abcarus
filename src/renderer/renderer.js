@@ -10222,8 +10222,13 @@ function maybeAutoScrollRenderToCursor(el) {
 
   const h = $renderPane.clientHeight || 1;
   const w = $renderPane.clientWidth || 1;
-  const topMargin = Math.max(40, h * 0.15);
-  const bottomMargin = Math.max(40, h * (mode === "page" ? 0.25 : 0.15));
+  const playheadH = targetRect.height / scaleY;
+  const topMargin = Math.max(40, h * 0.15, playheadH * 0.8);
+  const bottomMargin = Math.max(
+    40,
+    h * (mode === "page" ? 0.25 : 0.15),
+    (mode === "keep" ? playheadH * 2.2 : playheadH * 1.4),
+  );
   const leftMargin = Math.max(40, w * 0.12);
   const rightMargin = Math.max(40, w * 0.12);
 
