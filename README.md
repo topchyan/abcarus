@@ -12,22 +12,26 @@ See `docs/DISCLAIMER.md` and `CHANGELOG.md`.
 
 ## Downloads (latest)
 
-- Release page: https://github.com/topchyan/abcarus/releases/latest
-- Linux:
-  - AppImage: https://github.com/topchyan/abcarus/releases/latest/download/ABCarus-x86_64.AppImage
-  - Portable folder (`AppDir` tar.gz): https://github.com/topchyan/abcarus/releases/latest/download/ABCarus-x86_64-portable.tar.gz
-- Windows:
-  - Setup: https://github.com/topchyan/abcarus/releases/latest/download/ABCarus-setup-x64.exe
-  - Portable (single `.exe`): https://github.com/topchyan/abcarus/releases/latest/download/ABCarus-portable-x64.exe
-  - Portable folder (`win-unpacked` zip): https://github.com/topchyan/abcarus/releases/latest/download/ABCarus-win-unpacked-x64.zip
-- macOS:
-  - Apple Silicon (arm64) DMG: https://github.com/topchyan/abcarus/releases/latest/download/ABCarus-macos-arm64.dmg
-  - Intel (x64) DMG: https://github.com/topchyan/abcarus/releases/latest/download/ABCarus-macos-x64.dmg
-- Checksums:
-  - Linux: https://github.com/topchyan/abcarus/releases/latest/download/SHA256SUMS-linux.txt
-  - Windows: https://github.com/topchyan/abcarus/releases/latest/download/SHA256SUMS-windows.txt
-  - macOS (arm64): https://github.com/topchyan/abcarus/releases/latest/download/SHA256SUMS-macos-arm64.txt
-  - macOS (x64): https://github.com/topchyan/abcarus/releases/latest/download/SHA256SUMS-macos-x64.txt
+- Release page: [GitHub Releases][releases-latest]
+- Linux: [AppImage][dl-linux-appimage] · [Portable (AppDir tar.gz)][dl-linux-portable] · [SHA256][sha-linux]
+- Windows: [Setup][dl-win-setup] · [Portable (.exe)][dl-win-portable] · [Portable (win-unpacked zip)][dl-win-unpacked] · [SHA256][sha-windows]
+- macOS: [DMG (arm64)][dl-mac-arm64] · [DMG (x64)][dl-mac-x64] · [SHA256 (arm64)][sha-mac-arm64] · [SHA256 (x64)][sha-mac-x64]
+
+[releases-latest]: https://github.com/topchyan/abcarus/releases/latest
+
+[dl-linux-appimage]: https://github.com/topchyan/abcarus/releases/latest/download/ABCarus-x86_64.AppImage
+[dl-linux-portable]: https://github.com/topchyan/abcarus/releases/latest/download/ABCarus-x86_64-portable.tar.gz
+[sha-linux]: https://github.com/topchyan/abcarus/releases/latest/download/SHA256SUMS-linux.txt
+
+[dl-win-setup]: https://github.com/topchyan/abcarus/releases/latest/download/ABCarus-setup-x64.exe
+[dl-win-portable]: https://github.com/topchyan/abcarus/releases/latest/download/ABCarus-portable-x64.exe
+[dl-win-unpacked]: https://github.com/topchyan/abcarus/releases/latest/download/ABCarus-win-unpacked-x64.zip
+[sha-windows]: https://github.com/topchyan/abcarus/releases/latest/download/SHA256SUMS-windows.txt
+
+[dl-mac-arm64]: https://github.com/topchyan/abcarus/releases/latest/download/ABCarus-macos-arm64.dmg
+[dl-mac-x64]: https://github.com/topchyan/abcarus/releases/latest/download/ABCarus-macos-x64.dmg
+[sha-mac-arm64]: https://github.com/topchyan/abcarus/releases/latest/download/SHA256SUMS-macos-arm64.txt
+[sha-mac-x64]: https://github.com/topchyan/abcarus/releases/latest/download/SHA256SUMS-macos-x64.txt
 
 ## Project docs (recommended starting points)
 - Quick workflow (dev + release): `WORKFLOW.md`
