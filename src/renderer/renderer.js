@@ -10478,10 +10478,10 @@ function maybeAutoScrollRenderToCursor(el) {
   }
   const containerRect = $renderPane.getBoundingClientRect();
   const targetRect = targetEl.getBoundingClientRect();
-  // Use scroll container coordinate space directly (CSS pixels).
-  // Note: `zoom` is applied to the score container; `scrollTop/Left` operate in the same coordinate space.
-  const offsetTop = $renderPane.scrollTop + (targetRect.top - containerRect.top);
-  const offsetLeft = $renderPane.scrollLeft + (targetRect.left - containerRect.left);
+  const scale = getRenderZoomFactor();
+  const safeScale = (Number.isFinite(scale) && scale > 0) ? scale : 1;
+  const offsetTop = $renderPane.scrollTop + (targetRect.top - containerRect.top) / safeScale;
+  const offsetLeft = $renderPane.scrollLeft + (targetRect.left - containerRect.left) / safeScale;
 
   const viewTop = $renderPane.scrollTop;
   const viewBottom = viewTop + $renderPane.clientHeight;
@@ -10490,7 +10490,7 @@ function maybeAutoScrollRenderToCursor(el) {
 
   const h = $renderPane.clientHeight || 1;
   const w = $renderPane.clientWidth || 1;
-  const playheadH = targetRect.height;
+  const playheadH = targetRect.height / safeScale;
   const topMargin = Math.max(40, h * 0.15);
   const bottomMargin = mode === "keep"
     ? Math.max(40, h * 0.15 + playheadH * 1.2)
@@ -10499,15 +10499,15 @@ function maybeAutoScrollRenderToCursor(el) {
   const rightMargin = Math.max(40, w * 0.12);
 
   const cursorTop = offsetTop;
-  const cursorBottom = offsetTop + targetRect.height;
+  const cursorBottom = offsetTop + targetRect.height / safeScale;
   const cursorLeft = offsetLeft;
-  const cursorRight = offsetLeft + targetRect.width;
+  const cursorRight = offsetLeft + targetRect.width / safeScale;
 
   let nextTop = viewTop;
   let nextLeft = viewLeft;
 
   if (mode === "center") {
-    nextTop = cursorTop - h * 0.5 + targetRect.height * 0.5;
+    nextTop = cursorTop - h * 0.5 + (targetRect.height / safeScale) * 0.5;
   } else if (mode === "page") {
     if (cursorBottom > viewBottom - bottomMargin) {
       nextTop = cursorTop - h * 0.1;
@@ -10525,7 +10525,7 @@ function maybeAutoScrollRenderToCursor(el) {
   const allowH = Boolean(playbackAutoScrollHorizontal);
   if (allowH) {
     if (mode === "center") {
-      nextLeft = cursorLeft - w * 0.5 + targetRect.width * 0.5;
+      nextLeft = cursorLeft - w * 0.5 + (targetRect.width / safeScale) * 0.5;
     } else {
       if (cursorLeft < viewLeft + leftMargin) {
         nextLeft = cursorLeft - leftMargin;
@@ -10544,6 +10544,7 @@ function maybeAutoScrollRenderToCursor(el) {
   const dy = Math.abs(clampedTop - viewTop);
   debugAutoScroll(dx < 1 && dy < 1 ? "noop" : "scroll", {
     mode,
+    scale: Math.round(safeScale * 100) / 100,
     viewTop: Math.round(viewTop),
     viewBottom: Math.round(viewBottom),
     viewLeft: Math.round(viewLeft),
@@ -10563,7 +10564,8 @@ function maybeAutoScrollRenderToCursor(el) {
     maxTop: Math.round(maxTop),
     maxLeft: Math.round(maxLeft),
   });
-  animateRenderPaneScrollTo(nextTop, nextLeft, duration);
+  if (dx < 1 && dy < 1) return;
+  animateRenderPaneScrollTo(clampedTop, clampedLeft, duration);
 }
 
 function playbackGuardError(message) {
@@ -11046,19 +11048,21 @@ function maybeScrollRenderToNote(el) {
   }
   const containerRect = $renderPane.getBoundingClientRect();
   const targetRect = el.getBoundingClientRect();
-  const offsetTop = $renderPane.scrollTop + (targetRect.top - containerRect.top);
-  const offsetLeft = $renderPane.scrollLeft + (targetRect.left - containerRect.left);
+  const scale = getRenderZoomFactor();
+  const safeScale = (Number.isFinite(scale) && scale > 0) ? scale : 1;
+  const offsetTop = $renderPane.scrollTop + (targetRect.top - containerRect.top) / safeScale;
+  const offsetLeft = $renderPane.scrollLeft + (targetRect.left - containerRect.left) / safeScale;
   const viewTop = $renderPane.scrollTop;
   const viewBottom = viewTop + $renderPane.clientHeight;
   const viewLeft = $renderPane.scrollLeft;
   const viewRight = viewLeft + $renderPane.clientWidth;
-  const linePad = Math.max(80, targetRect.height * 8);
+  const linePad = Math.max(80, (targetRect.height / safeScale) * 8);
   if (offsetTop < viewTop + linePad) {
     $renderPane.scrollTop = Math.max(0, offsetTop - linePad);
   } else if (offsetTop > viewBottom - linePad) {
     $renderPane.scrollTop = Math.max(0, offsetTop - $renderPane.clientHeight + linePad);
   }
-  const colPad = Math.max(80, targetRect.width * 8);
+  const colPad = Math.max(80, (targetRect.width / safeScale) * 8);
   if (offsetLeft < viewLeft + colPad) {
     $renderPane.scrollLeft = Math.max(0, offsetLeft - colPad);
   } else if (offsetLeft > viewRight - colPad) {
