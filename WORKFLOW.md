@@ -18,6 +18,11 @@ If `ELECTRON_RUN_AS_NODE=1` leaks into your environment, Electron starts in "Nod
 
 For local dev runs, `scripts/local/run.sh` defensively unsets it.
 
+## Branch Status
+
+- `feat/playback-autoscroll` — experimental / archived (kept for history; do not base new work on it).
+- Use branches based on `master` (or the current stabilization PR branch) for new work.
+
 ## Release (3–5 commands)
 
 1) Update `CHANGELOG.md` under `## [Unreleased]` (make sure it’s not empty).
