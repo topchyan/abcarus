@@ -7439,6 +7439,7 @@ updateHeaderStateUI();
 initPaneResizer();
 initRightPaneResizer();
 initSidebarResizer();
+initPlaybackAutoScrollListeners();
 setLibraryVisible(false);
 
 // Preload soundfont in background to avoid first-play delay.
@@ -9639,6 +9640,7 @@ if (window.api && typeof window.api.getSettings === "function") {
       setSoundfontFromSettings(settings);
       setDrumVelocityFromSettings(settings);
       setFollowFromSettings(settings);
+      setPlaybackAutoScrollFromSettings(settings);
       applyLibraryPrefsFromSettings(settings);
       updateGlobalHeaderToggle();
       updateErrorsFeatureUI();
@@ -9667,6 +9669,7 @@ if (window.api && typeof window.api.onSettingsChanged === "function") {
     setSoundfontFromSettings(settings);
     setDrumVelocityFromSettings(settings);
     setFollowFromSettings(settings);
+    setPlaybackAutoScrollFromSettings(settings);
     applyLibraryPrefsFromSettings(settings);
     updateGlobalHeaderToggle();
     updateErrorsFeatureUI();
@@ -10008,6 +10011,13 @@ let followPlayheadPad = 8;
 let followPlayheadBetweenNotesWeight = 1;
 let followPlayheadShift = 0;
 let followPlayheadFirstBias = 6;
+let playbackAutoScrollMode = "keep";
+let playbackAutoScrollHorizontal = true;
+let playbackAutoScrollPauseMs = 1800;
+let playbackAutoScrollManualUntil = 0;
+let playbackAutoScrollAnim = null; // {raf,startAt,duration,fromTop,fromLeft,toTop,toLeft}
+let playbackAutoScrollProgrammatic = false;
+let playbackAutoScrollLastAt = 0;
 let followVoiceId = null;
 let followVoiceIndex = null;
 let drumVelocityMap = buildDefaultDrumVelocityMap();
@@ -10059,6 +10069,159 @@ function resetPlaybackUiState() {
     try { cancelAnimationFrame(pendingPlaybackUiRaf); } catch {}
     pendingPlaybackUiRaf = null;
   }
+  playbackAutoScrollManualUntil = 0;
+  cancelPlaybackAutoScroll();
+}
+
+function normalizeAutoScrollMode(raw) {
+  const s = String(raw || "").trim().toLowerCase();
+  if (!s) return "keep";
+  if (s.startsWith("off")) return "off";
+  if (s.startsWith("page")) return "page";
+  if (s.startsWith("center")) return "center";
+  return "keep";
+}
+
+function initPlaybackAutoScrollListeners() {
+  if (!$renderPane) return;
+  const markManual = () => {
+    const ms = clampNumber(playbackAutoScrollPauseMs, 0, 5000, 1800);
+    playbackAutoScrollManualUntil = (typeof performance !== "undefined" ? performance.now() : Date.now()) + ms;
+  };
+  $renderPane.addEventListener("wheel", () => markManual(), { passive: true });
+  $renderPane.addEventListener("pointerdown", () => markManual(), { passive: true });
+  $renderPane.addEventListener("scroll", () => {
+    if (playbackAutoScrollProgrammatic) return;
+    if (playbackAutoScrollAnim && playbackAutoScrollAnim.raf != null) return;
+    markManual();
+  }, { passive: true });
+}
+
+function cancelPlaybackAutoScroll() {
+  if (playbackAutoScrollAnim && playbackAutoScrollAnim.raf != null) {
+    try { cancelAnimationFrame(playbackAutoScrollAnim.raf); } catch {}
+  }
+  playbackAutoScrollAnim = null;
+  playbackAutoScrollProgrammatic = false;
+}
+
+function animateRenderPaneScrollTo(targetTop, targetLeft, durationMs) {
+  if (!$renderPane) return;
+  const maxTop = Math.max(0, $renderPane.scrollHeight - $renderPane.clientHeight);
+  const maxLeft = Math.max(0, $renderPane.scrollWidth - $renderPane.clientWidth);
+  const toTop = Math.max(0, Math.min(maxTop, Number(targetTop) || 0));
+  const toLeft = Math.max(0, Math.min(maxLeft, Number(targetLeft) || 0));
+
+  const fromTop = $renderPane.scrollTop;
+  const fromLeft = $renderPane.scrollLeft;
+  const dx = Math.abs(toLeft - fromLeft);
+  const dy = Math.abs(toTop - fromTop);
+  if (dx < 1 && dy < 1) return;
+
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  const duration = clampNumber(durationMs, 0, 2000, 250);
+  cancelPlaybackAutoScroll();
+
+  playbackAutoScrollAnim = {
+    raf: null,
+    startAt: now,
+    duration,
+    fromTop,
+    fromLeft,
+    toTop,
+    toLeft,
+  };
+
+  const step = (tNow) => {
+    if (!$renderPane || !playbackAutoScrollAnim) return;
+    const a = playbackAutoScrollAnim;
+    const t = a.duration > 0 ? Math.max(0, Math.min(1, (tNow - a.startAt) / a.duration)) : 1;
+    const ease = 1 - Math.pow(1 - t, 3);
+    const nextTop = a.fromTop + (a.toTop - a.fromTop) * ease;
+    const nextLeft = a.fromLeft + (a.toLeft - a.fromLeft) * ease;
+    playbackAutoScrollProgrammatic = true;
+    $renderPane.scrollTop = nextTop;
+    $renderPane.scrollLeft = nextLeft;
+    playbackAutoScrollProgrammatic = false;
+    if (t < 1) {
+      a.raf = requestAnimationFrame(step);
+    } else {
+      playbackAutoScrollAnim = null;
+    }
+  };
+  playbackAutoScrollAnim.raf = requestAnimationFrame(step);
+}
+
+function maybeAutoScrollRenderToCursor(el) {
+  if (!$renderPane) return;
+  if (!el) return;
+  if (!isPlaybackBusy()) return;
+
+  const mode = normalizeAutoScrollMode(playbackAutoScrollMode);
+  if (mode === "off") return;
+
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  if (now < playbackAutoScrollManualUntil) return;
+  if (now - playbackAutoScrollLastAt < 80) return;
+  playbackAutoScrollLastAt = now;
+
+  const targetEl = lastSvgPlayheadEl || el;
+  const containerRect = $renderPane.getBoundingClientRect();
+  const targetRect = targetEl.getBoundingClientRect();
+  const offsetTop = targetRect.top - containerRect.top + $renderPane.scrollTop;
+  const offsetLeft = targetRect.left - containerRect.left + $renderPane.scrollLeft;
+
+  const viewTop = $renderPane.scrollTop;
+  const viewBottom = viewTop + $renderPane.clientHeight;
+  const viewLeft = $renderPane.scrollLeft;
+  const viewRight = viewLeft + $renderPane.clientWidth;
+
+  const h = $renderPane.clientHeight || 1;
+  const w = $renderPane.clientWidth || 1;
+  const topMargin = Math.max(40, h * 0.15);
+  const bottomMargin = Math.max(40, h * (mode === "page" ? 0.25 : 0.15));
+  const leftMargin = Math.max(40, w * 0.12);
+  const rightMargin = Math.max(40, w * 0.12);
+
+  const cursorTop = offsetTop;
+  const cursorBottom = offsetTop + targetRect.height;
+  const cursorLeft = offsetLeft;
+  const cursorRight = offsetLeft + targetRect.width;
+
+  let nextTop = viewTop;
+  let nextLeft = viewLeft;
+
+  if (mode === "center") {
+    nextTop = cursorTop - h * 0.5 + targetRect.height * 0.5;
+  } else if (mode === "page") {
+    if (cursorBottom > viewBottom - bottomMargin) {
+      nextTop = cursorTop - h * 0.1;
+    } else if (cursorTop < viewTop + topMargin) {
+      nextTop = cursorTop - h * 0.1;
+    }
+  } else {
+    if (cursorTop < viewTop + topMargin) {
+      nextTop = cursorTop - topMargin;
+    } else if (cursorBottom > viewBottom - bottomMargin) {
+      nextTop = cursorBottom - (h - bottomMargin);
+    }
+  }
+
+  const allowH = Boolean(playbackAutoScrollHorizontal);
+  if (allowH) {
+    if (mode === "center") {
+      nextLeft = cursorLeft - w * 0.5 + targetRect.width * 0.5;
+    } else {
+      if (cursorLeft < viewLeft + leftMargin) {
+        nextLeft = cursorLeft - leftMargin;
+      } else if (cursorRight > viewRight - rightMargin) {
+        nextLeft = cursorRight - (w - rightMargin);
+      }
+    }
+  }
+
+  const duration = mode === "page" ? 420 : (mode === "center" ? 160 : 260);
+  animateRenderPaneScrollTo(nextTop, nextLeft, duration);
 }
 
 function playbackGuardError(message) {
@@ -10531,6 +10694,10 @@ function schedulePlaybackUiUpdate(istart) {
 
 function maybeScrollRenderToNote(el) {
   if (!$renderPane || !el) return;
+  if (isPlaybackBusy()) {
+    maybeAutoScrollRenderToCursor(el);
+    return;
+  }
   const containerRect = $renderPane.getBoundingClientRect();
   const targetRect = el.getBoundingClientRect();
   const offsetTop = targetRect.top - containerRect.top + $renderPane.scrollTop;
@@ -11317,6 +11484,16 @@ function setFollowFromSettings(settings) {
   if (settings.followPlayback === undefined) return;
   followPlayback = settings.followPlayback !== false;
   updateFollowToggle();
+}
+
+function setPlaybackAutoScrollFromSettings(settings) {
+  if (!settings || typeof settings !== "object") return;
+  playbackAutoScrollMode = normalizeAutoScrollMode(settings.playbackAutoScrollMode);
+  playbackAutoScrollHorizontal = settings.playbackAutoScrollHorizontal !== false;
+  playbackAutoScrollPauseMs = clampNumber(settings.playbackAutoScrollPauseMs, 0, 5000, playbackAutoScrollPauseMs);
+  if (normalizeAutoScrollMode(playbackAutoScrollMode) === "off") {
+    cancelPlaybackAutoScroll();
+  }
 }
 
 function setSoundfontFromSettings(settings) {
