@@ -6270,7 +6270,7 @@ async function goToMeasureFromMenu() {
       if (Number.isFinite(chosen)) idx = Math.max(0, Math.floor(chosen - renderOffset));
     }
   }
-  if (measureIndex && Array.isArray(measureIndex.istarts) && measureIndex.istarts.length) {
+  if (idx == null && n >= 1 && measureIndex && Array.isArray(measureIndex.istarts) && measureIndex.istarts.length) {
     const anchor = Number.isFinite(measureIndex.anchor) ? measureIndex.anchor : 0;
     const slot = (n - 1) + anchor;
     const istart = measureIndex.istarts[slot];
