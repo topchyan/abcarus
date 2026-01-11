@@ -10996,6 +10996,24 @@ function ensurePlayer() {
         if (Number.isFinite(lastPlaybackOnIstart) && Number.isFinite(i) && i < lastPlaybackOnIstart && window.__abcarusDebugPlayback) {
           console.log("[abcarus] playback jump (repeat?)", { from: lastPlaybackOnIstart, to: i });
         }
+        if (window.__abcarusDebugParts === true && Number.isFinite(i)) {
+          try {
+            const sym = findSymbolAtOrBefore(i);
+            const letter = (sym && sym.part && sym.part.text) ? (String(sym.part.text || "")[0] || "?") : null;
+            if (letter) console.log("[abcarus] part start", { part: letter, istart: i });
+            if (Number.isFinite(lastPlaybackOnIstart) && i < lastPlaybackOnIstart) {
+              let s = sym;
+              let guard = 0;
+              let inferred = null;
+              while (s && guard < 200000) {
+                if (s.part && s.part.text) { inferred = String(s.part.text || "")[0] || "?"; break; }
+                s = s.ts_prev;
+                guard += 1;
+              }
+              console.log("[abcarus] part jump", { from: lastPlaybackOnIstart, to: i, inferredPart: inferred });
+            }
+          } catch {}
+        }
         lastPlaybackOnIstart = i;
       }
       if (
@@ -13344,6 +13362,58 @@ function startPlaybackFromPrepared(startIdx) {
   lastRenderIdx = null;
   resumeStartIdx = null;
   suppressOnEnd = true;
+
+  if (window.__abcarusDebugParts === true) {
+    try {
+      const getPartLetterAtSymbol = (sym) => {
+        let s = sym;
+        let guard = 0;
+        while (s && guard < 200000) {
+          if (s.part && s.part.text) return String(s.part.text || "")[0] || "?";
+          s = s.ts_prev;
+          guard += 1;
+        }
+        return "?";
+      };
+      const computePartIndexLikeSnd = (sym) => {
+        let s = sym;
+        let guard = 0;
+        while (s && guard < 200000) {
+          if (s.parts) return { i_p: -1, hit: "parts", at: Number.isFinite(s.istart) ? s.istart : null };
+          const s_p = s.part1;
+          const p_s = s_p && Array.isArray(s_p.p_s) ? s_p.p_s : null;
+          if (p_s) {
+            for (let i = 0; i < p_s.length; i += 1) {
+              if (p_s[i] === s) return { i_p: i, hit: "p_s", at: Number.isFinite(s.istart) ? s.istart : null };
+            }
+          }
+          s = s.ts_prev;
+          guard += 1;
+        }
+        return { i_p: undefined, hit: null, at: null };
+      };
+      const idxInfo = computePartIndexLikeSnd(start);
+      let partsSeq = null;
+      try {
+        let s = start;
+        let guard = 0;
+        while (s && guard < 200000) {
+          if (typeof s.parts === "string" && s.parts) { partsSeq = s.parts; break; }
+          s = s.ts_prev;
+          guard += 1;
+        }
+      } catch {}
+      console.log("[abcarus] playback start (parts)", {
+        startIstart: start.istart,
+        startEditorOffset: Number.isFinite(start.istart) ? (start.istart - (playbackIndexOffset || 0)) : null,
+        partAtStart: getPartLetterAtSymbol(start),
+        i_p: idxInfo.i_p,
+        i_p_hit: idxInfo.hit,
+        i_p_at: idxInfo.at,
+        partsSeq,
+      });
+    } catch {}
+  }
 
   player.play(start, null, 0);
   isPlaying = true;
