@@ -5995,7 +5995,7 @@ function findMeasureStartOffsetByNumber(text, measureNumber) {
   return null;
 }
 
-let renderMeasureIndexCache = null; // { key, offset, istarts, anchor }
+let renderMeasureIndexCache = null; // { key, offset, istarts, anchor, byNumber }
 
 function buildMeasureIstartsFromAbc2svg(firstSymbol) {
   const istarts = [];
@@ -6024,6 +6024,60 @@ function buildMeasureIstartsFromAbc2svg(firstSymbol) {
   return out;
 }
 
+function buildMeasureStartsByNumberFromAbc2svg(firstSymbol) {
+  const byNumber = new Map(); // number -> [istart...]
+  const push = (n, istart) => {
+    const num = Number(n);
+    if (!Number.isFinite(num)) return;
+    const start = Number(istart);
+    if (!Number.isFinite(start)) return;
+    const list = byNumber.get(num) || [];
+    if (!list.length || list[list.length - 1] !== start) list.push(start);
+    byNumber.set(num, list);
+  };
+  const isBarLikeSymbol = (symbol) => !!(symbol && (symbol.bar_type || symbol.type === 14));
+
+  // Provide a best-effort "measure 0/1 starts here" mapping: the first symbol with an istart in the tune body.
+  let s = firstSymbol;
+  let guard = 0;
+  let firstStart = null;
+  while (s && guard < 200000) {
+    if (Number.isFinite(s.istart)) { firstStart = s.istart; break; }
+    s = s.ts_next;
+    guard += 1;
+  }
+  if (firstStart != null) {
+    // Many files use 1-based numbering, but some (pickup/anacrusis) effectively have a bar 0.
+    // We include both: callers can decide which one to use.
+    push(0, firstStart);
+    push(1, firstStart);
+  }
+
+  s = firstSymbol;
+  guard = 0;
+  while (s && guard < 200000) {
+    if (isBarLikeSymbol(s) && s.ts_next && Number.isFinite(s.ts_next.istart) && Number.isFinite(s.bar_num)) {
+      push(s.bar_num, s.ts_next.istart);
+    }
+    s = s.ts_next;
+    guard += 1;
+  }
+
+  // Normalize: sort each list and dedupe.
+  for (const [k, list] of byNumber.entries()) {
+    const out = [];
+    let last = null;
+    for (const v of list.slice().sort((a, b) => a - b)) {
+      if (!Number.isFinite(v)) continue;
+      if (last == null || v !== last) out.push(v);
+      last = v;
+    }
+    byNumber.set(k, out);
+  }
+
+  return byNumber;
+}
+
 function getRenderMeasureIndex() {
   if (!editorView) return null;
   const payload = getRenderPayload();
@@ -6044,6 +6098,7 @@ function getRenderMeasureIndex() {
     if (!first) return null;
     const istarts = buildMeasureIstartsFromAbc2svg(first);
     if (!istarts.length) return null;
+    const byNumber = buildMeasureStartsByNumberFromAbc2svg(first);
     const renderOffset = Number(payload.offset) || 0;
     const firstBodyStart = findMeasureStartOffsetByNumber(payload.text || "", 1);
     const minIstart = Math.max(
@@ -6052,7 +6107,7 @@ function getRenderMeasureIndex() {
     );
     let anchor = istarts.findIndex((v) => v >= minIstart);
     if (!Number.isFinite(anchor) || anchor < 0) anchor = 0;
-    renderMeasureIndexCache = { key, offset: renderOffset, istarts, anchor };
+    renderMeasureIndexCache = { key, offset: renderOffset, istarts, anchor, byNumber };
     return renderMeasureIndexCache;
   } catch {
     return null;
@@ -6080,13 +6135,13 @@ function getGoToMeasureModal() {
 
   const label = document.createElement("label");
   label.className = "abcarus-modal-label";
-  label.textContent = "Measure number (starting at 1):";
+  label.textContent = "Measure number:";
 
   const input = document.createElement("input");
   input.className = "abcarus-modal-input";
   input.type = "number";
   input.inputMode = "numeric";
-  input.min = "1";
+  input.min = "0";
   input.step = "1";
   input.autocomplete = "off";
   input.spellcheck = false;
@@ -6190,13 +6245,31 @@ async function goToMeasureFromMenu() {
   const raw = await promptGoToMeasureNumber();
   if (raw == null) return;
   const n = Number(String(raw).trim());
-  if (!Number.isFinite(n) || n < 1 || Math.floor(n) !== n) {
+  if (!Number.isFinite(n) || n < 0 || Math.floor(n) !== n) {
     showToast("Invalid measure number.", 2400);
     return;
   }
   const text = getEditorValue();
   let idx = null;
   const measureIndex = getRenderMeasureIndex();
+  if (
+    idx == null
+    && measureIndex
+    && measureIndex.byNumber
+    && typeof measureIndex.byNumber.get === "function"
+  ) {
+    const list = measureIndex.byNumber.get(n);
+    if (Array.isArray(list) && list.length) {
+      const renderOffset = Number(measureIndex.offset) || 0;
+      const cursor = editorView ? editorView.state.selection.main.anchor : 0;
+      const currentRenderIdx = (Number(cursor) || 0) + renderOffset;
+      let chosen = list[0];
+      for (const v of list) {
+        if (Number.isFinite(v) && v >= currentRenderIdx) { chosen = v; break; }
+      }
+      if (Number.isFinite(chosen)) idx = Math.max(0, Math.floor(chosen - renderOffset));
+    }
+  }
   if (measureIndex && Array.isArray(measureIndex.istarts) && measureIndex.istarts.length) {
     const anchor = Number.isFinite(measureIndex.anchor) ? measureIndex.anchor : 0;
     const slot = (n - 1) + anchor;
@@ -6210,7 +6283,7 @@ async function goToMeasureFromMenu() {
       }
     }
   }
-  if (idx == null) idx = findMeasureStartOffsetByNumber(text, n);
+  if (idx == null && n >= 1) idx = findMeasureStartOffsetByNumber(text, n);
   if (idx == null) {
     showToast(`Measure ${n} not found.`, 2600);
     return;
