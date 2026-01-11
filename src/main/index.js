@@ -1879,7 +1879,19 @@ function createWindow() {
   }
   try { win.setAlwaysOnTop(false); } catch {}
   win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
-  win.maximize();
+  if (process.env.ABCARUS_DEV_NO_MAXIMIZE !== "1") {
+    win.maximize();
+  }
+  if (process.env.ABCARUS_DEV_FORWARD_CONSOLE === "1") {
+    win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+      try {
+        const lvl = Number(level);
+        const tag = Number.isFinite(lvl) ? String(lvl) : "?";
+        // eslint-disable-next-line no-console
+        console.log(`[renderer:${tag}] ${message} (${sourceId}:${line})`);
+      } catch {}
+    });
+  }
   win.webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
     // Use best-effort key handling for tune navigation.

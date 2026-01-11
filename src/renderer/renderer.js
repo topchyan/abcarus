@@ -10171,6 +10171,7 @@ let playbackAutoScrollMode = "keep";
 let playbackAutoScrollHorizontal = true;
 let playbackAutoScrollPauseMs = 1800;
 let playbackAutoScrollManualUntil = 0;
+let playbackAutoScrollIgnoreUntil = 0;
 let playbackAutoScrollAnim = null; // {raf,startAt,duration,fromTop,fromLeft,toTop,toLeft}
 let playbackAutoScrollProgrammatic = false;
 let playbackAutoScrollLastAt = 0;
@@ -10317,6 +10318,16 @@ function debugAutoScroll(tag, detail) {
   try {
     const debug = (detail && typeof detail === "object") ? { ...detail } : {};
     debug.zoom = Math.round(getRenderZoomFactor() * 100) / 100;
+    try {
+      debug.cssZoom = String(getComputedStyle(document.documentElement).getPropertyValue("--render-zoom") || "").trim();
+    } catch {
+      debug.cssZoom = "";
+    }
+    try {
+      debug.outZoom = $out ? String(getComputedStyle($out).zoom || "").trim() : "";
+    } catch {
+      debug.outZoom = "";
+    }
     if ($renderPane) {
       debug.pane = {
         top: Math.round($renderPane.scrollTop),
@@ -10329,6 +10340,9 @@ function debugAutoScroll(tag, detail) {
     }
     const msgParts = [`[abcarus][autoscroll] ${tag}`];
     if (debug.mode) msgParts.push(`mode=${debug.mode}`);
+    if (Number.isFinite(debug.zoom)) msgParts.push(`z=${debug.zoom}`);
+    if (debug.cssZoom) msgParts.push(`css=${debug.cssZoom}`);
+    if (debug.outZoom) msgParts.push(`out=${debug.outZoom}`);
     if (Number.isFinite(debug.clampedTop) && Number.isFinite(debug.nextTop)) {
       msgParts.push(`top=${debug.clampedTop}/${Math.round(debug.nextTop)}`);
     }
@@ -10352,6 +10366,8 @@ function initPlaybackAutoScrollListeners() {
   $renderPane.addEventListener("wheel", () => markManual(), { passive: true });
   $renderPane.addEventListener("pointerdown", () => markManual(), { passive: true });
   $renderPane.addEventListener("scroll", () => {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (now < playbackAutoScrollIgnoreUntil) return;
     if (playbackAutoScrollProgrammatic) return;
     if (playbackAutoScrollAnim && playbackAutoScrollAnim.raf != null) return;
     markManual();
@@ -10383,6 +10399,7 @@ function animateRenderPaneScrollTo(targetTop, targetLeft, durationMs) {
   const duration = clampNumber(durationMs, 0, 2000, 250);
   cancelPlaybackAutoScroll();
   playbackAutoScrollProgrammatic = true;
+  playbackAutoScrollIgnoreUntil = now + Math.min(2500, Math.max(200, duration + 100));
 
   playbackAutoScrollAnim = {
     raf: null,
@@ -10489,10 +10506,90 @@ function maybeAutoScrollRenderToCursor(el) {
   const playheadH = targetRect.height;
   const topMargin = Math.max(40, h * 0.15);
   const bottomMargin = mode === "keep"
-    ? Math.max(40, h * 0.15 + playheadH * 1.2)
+    ? Math.max(40, h * 0.15 + playheadH * 2.2)
     : Math.max(40, h * (mode === "page" ? 0.25 : 0.15), playheadH * 0.8);
   const leftMargin = Math.max(40, w * 0.12);
   const rightMargin = Math.max(40, w * 0.12);
+
+  const allowH = Boolean(playbackAutoScrollHorizontal);
+
+  // For "keep" / "center", let the browser compute correct scroll positions under zoom
+  // (CSS zoom can desync getBoundingClientRect from scrollTop on some platforms).
+  // We do a fast "auto" scrollIntoView to compute targets, then animate ourselves.
+  if (mode === "keep" || mode === "center") {
+    const padTop = mode === "keep" ? topMargin : 0;
+    const padBottom = mode === "keep" ? bottomMargin : 0;
+    const padLeft = allowH ? (mode === "keep" ? leftMargin : 0) : 0;
+    const padRight = allowH ? (mode === "keep" ? rightMargin : 0) : 0;
+
+    try {
+      $renderPane.style.scrollPaddingTop = `${Math.round(padTop)}px`;
+      $renderPane.style.scrollPaddingBottom = `${Math.round(padBottom)}px`;
+      $renderPane.style.scrollPaddingLeft = `${Math.round(padLeft)}px`;
+      $renderPane.style.scrollPaddingRight = `${Math.round(padRight)}px`;
+    } catch {}
+
+    const fromTop = viewTop;
+    const fromLeft = viewLeft;
+    let toTop = viewTop;
+    let toLeft = viewLeft;
+    try {
+      playbackAutoScrollProgrammatic = true;
+      playbackAutoScrollIgnoreUntil = now + 250;
+      targetEl.scrollIntoView({
+        block: mode === "center" ? "center" : "nearest",
+        inline: allowH ? (mode === "center" ? "center" : "nearest") : "nearest",
+        behavior: "auto",
+      });
+      toTop = $renderPane.scrollTop;
+      toLeft = allowH ? $renderPane.scrollLeft : fromLeft;
+    } catch {
+      // ignore
+    } finally {
+      try {
+        $renderPane.scrollTop = fromTop;
+        $renderPane.scrollLeft = fromLeft;
+      } catch {}
+      playbackAutoScrollProgrammatic = false;
+    }
+
+    const relTop = targetRect.top - containerRect.top;
+    const relBottom = relTop + targetRect.height;
+    const relLeft = targetRect.left - containerRect.left;
+    const relRight = relLeft + targetRect.width;
+
+    const duration = mode === "center" ? 160 : 260;
+    const maxTop = Math.max(0, $renderPane.scrollHeight - $renderPane.clientHeight);
+    const maxLeft = Math.max(0, $renderPane.scrollWidth - $renderPane.clientWidth);
+    const clampedTop = Math.max(0, Math.min(maxTop, Number(toTop) || 0));
+    const clampedLeft = Math.max(0, Math.min(maxLeft, Number(toLeft) || 0));
+    const dx = Math.abs(clampedLeft - viewLeft);
+    const dy = Math.abs(clampedTop - viewTop);
+    debugAutoScroll(dx < 1 && dy < 1 ? "noop" : "scroll", {
+      mode,
+      viewTop: Math.round(viewTop),
+      viewBottom: Math.round(viewBottom),
+      viewLeft: Math.round(viewLeft),
+      viewRight: Math.round(viewRight),
+      cursorTop: Math.round(viewTop + relTop),
+      cursorBottom: Math.round(viewTop + relBottom),
+      cursorLeft: Math.round(viewLeft + relLeft),
+      cursorRight: Math.round(viewLeft + relRight),
+      nextTop: Math.round(toTop),
+      nextLeft: Math.round(toLeft),
+      clampedTop: Math.round(clampedTop),
+      clampedLeft: Math.round(clampedLeft),
+      maxTop: Math.round(maxTop),
+      maxLeft: Math.round(maxLeft),
+      topMargin: Math.round(topMargin),
+      bottomMargin: Math.round(bottomMargin),
+      leftMargin: Math.round(leftMargin),
+      rightMargin: Math.round(rightMargin),
+    });
+    if (dx < 1 && dy < 1) return;
+    animateRenderPaneScrollTo(clampedTop, clampedLeft, duration);
+    return;
+  }
 
   // Work entirely in scroll container pixel space:
   // - rect deltas are viewport pixels
@@ -10523,7 +10620,6 @@ function maybeAutoScrollRenderToCursor(el) {
     }
   }
 
-  const allowH = Boolean(playbackAutoScrollHorizontal);
   if (allowH) {
     if (mode === "center") {
       const desiredLeft = w * 0.5 - targetRect.width * 0.5;
@@ -14315,3 +14411,144 @@ if ($btnToggleGlobals) {
 
 updatePlayButton();
 updateFollowToggle();
+
+async function maybeRunDevAutoscrollDemo() {
+  if (!window.api || typeof window.api.getDevConfig !== "function") return;
+  const cfg = window.api.getDevConfig() || {};
+  const filePath = String(cfg.ABCARUS_DEV_FILE || "").trim();
+  if (!filePath) return;
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const tuneX = Number(String(cfg.ABCARUS_DEV_TUNE_X || "").trim());
+  const wantFocus = String(cfg.ABCARUS_DEV_FOCUS || "").trim() === "1";
+  const wantPlay = String(cfg.ABCARUS_DEV_AUTOPLAY || "").trim() === "1";
+  const wantDebug = String(cfg.ABCARUS_DEV_AUTOSCROLL_DEBUG || "").trim() === "1";
+  const quitAfter = String(cfg.ABCARUS_DEV_QUIT || "").trim() === "1";
+  const modeSpec = String(cfg.ABCARUS_DEV_AUTOSCROLL_MODE || "").trim();
+  const forcedZoom = Number(String(cfg.ABCARUS_DEV_RENDER_ZOOM || "").trim());
+  const mutateSettings = String(cfg.ABCARUS_DEV_MUTATE_SETTINGS || "").trim() === "1";
+
+  if (wantDebug) window.__abcarusDebugAutoscroll = true;
+
+  let restoreSettingsPatch = null;
+
+  const res = await readFile(filePath);
+  if (!res || !res.ok) {
+    console.error("[abcarus][dev] Unable to read dev file:", res && res.error ? res.error : filePath);
+    return;
+  }
+  const full = String(res.data || "");
+
+  const extractTune = (text, xNumber) => {
+    if (!Number.isFinite(xNumber)) return text;
+    const re = /^\s*X:\s*(\d+)\s*$/gm;
+    let match = null;
+    const starts = [];
+    while ((match = re.exec(text))) {
+      starts.push({ idx: match.index, x: Number(match[1]) });
+    }
+    const start = starts.find((s) => s.x === xNumber);
+    if (!start) return text;
+    const next = starts.find((s) => s.idx > start.idx);
+    const end = next ? next.idx : text.length;
+    return String(text.slice(start.idx, end)).trimEnd() + "\n";
+  };
+
+  const tuneText = extractTune(full, tuneX);
+  suppressDirty = true;
+  try {
+    setEditorValue(tuneText);
+  } finally {
+    suppressDirty = false;
+  }
+  scheduleRenderNow();
+
+  const waitForSvg = async (timeoutMs = 12000) => {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const svg = $out ? $out.querySelector("svg") : null;
+      if (svg) return true;
+      await sleep(100);
+    }
+    return false;
+  };
+  if (!(await waitForSvg())) {
+    console.error("[abcarus][dev] SVG render did not appear in time.");
+    return;
+  }
+
+  if (Number.isFinite(forcedZoom) && forcedZoom > 0) {
+    if (!wantFocus && mutateSettings && window.api && typeof window.api.getSettings === "function" && typeof window.api.updateSettings === "function") {
+      try {
+        const prev = await window.api.getSettings();
+        const prevZoom = prev && Number(prev.renderZoom);
+        if (Number.isFinite(prevZoom) && prevZoom > 0 && prevZoom !== forcedZoom) {
+          restoreSettingsPatch = { renderZoom: prevZoom };
+        }
+        await window.api.updateSettings({ renderZoom: forcedZoom });
+      } catch {}
+    }
+    setRenderZoomCss(forcedZoom);
+    try {
+      const cssZoom = getComputedStyle(document.documentElement).getPropertyValue("--render-zoom");
+      const outZoom = $out ? getComputedStyle($out).zoom : "";
+      console.log(
+        "[abcarus][dev] render zoom =",
+        forcedZoom,
+        "cssVar=",
+        String(cssZoom || "").trim(),
+        "outZoom=",
+        String(outZoom || "").trim(),
+        "getRenderZoomFactor=",
+        getRenderZoomFactor()
+      );
+    } catch {
+      console.log("[abcarus][dev] render zoom =", forcedZoom);
+    }
+    await sleep(250);
+  }
+
+  if (wantFocus) {
+    setFocusModeEnabled(true);
+    await sleep(250);
+  }
+
+  const setMode = (m) => {
+    if (!m) return;
+    playbackAutoScrollMode = m;
+    console.log("[abcarus][dev] autoscroll mode =", playbackAutoScrollMode);
+  };
+
+  const runOnce = async (m) => {
+    setMode(m);
+    await sleep(120);
+    if (!wantPlay) return;
+    await togglePlayPauseEffective();
+    await sleep(25000);
+    stopPlaybackTransport();
+    await sleep(900);
+  };
+
+  try {
+    if (modeSpec.toLowerCase() === "cycle") {
+      for (const m of ["Keep Visible", "Page Turn", "Centered"]) {
+        await runOnce(m);
+      }
+    } else if (modeSpec) {
+      await runOnce(modeSpec);
+    } else {
+      await runOnce(null);
+    }
+  } catch (e) {
+    console.error("[abcarus][dev] Demo failed:", (e && e.stack) ? e.stack : String(e));
+  } finally {
+    if (restoreSettingsPatch && window.api && typeof window.api.updateSettings === "function") {
+      try { await window.api.updateSettings(restoreSettingsPatch); } catch {}
+    }
+    if (quitAfter && window.api && typeof window.api.quitApplication === "function") {
+      try { await window.api.quitApplication(); } catch {}
+    }
+  }
+}
+
+maybeRunDevAutoscrollDemo().catch(() => {});

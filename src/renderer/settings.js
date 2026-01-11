@@ -247,7 +247,9 @@ export function initSettings(api) {
     root.setProperty("--editor-font-size", `${currentSettings.editorFontSize}px`);
     root.setProperty("--editor-notes-weight", currentSettings.editorNotesBold ? "600" : "400");
     root.setProperty("--editor-lyrics-weight", currentSettings.editorLyricsBold ? "600" : "400");
-    root.setProperty("--render-zoom", String(currentSettings.renderZoom));
+    if (!(document.body && document.body.classList.contains("focus-mode"))) {
+      root.setProperty("--render-zoom", String(currentSettings.renderZoom));
+    }
     root.setProperty("--editor-zoom", String(currentSettings.editorZoom));
 
     for (const [key, meta] of controlByKey.entries()) {

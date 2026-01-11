@@ -82,4 +82,12 @@ contextBridge.exposeInMainWorld("api", {
   onSettingsChanged: (handler) => {
     ipcRenderer.on("settings:changed", (_evt, settings) => handler(settings));
   },
+  getDevConfig: () => {
+    const cfg = {};
+    for (const [k, v] of Object.entries(process.env || {})) {
+      if (!k.startsWith("ABCARUS_DEV_")) continue;
+      cfg[k] = String(v || "");
+    }
+    return cfg;
+  },
 });
