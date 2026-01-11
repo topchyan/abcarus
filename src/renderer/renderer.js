@@ -5995,6 +5995,62 @@ function findMeasureStartOffsetByNumber(text, measureNumber) {
   return null;
 }
 
+let renderMeasureIndexCache = null; // { key, offset, istarts }
+
+function buildMeasureIstartsFromAbc2svg(firstSymbol) {
+  const istarts = [];
+  const pushUnique = (v) => {
+    if (!Number.isFinite(v)) return;
+    if (!istarts.length || istarts[istarts.length - 1] !== v) istarts.push(v);
+  };
+  const isBarLikeSymbol = (symbol) => !!(symbol && (symbol.bar_type || symbol.type === 14));
+  let s = firstSymbol;
+  let guard = 0;
+  if (s && Number.isFinite(s.istart)) pushUnique(s.istart);
+  while (s && guard < 200000) {
+    if (isBarLikeSymbol(s) && s.ts_next && Number.isFinite(s.ts_next.istart)) {
+      pushUnique(s.ts_next.istart);
+    }
+    s = s.ts_next;
+    guard += 1;
+  }
+  const out = [];
+  let last = null;
+  for (const v of istarts.slice().sort((a, b) => a - b)) {
+    if (!Number.isFinite(v)) continue;
+    if (last == null || v !== last) out.push(v);
+    last = v;
+  }
+  return out;
+}
+
+function getRenderMeasureIndex() {
+  if (!editorView) return null;
+  const payload = getRenderPayload();
+  const key = `${payload.offset || 0}|||${payload.text || ""}`;
+  if (renderMeasureIndexCache && renderMeasureIndexCache.key === key) return renderMeasureIndexCache;
+
+  try {
+    const AbcCtor = getAbcCtor();
+    const user = {
+      img_out: () => {},
+      err: () => {},
+      errmsg: () => {},
+    };
+    const abc = new AbcCtor(user);
+    abc.tosvg("nav_measures", payload.text || "");
+    const tunes = abc.tunes || [];
+    const first = tunes && tunes[0] ? tunes[0][0] : null;
+    if (!first) return null;
+    const istarts = buildMeasureIstartsFromAbc2svg(first);
+    if (!istarts.length) return null;
+    renderMeasureIndexCache = { key, offset: Number(payload.offset) || 0, istarts };
+    return renderMeasureIndexCache;
+  } catch {
+    return null;
+  }
+}
+
 let goToMeasureModalEls = null;
 function getGoToMeasureModal() {
   if (goToMeasureModalEls) return goToMeasureModalEls;
@@ -6131,7 +6187,15 @@ async function goToMeasureFromMenu() {
     return;
   }
   const text = getEditorValue();
-  const idx = findMeasureStartOffsetByNumber(text, n);
+  let idx = null;
+  const measureIndex = getRenderMeasureIndex();
+  if (measureIndex && Array.isArray(measureIndex.istarts) && measureIndex.istarts.length) {
+    const istart = measureIndex.istarts[n - 1];
+    if (Number.isFinite(istart)) {
+      idx = Math.max(0, Math.floor(istart - (Number(measureIndex.offset) || 0)));
+    }
+  }
+  if (idx == null) idx = findMeasureStartOffsetByNumber(text, n);
   if (idx == null) {
     showToast(`Measure ${n} not found.`, 2600);
     return;
