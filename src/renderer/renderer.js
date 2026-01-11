@@ -10264,24 +10264,14 @@ function setFocusModeEnabled(nextEnabled) {
     focusPrevRenderZoom = readRenderZoomCss();
     requestAnimationFrame(() => {
       const fit = computeFocusFitZoom();
-      // Focus auto-zooms to use the available space, but must never *reduce* the user's current zoom.
-      // (Users often enter Focus specifically after increasing zoom for readability.)
-      const prev = Number(focusPrevRenderZoom);
-      const prevZoom = (Number.isFinite(prev) && prev > 0) ? prev : null;
-      const nowZoomRaw = readRenderZoomCss();
-      const nowZoom = (Number.isFinite(nowZoomRaw) && nowZoomRaw > 0) ? nowZoomRaw : null;
-      const applied = (fit != null)
-        ? Math.max(prevZoom || 0, nowZoom || 0, fit)
-        : null;
-      if (applied != null) setRenderZoomCss(applied);
+      // Focus is a "stage" mode: it chooses the zoom independently to reduce unused margins
+      // and keep the score readable during playback (restored on exit).
+      if (fit != null) setRenderZoomCss(fit);
       if (window.__abcarusDebugFocus) {
         try {
           const cssZoom = getComputedStyle(document.documentElement).getPropertyValue("--render-zoom");
           console.log("[abcarus][focus] apply " + JSON.stringify({
-            prevZoom,
-            nowZoom,
             fit,
-            applied,
             cssZoom: String(cssZoom || "").trim(),
           }));
         } catch {}
