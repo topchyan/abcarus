@@ -32,6 +32,9 @@ const FALLBACK_SCHEMA = [
   { key: "followPlayheadBetweenNotesWeight", type: "number", default: 1, section: "Playback", label: "Playhead between notes (%)", ui: { input: "percent", min: 0, max: 100, step: 5 }, advanced: true },
   { key: "followPlayheadShift", type: "number", default: 0, section: "Playback", label: "Playhead horizontal shift (px)", ui: { input: "number", min: -20, max: 20, step: 1 }, advanced: true },
   { key: "followPlayheadFirstBias", type: "number", default: 6, section: "Playback", label: "First-note bias (px)", ui: { input: "number", min: 0, max: 20, step: 1 }, advanced: true },
+  { key: "soundfontName", type: "string", default: "TimGM6mb.sf2", section: "Fonts", label: "Soundfont (SF2)", ui: { input: "select", options: "soundfonts" } },
+  { key: "abc2svgNotationFontFile", type: "string", default: "", section: "Fonts", label: "Notation font", ui: { input: "select", options: "notationFonts" } },
+  { key: "abc2svgTextFontFile", type: "string", default: "", section: "Fonts", label: "Text font", ui: { input: "select", options: "textFonts" } },
 ];
 
 function buildDefaults(schema) {
@@ -52,7 +55,20 @@ function groupSchemaForModal(schema) {
     bySection.get(section).push(entry);
   }
   for (const entries of bySection.values()) {
-    entries.sort((a, b) => String(a.label || a.key).localeCompare(String(b.label || b.key)));
+    entries.sort((a, b) => {
+      const sectionName = String((a && a.section) || (b && b.section) || "");
+      if (sectionName === "Fonts") {
+        const order = new Map([
+          ["abc2svgNotationFontFile", 0],
+          ["abc2svgTextFontFile", 1],
+          ["soundfontName", 2],
+        ]);
+        const ak = order.has(a.key) ? order.get(a.key) : 999;
+        const bk = order.has(b.key) ? order.get(b.key) : 999;
+        if (ak !== bk) return ak - bk;
+      }
+      return String(a.label || a.key).localeCompare(String(b.label || b.key));
+    });
   }
   return bySection;
 }
@@ -61,6 +77,8 @@ export function initSettings(api) {
   const store = createSettingsStore(api);
 
   const $settingsModal = document.getElementById("settingsModal");
+  const $settingsCard = $settingsModal ? $settingsModal.querySelector(".modal-card") : null;
+  const $settingsHeader = $settingsModal ? $settingsModal.querySelector(".modal-header") : null;
   const $settingsClose = document.getElementById("settingsClose");
   const $settingsReset = document.getElementById("settingsReset");
   const $settingsFilter = document.getElementById("settingsFilter");
@@ -80,6 +98,9 @@ export function initSettings(api) {
   let applySettingsFilter = null;
   let cachedFontLists = { notation: [], text: [] };
   let cachedFontDirs = { bundledDir: "", userDir: "" };
+  let cachedSoundfonts = [];
+  const knownTabs = new Set(["general", "editor", "playback", "tools", "library", "dialogs", "fonts", "xml", "header"]);
+  let dragState = null;
 
   function formatFontOptionLabel(ref) {
     const raw = String(ref || "");
@@ -115,6 +136,60 @@ export function initSettings(api) {
     // Restore selection if possible.
     selectEl.value = prev;
     if (selectEl.value !== prev) selectEl.value = "";
+  }
+
+  function safeBasename(value) {
+    const s = String(value || "");
+    if (!s) return "";
+    const normalized = s.replace(/\\/g, "/");
+    const parts = normalized.split("/");
+    return parts[parts.length - 1] || s;
+  }
+
+  function isSoundfontPath(value) {
+    const s = String(value || "");
+    return s.startsWith("file://") || /^[a-zA-Z]:[\\/]/.test(s) || s.startsWith("/");
+  }
+
+  function populateSoundfontSelect(selectEl) {
+    if (!selectEl) return;
+    const prev = String(selectEl.value || "");
+    selectEl.textContent = "";
+
+    const fallback = "TimGM6mb.sf2";
+    const current = String(currentSettings.soundfontName || fallback);
+    const entries = Array.isArray(cachedSoundfonts) ? cachedSoundfonts : [];
+    const normalized = [];
+
+    for (const item of entries) {
+      if (!item) continue;
+      if (typeof item === "string") {
+        normalized.push({ name: item, source: isSoundfontPath(item) ? "user" : "bundled" });
+      } else if (typeof item === "object" && item.name) {
+        normalized.push({ name: String(item.name), source: item.source === "user" ? "user" : "bundled" });
+      }
+    }
+
+    if (current && !normalized.some((x) => x.name === current)) {
+      normalized.unshift({ name: current, source: isSoundfontPath(current) ? "user" : "bundled" });
+    }
+    if (!normalized.some((x) => x.name === fallback)) {
+      normalized.unshift({ name: fallback, source: "bundled" });
+    }
+
+    const seen = new Set();
+    for (const item of normalized) {
+      if (!item || !item.name || seen.has(item.name)) continue;
+      seen.add(item.name);
+      const option = document.createElement("option");
+      option.value = item.name;
+      const label = safeBasename(item.name).replace(/\.sf2$/i, "");
+      option.textContent = `${label}${item.source === "user" ? " (user)" : " (bundled)"}`;
+      selectEl.appendChild(option);
+    }
+
+    selectEl.value = prev;
+    if (selectEl.value !== prev) selectEl.value = current;
   }
 
   const controlByKey = new Map(); // key -> { entry, el, kind }
@@ -157,23 +232,23 @@ export function initSettings(api) {
     root.setProperty("--render-zoom", String(currentSettings.renderZoom));
     root.setProperty("--editor-zoom", String(currentSettings.editorZoom));
 
-	    for (const [key, meta] of controlByKey.entries()) {
-	      const entry = meta.entry;
-	      if (!entry || !entry.ui) continue;
-	      const kind = entry.ui.input;
-	      const value = currentSettings[key];
-	      if (kind === "checkbox" && meta.el) {
-	        meta.el.checked = Boolean(value);
-	      } else if (kind === "percent" && meta.el) {
-	        meta.el.value = String(Math.round((Number(value) || 1) * 100));
-	      } else if (kind === "color" && meta.el) {
-	        meta.el.value = String(value || "#000000");
-	      } else if (kind === "select" && meta.el) {
-	        meta.el.value = String(value || "");
-	      } else if ((kind === "number" || kind === "text") && meta.el) {
-	        meta.el.value = String(value == null ? "" : value);
-	      }
-	    }
+    for (const [key, meta] of controlByKey.entries()) {
+      const entry = meta.entry;
+      if (!entry || !entry.ui) continue;
+      const kind = entry.ui.input;
+      const value = currentSettings[key];
+      if (kind === "checkbox" && meta.el) {
+        meta.el.checked = Boolean(value);
+      } else if (kind === "percent" && meta.el) {
+        meta.el.value = String(Math.round((Number(value) || 1) * 100));
+      } else if (kind === "color" && meta.el) {
+        meta.el.value = String(value || "#000000");
+      } else if (kind === "select" && meta.el) {
+        meta.el.value = String(value || "");
+      } else if ((kind === "number" || kind === "text") && meta.el) {
+        meta.el.value = String(value == null ? "" : value);
+      }
+    }
 
     if (globalHeaderView) {
       const nextText = String(currentSettings.globalHeaderText || "");
@@ -206,6 +281,104 @@ export function initSettings(api) {
     if (!$settingsModal) return;
     $settingsModal.classList.remove("open");
     $settingsModal.setAttribute("aria-hidden", "true");
+  }
+
+  function readModalPosition() {
+    const ui = readUiState();
+    if (!ui || !ui.settingsModalPos) return null;
+    const pos = ui.settingsModalPos;
+    if (!pos || typeof pos !== "object") return null;
+    const x = Number(pos.x);
+    const y = Number(pos.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  }
+
+  function applyModalPosition(pos) {
+    if (!$settingsCard) return;
+    if (!pos) {
+      $settingsCard.style.transform = "";
+      return;
+    }
+    const x = Math.round(Number(pos.x) || 0);
+    const y = Math.round(Number(pos.y) || 0);
+    $settingsCard.style.transform = `translate(${x}px, ${y}px)`;
+  }
+
+  function clampModalPosition(pos) {
+    if (!$settingsCard) return pos;
+    const x = Number(pos && pos.x);
+    const y = Number(pos && pos.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return { x: 0, y: 0 };
+    const rect = $settingsCard.getBoundingClientRect();
+    const maxX = Math.max(0, (window.innerWidth - rect.width) / 2);
+    const maxY = Math.max(0, (window.innerHeight - rect.height) / 2);
+    return {
+      x: Math.max(-maxX, Math.min(maxX, x)),
+      y: Math.max(-maxY, Math.min(maxY, y)),
+    };
+  }
+
+  function initSettingsDrag() {
+    if (!$settingsCard || !$settingsHeader) return;
+
+    const applyFromUi = () => {
+      const pos = readModalPosition();
+      applyModalPosition(pos);
+    };
+    applyFromUi();
+
+    $settingsHeader.addEventListener("pointerdown", (event) => {
+      if (!event || event.button !== 0) return;
+      const target = event.target;
+      if (target && (target.closest("button") || target.closest("input") || target.closest("select") || target.closest("textarea"))) {
+        return;
+      }
+      if (!$settingsModal.classList.contains("open")) return;
+
+      const start = readModalPosition() || { x: 0, y: 0 };
+      dragState = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: start.x,
+        originY: start.y,
+      };
+      $settingsCard.classList.add("dragging");
+      try { $settingsHeader.setPointerCapture(event.pointerId); } catch {}
+      event.preventDefault();
+    });
+
+    $settingsHeader.addEventListener("pointermove", (event) => {
+      if (!dragState || dragState.pointerId !== event.pointerId) return;
+      const dx = event.clientX - dragState.startX;
+      const dy = event.clientY - dragState.startY;
+      const next = clampModalPosition({ x: dragState.originX + dx, y: dragState.originY + dy });
+      applyModalPosition(next);
+    });
+
+    const endDrag = (event) => {
+      if (!dragState) return;
+      if (event && dragState.pointerId != null && event.pointerId !== dragState.pointerId) return;
+      const current = $settingsCard.style.transform || "";
+      const m = current.match(/translate\(\s*(-?\d+(?:\.\d+)?)px,\s*(-?\d+(?:\.\d+)?)px\)/);
+      const pos = m ? { x: Number(m[1]), y: Number(m[2]) } : { x: 0, y: 0 };
+      writeUiState({ settingsModalPos: clampModalPosition(pos) });
+      dragState = null;
+      $settingsCard.classList.remove("dragging");
+      try { if (event) $settingsHeader.releasePointerCapture(event.pointerId); } catch {}
+    };
+
+    $settingsHeader.addEventListener("pointerup", endDrag);
+    $settingsHeader.addEventListener("pointercancel", endDrag);
+
+    window.addEventListener("resize", () => {
+      const pos = readModalPosition();
+      if (!pos) return;
+      const clamped = clampModalPosition(pos);
+      applyModalPosition(clamped);
+      writeUiState({ settingsModalPos: clamped });
+    });
   }
 
   function zoomBy(delta) {
@@ -261,7 +434,7 @@ export function initSettings(api) {
       return row;
     }
 
-	    if (kind === "text") {
+    if (kind === "text") {
       input = document.createElement("input");
       input.type = "text";
       if (entry.ui.placeholder) input.placeholder = String(entry.ui.placeholder);
@@ -270,16 +443,19 @@ export function initSettings(api) {
       });
       row.appendChild(input);
       controlByKey.set(entry.key, { entry, el: input });
-	      return row;
-	    }
+      return row;
+    }
 
     if (kind === "select") {
       const select = document.createElement("select");
       const optionsKey = entry.ui && entry.ui.options ? String(entry.ui.options) : "";
       const isFontSelect = optionsKey === "notationFonts" || optionsKey === "textFonts";
+      const isSoundfontSelect = optionsKey === "soundfonts";
 
       if (isFontSelect) {
         populateFontSelect(select, optionsKey);
+      } else if (isSoundfontSelect) {
+        populateSoundfontSelect(select);
       } else if (Array.isArray(entry.ui && entry.ui.options)) {
         const optDefault = document.createElement("option");
         optDefault.value = "";
@@ -297,7 +473,7 @@ export function initSettings(api) {
         updateSettings({ [entry.key]: select.value || "" }).catch(() => {});
       });
 
-      if (!isFontSelect) {
+      if (!isFontSelect && !isSoundfontSelect) {
         row.appendChild(select);
         controlByKey.set(entry.key, { entry, el: select });
         return row;
@@ -311,6 +487,35 @@ export function initSettings(api) {
       addBtn.type = "button";
       addBtn.textContent = "Add…";
       addBtn.addEventListener("click", async () => {
+        if (isSoundfontSelect) {
+          if (!api || typeof api.pickSoundfont !== "function") return;
+          const picked = await api.pickSoundfont().catch(() => null);
+          if (!picked) return;
+          if (!/\.sf2$/i.test(String(picked))) {
+            alert("Soundfont must be a .sf2 file.");
+            return;
+          }
+          if (api.fileExists) {
+            const exists = await api.fileExists(picked).catch(() => false);
+            if (!exists) {
+              alert("Soundfont file not found.");
+              return;
+            }
+          }
+          const current = (api.getSettings ? await api.getSettings().catch(() => ({})) : {}) || {};
+          const existing = Array.isArray(current.soundfontPaths) ? current.soundfontPaths : [];
+          const nextPaths = existing.includes(picked) ? existing : [...existing, picked];
+          if (api.updateSettings) {
+            await api.updateSettings({ soundfontPaths: nextPaths, soundfontName: picked }).catch(() => {});
+          }
+          const list = await api.listSoundfonts().catch(() => []);
+          cachedSoundfonts = Array.isArray(list) ? list : [];
+          populateSoundfontSelect(select);
+          select.value = picked;
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+          return;
+        }
+
         if (!api || typeof api.pickFont !== "function" || typeof api.installFont !== "function") return;
         const pick = await api.pickFont().catch(() => null);
         if (!pick || !pick.ok || !pick.path) return;
@@ -342,6 +547,36 @@ export function initSettings(api) {
       removeBtn.type = "button";
       removeBtn.textContent = "Remove";
       removeBtn.addEventListener("click", async () => {
+        if (isSoundfontSelect) {
+          const current = String(select.value || "");
+          if (!current) return;
+          if (!isSoundfontPath(current)) {
+            alert("Bundled soundfonts cannot be removed.");
+            return;
+          }
+          const label = safeBasename(current).replace(/\.sf2$/i, "");
+          if (api && typeof api.confirmRemoveSoundfont === "function") {
+            const ok = await api.confirmRemoveSoundfont(label).catch(() => false);
+            if (!ok) return;
+          } else if (!confirm(`Remove "${label}" from the list?`)) {
+            return;
+          }
+          const settings = (api && api.getSettings) ? await api.getSettings().catch(() => ({})) : {};
+          const existing = Array.isArray(settings.soundfontPaths) ? settings.soundfontPaths : [];
+          const nextPaths = existing.filter((item) => item !== current);
+          const fallback = "TimGM6mb.sf2";
+          const nextName = current === String(currentSettings.soundfontName || "") ? fallback : String(currentSettings.soundfontName || fallback);
+          if (api && api.updateSettings) {
+            await api.updateSettings({ soundfontPaths: nextPaths, soundfontName: nextName }).catch(() => {});
+          }
+          const list = await api.listSoundfonts().catch(() => []);
+          cachedSoundfonts = Array.isArray(list) ? list : [];
+          populateSoundfontSelect(select);
+          select.value = nextName;
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+          return;
+        }
+
         const current = String(select.value || "");
         const m = current.match(/^user:(.+)$/);
         if (!m) return;
@@ -375,8 +610,13 @@ export function initSettings(api) {
 
       const updateRemoveEnabled = () => {
         const current = String(select.value || "");
-        removeBtn.disabled = !/^user:/.test(current);
-        removeBtn.title = removeBtn.disabled ? "Only user-installed fonts can be removed." : "";
+        if (isSoundfontSelect) {
+          removeBtn.disabled = !isSoundfontPath(current);
+          removeBtn.title = removeBtn.disabled ? "Bundled soundfonts cannot be removed." : "";
+        } else {
+          removeBtn.disabled = !/^user:/.test(current);
+          removeBtn.title = removeBtn.disabled ? "Only user-installed fonts can be removed." : "";
+        }
       };
       select.addEventListener("change", updateRemoveEnabled);
       updateRemoveEnabled();
@@ -388,17 +628,17 @@ export function initSettings(api) {
       return row;
     }
 
-	    if (kind === "color") {
-	      input = document.createElement("input");
-	      input.type = "color";
-	      input.addEventListener("change", () => {
-	        const v = String(input.value || "").trim();
-	        updateSettings({ [entry.key]: v }).catch(() => {});
-	      });
-	      row.appendChild(input);
-	      controlByKey.set(entry.key, { entry, el: input });
-	      return row;
-	    }
+    if (kind === "color") {
+      input = document.createElement("input");
+      input.type = "color";
+      input.addEventListener("change", () => {
+        const v = String(input.value || "").trim();
+        updateSettings({ [entry.key]: v }).catch(() => {});
+      });
+      row.appendChild(input);
+      controlByKey.set(entry.key, { entry, el: input });
+      return row;
+    }
 
     // Other inputs are handled as custom sections.
     return null;
@@ -694,7 +934,7 @@ export function initSettings(api) {
     $editorPane.addEventListener("pointerdown", () => { activePane = "editor"; });
   }
 
-  (async () => {
+  const initPromise = (async () => {
     const schemaRes = await store.getSchema().catch(() => null);
     if (schemaRes && schemaRes.ok && Array.isArray(schemaRes.schema)) schema = schemaRes.schema;
     if (api && typeof api.getFontDirs === "function") {
@@ -718,15 +958,36 @@ export function initSettings(api) {
         };
       }
     }
+    if (api && typeof api.listSoundfonts === "function") {
+      const list = await api.listSoundfonts().catch(() => []);
+      cachedSoundfonts = Array.isArray(list) ? list : [];
+    }
     defaultSettings = buildDefaults(schema);
     buildSettingsUi();
+    initSettingsDrag();
     const settings = await store.get().catch(() => null);
     if (settings) applySettings(settings);
     if (applySettingsFilter && $settingsFilter) applySettingsFilter($settingsFilter.value);
   })();
 
+  function normalizeTabKey(raw) {
+    const key = String(raw || "").trim().toLowerCase();
+    if (!key) return "general";
+    if (key === "main") return "general";
+    if (key === "import" || key === "importexport" || key === "import/export") return "xml";
+    if (knownTabs.has(key)) return key;
+    return "general";
+  }
+
+  async function openTab(tabKey) {
+    await initPromise.catch(() => {});
+    lastActiveTab = normalizeTabKey(tabKey);
+    openSettings();
+  }
+
   return {
     openSettings,
+    openTab,
     closeSettings,
     zoomIn: () => zoomBy(ZOOM_STEP),
     zoomOut: () => zoomBy(-ZOOM_STEP),

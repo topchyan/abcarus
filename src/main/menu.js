@@ -132,17 +132,18 @@ function buildMenuTemplate(appState, sendMenuAction) {
     ],
   };
 
-  const settingsMenu = isMac
-    ? null
-    : {
-      label: "Settings",
-      submenu: [
-        { label: "Settings…", accelerator: "CmdOrCtrl+,", click: () => sendMenuAction("settings") },
-        { type: "separator" },
-        { label: "Export Settings…", click: () => sendMenuAction("exportSettings") },
-        { label: "Import Settings…", click: () => sendMenuAction("importSettings") },
-      ],
-    };
+	  const settingsMenu = isMac
+	    ? null
+	    : {
+	      label: "Settings",
+	      submenu: [
+	        { label: "Settings…", accelerator: "CmdOrCtrl+,", click: () => sendMenuAction("settings") },
+	        { label: "Fonts…", accelerator: "F9", click: () => sendMenuAction("fonts") },
+	        { type: "separator" },
+	        { label: "Export Settings…", click: () => sendMenuAction("exportSettings") },
+	        { label: "Import Settings…", click: () => sendMenuAction("importSettings") },
+	      ],
+	    };
 
   const playMenu = {
     label: "Play",
@@ -229,17 +230,18 @@ function buildMenuTemplate(appState, sendMenuAction) {
     ],
   };
 
-  const macAppMenu = isMac
-    ? {
-      label: appState && appState.name ? appState.name : "ABCarus",
-      submenu: [
-        { role: "about", label: "About ABCarus" },
-        { type: "separator" },
-        { label: "Settings…", accelerator: "Cmd+,", click: () => sendMenuAction("settings") },
-        { type: "separator" },
-        { role: "services" },
-        { type: "separator" },
-        { role: "hide" },
+	  const macAppMenu = isMac
+	    ? {
+	      label: appState && appState.name ? appState.name : "ABCarus",
+	      submenu: [
+	        { role: "about", label: "About ABCarus" },
+	        { type: "separator" },
+	        { label: "Settings…", accelerator: "Cmd+,", click: () => sendMenuAction("settings") },
+	        { label: "Fonts…", accelerator: "F9", click: () => sendMenuAction("fonts") },
+	        { type: "separator" },
+	        { role: "services" },
+	        { type: "separator" },
+	        { role: "hide" },
         { role: "hideOthers" },
         { role: "unhide" },
         { type: "separator" },

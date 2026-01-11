@@ -76,13 +76,11 @@ const $btnRestart = document.getElementById("btnRestart");
 const $btnPrevMeasure = document.getElementById("btnPrevMeasure");
 const $btnNextMeasure = document.getElementById("btnNextMeasure");
 const $btnResetLayout = document.getElementById("btnResetLayout");
+const $btnFonts = document.getElementById("btnFonts");
 const $btnToggleFollow = document.getElementById("btnToggleFollow");
 const $btnToggleGlobals = document.getElementById("btnToggleGlobals");
 const $btnToggleErrors = document.getElementById("btnToggleErrors");
 const $soundfontLabel = document.getElementById("soundfontLabel");
-const $soundfontSelect = document.getElementById("soundfontSelect");
-const $soundfontAdd = document.getElementById("soundfontAdd");
-const $soundfontRemove = document.getElementById("soundfontRemove");
 const $rightSplit = document.querySelector(".right-split");
 const $splitDivider = document.getElementById("splitDivider");
 const $errorPane = document.getElementById("errorPane");
@@ -1109,8 +1107,6 @@ let soundfontLoadPromise = null;
 let soundfontLoadTarget = null;
 let soundfontStatusTimer = null;
 const STREAMING_SF2 = new Set();
-let soundfontOptionsLoaded = false;
-let soundfontOptionsLoading = null;
 const MAX_FILE_CONTENT_CACHE_ENTRIES = 12;
 const fileContentCache = new Map();
 
@@ -4851,24 +4847,6 @@ function toFileUrl(filePath) {
     return `file:///${raw.replace(/\\/g, "/")}`;
   }
   if (raw.startsWith("/")) return new URL(raw, window.location.href).href;
-  return raw;
-}
-
-function isSoundfontPath(value) {
-  const raw = String(value || "");
-  return raw.startsWith("file://") || raw.startsWith("/") || /^[a-zA-Z]:\\/.test(raw);
-}
-
-function getSoundfontLabel(name) {
-  const raw = String(name || "");
-  if (!raw) return "";
-  if (raw.startsWith("/") || /^[a-zA-Z]:\\/.test(raw)) {
-    if (window.api && typeof window.api.pathBasename === "function") {
-      return window.api.pathBasename(raw);
-    }
-    const parts = raw.split(/[\\/]/);
-    return parts[parts.length - 1] || raw;
-  }
   return raw;
 }
 
@@ -9581,14 +9559,18 @@ function wireMenuActions() {
       else if (actionType === "transformMeasures" && action && Number.isFinite(action.value)) {
         await applyAbc2abcTransform({ measuresPerLine: action.value });
       }
-      else if (actionType === "alignBars") alignBarsInEditor();
-	      else if (actionType === "dumpDebug") dumpDebugToFile().catch(() => {});
-	      else if (actionType === "settings" && settingsController) settingsController.openSettings();
-	      else if (actionType === "exportSettings") {
-	        if (!window.api || typeof window.api.exportSettings !== "function") {
-	          showToast("Export not available.", 2400);
-	          return;
-	        }
+	      else if (actionType === "alignBars") alignBarsInEditor();
+		      else if (actionType === "dumpDebug") dumpDebugToFile().catch(() => {});
+		      else if (actionType === "settings" && settingsController) settingsController.openSettings();
+		      else if (actionType === "fonts" && settingsController) {
+		        if (typeof settingsController.openTab === "function") settingsController.openTab("fonts");
+		        else settingsController.openSettings();
+		      }
+		      else if (actionType === "exportSettings") {
+		        if (!window.api || typeof window.api.exportSettings !== "function") {
+		          showToast("Export not available.", 2400);
+		          return;
+		        }
 	        const res = await window.api.exportSettings();
 	        if (res && res.ok) {
 	          const note = res.exportedHeader ? " (incl. user_settings.abc)" : "";
@@ -9660,7 +9642,6 @@ if (window.api && typeof window.api.getSettings === "function") {
       applyLibraryPrefsFromSettings(settings);
       updateGlobalHeaderToggle();
       updateErrorsFeatureUI();
-      loadSoundfontSelectOptions();
       refreshHeaderLayers().catch(() => {});
       showDisclaimerIfNeeded(settings);
       scheduleStartupLayoutReset();
@@ -9689,7 +9670,6 @@ if (window.api && typeof window.api.onSettingsChanged === "function") {
     applyLibraryPrefsFromSettings(settings);
     updateGlobalHeaderToggle();
     updateErrorsFeatureUI();
-    loadSoundfontSelectOptions();
     refreshHeaderLayers().catch(() => {});
     showDisclaimerIfNeeded(settings);
     if (settings && prevHeader !== `${globalHeaderEnabled}|${globalHeaderText}|${abc2svgNotationFontFile}|${abc2svgTextFontFile}`) {
@@ -10254,9 +10234,7 @@ function updatePlaybackInteractionLock() {
   disable($btnPracticeToggle);
   disable($practiceTempo);
 
-  disable($soundfontSelect);
-  disable($soundfontAdd);
-  disable($soundfontRemove);
+  disable($btnFonts);
 
   disable($xIssuesAutoFix);
   disable($xIssuesJump);
@@ -11345,7 +11323,6 @@ function setSoundfontFromSettings(settings) {
   if (!settings || typeof settings !== "object") return;
   const next = String(settings.soundfontName || "");
   soundfontName = next || "TimGM6mb.sf2";
-  updateSoundfontSelectValue();
 }
 
 function setDrumVelocityFromSettings(settings) {
@@ -11360,64 +11337,6 @@ function setDrumVelocityFromSettings(settings) {
     }
   }
   drumVelocityMap = base;
-}
-
-function updateSoundfontSelectValue() {
-  if (!$soundfontSelect) return;
-  const current = soundfontName || "TimGM6mb.sf2";
-  if ($soundfontSelect.value !== current) $soundfontSelect.value = current;
-}
-
-async function loadSoundfontSelectOptions(force) {
-  if (!$soundfontSelect) return;
-  if (soundfontOptionsLoading && !force) return soundfontOptionsLoading;
-  if (force) {
-    soundfontOptionsLoading = null;
-    soundfontOptionsLoaded = false;
-  }
-  soundfontOptionsLoading = (async () => {
-    let fonts = [];
-    if (window.api && typeof window.api.listSoundfonts === "function") {
-      try {
-        const list = await window.api.listSoundfonts();
-        if (Array.isArray(list)) fonts = list;
-      } catch {}
-    }
-    const fallback = "TimGM6mb.sf2";
-    const current = soundfontName || fallback;
-    const normalize = (item) => {
-      if (!item) return null;
-      if (typeof item === "string") {
-        return { name: item, source: isSoundfontPath(item) ? "user" : "bundled" };
-      }
-      if (typeof item === "object" && item.name) {
-        return { name: String(item.name), source: item.source === "user" ? "user" : "bundled" };
-      }
-      return null;
-    };
-    let normalized = fonts.map(normalize).filter(Boolean);
-    if (current && !normalized.some((item) => item.name === current)) {
-      normalized.unshift({ name: current, source: isSoundfontPath(current) ? "user" : "bundled" });
-    }
-    if (!normalized.some((item) => item.name === fallback)) {
-      normalized.unshift({ name: fallback, source: "bundled" });
-    }
-    const seen = new Set();
-    $soundfontSelect.textContent = "";
-    for (const item of normalized) {
-      if (!item || !item.name || seen.has(item.name)) continue;
-      seen.add(item.name);
-      const option = document.createElement("option");
-      option.value = item.name;
-      const label = getSoundfontLabel(item.name);
-      const suffix = item.source === "user" ? " (user)" : " (bundled)";
-      option.textContent = `${label}${suffix}`;
-      $soundfontSelect.appendChild(option);
-    }
-    soundfontOptionsLoaded = true;
-    updateSoundfontSelectValue();
-  })();
-  return soundfontOptionsLoading;
 }
 
 function resetSoundfontCache() {
@@ -13701,103 +13620,14 @@ document.addEventListener("drum:preview", (event) => {
   playDrumPreview(detail.pitch, detail.velocity);
 });
 
-if ($soundfontSelect) {
-  loadSoundfontSelectOptions();
-  $soundfontSelect.addEventListener("change", () => {
-    const next = $soundfontSelect.value || "TimGM6mb.sf2";
-    soundfontName = next;
-    resetSoundfontCache();
-    if (player && typeof player.stop === "function") {
-      suppressOnEnd = true;
-      player.stop();
-    }
-    player = null;
-    playbackState = null;
-    playbackIndexOffset = 0;
-    isPlaying = false;
-    isPaused = false;
-    waitingForFirstNote = false;
-    updatePlayButton();
-    setSoundfontCaption("Loading...");
-    updateSoundfontLoadingStatus(next);
-    ensureSoundfontLoaded().catch(() => setSoundfontStatus("Soundfont load failed", 5000));
-    if (window.api && typeof window.api.updateSettings === "function") {
-      window.api.updateSettings({ soundfontName: next }).catch(() => {});
-    }
-  });
-}
-
-if ($soundfontAdd) {
-  $soundfontAdd.addEventListener("click", async () => {
-    try {
-      if (!window.api || typeof window.api.pickSoundfont !== "function") return;
-      const picked = await window.api.pickSoundfont();
-      if (!picked) return;
-      if (!/\.sf2$/i.test(String(picked))) {
-        setStatus("Soundfont must be a .sf2 file.");
-        return;
-      }
-      if (window.api && typeof window.api.fileExists === "function") {
-        const exists = await window.api.fileExists(picked);
-        if (!exists) {
-          setStatus("Soundfont file not found.");
-          return;
-        }
-      }
-      let current = {};
-      if (typeof window.api.getSettings === "function") {
-        try {
-          current = await window.api.getSettings();
-        } catch {}
-      }
-      const existing = Array.isArray(current.soundfontPaths) ? current.soundfontPaths : [];
-      const nextPaths = existing.includes(picked) ? existing : [...existing, picked];
-      if (window.api && typeof window.api.updateSettings === "function") {
-        await window.api.updateSettings({ soundfontPaths: nextPaths, soundfontName: picked });
-      }
-      soundfontName = picked;
-      updateSoundfontSelectValue();
-      loadSoundfontSelectOptions(true);
-    } catch (e) {
-      logErr((e && e.stack) ? e.stack : String(e));
-    }
-  });
-}
-
-if ($soundfontRemove) {
-  $soundfontRemove.addEventListener("click", async () => {
-    const current = $soundfontSelect ? $soundfontSelect.value : "";
-    if (!current) return;
-    if (!isSoundfontPath(current)) {
-      setStatus("Bundled soundfonts cannot be removed.");
+if ($btnFonts) {
+  $btnFonts.addEventListener("click", () => {
+    if (!settingsController) return;
+    if (typeof settingsController.openTab === "function") {
+      settingsController.openTab("fonts");
       return;
     }
-    const label = getSoundfontLabel(current);
-    if (window.api && typeof window.api.confirmRemoveSoundfont === "function") {
-      const ok = await window.api.confirmRemoveSoundfont(label);
-      if (!ok) return;
-    } else if (!window.confirm(`Remove "${label}" from the list?`)) {
-      return;
-    }
-    if (!window.api || typeof window.api.getSettings !== "function") return;
-    try {
-      const settings = await window.api.getSettings();
-      const existing = Array.isArray(settings.soundfontPaths) ? settings.soundfontPaths : [];
-      const nextPaths = existing.filter((item) => item !== current);
-      const fallback = "TimGM6mb.sf2";
-      const nextName = current === soundfontName ? fallback : soundfontName;
-      if (window.api && typeof window.api.updateSettings === "function") {
-        await window.api.updateSettings({
-          soundfontPaths: nextPaths,
-          soundfontName: nextName,
-        });
-      }
-      soundfontName = nextName;
-      updateSoundfontSelectValue();
-      loadSoundfontSelectOptions(true);
-    } catch (e) {
-      logErr((e && e.stack) ? e.stack : String(e));
-    }
+    settingsController.openSettings();
   });
 }
 

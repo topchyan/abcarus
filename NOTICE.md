@@ -77,7 +77,6 @@ ABCarus may ship additional notation/text fonts for abc2svg rendering.
 Included fonts (SIL Open Font License 1.1 / OFL):
 - Bravura / BravuraText — Steinberg / SMuFL project
 - Petaluma / PetalumaText / PetalumaScript — Steinberg
-- Sebastian / SebastianText — Steinberg
 - Leland / LelandText — MuseScore
 - MuseJazz / MuseJazzText — MuseScore
 

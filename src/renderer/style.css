@@ -275,6 +275,7 @@ main {
 .icon-pause { -webkit-mask-image: url("../../assets/icons/ui/pause.svg"); mask-image: url("../../assets/icons/ui/pause.svg"); }
 .icon-stop { -webkit-mask-image: url("../../assets/icons/ui/square.svg"); mask-image: url("../../assets/icons/ui/square.svg"); }
 .icon-reset { -webkit-mask-image: url("../../assets/icons/ui/rotate-ccw.svg"); mask-image: url("../../assets/icons/ui/rotate-ccw.svg"); }
+.icon-type { -webkit-mask-image: url("../../assets/icons/ui/type.svg"); mask-image: url("../../assets/icons/ui/type.svg"); }
 .icon-repeat { -webkit-mask-image: url("../../assets/icons/ui/repeat.svg"); mask-image: url("../../assets/icons/ui/repeat.svg"); }
 .icon-plus { -webkit-mask-image: url("../../assets/icons/ui/plus.svg"); mask-image: url("../../assets/icons/ui/plus.svg"); }
 .icon-minus { -webkit-mask-image: url("../../assets/icons/ui/minus.svg"); mask-image: url("../../assets/icons/ui/minus.svg"); }
@@ -282,63 +283,6 @@ main {
 #btnPlayPause .icon-pause { display: none; }
 #btnPlayPause.is-playing .icon-play { display: none; }
 #btnPlayPause.is-playing .icon-pause { display: inline-block; }
-
-.soundfont-control {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #444;
-}
-
-.soundfont-control select {
-  min-height: var(--button-height);
-  padding: 6px 8px;
-  border-radius: var(--button-radius);
-  border: 1px solid var(--button-border);
-  background: var(--button-bg);
-  color: var(--button-text);
-}
-
-.soundfont-control select:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-#soundfontLabel.loading {
-  font-weight: 700;
-}
-
-#soundfontAdd {
-  min-height: var(--button-height);
-  padding: 6px 10px;
-  border-radius: var(--button-radius);
-  border: 1px solid var(--button-border);
-  background: var(--button-bg);
-  color: var(--button-text);
-  cursor: pointer;
-}
-
-#soundfontAdd:disabled,
-#soundfontRemove:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-#soundfontAdd:hover,
-#soundfontRemove:hover {
-  background: var(--button-bg-hover);
-}
-
-#soundfontRemove {
-  min-height: var(--button-height);
-  padding: 6px 10px;
-  border-radius: var(--button-radius);
-  border: 1px solid var(--button-border);
-  background: var(--button-bg);
-  color: var(--button-text);
-  cursor: pointer;
-}
 
 .pane {
   height: 100%;
@@ -1432,6 +1376,18 @@ svg {
   min-height: 320px;
   max-width: 96vw;
   max-height: 92vh;
+}
+
+.modal-card.settings-card .modal-header {
+  cursor: move;
+}
+
+.modal-card.settings-card.dragging .modal-header {
+  cursor: grabbing;
+}
+
+.modal-card.settings-card.dragging {
+  user-select: none;
 }
 
 .modal-card.settings-card .modal-body {

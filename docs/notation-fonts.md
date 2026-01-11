@@ -51,6 +51,16 @@ Why this path works:
 - UI sets up a CSS `@font-face` for `font-family: "music"` in `src/renderer/style.css`, pointing at `third_party/abc2svg/abc2svg.ttf`.
 - However, abc2svg also embeds its own default font via `data:` URL unless overridden by `%%musicfont`.
 
+## Bundled OFL fonts
+
+ABCarus ships several SMuFL-compatible fonts under SIL Open Font License 1.1 (OFL):
+- Bravura / BravuraText
+- Petaluma / PetalumaText / PetalumaScript
+- Leland / LelandText
+- MuseJazz / MuseJazzText
+
+See `assets/fonts/notation/OFL.txt` and `NOTICE.md`.
+
 ## UI support (Settings)
 
 ABCarus can optionally inject font directives automatically based on Settings:

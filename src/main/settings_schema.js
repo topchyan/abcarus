@@ -115,9 +115,10 @@ function getSettingsSchema() {
       key: "soundfontName",
       type: "string",
       default: "TimGM6mb.sf2",
-      section: "Playback",
-      label: "Soundfont",
-      help: "Default soundfont for playback (controlled via the toolbar).",
+      section: "Fonts",
+      label: "Soundfont (SF2)",
+      help: "Default soundfont for playback. You can add/remove user soundfonts here.",
+      ui: { input: "select", options: "soundfonts" },
     },
     {
       key: "drumVelocityMap",
