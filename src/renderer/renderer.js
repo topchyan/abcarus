@@ -5986,6 +5986,9 @@ function findMeasureStartOffsetByNumber(text, measureNumber) {
       currentMeasure += 1;
       currentStart = j;
       if (currentMeasure === target) return currentStart;
+
+      // Skip the rest of the boundary token sequence to avoid double-counting "||", "|]", "|:", etc.
+      i = j - 1;
     }
   }
 
