@@ -14,6 +14,11 @@ This is a step-by-step guide for making a release build and pushing it to GitHub
    - `git push origin vX.Y.Z`
 4) Verify the GitHub Actions run for tag `vX.Y.Z` is green (all jobs), then do a quick sanity check.
 
+CLI alternative (no browser, using GitHub CLI):
+- `gh auth status`
+- `gh run list -L 10 --workflow release-assets.yml`
+- `gh release view vX.Y.Z`
+
 Where to find:
 - High-level policy: `docs/RELEASES.md`
 - This checklist: `docs/RELEASE_CHECKLIST.md`
@@ -80,6 +85,9 @@ This flow bumps the version, updates release docs, commits, and creates a tag:
 Notes:
 - The user-facing release notes are the `CHANGELOG.md` entry for `vX.Y.Z`.
 - Tag pushes trigger GitHub Actions (including `.github/workflows/release-assets.yml`) which builds and uploads artifacts to the GitHub Release for that tag.
+
+Tip: if you don’t want to use the browser, you can confirm the release and attached assets via:
+- `gh release view vX.Y.Z`
 
 ## 4) Push (if skipped earlier)
 

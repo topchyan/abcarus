@@ -42,6 +42,26 @@ git push origin v0.19.2
 
 For the detailed checklist see `docs/RELEASE_CHECKLIST.md`.
 
+## Verify release via `gh` (no browser)
+
+If you have GitHub CLI installed and authenticated (`gh auth login`), you can verify releases from the terminal:
+
+```bash
+gh auth status
+
+# See the latest releases
+gh release list -L 10
+
+# See assets attached to a specific release
+gh release view vX.Y.Z
+
+# Check the tag-triggered workflow runs
+gh run list -L 10 --workflow release-assets.yml
+```
+
+Notes:
+- `release-assets.yml` runs on `push` to tags `v*` and uploads artifacts to the GitHub Release for that tag.
+
 ## If release script fails (EPERM / git issues)
 
 If `npm run release:*` fails due to git permissions or an “EPERM” error, do the minimal manual fallback:
