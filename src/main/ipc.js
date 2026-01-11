@@ -98,6 +98,52 @@ async function getPythonVersion() {
   }
 }
 
+async function atomicCopyFileWithRetry(fs, path, srcPath, destPath, { attempts = 5 } = {}) {
+  const absSrc = String(srcPath || "");
+  const absDest = String(destPath || "");
+  if (!absSrc || !absDest) throw new Error("Missing file path.");
+  const tmpPath = path.join(
+    path.dirname(absDest),
+    `.${path.basename(absDest)}.${process.pid}.${Date.now()}.tmp`
+  );
+  await fs.promises.copyFile(absSrc, tmpPath);
+  let lastErr = null;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      try {
+        await fs.promises.rename(tmpPath, absDest);
+        return;
+      } catch (e) {
+        // Windows often fails rename when target exists; remove and retry.
+        try { await fs.promises.unlink(absDest); } catch {}
+        await fs.promises.rename(tmpPath, absDest);
+        return;
+      }
+    } catch (e) {
+      lastErr = e;
+      const code = e && e.code ? String(e.code) : "";
+      if (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES") break;
+      await new Promise((r) => setTimeout(r, 50 * (i + 1)));
+    }
+  }
+  try { await fs.promises.unlink(tmpPath); } catch {}
+  throw lastErr || new Error("Unable to copy file.");
+}
+
+function sanitizeFontFileName(name) {
+  const raw = String(name || "").trim();
+  if (!raw) return "";
+  if (raw.includes("/") || raw.includes("\\") || raw.includes("..")) return "";
+  if (!/^[A-Za-z0-9._-]+\.(otf|ttf|woff2?)$/i.test(raw)) return "";
+  return raw;
+}
+
+function classifyFontName(name) {
+  const raw = String(name || "");
+  if (!raw) return "notation";
+  return /text|script/i.test(raw) ? "text" : "notation";
+}
+
 function registerIpcHandlers(ctx) {
 	  const {
     ipcMain,
@@ -463,28 +509,109 @@ function registerIpcHandlers(ctx) {
       return { ok: false, error: e && e.message ? e.message : String(e) };
     }
   });
+
+  async function resolveFontDirs() {
+    const appRoot = (app && typeof app.getAppPath === "function") ? app.getAppPath() : process.cwd();
+    const bundledDir = path.join(appRoot, "assets", "fonts", "notation");
+    const userData = (app && typeof app.getPath === "function") ? app.getPath("userData") : "";
+    const userDir = userData ? path.join(userData, "fonts", "notation") : "";
+    if (userDir) {
+      try { await fs.promises.mkdir(userDir, { recursive: true }); } catch {}
+    }
+    return { bundledDir, userDir };
+  }
+
+  ipcMain.handle("fonts:dirs", async () => {
+    try {
+      const { bundledDir, userDir } = await resolveFontDirs();
+      return { ok: true, bundledDir, userDir };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e), bundledDir: "", userDir: "" };
+    }
+  });
+
+  async function readFontDirFonts(dirPath) {
+    if (!dirPath) return [];
+    let names = [];
+    try {
+      names = await fs.promises.readdir(dirPath);
+    } catch {
+      names = [];
+    }
+    return (names || [])
+      .map((name) => String(name || ""))
+      .filter((name) => /\.(otf|ttf|woff2?)$/i.test(name))
+      .filter((name) => !name.startsWith("."))
+      .sort((a, b) => a.localeCompare(b));
+  }
+
   ipcMain.handle("fonts:list", async () => {
     try {
-      const appRoot = (app && typeof app.getAppPath === "function") ? app.getAppPath() : process.cwd();
-      const fontsDir = path.join(appRoot, "assets", "fonts", "notation");
-      let names = [];
-      try {
-        names = await fs.promises.readdir(fontsDir);
-      } catch {
-        names = [];
-      }
-      const files = (names || [])
-        .map((name) => String(name || ""))
-        .filter((name) => /\.(otf|ttf|woff2?)$/i.test(name))
-        .filter((name) => !name.startsWith("."))
-        .sort((a, b) => a.localeCompare(b));
+      const { bundledDir, userDir } = await resolveFontDirs();
+      const bundledFiles = await readFontDirFonts(bundledDir);
+      const userFiles = await readFontDirFonts(userDir);
 
-      const isTextFont = (name) => /text|script/i.test(String(name || ""));
-      const notation = files.filter((f) => !isTextFont(f));
-      const text = files.filter((f) => isTextFont(f));
-      return { ok: true, notation, text };
+      const split = (files) => {
+        const notation = [];
+        const text = [];
+        for (const f of files) {
+          if (classifyFontName(f) === "text") text.push(f);
+          else notation.push(f);
+        }
+        return { notation, text };
+      };
+      return { ok: true, bundled: split(bundledFiles), user: split(userFiles) };
     } catch (e) {
-      return { ok: false, error: e && e.message ? e.message : String(e), notation: [], text: [] };
+      return { ok: false, error: e && e.message ? e.message : String(e), bundled: { notation: [], text: [] }, user: { notation: [], text: [] } };
+    }
+  });
+
+  ipcMain.handle("fonts:pick", async (event) => {
+    try {
+      const parent = getParentForDialog(event, "fonts:pick");
+      const result = await dialog.showOpenDialog(parent || undefined, {
+        modal: true,
+        title: "Add font",
+        properties: ["openFile"],
+        filters: [{ name: "Fonts", extensions: ["otf", "ttf", "woff", "woff2"] }, { name: "All Files", extensions: ["*"] }],
+      });
+      if (!result || result.canceled || !Array.isArray(result.filePaths) || !result.filePaths[0]) return { ok: false, error: "Canceled" };
+      return { ok: true, path: String(result.filePaths[0]) };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("fonts:install", async (_event, srcPath) => {
+    try {
+      const { userDir } = await resolveFontDirs();
+      if (!userDir) return { ok: false, error: "Fonts directory is unavailable." };
+
+      const source = String(srcPath || "");
+      if (!source) return { ok: false, error: "Missing font path." };
+      const baseName = sanitizeFontFileName(path.basename(source));
+      if (!baseName) return { ok: false, error: "Unsupported font filename." };
+
+      const targetPath = path.join(userDir, baseName);
+      await atomicCopyFileWithRetry(fs, path, source, targetPath);
+      return { ok: true, name: baseName };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("fonts:remove", async (_event, fileName) => {
+    try {
+      const { userDir } = await resolveFontDirs();
+      if (!userDir) return { ok: false, error: "Fonts directory is unavailable." };
+
+      const safeName = sanitizeFontFileName(fileName);
+      if (!safeName) return { ok: false, error: "Invalid font filename." };
+      const targetPath = path.join(userDir, safeName);
+      await fs.promises.unlink(targetPath);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
     }
   });
   ipcMain.handle("settings:paths", async () => {

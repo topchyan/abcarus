@@ -64,3 +64,11 @@ These overrides are:
 If we later add a “Notation font” selector in Settings, the safest approach is:
 - keep abc2svg upstream untouched,
 - and implement selection by injecting an appropriate `%%musicfont ...` line via the existing global header mechanism.
+
+## User-installed fonts (like soundfonts)
+
+ABCarus supports user-installed fonts in addition to bundled ones.
+These are stored outside the app bundle (so they survive upgrades):
+- `<userData>/fonts/notation/`
+
+The Settings dropdowns show both bundled and user-installed fonts.

@@ -1803,6 +1803,18 @@ textarea {
   box-sizing: border-box;
 }
 
+.settings-select-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.settings-select-row select {
+  min-width: 0;
+}
+
 @media (max-width: 860px) {
   .modal-card.settings-card {
     width: min(720px, 96vw);

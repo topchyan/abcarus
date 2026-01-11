@@ -79,6 +79,43 @@ export function initSettings(api) {
   let setActiveTab = null;
   let applySettingsFilter = null;
   let cachedFontLists = { notation: [], text: [] };
+  let cachedFontDirs = { bundledDir: "", userDir: "" };
+
+  function formatFontOptionLabel(ref) {
+    const raw = String(ref || "");
+    const m = raw.match(/^(bundled|user):(.*)$/);
+    if (!m) return raw;
+    const origin = m[1] === "user" ? "User" : "Bundled";
+    const name = String(m[2] || "").replace(/\.(otf|ttf|woff2?)$/i, "");
+    return `${name} (${origin})`;
+  }
+
+  function populateFontSelect(selectEl, optionsKey) {
+    if (!selectEl) return;
+    const prev = String(selectEl.value || "");
+    selectEl.textContent = "";
+
+    const optDefault = document.createElement("option");
+    optDefault.value = "";
+    optDefault.textContent = "Default";
+    selectEl.appendChild(optDefault);
+
+    const pushOptions = (refs) => {
+      for (const ref of refs) {
+        const option = document.createElement("option");
+        option.value = String(ref || "");
+        option.textContent = formatFontOptionLabel(option.value);
+        selectEl.appendChild(option);
+      }
+    };
+
+    if (optionsKey === "notationFonts") pushOptions(cachedFontLists.notation || []);
+    else if (optionsKey === "textFonts") pushOptions(cachedFontLists.text || []);
+
+    // Restore selection if possible.
+    selectEl.value = prev;
+    if (selectEl.value !== prev) selectEl.value = "";
+  }
 
   const controlByKey = new Map(); // key -> { entry, el, kind }
   let globalHeaderView = null;
@@ -237,29 +274,117 @@ export function initSettings(api) {
 	    }
 
     if (kind === "select") {
-      input = document.createElement("select");
+      const select = document.createElement("select");
       const optionsKey = entry.ui && entry.ui.options ? String(entry.ui.options) : "";
-      let files = [];
-      if (optionsKey === "notationFonts") files = cachedFontLists.notation || [];
-      else if (optionsKey === "textFonts") files = cachedFontLists.text || [];
-      else if (Array.isArray(entry.ui && entry.ui.options)) files = entry.ui.options;
+      const isFontSelect = optionsKey === "notationFonts" || optionsKey === "textFonts";
 
-      const optDefault = document.createElement("option");
-      optDefault.value = "";
-      optDefault.textContent = "Default";
-      input.appendChild(optDefault);
-
-      for (const name of files) {
-        const option = document.createElement("option");
-        option.value = String(name || "");
-        option.textContent = String(name || "").replace(/\.(otf|ttf|woff2?)$/i, "");
-        input.appendChild(option);
+      if (isFontSelect) {
+        populateFontSelect(select, optionsKey);
+      } else if (Array.isArray(entry.ui && entry.ui.options)) {
+        const optDefault = document.createElement("option");
+        optDefault.value = "";
+        optDefault.textContent = "Default";
+        select.appendChild(optDefault);
+        for (const name of entry.ui.options) {
+          const option = document.createElement("option");
+          option.value = String(name || "");
+          option.textContent = String(name || "");
+          select.appendChild(option);
+        }
       }
-      input.addEventListener("change", () => {
-        updateSettings({ [entry.key]: input.value || "" }).catch(() => {});
+
+      select.addEventListener("change", () => {
+        updateSettings({ [entry.key]: select.value || "" }).catch(() => {});
       });
-      row.appendChild(input);
-      controlByKey.set(entry.key, { entry, el: input });
+
+      if (!isFontSelect) {
+        row.appendChild(select);
+        controlByKey.set(entry.key, { entry, el: select });
+        return row;
+      }
+
+      const wrap = document.createElement("div");
+      wrap.className = "settings-select-row";
+      wrap.appendChild(select);
+
+      const addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.textContent = "Add…";
+      addBtn.addEventListener("click", async () => {
+        if (!api || typeof api.pickFont !== "function" || typeof api.installFont !== "function") return;
+        const pick = await api.pickFont().catch(() => null);
+        if (!pick || !pick.ok || !pick.path) return;
+        const res = await api.installFont(pick.path).catch(() => null);
+        if (!res || !res.ok) {
+          alert(res && res.error ? res.error : "Failed to add font.");
+          return;
+        }
+        const list = await api.listFonts().catch(() => null);
+        if (list && list.ok) {
+          cachedFontLists = {
+            notation: [
+              ...(list.bundled && list.bundled.notation ? list.bundled.notation.map((n) => `bundled:${n}`) : []),
+              ...(list.user && list.user.notation ? list.user.notation.map((n) => `user:${n}`) : []),
+            ],
+            text: [
+              ...(list.bundled && list.bundled.text ? list.bundled.text.map((n) => `bundled:${n}`) : []),
+              ...(list.user && list.user.text ? list.user.text.map((n) => `user:${n}`) : []),
+            ],
+          };
+        }
+        populateFontSelect(select, optionsKey);
+        const newRef = `user:${String(res.name || "")}`;
+        select.value = newRef;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", async () => {
+        const current = String(select.value || "");
+        const m = current.match(/^user:(.+)$/);
+        if (!m) return;
+        const fileName = String(m[1] || "");
+        if (!fileName) return;
+        const ok = confirm(`Remove user font "${fileName}"?`);
+        if (!ok) return;
+        if (!api || typeof api.removeFont !== "function") return;
+        const res = await api.removeFont(fileName).catch(() => null);
+        if (!res || !res.ok) {
+          alert(res && res.error ? res.error : "Failed to remove font.");
+          return;
+        }
+        const list = await api.listFonts().catch(() => null);
+        if (list && list.ok) {
+          cachedFontLists = {
+            notation: [
+              ...(list.bundled && list.bundled.notation ? list.bundled.notation.map((n) => `bundled:${n}`) : []),
+              ...(list.user && list.user.notation ? list.user.notation.map((n) => `user:${n}`) : []),
+            ],
+            text: [
+              ...(list.bundled && list.bundled.text ? list.bundled.text.map((n) => `bundled:${n}`) : []),
+              ...(list.user && list.user.text ? list.user.text.map((n) => `user:${n}`) : []),
+            ],
+          };
+        }
+        populateFontSelect(select, optionsKey);
+        select.value = "";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+
+      const updateRemoveEnabled = () => {
+        const current = String(select.value || "");
+        removeBtn.disabled = !/^user:/.test(current);
+        removeBtn.title = removeBtn.disabled ? "Only user-installed fonts can be removed." : "";
+      };
+      select.addEventListener("change", updateRemoveEnabled);
+      updateRemoveEnabled();
+
+      wrap.appendChild(addBtn);
+      wrap.appendChild(removeBtn);
+      row.appendChild(wrap);
+      controlByKey.set(entry.key, { entry, el: select });
       return row;
     }
 
@@ -321,6 +446,7 @@ export function initSettings(api) {
       { key: "tools", label: "Tools", sections: ["Tools"] },
       { key: "library", label: "Library", sections: ["Library"] },
       { key: "dialogs", label: "Dialogs", sections: ["Dialogs"] },
+      { key: "fonts", label: "Fonts", sections: ["Fonts"] },
       { key: "xml", label: "Import/Export", sections: ["Import/Export"] },
       { key: "header", label: "Header", sections: ["Header"] },
     ];
@@ -571,12 +697,24 @@ export function initSettings(api) {
   (async () => {
     const schemaRes = await store.getSchema().catch(() => null);
     if (schemaRes && schemaRes.ok && Array.isArray(schemaRes.schema)) schema = schemaRes.schema;
+    if (api && typeof api.getFontDirs === "function") {
+      const res = await api.getFontDirs().catch(() => null);
+      if (res && res.ok) {
+        cachedFontDirs = { bundledDir: String(res.bundledDir || ""), userDir: String(res.userDir || "") };
+      }
+    }
     if (api && typeof api.listFonts === "function") {
       const res = await api.listFonts().catch(() => null);
       if (res && res.ok) {
         cachedFontLists = {
-          notation: Array.isArray(res.notation) ? res.notation : [],
-          text: Array.isArray(res.text) ? res.text : [],
+          notation: [
+            ...(res.bundled && Array.isArray(res.bundled.notation) ? res.bundled.notation.map((n) => `bundled:${n}`) : []),
+            ...(res.user && Array.isArray(res.user.notation) ? res.user.notation.map((n) => `user:${n}`) : []),
+          ],
+          text: [
+            ...(res.bundled && Array.isArray(res.bundled.text) ? res.bundled.text.map((n) => `bundled:${n}`) : []),
+            ...(res.user && Array.isArray(res.user.text) ? res.user.text.map((n) => `user:${n}`) : []),
+          ],
         };
       }
     }

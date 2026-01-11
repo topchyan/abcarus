@@ -1101,6 +1101,7 @@ let globalHeaderUserText = "";
 let globalHeaderGlobalText = "";
 let abc2svgNotationFontFile = "";
 let abc2svgTextFontFile = "";
+let fontDirs = { bundledDir: "", userDir: "" };
 let soundfontName = "TimGM6mb.sf2";
 let soundfontSource = "abc2svg.sf2";
 let soundfontReadyName = null;
@@ -9667,6 +9668,14 @@ if (window.api && typeof window.api.getSettings === "function") {
     suppressLibraryPrefsWrite = false;
   }).catch(() => { suppressLibraryPrefsWrite = false; });
 }
+
+if (window.api && typeof window.api.getFontDirs === "function") {
+  window.api.getFontDirs().then((res) => {
+    if (res && res.ok) {
+      fontDirs = { bundledDir: String(res.bundledDir || ""), userDir: String(res.userDir || "") };
+    }
+  }).catch(() => {});
+}
 if (window.api && typeof window.api.onSettingsChanged === "function") {
   window.api.onSettingsChanged((settings) => {
     latestSettingsSnapshot = settings || null;
@@ -11128,9 +11137,15 @@ function setGlobalHeaderFromSettings(settings) {
 function sanitizeFontAssetName(name) {
   const raw = String(name || "").trim();
   if (!raw) return "";
-  if (raw.includes("/") || raw.includes("\\") || raw.includes("..")) return "";
-  if (!/^[A-Za-z0-9._-]+\.(otf|ttf|woff2?)$/i.test(raw)) return "";
-  return raw;
+  // Backward-compat: accept plain filenames and treat them as bundled.
+  if (/^[A-Za-z0-9._-]+\.(otf|ttf|woff2?)$/i.test(raw)) return `bundled:${raw}`;
+  const m = raw.match(/^(bundled|user):(.*)$/);
+  if (!m) return "";
+  const origin = m[1];
+  const fileName = String(m[2] || "").trim();
+  if (fileName.includes("/") || fileName.includes("\\") || fileName.includes("..")) return "";
+  if (!/^[A-Za-z0-9._-]+\.(otf|ttf|woff2?)$/i.test(fileName)) return "";
+  return `${origin}:${fileName}`;
 }
 
 function setAbc2svgFontsFromSettings(settings) {
@@ -11139,39 +11154,69 @@ function setAbc2svgFontsFromSettings(settings) {
   abc2svgTextFontFile = sanitizeFontAssetName(settings.abc2svgTextFontFile);
 }
 
+function filePathToFileUrl(filePath) {
+  const raw = String(filePath || "");
+  if (!raw) return "";
+  const normalized = raw.replace(/\\/g, "/");
+  const prefix = normalized.startsWith("/") ? "file://" : "file:///";
+  // Best-effort: keep it simple; spaces are the common case.
+  return prefix + encodeURI(normalized);
+}
+
 function buildAbc2svgFontHeaderLayer() {
   const lines = [];
   const comment = "% ABCarus: font overrides (auto)";
 
   if (abc2svgNotationFontFile) {
-    const url = `../../assets/fonts/notation/${abc2svgNotationFontFile}`;
-    lines.push(`%%musicfont url("${url}") *`);
+    const m = abc2svgNotationFontFile.match(/^(bundled|user):(.*)$/);
+    if (m) {
+      const origin = m[1];
+      const fileName = m[2];
+      const url = origin === "bundled"
+        ? `../../assets/fonts/notation/${fileName}`
+        : (fontDirs && fontDirs.userDir
+          ? filePathToFileUrl(window.api && window.api.pathJoin ? window.api.pathJoin(fontDirs.userDir, fileName) : `${fontDirs.userDir}/${fileName}`)
+          : "");
+      if (url) lines.push(`%%musicfont url("${url}") *`);
+    }
   }
 
   if (abc2svgTextFontFile) {
-    const url = `../../assets/fonts/notation/${abc2svgTextFontFile}`;
-    const directives = [
-      "annotationfont",
-      "footerfont",
-      "headerfont",
-      "historyfont",
-      "infofont",
-      "titlefont",
-      "subtitlefont",
-      "composerfont",
-      "partsfont",
-      "textfont",
-      "gchordfont",
-      "tempofont",
-      "tupletfont",
-      "voicefont",
-      "vocalfont",
-      "wordsfont",
-      "measurefont",
-      "repeatfont",
-    ];
-    for (const d of directives) {
-      lines.push(`%%${d} url("${url}") *`);
+    const m = abc2svgTextFontFile.match(/^(bundled|user):(.*)$/);
+    let url = "";
+    if (m) {
+      const origin = m[1];
+      const fileName = m[2];
+      url = origin === "bundled"
+        ? `../../assets/fonts/notation/${fileName}`
+        : (fontDirs && fontDirs.userDir
+          ? filePathToFileUrl(window.api && window.api.pathJoin ? window.api.pathJoin(fontDirs.userDir, fileName) : `${fontDirs.userDir}/${fileName}`)
+          : "");
+    }
+    if (url) {
+      const directives = [
+        "annotationfont",
+        "footerfont",
+        "headerfont",
+        "historyfont",
+        "infofont",
+        "titlefont",
+        "subtitlefont",
+        "composerfont",
+        "partsfont",
+        "textfont",
+        "gchordfont",
+        "tempofont",
+        "tupletfont",
+        "voicefont",
+        "vocalfont",
+        "wordsfont",
+        "measurefont",
+        "repeatfont",
+      ];
+      for (const d of directives) {
+        lines.push(`%%${d} url("${url}") *`);
+      }
     }
   }
 
