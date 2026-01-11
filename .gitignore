@@ -35,5 +35,9 @@ assets/icons/ABCarus.iconset/
 third_party/sf2/*.sf2
 !third_party/sf2/TimGM6mb.sf2
 
+# Notation fonts: Finale Jazz fonts are NOT redistributable (keep local only)
+assets/fonts/notation/FinaleJazz.otf
+assets/fonts/notation/FinaleJazzText.otf
+
 # Dependencies
 node_modules/
