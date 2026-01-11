@@ -425,6 +425,20 @@ if(!s_p||!s_p.p_s)
 continue
 for(i=0;i<s_p.p_s.length;i++){if(s_p.p_s[i]==s){po.i_p=i
 return}}}}
+// Fallback: when starting playback in the middle of a part, some timelines fail to resolve i_p via ts_prev.
+// Infer the current part index from the nearest preceding part marker and the parts sequence.
+if(po.i_p==undefined){var first=null,parts=null,letter=null
+for(s=po.s_cur;s;s=s.ts_next){if(s.parts){first=s
+break}
+if(s.part1&&s.part1.p_s){first=s.part1
+break}}
+if(first&&first.parts){parts=first.parts
+for(s=po.s_cur;s;s=s.prev){if(s.part&&s.part.text){letter=s.part.text[0]
+break}}
+if(!letter){for(s=po.s_cur;s;s=s.ts_prev){if(s.part&&s.part.text){letter=s.part.text[0]
+break}}}
+if(letter){for(i=0;i<parts.length;i++){if(parts[i]==letter){po.i_p=i
+break}}}}}
 if(po.stop){if(po.onend)
 po.onend(po.repv)
 return}
