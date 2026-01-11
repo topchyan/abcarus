@@ -10048,6 +10048,7 @@ let lastPlaybackKeyOrderWarning = null;
 let playbackStartToken = 0;
 let lastPlaybackGuardMessage = "";
 let lastPlaybackAbortMessage = "";
+let playbackNeedsReprepare = false;
 
 function clearPlaybackNoteOnEls() {
   for (const el of lastPlaybackNoteOnEls) {
@@ -10529,6 +10530,7 @@ function resetPlaybackState() {
   isPaused = false;
   waitingForFirstNote = false;
   isPreviewing = false;
+  playbackNeedsReprepare = true;
   lastPlaybackIdx = null;
   lastRenderIdx = null;
   lastStartPlaybackIdx = 0;
@@ -11261,6 +11263,8 @@ function stopPlaybackTransport() {
     suppressOnEnd = true;
     try { player.stop(); } catch {}
   }
+  // abc2svg playback mutates internal tune/parts structures; force a clean re-prepare after Stop.
+  playbackNeedsReprepare = true;
   isPlaying = false;
   isPaused = false;
   waitingForFirstNote = false;
@@ -13020,6 +13024,7 @@ async function preparePlayback() {
     player.stop();
   }
   if (typeof p.clear === "function") p.clear();
+  playbackNeedsReprepare = false;
 
   try { sessionStorage.setItem("audio", "sf2"); } catch {}
 
@@ -13486,7 +13491,13 @@ async function startPlaybackFromRange(rangeOverride) {
 
   clearNoteSelection();
   const sourceKey = getPlaybackSourceKey();
-  const canReuse = playbackState && lastPreparedPlaybackKey && lastPreparedPlaybackKey === sourceKey && player;
+  const canReuse = (
+    !playbackNeedsReprepare
+    && playbackState
+    && lastPreparedPlaybackKey
+    && lastPreparedPlaybackKey === sourceKey
+    && player
+  );
   waitingForFirstNote = true;
   try {
     if (!canReuse) {
