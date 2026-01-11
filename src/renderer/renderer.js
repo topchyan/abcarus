@@ -10264,7 +10264,28 @@ function setFocusModeEnabled(nextEnabled) {
     focusPrevRenderZoom = readRenderZoomCss();
     requestAnimationFrame(() => {
       const fit = computeFocusFitZoom();
-      if (fit != null) setRenderZoomCss(fit);
+      // Focus auto-zooms to use the available space, but must never *reduce* the user's current zoom.
+      // (Users often enter Focus specifically after increasing zoom for readability.)
+      const prev = Number(focusPrevRenderZoom);
+      const prevZoom = (Number.isFinite(prev) && prev > 0) ? prev : null;
+      const nowZoomRaw = readRenderZoomCss();
+      const nowZoom = (Number.isFinite(nowZoomRaw) && nowZoomRaw > 0) ? nowZoomRaw : null;
+      const applied = (fit != null)
+        ? Math.max(prevZoom || 0, nowZoom || 0, fit)
+        : null;
+      if (applied != null) setRenderZoomCss(applied);
+      if (window.__abcarusDebugFocus) {
+        try {
+          const cssZoom = getComputedStyle(document.documentElement).getPropertyValue("--render-zoom");
+          console.log("[abcarus][focus] apply " + JSON.stringify({
+            prevZoom,
+            nowZoom,
+            fit,
+            applied,
+            cssZoom: String(cssZoom || "").trim(),
+          }));
+        } catch {}
+      }
     });
   } else if (focusPrevRenderZoom != null) {
     setRenderZoomCss(focusPrevRenderZoom);
@@ -14423,12 +14444,14 @@ async function maybeRunDevAutoscrollDemo() {
   const wantFocus = String(cfg.ABCARUS_DEV_FOCUS || "").trim() === "1";
   const wantPlay = String(cfg.ABCARUS_DEV_AUTOPLAY || "").trim() === "1";
   const wantDebug = String(cfg.ABCARUS_DEV_AUTOSCROLL_DEBUG || "").trim() === "1";
+  const wantFocusDebug = String(cfg.ABCARUS_DEV_FOCUS_DEBUG || "").trim() === "1";
   const quitAfter = String(cfg.ABCARUS_DEV_QUIT || "").trim() === "1";
   const modeSpec = String(cfg.ABCARUS_DEV_AUTOSCROLL_MODE || "").trim();
   const forcedZoom = Number(String(cfg.ABCARUS_DEV_RENDER_ZOOM || "").trim());
   const mutateSettings = String(cfg.ABCARUS_DEV_MUTATE_SETTINGS || "").trim() === "1";
 
   if (wantDebug) window.__abcarusDebugAutoscroll = true;
+  if (wantFocusDebug) window.__abcarusDebugFocus = true;
 
   let restoreSettingsPatch = null;
 
