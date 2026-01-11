@@ -6228,7 +6228,7 @@ async function goToMeasureFromMenu() {
     const range = findMeasureRangeAt(text, pos);
     if (range && Number.isFinite(range.start) && Number.isFinite(range.end) && range.end > range.start) {
       setPracticeBarHighlight({ from: range.start, to: range.end });
-      highlightSvgPracticeBarAtEditorOffset(range.start);
+      highlightSvgPracticeBarAtEditorOffset(pos);
       const chosen = lastSvgPracticeBarEls.length ? pickClosestNoteElement(lastSvgPracticeBarEls) : null;
       if (chosen) maybeScrollRenderToNote(chosen);
       transportJumpHighlightActive = true;
@@ -7482,11 +7482,7 @@ function renderNow() {
           }
           if (!practiceEnabled && !isPlaybackBusy() && transportJumpHighlightActive && Number.isFinite(anchor)) {
             try {
-              const editorText = editorView.state.doc.toString();
-              const measure = findMeasureRangeAt(editorText, anchor);
-              if (measure && Number.isFinite(measure.start)) {
-                highlightSvgPracticeBarAtEditorOffset(measure.start);
-              }
+              highlightSvgPracticeBarAtEditorOffset(anchor);
             } catch {}
           }
         }
