@@ -193,6 +193,12 @@ main {
   line-height: 1.2;
 }
 
+.controls button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .controls button:hover,
 .sidebar-action:hover,
 .file-header-actions button:hover,
