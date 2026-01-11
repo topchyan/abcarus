@@ -12673,7 +12673,6 @@ function detectKeyFieldNotLastBeforeBody(text) {
   const lines = String(text || "").split(/\r\n|\n|\r/);
   const isTuneStart = (line) => /^\s*X:/.test(line);
   const isFieldLine = (line) => /^\s*[A-Za-z]:/.test(line);
-  const isInlineFieldLine = (line) => isInlineFieldOnlyLine(line);
   const isContinuationLine = (line) => /^\s*\+:\s*/.test(line);
   const isKeyLine = (line) => /^\s*K:/.test(line);
   const isCommentLine = (line) => /^\s*%/.test(line);
@@ -12717,7 +12716,10 @@ function detectKeyFieldNotLastBeforeBody(text) {
       }
       if (!trimmed) continue;
       if (isCommentLine(raw)) continue;
-      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw) || isInlineFieldLine(raw)) continue;
+      // Inline field-only lines like `[P:A]` or `[M:...]` are tune-body directives (even if they contain no notes).
+      // Treat them as the body start so we don't reorder K: past them (it can break P: parts playback).
+      if (isInlineFieldOnlyLine(raw)) { bodyStart = j; break; }
+      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw)) continue;
       bodyStart = j;
       break;
     }
@@ -12728,7 +12730,7 @@ function detectKeyFieldNotLastBeforeBody(text) {
       const trimmed = raw.trim();
       if (!trimmed) continue;
       if (isCommentLine(raw)) continue;
-      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw) || isInlineFieldLine(raw)) {
+      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw)) {
         firstOffender = { line: j + 1, text: raw };
         break;
       }
@@ -12772,7 +12774,6 @@ function normalizeKeyFieldToBeLastBeforeBodyForPlayback(text) {
   const lines = String(text || "").split(/\r\n|\n|\r/);
   const isTuneStart = (line) => /^\s*X:/.test(line);
   const isFieldLine = (line) => /^\s*[A-Za-z]:/.test(line);
-  const isInlineFieldLine = (line) => isInlineFieldOnlyLine(line);
   const isContinuationLine = (line) => /^\s*\+:\s*/.test(line);
   const isKeyLine = (line) => /^\s*K:/.test(line);
   const isCommentLine = (line) => /^\s*%/.test(line);
@@ -12816,7 +12817,10 @@ function normalizeKeyFieldToBeLastBeforeBodyForPlayback(text) {
       }
       if (!trimmed) continue;
       if (isCommentLine(raw)) continue;
-      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw) || isInlineFieldLine(raw)) continue;
+      // Inline field-only lines like `[P:A]` or `[M:...]` are tune-body directives (even if they contain no notes).
+      // Treat them as the body start so we don't reorder K: past them (it can break P: parts playback).
+      if (isInlineFieldOnlyLine(raw)) { bodyStart = j; break; }
+      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw)) continue;
       bodyStart = j;
       break;
     }
@@ -12828,7 +12832,7 @@ function normalizeKeyFieldToBeLastBeforeBodyForPlayback(text) {
       const trimmed = raw.trim();
       if (!trimmed) continue;
       if (isCommentLine(raw)) continue;
-      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw) || isInlineFieldLine(raw)) {
+      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw)) {
         hasPostKeyHeader = true;
         break;
       }
