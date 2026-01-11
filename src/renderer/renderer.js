@@ -10315,11 +10315,31 @@ function debugAutoScroll(tag, detail) {
   if (now - playbackAutoScrollDebugLastAt < 600) return;
   playbackAutoScrollDebugLastAt = now;
   try {
-    const debug = { ...(detail || {}) };
-    if (debug && typeof debug === "object") {
-      debug.zoom = Math.round(getRenderZoomFactor() * 100) / 100;
+    const debug = (detail && typeof detail === "object") ? { ...detail } : {};
+    debug.zoom = Math.round(getRenderZoomFactor() * 100) / 100;
+    if ($renderPane) {
+      debug.pane = {
+        top: Math.round($renderPane.scrollTop),
+        left: Math.round($renderPane.scrollLeft),
+        scrollH: Math.round($renderPane.scrollHeight),
+        scrollW: Math.round($renderPane.scrollWidth),
+        clientH: Math.round($renderPane.clientHeight),
+        clientW: Math.round($renderPane.clientWidth),
+      };
     }
-    console.log(`[abcarus][autoscroll] ${tag}`, debug || "");
+    const msgParts = [`[abcarus][autoscroll] ${tag}`];
+    if (debug.mode) msgParts.push(`mode=${debug.mode}`);
+    if (Number.isFinite(debug.clampedTop) && Number.isFinite(debug.nextTop)) {
+      msgParts.push(`top=${debug.clampedTop}/${Math.round(debug.nextTop)}`);
+    }
+    if (Number.isFinite(debug.cursorTop) && Number.isFinite(debug.cursorBottom) && Number.isFinite(debug.viewTop) && Number.isFinite(debug.viewBottom)) {
+      msgParts.push(`cursorY=${debug.cursorTop}..${debug.cursorBottom}`);
+      msgParts.push(`viewY=${debug.viewTop}..${debug.viewBottom}`);
+    }
+    if (debug.pane && Number.isFinite(debug.pane.scrollH) && Number.isFinite(debug.pane.clientH)) {
+      msgParts.push(`scrollY=${debug.pane.top}/${Math.max(0, debug.pane.scrollH - debug.pane.clientH)}`);
+    }
+    console.log(msgParts.join(" "), debug);
   } catch {}
 }
 
