@@ -10032,6 +10032,7 @@ let playbackParseErrors = [];
 let playbackSanitizeWarnings = [];
 let lastPlaybackTuneInfo = null;
 let lastPlaybackOnIstart = null;
+let lastPlaybackHasParts = false;
 let pendingPlaybackUiIstart = null;
 let pendingPlaybackUiRaf = null;
 let lastPlaybackNoteOnEls = [];
@@ -13082,6 +13083,7 @@ async function preparePlayback() {
   };
   const abc = new AbcCtor(user);
   const playbackPayload = getPlaybackPayload();
+  lastPlaybackHasParts = /\nP\s*:/.test(`\n${playbackPayload.text || ""}`) || /\[\s*P\s*:/i.test(playbackPayload.text || "");
   if (Array.isArray(playbackSanitizeWarnings) && playbackSanitizeWarnings.length) {
     showToast("Playback may vary (ABC sanitized for stability).", 3600);
   }
@@ -13493,6 +13495,7 @@ async function startPlaybackFromRange(rangeOverride) {
   const sourceKey = getPlaybackSourceKey();
   const canReuse = (
     !playbackNeedsReprepare
+    && !lastPlaybackHasParts
     && playbackState
     && lastPreparedPlaybackKey
     && lastPreparedPlaybackKey === sourceKey
@@ -13621,7 +13624,14 @@ function pausePlayback() {
 async function startPlaybackAtMeasureOffset(delta) {
   clearNoteSelection();
   const sourceKey = getPlaybackSourceKey();
-  const canReuse = playbackState && lastPreparedPlaybackKey && lastPreparedPlaybackKey === sourceKey && player;
+  const canReuse = (
+    !playbackNeedsReprepare
+    && !lastPlaybackHasParts
+    && playbackState
+    && lastPreparedPlaybackKey
+    && lastPreparedPlaybackKey === sourceKey
+    && player
+  );
   if (!canReuse) {
     stopPlaybackForRestart();
     await preparePlayback();
