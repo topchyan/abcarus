@@ -5986,10 +5986,134 @@ function findMeasureStartOffsetByNumber(text, measureNumber) {
       currentMeasure += 1;
       currentStart = j;
       if (currentMeasure === target) return currentStart;
+
+      // Skip the rest of the boundary token sequence to avoid double-counting "||", "|]", "|:", etc.
+      i = j - 1;
     }
   }
 
   return null;
+}
+
+let renderMeasureIndexCache = null; // { key, offset, istarts, anchor, byNumber }
+
+function buildMeasureIstartsFromAbc2svg(firstSymbol) {
+  const istarts = [];
+  const pushUnique = (v) => {
+    if (!Number.isFinite(v)) return;
+    if (!istarts.length || istarts[istarts.length - 1] !== v) istarts.push(v);
+  };
+  const isBarLikeSymbol = (symbol) => !!(symbol && (symbol.bar_type || symbol.type === 14));
+  let s = firstSymbol;
+  let guard = 0;
+  if (s && Number.isFinite(s.istart)) pushUnique(s.istart);
+  while (s && guard < 200000) {
+    if (isBarLikeSymbol(s) && s.ts_next && Number.isFinite(s.ts_next.istart)) {
+      pushUnique(s.ts_next.istart);
+    }
+    s = s.ts_next;
+    guard += 1;
+  }
+  const out = [];
+  let last = null;
+  for (const v of istarts.slice().sort((a, b) => a - b)) {
+    if (!Number.isFinite(v)) continue;
+    if (last == null || v !== last) out.push(v);
+    last = v;
+  }
+  return out;
+}
+
+function buildMeasureStartsByNumberFromAbc2svg(firstSymbol) {
+  const byNumber = new Map(); // number -> [istart...]
+  const push = (n, istart) => {
+    const num = Number(n);
+    if (!Number.isFinite(num)) return;
+    const start = Number(istart);
+    if (!Number.isFinite(start)) return;
+    const list = byNumber.get(num) || [];
+    if (!list.length || list[list.length - 1] !== start) list.push(start);
+    byNumber.set(num, list);
+  };
+  const isBarLikeSymbol = (symbol) => !!(symbol && (symbol.bar_type || symbol.type === 14));
+
+  // Measure 1 start should point at the first playable symbol, not at header tokens like Q:/K:/etc.
+  // abc2svg's bar_num typically labels the barline *ending* measure 1 as 2, so we may not get a natural
+  // (bar_num=1) mapping from barlines; we seed measure 1 explicitly.
+  let s = firstSymbol;
+  let guard = 0;
+  let firstPlayableStart = null;
+  while (s && guard < 200000) {
+    const playable = Number.isFinite(s.dur) && s.dur > 0;
+    if (playable && Number.isFinite(s.istart)) { firstPlayableStart = s.istart; break; }
+    s = s.ts_next;
+    guard += 1;
+  }
+  if (firstPlayableStart != null) {
+    // Also expose as bar 0 for pickup-heavy sources.
+    push(0, firstPlayableStart);
+    push(1, firstPlayableStart);
+  }
+
+  s = firstSymbol;
+  guard = 0;
+  while (s && guard < 200000) {
+    if (isBarLikeSymbol(s) && s.ts_next && Number.isFinite(s.ts_next.istart) && Number.isFinite(s.bar_num)) {
+      push(s.bar_num, s.ts_next.istart);
+    }
+    s = s.ts_next;
+    guard += 1;
+  }
+
+  // Normalize: sort each list and dedupe.
+  for (const [k, list] of byNumber.entries()) {
+    const out = [];
+    let last = null;
+    for (const v of list.slice().sort((a, b) => a - b)) {
+      if (!Number.isFinite(v)) continue;
+      if (last == null || v !== last) out.push(v);
+      last = v;
+    }
+    byNumber.set(k, out);
+  }
+
+  return byNumber;
+}
+
+function getRenderMeasureIndex() {
+  if (!editorView) return null;
+  const payload = getRenderPayload();
+  const key = `${payload.offset || 0}|||${payload.text || ""}`;
+  if (renderMeasureIndexCache && renderMeasureIndexCache.key === key) return renderMeasureIndexCache;
+
+  try {
+    const AbcCtor = getAbcCtor();
+    const user = {
+      img_out: () => {},
+      err: () => {},
+      errmsg: () => {},
+    };
+    const abc = new AbcCtor(user);
+    abc.tosvg("nav_measures", payload.text || "");
+    const tunes = abc.tunes || [];
+    const first = tunes && tunes[0] ? tunes[0][0] : null;
+    if (!first) return null;
+    const istarts = buildMeasureIstartsFromAbc2svg(first);
+    if (!istarts.length) return null;
+    const byNumber = buildMeasureStartsByNumberFromAbc2svg(first);
+    const renderOffset = Number(payload.offset) || 0;
+    const firstBodyStart = findMeasureStartOffsetByNumber(payload.text || "", 1);
+    const minIstart = Math.max(
+      renderOffset,
+      Number.isFinite(firstBodyStart) ? firstBodyStart : 0
+    );
+    let anchor = istarts.findIndex((v) => v >= minIstart);
+    if (!Number.isFinite(anchor) || anchor < 0) anchor = 0;
+    renderMeasureIndexCache = { key, offset: renderOffset, istarts, anchor, byNumber };
+    return renderMeasureIndexCache;
+  } catch {
+    return null;
+  }
 }
 
 let goToMeasureModalEls = null;
@@ -6013,13 +6137,13 @@ function getGoToMeasureModal() {
 
   const label = document.createElement("label");
   label.className = "abcarus-modal-label";
-  label.textContent = "Measure number (starting at 1):";
+  label.textContent = "Measure number:";
 
   const input = document.createElement("input");
   input.className = "abcarus-modal-input";
   input.type = "number";
   input.inputMode = "numeric";
-  input.min = "1";
+  input.min = "0";
   input.step = "1";
   input.autocomplete = "off";
   input.spellcheck = false;
@@ -6123,12 +6247,45 @@ async function goToMeasureFromMenu() {
   const raw = await promptGoToMeasureNumber();
   if (raw == null) return;
   const n = Number(String(raw).trim());
-  if (!Number.isFinite(n) || n < 1 || Math.floor(n) !== n) {
+  if (!Number.isFinite(n) || n < 0 || Math.floor(n) !== n) {
     showToast("Invalid measure number.", 2400);
     return;
   }
   const text = getEditorValue();
-  const idx = findMeasureStartOffsetByNumber(text, n);
+  let idx = null;
+  const measureIndex = getRenderMeasureIndex();
+  if (
+    idx == null
+    && measureIndex
+    && measureIndex.byNumber
+    && typeof measureIndex.byNumber.get === "function"
+  ) {
+    const list = measureIndex.byNumber.get(n);
+    if (Array.isArray(list) && list.length) {
+      const renderOffset = Number(measureIndex.offset) || 0;
+      const cursor = editorView ? editorView.state.selection.main.anchor : 0;
+      const currentRenderIdx = (Number(cursor) || 0) + renderOffset;
+      let chosen = list[0];
+      for (const v of list) {
+        if (Number.isFinite(v) && v >= currentRenderIdx) { chosen = v; break; }
+      }
+      if (Number.isFinite(chosen)) idx = Math.max(0, Math.floor(chosen - renderOffset));
+    }
+  }
+  if (idx == null && n >= 1 && measureIndex && Array.isArray(measureIndex.istarts) && measureIndex.istarts.length) {
+    const anchor = Number.isFinite(measureIndex.anchor) ? measureIndex.anchor : 0;
+    const slot = (n - 1) + anchor;
+    const istart = measureIndex.istarts[slot];
+    if (Number.isFinite(istart)) {
+      idx = Math.max(0, Math.floor(istart - (Number(measureIndex.offset) || 0)));
+      if (window.__abcarusDebugGoToMeasure) {
+        try {
+          console.log("[abcarus] goToMeasure", { n, anchor, slot, istart, renderOffset: measureIndex.offset, idx });
+        } catch {}
+      }
+    }
+  }
+  if (idx == null && n >= 1) idx = findMeasureStartOffsetByNumber(text, n);
   if (idx == null) {
     showToast(`Measure ${n} not found.`, 2600);
     return;
@@ -6146,7 +6303,7 @@ async function goToMeasureFromMenu() {
     const range = findMeasureRangeAt(text, pos);
     if (range && Number.isFinite(range.start) && Number.isFinite(range.end) && range.end > range.start) {
       setPracticeBarHighlight({ from: range.start, to: range.end });
-      highlightSvgPracticeBarAtEditorOffset(range.start);
+      highlightSvgPracticeBarAtEditorOffset(pos);
       const chosen = lastSvgPracticeBarEls.length ? pickClosestNoteElement(lastSvgPracticeBarEls) : null;
       if (chosen) maybeScrollRenderToNote(chosen);
       transportJumpHighlightActive = true;
@@ -7400,11 +7557,7 @@ function renderNow() {
           }
           if (!practiceEnabled && !isPlaybackBusy() && transportJumpHighlightActive && Number.isFinite(anchor)) {
             try {
-              const editorText = editorView.state.doc.toString();
-              const measure = findMeasureRangeAt(editorText, anchor);
-              if (measure && Number.isFinite(measure.start)) {
-                highlightSvgPracticeBarAtEditorOffset(measure.start);
-              }
+              highlightSvgPracticeBarAtEditorOffset(anchor);
             } catch {}
           }
         }
@@ -7439,6 +7592,7 @@ updateHeaderStateUI();
 initPaneResizer();
 initRightPaneResizer();
 initSidebarResizer();
+initPlaybackAutoScrollListeners();
 setLibraryVisible(false);
 
 // Preload soundfont in background to avoid first-play delay.
@@ -9639,6 +9793,7 @@ if (window.api && typeof window.api.getSettings === "function") {
       setSoundfontFromSettings(settings);
       setDrumVelocityFromSettings(settings);
       setFollowFromSettings(settings);
+      setPlaybackAutoScrollFromSettings(settings);
       applyLibraryPrefsFromSettings(settings);
       updateGlobalHeaderToggle();
       updateErrorsFeatureUI();
@@ -9667,6 +9822,7 @@ if (window.api && typeof window.api.onSettingsChanged === "function") {
     setSoundfontFromSettings(settings);
     setDrumVelocityFromSettings(settings);
     setFollowFromSettings(settings);
+    setPlaybackAutoScrollFromSettings(settings);
     applyLibraryPrefsFromSettings(settings);
     updateGlobalHeaderToggle();
     updateErrorsFeatureUI();
@@ -10008,6 +10164,13 @@ let followPlayheadPad = 8;
 let followPlayheadBetweenNotesWeight = 1;
 let followPlayheadShift = 0;
 let followPlayheadFirstBias = 6;
+let playbackAutoScrollMode = "keep";
+let playbackAutoScrollHorizontal = true;
+let playbackAutoScrollPauseMs = 1800;
+let playbackAutoScrollManualUntil = 0;
+let playbackAutoScrollAnim = null; // {raf,startAt,duration,fromTop,fromLeft,toTop,toLeft}
+let playbackAutoScrollProgrammatic = false;
+let playbackAutoScrollLastAt = 0;
 let followVoiceId = null;
 let followVoiceIndex = null;
 let drumVelocityMap = buildDefaultDrumVelocityMap();
@@ -10022,6 +10185,7 @@ let playbackParseErrors = [];
 let playbackSanitizeWarnings = [];
 let lastPlaybackTuneInfo = null;
 let lastPlaybackOnIstart = null;
+let lastPlaybackHasParts = false;
 let pendingPlaybackUiIstart = null;
 let pendingPlaybackUiRaf = null;
 let lastPlaybackNoteOnEls = [];
@@ -10038,6 +10202,7 @@ let lastPlaybackKeyOrderWarning = null;
 let playbackStartToken = 0;
 let lastPlaybackGuardMessage = "";
 let lastPlaybackAbortMessage = "";
+let playbackNeedsReprepare = false;
 
 function clearPlaybackNoteOnEls() {
   for (const el of lastPlaybackNoteOnEls) {
@@ -10059,6 +10224,181 @@ function resetPlaybackUiState() {
     try { cancelAnimationFrame(pendingPlaybackUiRaf); } catch {}
     pendingPlaybackUiRaf = null;
   }
+  playbackAutoScrollManualUntil = 0;
+  cancelPlaybackAutoScroll();
+}
+
+function normalizeAutoScrollMode(raw) {
+  const s = String(raw || "").trim().toLowerCase();
+  if (!s) return "keep";
+  if (s.startsWith("off")) return "off";
+  if (s.startsWith("page")) return "page";
+  if (s.startsWith("center")) return "center";
+  return "keep";
+}
+
+function initPlaybackAutoScrollListeners() {
+  if (!$renderPane) return;
+  const markManual = () => {
+    const ms = clampNumber(playbackAutoScrollPauseMs, 0, 5000, 1800);
+    playbackAutoScrollManualUntil = (typeof performance !== "undefined" ? performance.now() : Date.now()) + ms;
+  };
+  $renderPane.addEventListener("wheel", () => markManual(), { passive: true });
+  $renderPane.addEventListener("pointerdown", () => markManual(), { passive: true });
+  $renderPane.addEventListener("scroll", () => {
+    if (playbackAutoScrollProgrammatic) return;
+    if (playbackAutoScrollAnim && playbackAutoScrollAnim.raf != null) return;
+    markManual();
+  }, { passive: true });
+}
+
+function cancelPlaybackAutoScroll() {
+  if (playbackAutoScrollAnim && playbackAutoScrollAnim.raf != null) {
+    try { cancelAnimationFrame(playbackAutoScrollAnim.raf); } catch {}
+  }
+  playbackAutoScrollAnim = null;
+  playbackAutoScrollProgrammatic = false;
+}
+
+function animateRenderPaneScrollTo(targetTop, targetLeft, durationMs) {
+  if (!$renderPane) return;
+  const maxTop = Math.max(0, $renderPane.scrollHeight - $renderPane.clientHeight);
+  const maxLeft = Math.max(0, $renderPane.scrollWidth - $renderPane.clientWidth);
+  const toTop = Math.max(0, Math.min(maxTop, Number(targetTop) || 0));
+  const toLeft = Math.max(0, Math.min(maxLeft, Number(targetLeft) || 0));
+
+  const fromTop = $renderPane.scrollTop;
+  const fromLeft = $renderPane.scrollLeft;
+  const dx = Math.abs(toLeft - fromLeft);
+  const dy = Math.abs(toTop - fromTop);
+  if (dx < 1 && dy < 1) return;
+
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  const duration = clampNumber(durationMs, 0, 2000, 250);
+  cancelPlaybackAutoScroll();
+  playbackAutoScrollProgrammatic = true;
+
+  playbackAutoScrollAnim = {
+    raf: null,
+    startAt: now,
+    duration,
+    fromTop,
+    fromLeft,
+    toTop,
+    toLeft,
+  };
+
+  const step = (tNow) => {
+    if (!$renderPane || !playbackAutoScrollAnim) return;
+    const a = playbackAutoScrollAnim;
+    const t = a.duration > 0 ? Math.max(0, Math.min(1, (tNow - a.startAt) / a.duration)) : 1;
+    const ease = 1 - Math.pow(1 - t, 3);
+    const nextTop = a.fromTop + (a.toTop - a.fromTop) * ease;
+    const nextLeft = a.fromLeft + (a.toLeft - a.fromLeft) * ease;
+    $renderPane.scrollTop = nextTop;
+    $renderPane.scrollLeft = nextLeft;
+    if (t < 1) {
+      a.raf = requestAnimationFrame(step);
+    } else {
+      playbackAutoScrollAnim = null;
+      playbackAutoScrollProgrammatic = false;
+    }
+  };
+  playbackAutoScrollAnim.raf = requestAnimationFrame(step);
+}
+
+function getRenderZoomFactor() {
+  try {
+    if ($out) {
+      const raw = getComputedStyle($out).zoom;
+      const v = Number(String(raw || "").trim());
+      if (Number.isFinite(v) && v > 0) return v;
+    }
+  } catch {}
+  const fromSettings = latestSettingsSnapshot && Number(latestSettingsSnapshot.renderZoom);
+  if (Number.isFinite(fromSettings) && fromSettings > 0) return fromSettings;
+  try {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue("--render-zoom");
+    const v = Number(String(raw || "").trim());
+    if (Number.isFinite(v) && v > 0) return v;
+  } catch {}
+  return 1;
+}
+
+function maybeAutoScrollRenderToCursor(el) {
+  if (!$renderPane) return;
+  if (!el) return;
+  if (!isPlaybackBusy()) return;
+
+  const mode = normalizeAutoScrollMode(playbackAutoScrollMode);
+  if (mode === "off") return;
+
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  if (now < playbackAutoScrollManualUntil) return;
+  if (now - playbackAutoScrollLastAt < 80) return;
+  playbackAutoScrollLastAt = now;
+
+  const targetEl = lastSvgPlayheadEl || el;
+  const containerRect = $renderPane.getBoundingClientRect();
+  const targetRect = targetEl.getBoundingClientRect();
+  const scale = getRenderZoomFactor();
+  const offsetTop = $renderPane.scrollTop + (targetRect.top - containerRect.top) / scale;
+  const offsetLeft = $renderPane.scrollLeft + (targetRect.left - containerRect.left) / scale;
+
+  const viewTop = $renderPane.scrollTop;
+  const viewBottom = viewTop + $renderPane.clientHeight;
+  const viewLeft = $renderPane.scrollLeft;
+  const viewRight = viewLeft + $renderPane.clientWidth;
+
+  const h = $renderPane.clientHeight || 1;
+  const w = $renderPane.clientWidth || 1;
+  const playheadH = targetRect.height / scale;
+  const topMargin = Math.max(40, h * 0.15);
+  const bottomMargin = mode === "keep"
+    ? Math.max(40, h * 0.15 + playheadH * 1.2)
+    : Math.max(40, h * (mode === "page" ? 0.25 : 0.15), playheadH * 0.8);
+  const leftMargin = Math.max(40, w * 0.12);
+  const rightMargin = Math.max(40, w * 0.12);
+
+  const cursorTop = offsetTop;
+  const cursorBottom = offsetTop + targetRect.height / scale;
+  const cursorLeft = offsetLeft;
+  const cursorRight = offsetLeft + targetRect.width / scale;
+
+  let nextTop = viewTop;
+  let nextLeft = viewLeft;
+
+  if (mode === "center") {
+    nextTop = cursorTop - h * 0.5 + (targetRect.height / scale) * 0.5;
+  } else if (mode === "page") {
+    if (cursorBottom > viewBottom - bottomMargin) {
+      nextTop = cursorTop - h * 0.1;
+    } else if (cursorTop < viewTop + topMargin) {
+      nextTop = cursorTop - h * 0.1;
+    }
+  } else {
+    if (cursorTop < viewTop + topMargin) {
+      nextTop = cursorTop - topMargin;
+    } else if (cursorBottom > viewBottom - bottomMargin) {
+      nextTop = cursorBottom - (h - bottomMargin);
+    }
+  }
+
+  const allowH = Boolean(playbackAutoScrollHorizontal);
+  if (allowH) {
+    if (mode === "center") {
+      nextLeft = cursorLeft - w * 0.5 + (targetRect.width / scale) * 0.5;
+    } else {
+      if (cursorLeft < viewLeft + leftMargin) {
+        nextLeft = cursorLeft - leftMargin;
+      } else if (cursorRight > viewRight - rightMargin) {
+        nextLeft = cursorRight - (w - rightMargin);
+      }
+    }
+  }
+
+  const duration = mode === "page" ? 420 : (mode === "center" ? 160 : 260);
+  animateRenderPaneScrollTo(nextTop, nextLeft, duration);
 }
 
 function playbackGuardError(message) {
@@ -10344,6 +10684,7 @@ function resetPlaybackState() {
   isPaused = false;
   waitingForFirstNote = false;
   isPreviewing = false;
+  playbackNeedsReprepare = true;
   lastPlaybackIdx = null;
   lastRenderIdx = null;
   lastStartPlaybackIdx = 0;
@@ -10531,21 +10872,26 @@ function schedulePlaybackUiUpdate(istart) {
 
 function maybeScrollRenderToNote(el) {
   if (!$renderPane || !el) return;
+  if (isPlaybackBusy()) {
+    maybeAutoScrollRenderToCursor(el);
+    return;
+  }
   const containerRect = $renderPane.getBoundingClientRect();
   const targetRect = el.getBoundingClientRect();
-  const offsetTop = targetRect.top - containerRect.top + $renderPane.scrollTop;
-  const offsetLeft = targetRect.left - containerRect.left + $renderPane.scrollLeft;
+  const scale = getRenderZoomFactor();
+  const offsetTop = $renderPane.scrollTop + (targetRect.top - containerRect.top) / scale;
+  const offsetLeft = $renderPane.scrollLeft + (targetRect.left - containerRect.left) / scale;
   const viewTop = $renderPane.scrollTop;
   const viewBottom = viewTop + $renderPane.clientHeight;
   const viewLeft = $renderPane.scrollLeft;
   const viewRight = viewLeft + $renderPane.clientWidth;
-  const linePad = Math.max(80, targetRect.height * 8);
+  const linePad = Math.max(80, (targetRect.height / scale) * 8);
   if (offsetTop < viewTop + linePad) {
     $renderPane.scrollTop = Math.max(0, offsetTop - linePad);
   } else if (offsetTop > viewBottom - linePad) {
     $renderPane.scrollTop = Math.max(0, offsetTop - $renderPane.clientHeight + linePad);
   }
-  const colPad = Math.max(80, targetRect.width * 8);
+  const colPad = Math.max(80, (targetRect.width / scale) * 8);
   if (offsetLeft < viewLeft + colPad) {
     $renderPane.scrollLeft = Math.max(0, offsetLeft - colPad);
   } else if (offsetLeft > viewRight - colPad) {
@@ -10724,6 +11070,24 @@ function ensurePlayer() {
       if (on) {
         if (Number.isFinite(lastPlaybackOnIstart) && Number.isFinite(i) && i < lastPlaybackOnIstart && window.__abcarusDebugPlayback) {
           console.log("[abcarus] playback jump (repeat?)", { from: lastPlaybackOnIstart, to: i });
+        }
+        if (window.__abcarusDebugParts === true && Number.isFinite(i)) {
+          try {
+            const sym = findSymbolAtOrBefore(i);
+            const letter = (sym && sym.part && sym.part.text) ? (String(sym.part.text || "")[0] || "?") : null;
+            if (letter) console.log("[abcarus] part start", { part: letter, istart: i });
+            if (Number.isFinite(lastPlaybackOnIstart) && i < lastPlaybackOnIstart) {
+              let s = sym;
+              let guard = 0;
+              let inferred = null;
+              while (s && guard < 200000) {
+                if (s.part && s.part.text) { inferred = String(s.part.text || "")[0] || "?"; break; }
+                s = s.ts_prev;
+                guard += 1;
+              }
+              console.log("[abcarus] part jump", { from: lastPlaybackOnIstart, to: i, inferredPart: inferred });
+            }
+          } catch {}
         }
         lastPlaybackOnIstart = i;
       }
@@ -11071,6 +11435,8 @@ function stopPlaybackTransport() {
     suppressOnEnd = true;
     try { player.stop(); } catch {}
   }
+  // abc2svg playback mutates internal tune/parts structures; force a clean re-prepare after Stop.
+  playbackNeedsReprepare = true;
   isPlaying = false;
   isPaused = false;
   waitingForFirstNote = false;
@@ -11317,6 +11683,16 @@ function setFollowFromSettings(settings) {
   if (settings.followPlayback === undefined) return;
   followPlayback = settings.followPlayback !== false;
   updateFollowToggle();
+}
+
+function setPlaybackAutoScrollFromSettings(settings) {
+  if (!settings || typeof settings !== "object") return;
+  playbackAutoScrollMode = normalizeAutoScrollMode(settings.playbackAutoScrollMode);
+  playbackAutoScrollHorizontal = settings.playbackAutoScrollHorizontal !== false;
+  playbackAutoScrollPauseMs = clampNumber(settings.playbackAutoScrollPauseMs, 0, 5000, playbackAutoScrollPauseMs);
+  if (normalizeAutoScrollMode(playbackAutoScrollMode) === "off") {
+    cancelPlaybackAutoScroll();
+  }
 }
 
 function setSoundfontFromSettings(settings) {
@@ -12372,7 +12748,6 @@ function detectKeyFieldNotLastBeforeBody(text) {
   const lines = String(text || "").split(/\r\n|\n|\r/);
   const isTuneStart = (line) => /^\s*X:/.test(line);
   const isFieldLine = (line) => /^\s*[A-Za-z]:/.test(line);
-  const isInlineFieldLine = (line) => isInlineFieldOnlyLine(line);
   const isContinuationLine = (line) => /^\s*\+:\s*/.test(line);
   const isKeyLine = (line) => /^\s*K:/.test(line);
   const isCommentLine = (line) => /^\s*%/.test(line);
@@ -12416,7 +12791,10 @@ function detectKeyFieldNotLastBeforeBody(text) {
       }
       if (!trimmed) continue;
       if (isCommentLine(raw)) continue;
-      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw) || isInlineFieldLine(raw)) continue;
+      // Inline field-only lines like `[P:A]` or `[M:...]` are tune-body directives (even if they contain no notes).
+      // Treat them as the body start so we don't reorder K: past them (it can break P: parts playback).
+      if (isInlineFieldOnlyLine(raw)) { bodyStart = j; break; }
+      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw)) continue;
       bodyStart = j;
       break;
     }
@@ -12427,7 +12805,7 @@ function detectKeyFieldNotLastBeforeBody(text) {
       const trimmed = raw.trim();
       if (!trimmed) continue;
       if (isCommentLine(raw)) continue;
-      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw) || isInlineFieldLine(raw)) {
+      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw)) {
         firstOffender = { line: j + 1, text: raw };
         break;
       }
@@ -12471,7 +12849,6 @@ function normalizeKeyFieldToBeLastBeforeBodyForPlayback(text) {
   const lines = String(text || "").split(/\r\n|\n|\r/);
   const isTuneStart = (line) => /^\s*X:/.test(line);
   const isFieldLine = (line) => /^\s*[A-Za-z]:/.test(line);
-  const isInlineFieldLine = (line) => isInlineFieldOnlyLine(line);
   const isContinuationLine = (line) => /^\s*\+:\s*/.test(line);
   const isKeyLine = (line) => /^\s*K:/.test(line);
   const isCommentLine = (line) => /^\s*%/.test(line);
@@ -12515,7 +12892,10 @@ function normalizeKeyFieldToBeLastBeforeBodyForPlayback(text) {
       }
       if (!trimmed) continue;
       if (isCommentLine(raw)) continue;
-      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw) || isInlineFieldLine(raw)) continue;
+      // Inline field-only lines like `[P:A]` or `[M:...]` are tune-body directives (even if they contain no notes).
+      // Treat them as the body start so we don't reorder K: past them (it can break P: parts playback).
+      if (isInlineFieldOnlyLine(raw)) { bodyStart = j; break; }
+      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw)) continue;
       bodyStart = j;
       break;
     }
@@ -12527,7 +12907,7 @@ function normalizeKeyFieldToBeLastBeforeBodyForPlayback(text) {
       const trimmed = raw.trim();
       if (!trimmed) continue;
       if (isCommentLine(raw)) continue;
-      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw) || isInlineFieldLine(raw)) {
+      if (isDirectiveLine(raw) || isFieldLine(raw) || isContinuationLine(raw)) {
         hasPostKeyHeader = true;
         break;
       }
@@ -12820,6 +13200,7 @@ async function preparePlayback() {
     player.stop();
   }
   if (typeof p.clear === "function") p.clear();
+  playbackNeedsReprepare = false;
 
   try { sessionStorage.setItem("audio", "sf2"); } catch {}
 
@@ -12877,6 +13258,7 @@ async function preparePlayback() {
   };
   const abc = new AbcCtor(user);
   const playbackPayload = getPlaybackPayload();
+  lastPlaybackHasParts = /\nP\s*:/.test(`\n${playbackPayload.text || ""}`) || /\[\s*P\s*:/i.test(playbackPayload.text || "");
   if (Array.isArray(playbackSanitizeWarnings) && playbackSanitizeWarnings.length) {
     showToast("Playback may vary (ABC sanitized for stability).", 3600);
   }
@@ -13059,6 +13441,58 @@ function startPlaybackFromPrepared(startIdx) {
   lastRenderIdx = null;
   resumeStartIdx = null;
   suppressOnEnd = true;
+
+  if (window.__abcarusDebugParts === true) {
+    try {
+      const getPartLetterAtSymbol = (sym) => {
+        let s = sym;
+        let guard = 0;
+        while (s && guard < 200000) {
+          if (s.part && s.part.text) return String(s.part.text || "")[0] || "?";
+          s = s.ts_prev;
+          guard += 1;
+        }
+        return "?";
+      };
+      const computePartIndexLikeSnd = (sym) => {
+        let s = sym;
+        let guard = 0;
+        while (s && guard < 200000) {
+          if (s.parts) return { i_p: -1, hit: "parts", at: Number.isFinite(s.istart) ? s.istart : null };
+          const s_p = s.part1;
+          const p_s = s_p && Array.isArray(s_p.p_s) ? s_p.p_s : null;
+          if (p_s) {
+            for (let i = 0; i < p_s.length; i += 1) {
+              if (p_s[i] === s) return { i_p: i, hit: "p_s", at: Number.isFinite(s.istart) ? s.istart : null };
+            }
+          }
+          s = s.ts_prev;
+          guard += 1;
+        }
+        return { i_p: undefined, hit: null, at: null };
+      };
+      const idxInfo = computePartIndexLikeSnd(start);
+      let partsSeq = null;
+      try {
+        let s = start;
+        let guard = 0;
+        while (s && guard < 200000) {
+          if (typeof s.parts === "string" && s.parts) { partsSeq = s.parts; break; }
+          s = s.ts_prev;
+          guard += 1;
+        }
+      } catch {}
+      console.log("[abcarus] playback start (parts)", {
+        startIstart: start.istart,
+        startEditorOffset: Number.isFinite(start.istart) ? (start.istart - (playbackIndexOffset || 0)) : null,
+        partAtStart: getPartLetterAtSymbol(start),
+        i_p: idxInfo.i_p,
+        i_p_hit: idxInfo.hit,
+        i_p_at: idxInfo.at,
+        partsSeq,
+      });
+    } catch {}
+  }
 
   player.play(start, null, 0);
   isPlaying = true;
@@ -13286,7 +13720,14 @@ async function startPlaybackFromRange(rangeOverride) {
 
   clearNoteSelection();
   const sourceKey = getPlaybackSourceKey();
-  const canReuse = playbackState && lastPreparedPlaybackKey && lastPreparedPlaybackKey === sourceKey && player;
+  const canReuse = (
+    !playbackNeedsReprepare
+    && !lastPlaybackHasParts
+    && playbackState
+    && lastPreparedPlaybackKey
+    && lastPreparedPlaybackKey === sourceKey
+    && player
+  );
   waitingForFirstNote = true;
   try {
     if (!canReuse) {
@@ -13410,7 +13851,14 @@ function pausePlayback() {
 async function startPlaybackAtMeasureOffset(delta) {
   clearNoteSelection();
   const sourceKey = getPlaybackSourceKey();
-  const canReuse = playbackState && lastPreparedPlaybackKey && lastPreparedPlaybackKey === sourceKey && player;
+  const canReuse = (
+    !playbackNeedsReprepare
+    && !lastPlaybackHasParts
+    && playbackState
+    && lastPreparedPlaybackKey
+    && lastPreparedPlaybackKey === sourceKey
+    && player
+  );
   if (!canReuse) {
     stopPlaybackForRestart();
     await preparePlayback();
