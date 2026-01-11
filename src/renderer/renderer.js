@@ -10124,6 +10124,7 @@ function animateRenderPaneScrollTo(targetTop, targetLeft, durationMs) {
   const now = typeof performance !== "undefined" ? performance.now() : Date.now();
   const duration = clampNumber(durationMs, 0, 2000, 250);
   cancelPlaybackAutoScroll();
+  playbackAutoScrollProgrammatic = true;
 
   playbackAutoScrollAnim = {
     raf: null,
@@ -10142,14 +10143,13 @@ function animateRenderPaneScrollTo(targetTop, targetLeft, durationMs) {
     const ease = 1 - Math.pow(1 - t, 3);
     const nextTop = a.fromTop + (a.toTop - a.fromTop) * ease;
     const nextLeft = a.fromLeft + (a.toLeft - a.fromLeft) * ease;
-    playbackAutoScrollProgrammatic = true;
     $renderPane.scrollTop = nextTop;
     $renderPane.scrollLeft = nextLeft;
-    playbackAutoScrollProgrammatic = false;
     if (t < 1) {
       a.raf = requestAnimationFrame(step);
     } else {
       playbackAutoScrollAnim = null;
+      playbackAutoScrollProgrammatic = false;
     }
   };
   playbackAutoScrollAnim.raf = requestAnimationFrame(step);
@@ -10223,12 +10223,10 @@ function maybeAutoScrollRenderToCursor(el) {
   const h = $renderPane.clientHeight || 1;
   const w = $renderPane.clientWidth || 1;
   const playheadH = targetRect.height / scaleY;
-  const topMargin = Math.max(40, h * 0.15, playheadH * 0.8);
-  const bottomMargin = Math.max(
-    40,
-    h * (mode === "page" ? 0.25 : 0.15),
-    (mode === "keep" ? playheadH * 2.2 : playheadH * 1.4),
-  );
+  const topMargin = Math.max(40, h * 0.15);
+  const bottomBase = h * (mode === "page" ? 0.25 : 0.15);
+  const bottomExtra = Math.min(h * 0.35, playheadH * (mode === "keep" ? 1.1 : 0.9));
+  const bottomMargin = Math.max(40, bottomBase, bottomExtra);
   const leftMargin = Math.max(40, w * 0.12);
   const rightMargin = Math.max(40, w * 0.12);
 
