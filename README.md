@@ -62,6 +62,9 @@ Python is not required for basic editing/rendering/playback in development. It i
 ### Soundfonts
 ABCarus ships only one bundled soundfont (`TimGM6mb.sf2`). Additional soundfonts are optional and installed locally. See `docs/soundfonts.md`.
 
+### Notation fonts (SMuFL)
+ABCarus ships several bundled notation/text fonts (SIL OFL 1.1) for abc2svg rendering. See `docs/notation-fonts.md` and `NOTICE.md`.
+
 ### Release builds
 Release builds bundle a local Python runtime (PBS) for MusicXML import/export. See `docs/python-build-standalone.md` and `docs/python-runtime.md`.
 

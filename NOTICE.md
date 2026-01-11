@@ -70,6 +70,24 @@ the original distribution sources.
 
 ---
 
+## Notation fonts (SMuFL)
+
+ABCarus may ship additional notation/text fonts for abc2svg rendering.
+
+Included fonts (SIL Open Font License 1.1 / OFL):
+- Bravura / BravuraText — Steinberg / SMuFL project
+- Petaluma / PetalumaText / PetalumaScript — Steinberg
+- Leland / LelandText — MuseScore
+- MuseJazz / MuseJazzText — MuseScore
+
+License:
+- SIL Open Font License 1.1
+- License text: `assets/fonts/notation/OFL.txt`
+
+These fonts are bundled for rendering only; they are not sold separately.
+
+---
+
 ## CodeMirror
 
 ABCarus uses **CodeMirror** as the text editor component.
