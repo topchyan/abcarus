@@ -5995,7 +5995,7 @@ function findMeasureStartOffsetByNumber(text, measureNumber) {
   return null;
 }
 
-let renderMeasureIndexCache = null; // { key, offset, istarts }
+let renderMeasureIndexCache = null; // { key, offset, istarts, anchor }
 
 function buildMeasureIstartsFromAbc2svg(firstSymbol) {
   const istarts = [];
@@ -6044,7 +6044,15 @@ function getRenderMeasureIndex() {
     if (!first) return null;
     const istarts = buildMeasureIstartsFromAbc2svg(first);
     if (!istarts.length) return null;
-    renderMeasureIndexCache = { key, offset: Number(payload.offset) || 0, istarts };
+    const renderOffset = Number(payload.offset) || 0;
+    const firstBodyStart = findMeasureStartOffsetByNumber(payload.text || "", 1);
+    const minIstart = Math.max(
+      renderOffset,
+      Number.isFinite(firstBodyStart) ? firstBodyStart : 0
+    );
+    let anchor = istarts.findIndex((v) => v >= minIstart);
+    if (!Number.isFinite(anchor) || anchor < 0) anchor = 0;
+    renderMeasureIndexCache = { key, offset: renderOffset, istarts, anchor };
     return renderMeasureIndexCache;
   } catch {
     return null;
@@ -6190,9 +6198,16 @@ async function goToMeasureFromMenu() {
   let idx = null;
   const measureIndex = getRenderMeasureIndex();
   if (measureIndex && Array.isArray(measureIndex.istarts) && measureIndex.istarts.length) {
-    const istart = measureIndex.istarts[n - 1];
+    const anchor = Number.isFinite(measureIndex.anchor) ? measureIndex.anchor : 0;
+    const slot = (n - 1) + anchor;
+    const istart = measureIndex.istarts[slot];
     if (Number.isFinite(istart)) {
       idx = Math.max(0, Math.floor(istart - (Number(measureIndex.offset) || 0)));
+      if (window.__abcarusDebugGoToMeasure) {
+        try {
+          console.log("[abcarus] goToMeasure", { n, anchor, slot, istart, renderOffset: measureIndex.offset, idx });
+        } catch {}
+      }
     }
   }
   if (idx == null) idx = findMeasureStartOffsetByNumber(text, n);
