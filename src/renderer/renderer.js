@@ -10487,7 +10487,7 @@ function maybeAutoScrollRenderToCursor(el) {
   let nextLeft = viewLeft;
 
   if (mode === "center") {
-    nextTop = cursorTop - h * 0.5 + (targetRect.height / scale) * 0.5;
+    nextTop = cursorTop - h * 0.5 + targetRect.height * 0.5;
   } else if (mode === "page") {
     if (cursorBottom > viewBottom - bottomMargin) {
       nextTop = cursorTop - h * 0.1;
@@ -10505,7 +10505,7 @@ function maybeAutoScrollRenderToCursor(el) {
   const allowH = Boolean(playbackAutoScrollHorizontal);
   if (allowH) {
     if (mode === "center") {
-      nextLeft = cursorLeft - w * 0.5 + (targetRect.width / scale) * 0.5;
+      nextLeft = cursorLeft - w * 0.5 + targetRect.width * 0.5;
     } else {
       if (cursorLeft < viewLeft + leftMargin) {
         nextLeft = cursorLeft - leftMargin;
@@ -10516,12 +10516,32 @@ function maybeAutoScrollRenderToCursor(el) {
   }
 
   const duration = mode === "page" ? 420 : (mode === "center" ? 160 : 260);
-  debugAutoScroll("scroll", {
+  const maxTop = Math.max(0, $renderPane.scrollHeight - $renderPane.clientHeight);
+  const maxLeft = Math.max(0, $renderPane.scrollWidth - $renderPane.clientWidth);
+  const clampedTop = Math.max(0, Math.min(maxTop, Number(nextTop) || 0));
+  const clampedLeft = Math.max(0, Math.min(maxLeft, Number(nextLeft) || 0));
+  const dx = Math.abs(clampedLeft - viewLeft);
+  const dy = Math.abs(clampedTop - viewTop);
+  debugAutoScroll(dx < 1 && dy < 1 ? "noop" : "scroll", {
     mode,
-    fromTop: Math.round(viewTop),
-    toTop: Math.round(nextTop),
-    fromLeft: Math.round(viewLeft),
-    toLeft: Math.round(nextLeft),
+    viewTop: Math.round(viewTop),
+    viewBottom: Math.round(viewBottom),
+    viewLeft: Math.round(viewLeft),
+    viewRight: Math.round(viewRight),
+    cursorTop: Math.round(cursorTop),
+    cursorBottom: Math.round(cursorBottom),
+    cursorLeft: Math.round(cursorLeft),
+    cursorRight: Math.round(cursorRight),
+    topMargin: Math.round(topMargin),
+    bottomMargin: Math.round(bottomMargin),
+    leftMargin: Math.round(leftMargin),
+    rightMargin: Math.round(rightMargin),
+    nextTop: Math.round(nextTop),
+    nextLeft: Math.round(nextLeft),
+    clampedTop: Math.round(clampedTop),
+    clampedLeft: Math.round(clampedLeft),
+    maxTop: Math.round(maxTop),
+    maxLeft: Math.round(maxLeft),
   });
   animateRenderPaneScrollTo(nextTop, nextLeft, duration);
 }
