@@ -1,3 +1,76 @@
+/*
+PLAN (Architect prompts 1→7) — Settings dialog redesign (desktop-grade)
+
+Scope for this prompt: plan only. Do NOT implement yet.
+Allowed files for the full sequence: `src/renderer/index.html`, `src/renderer/style.css`, `src/renderer/settings.js`
+(and `src/renderer/settings_store.js` only if section reset needs a helper).
+
+Current state (audit notes, high-level):
+- Markup: Settings modal lives in `src/renderer/index.html` under `#settingsModal` with left-nav containing
+  Search (`#settingsFilter`) and “Show advanced” checkbox (`#settingsShowAdvanced`), tabs container `#settingsTabs`,
+  panels container `#settingsPanels`, footer buttons `#settingsReset` + `#settingsClose`.
+- CSS: `.modal-card.settings-card` is resizable and there are responsive rules that reflow to 1-column; multiple scroll
+  containers can cause “jumping”.
+- JS: `settings.js` builds tabs/panels from schema, uses `details.settings-advanced` per section, search currently
+  filters across all panels and can change active tab; settings apply immediately via `store.update`.
+
+Target layout (DOM changes in `index.html`):
+1) Header:
+   - Keep title “Settings”.
+   - Add header controls: segmented mode switch (buttons `#settingsModeBasic`, `#settingsModeAdvanced`, aria-pressed)
+     and Search input moved here (keep id `#settingsFilter`, accessible label/aria-label).
+2) Left pane:
+   - Navigation only: keep `#settingsTabs` list.
+   - Remove Search and remove “Show advanced” checkbox from visible UI (no `#settingsShowAdvanced` in UI).
+3) Right pane:
+   - Add section header bar above content: `#settingsSectionTitle` and optional `#settingsSectionHint`.
+   - Keep `#settingsNoResults` and `#settingsPanels`.
+4) Footer:
+   - Left: `#settingsResetSection` (“Reset Section…”).
+   - Right: `#settingsCancel`, `#settingsApply`, `#settingsOk`.
+   - Remove/stop using old ids `#settingsReset` / `#settingsClose` (updated in JS in later prompts).
+
+Desktop styling changes in `style.css`:
+- Remove free resize on settings modal (`resize: both`).
+- Stable geometry: set a default size (e.g. ~960×600) with min/max constraints; no responsive 1-column collapse.
+- Single-scroll rule: only right pane content scrolls (`.settings-panels`); left nav is fixed-width and stable.
+- Left nav: strong selected state, clean list.
+- Right pane: section header bar typography; groups as “cards” (`.settings-group`), consistent spacing.
+- Rows: predictable 2-column alignment; avoid far-right floating checkboxes; inputs not overly wide.
+- Advanced: disclosure (`details.settings-advanced`) styled like desktop preferences.
+
+Behavior changes in `settings.js`:
+1) Modes:
+   - Introduce `settingsMode = 'basic'|'advanced'` persisted in localStorage (UI state only).
+   - Basic mode shows only non-advanced settings; Advanced mode shows all settings, with advanced entries inside
+     per-group disclosure “Advanced options” (collapsed by default).
+2) Sections:
+   - Keep an `activeSectionId` persisted in localStorage; update `#settingsSectionTitle/#settingsSectionHint` on change.
+3) Rendering:
+   - Render entries exactly once (fix duplication risks, e.g. global header enable appearing twice).
+   - Group entries into `.settings-group` cards; within each group place an “Advanced options” disclosure as needed.
+4) Search:
+   - Search applies to the active section only; does not change left nav selection.
+   - When query is empty: normal view; when non-empty: hide non-matching entries; show `#settingsNoResults` if none.
+   - Search query is NOT persisted across restarts.
+5) Footer semantics:
+   - Switch to staged edits so Cancel has no side effects:
+     - Maintain `draftSettingsPatch` (in-memory) while dialog is open; controls update draft only.
+     - Apply/OK: send the accumulated patch via `store.update`, then clear draft; OK closes.
+     - Cancel: discard draft and close; reload persisted settings next open.
+   - Reset Section…:
+     - Confirm.
+     - Reset only keys belonging to active section (based on schema entries rendered in that section).
+     - Apply reset via `store.update`, keep dialog open.
+6) Safety checks (QA prompt 6+):
+   - After editing this file, run: `node --experimental-default-type=module --check src/renderer/settings.js`.
+
+Minimal touch-points:
+- `index.html`: only `#settingsModal` subtree changes (header/nav/content/footer), keep ids required by JS.
+- `style.css`: only settings-related selectors (.settings-*, .modal-card.settings-card) and override media query behavior.
+- `settings.js`: rewrite UI wiring to new ids and staged apply model; avoid reflow/jumping; keep store API unchanged.
+*/
+
 import {
   EditorView,
   EditorState,
