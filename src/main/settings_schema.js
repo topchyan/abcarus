@@ -54,6 +54,15 @@ function getSettingsSchema() {
       ui: { input: "percent", min: 0, max: 60, step: 1 },
     },
     {
+      key: "followMeasureOpacity",
+      type: "number",
+      default: 0.08,
+      section: "Playback",
+      label: "Follow staff opacity (%)",
+      help: "Opacity for the current staff highlight during playback (0–30%).",
+      ui: { input: "percent", min: 0, max: 30, step: 1 },
+    },
+    {
       key: "followPlayheadOpacity",
       type: "number",
       default: 0.7,

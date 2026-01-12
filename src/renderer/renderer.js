@@ -671,11 +671,13 @@ function findNearestBarElForNote(noteEl) {
     const by = getRectAttr(el, "y");
     const bh = getRectAttr(el, "height");
     const bx = getRectAttr(el, "x");
+    const bw = getRectAttr(el, "width");
     if (by == null || bh == null || bx == null) continue;
     const overlap = rectsOverlap(noteTop, noteBottom, by, by + bh);
     if (overlap <= 0) continue;
     // Prefer bars whose vertical span covers the note and are horizontally near the note.
-    const dx = Math.abs(bx - noteX);
+    const barX = (bw != null && bw > 0) ? (bx + bw / 2) : bx;
+    const dx = Math.abs(barX - noteX);
     const dy = Math.abs(by - noteTop);
     const score = dx + dy * 0.25;
     if (score < bestScore) {
@@ -707,12 +709,14 @@ function highlightSvgFollowMeasureForNote(noteEl, barEl) {
 
   const barsOnLine = Array.from(svg.querySelectorAll(".bar-hl")).map((el) => {
     const x = getRectAttr(el, "x");
+    const w = getRectAttr(el, "width");
     const y = getRectAttr(el, "y");
     const h = getRectAttr(el, "height");
     if (x == null || y == null || h == null) return null;
     const overlap = rectsOverlap(bandTop, bandBottom, y, y + h);
     if (overlap <= 0) return null;
-    return { el, x, y, h };
+    const xCenter = (w != null && w > 0) ? (x + w / 2) : x;
+    return { el, x, xCenter, y, h };
   }).filter(Boolean);
 
   // Collect notes on the same staff band to approximate the visible line extents.
@@ -739,10 +743,11 @@ function highlightSvgFollowMeasureForNote(noteEl, barEl) {
   let leftBarX = null;
   let rightBarX = null;
   for (const bar of barsOnLine) {
-    if (bar.x <= noteCenterX) {
-      leftBarX = (leftBarX == null) ? bar.x : Math.max(leftBarX, bar.x);
+    const bx = Number.isFinite(bar.xCenter) ? bar.xCenter : bar.x;
+    if (bx <= noteCenterX) {
+      leftBarX = (leftBarX == null) ? bx : Math.max(leftBarX, bx);
     } else {
-      rightBarX = (rightBarX == null) ? bar.x : Math.min(rightBarX, bar.x);
+      rightBarX = (rightBarX == null) ? bx : Math.min(rightBarX, bx);
     }
   }
 
@@ -10323,6 +10328,7 @@ let isPreviewing = false;
 let followPlayback = true;
 let followHighlightColor = "#1e90ff";
 let followHighlightBarOpacity = 0.12;
+let followMeasureOpacity = 0.08;
 let followPlayheadOpacity = 0.7;
 let followPlayheadWidth = 2;
 let followPlayheadPad = 8;
@@ -12018,6 +12024,7 @@ function updateFollowToggle() {
   if (!followPlayback) {
     clearSvgPlayhead();
     clearSvgFollowBarHighlight();
+    clearSvgFollowMeasureHighlight();
   }
 }
 
@@ -12038,6 +12045,7 @@ function applyFollowHighlightCssVars() {
   if (!root || !root.style) return;
   root.style.setProperty("--abcarus-follow-color", followHighlightColor);
   root.style.setProperty("--abcarus-follow-bar-opacity", String(followHighlightBarOpacity));
+  root.style.setProperty("--abcarus-follow-measure-opacity", String(followMeasureOpacity));
   root.style.setProperty("--abcarus-follow-playhead-opacity", String(followPlayheadOpacity));
 }
 
@@ -12045,6 +12053,7 @@ function setFollowHighlightFromSettings(settings) {
   if (!settings || typeof settings !== "object") return;
   followHighlightColor = normalizeHexColor(settings.followHighlightColor, followHighlightColor);
   followHighlightBarOpacity = clampNumber(settings.followHighlightBarOpacity, 0, 1, followHighlightBarOpacity);
+  followMeasureOpacity = clampNumber(settings.followMeasureOpacity, 0, 1, followMeasureOpacity);
   followPlayheadOpacity = clampNumber(settings.followPlayheadOpacity, 0, 1, followPlayheadOpacity);
   followPlayheadWidth = clampNumber(settings.followPlayheadWidth, 1, 6, followPlayheadWidth);
   followPlayheadPad = clampNumber(settings.followPlayheadPad, 0, 24, followPlayheadPad);
