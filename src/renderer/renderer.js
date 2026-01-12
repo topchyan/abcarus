@@ -14020,6 +14020,12 @@ function startPlaybackFromPrepared(startIdx) {
     }
   }
 
+  // Guard: an end boundary that points at/before the first playable symbol can cause immediate termination (no sound).
+  let endSym = activePlaybackEndSymbol || null;
+  if (endSym && Number.isFinite(endSym.istart) && Number.isFinite(start.istart) && endSym.istart <= start.istart) {
+    endSym = null;
+  }
+
   lastStartPlaybackIdx = Number.isFinite(start.istart) ? start.istart : 0;
   lastPlaybackIdx = null;
   lastRenderIdx = null;
@@ -14078,7 +14084,7 @@ function startPlaybackFromPrepared(startIdx) {
     } catch {}
   }
 
-  player.play(start, activePlaybackEndSymbol || null, 0);
+  player.play(start, endSym, 0);
   isPlaying = true;
   isPaused = false;
   if (!waitingForFirstNote) setStatus("Playing…");
