@@ -346,11 +346,26 @@ export function initSettings(api) {
     const y = Number(pos && pos.y);
     if (!Number.isFinite(x) || !Number.isFinite(y)) return { x: 0, y: 0 };
     const rect = $settingsCard.getBoundingClientRect();
-    const maxX = Math.max(0, (window.innerWidth - rect.width) / 2);
-    const maxY = Math.max(0, (window.innerHeight - rect.height) / 2);
+    const pad = 12;
+    const baseLeft = (window.innerWidth - rect.width) / 2;
+    const baseTop = (window.innerHeight - rect.height) / 2;
+
+    let minX = pad - baseLeft;
+    let maxX = (window.innerWidth - pad - rect.width) - baseLeft;
+    let minY = pad - baseTop;
+    let maxY = (window.innerHeight - pad - rect.height) - baseTop;
+
+    // If the modal is larger than the viewport, prefer keeping the top-left visible.
+    if (minX > maxX) {
+      maxX = minX;
+    }
+    if (minY > maxY) {
+      maxY = minY;
+    }
+
     return {
-      x: Math.max(-maxX, Math.min(maxX, x)),
-      y: Math.max(-maxY, Math.min(maxY, y)),
+      x: Math.max(minX, Math.min(maxX, x)),
+      y: Math.max(minY, Math.min(maxY, y)),
     };
   }
 
@@ -759,6 +774,7 @@ export function initSettings(api) {
       panels.forEach((panel) => {
         panel.classList.toggle("active", panel.dataset.settingsPanel === name);
       });
+      scheduleClampModalPosition();
     };
 
     for (const panel of panels) {
@@ -930,6 +946,7 @@ export function initSettings(api) {
           }
         }
       }
+      scheduleClampModalPosition();
     };
   }
 
