@@ -191,6 +191,11 @@ When reporting a bug, try to include: app version (About), OS/desktop, minimal A
   - Optional: `ABCARUS_DEV_AUTO_DUMP_DIR=/some/path` (override dump directory)
   - Runtime toggle (DevTools): `window.__abcarusAutoDumpOnError = true|false`
 
+**Experimental: abc2svg native `%%MIDI drum*`**
+- Enable native drum handling for playback (dev only): `ABCARUS_DEV_NATIVE_MIDI_DRUMS=1 npm start`
+- Runtime toggle (DevTools): `window.__abcarusNativeMidiDrums = true|false`
+- Note: this is experimental and may affect editor↔playback source mapping in some cases.
+
 **Keyboard shortcuts / key routing**
 ```bash
 ABCARUS_DEBUG_KEYS=1 npm start
