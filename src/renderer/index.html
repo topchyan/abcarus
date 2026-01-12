@@ -62,25 +62,28 @@
               <span class="btn-text">Stop</span>
             </button>
 	        </div>
-	        <div class="practice-controls" aria-label="Practice controls">
-	          <button id="btnPracticeToggle" type="button" title="Practice mode (loop + tempo override)" aria-pressed="false">
-              <span class="btn-icon icon-repeat" aria-hidden="true"></span>
-              <span class="btn-text">Practice</span>
-            </button>
-	          <label id="practiceTempoWrap" class="practice-tempo" hidden>
-	            <span>Speed</span>
-	            <select id="practiceTempo" aria-label="Playback speed">
-	              <option value="0.5">50%</option>
+		        <div class="practice-controls" aria-label="Playback controls">
+		          <label id="practiceTempoWrap" class="practice-tempo" hidden>
+		            <span>Speed</span>
+		            <select id="practiceTempo" aria-label="Playback speed">
+		              <option value="0.5">50%</option>
 	              <option value="0.6">60%</option>
 	              <option value="0.7">70%</option>
 	              <option value="0.8">80%</option>
 	              <option value="0.9">90%</option>
 	              <option value="1" selected>100%</option>
 	              <option value="1.1">110%</option>
-	              <option value="1.2">120%</option>
-	            </select>
-	          </label>
-	        </div>
+		              <option value="1.2">120%</option>
+		            </select>
+		          </label>
+		          <label id="practiceLoopWrap" class="practice-loop" hidden>
+		            <input id="practiceLoopEnabled" type="checkbox" />
+		            <span>Loop</span>
+		            <input id="practiceLoopFrom" class="practice-loop-num" type="number" inputmode="numeric" min="0" step="1" placeholder="from" title="Loop from measure (0 = first bar)" />
+		            <span class="practice-loop-arrow">→</span>
+		            <input id="practiceLoopTo" class="practice-loop-num" type="number" inputmode="numeric" min="0" step="1" placeholder="to" title="Loop to measure (0 = end)" />
+		          </label>
+		        </div>
 		      </div>
 		      <div class="right-controls">
 		        <div class="segmented" aria-label="Preferences">
