@@ -292,6 +292,7 @@ export function initSettings(api) {
     $settingsModal.classList.add("open");
     $settingsModal.setAttribute("aria-hidden", "false");
     if (typeof setActiveTab === "function") setActiveTab(lastActiveTab);
+    scheduleClampModalPosition();
     setTimeout(() => {
       if ($settingsFilter) {
         $settingsFilter.focus();
@@ -328,6 +329,17 @@ export function initSettings(api) {
     $settingsCard.style.transform = `translate(${x}px, ${y}px)`;
   }
 
+  function readModalPositionFromTransform() {
+    if (!$settingsCard) return null;
+    const current = String($settingsCard.style.transform || "");
+    const m = current.match(/translate\(\s*(-?\d+(?:\.\d+)?)px,\s*(-?\d+(?:\.\d+)?)px\)/);
+    if (!m) return null;
+    const x = Number(m[1]);
+    const y = Number(m[2]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  }
+
   function clampModalPosition(pos) {
     if (!$settingsCard) return pos;
     const x = Number(pos && pos.x);
@@ -342,12 +354,27 @@ export function initSettings(api) {
     };
   }
 
+  function clampAndPersistModalPosition() {
+    if (!$settingsCard) return;
+    const pos = readModalPositionFromTransform() || readModalPosition() || { x: 0, y: 0 };
+    const clamped = clampModalPosition(pos);
+    applyModalPosition(clamped);
+    writeUiState({ settingsModalPos: clamped });
+  }
+
+  function scheduleClampModalPosition() {
+    if (!$settingsModal || !$settingsCard) return;
+    if (!$settingsModal.classList.contains("open")) return;
+    // Let layout settle (tab changes / advanced toggles can change height).
+    requestAnimationFrame(() => requestAnimationFrame(() => clampAndPersistModalPosition()));
+  }
+
   function initSettingsDrag() {
     if (!$settingsCard || !$settingsHeader) return;
 
     const applyFromUi = () => {
       const pos = readModalPosition();
-      applyModalPosition(pos);
+      applyModalPosition(pos ? clampModalPosition(pos) : null);
     };
     applyFromUi();
 
@@ -933,6 +960,7 @@ export function initSettings(api) {
       showAdvanced = Boolean($settingsShowAdvanced.checked);
       writeUiState({ showAdvanced });
       if (applySettingsFilter) applySettingsFilter($settingsFilter ? $settingsFilter.value : "");
+      scheduleClampModalPosition();
     });
   }
   if ($settingsReset) {
