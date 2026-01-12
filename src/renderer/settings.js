@@ -200,6 +200,8 @@ export function initSettings(api) {
   const $settingsNoResults = document.getElementById("settingsNoResults");
   const $settingsTabsHost = document.getElementById("settingsTabs");
   const $settingsPanelsHost = document.getElementById("settingsPanels");
+  const $settingsExport = document.getElementById("settingsExport");
+  const $settingsImport = document.getElementById("settingsImport");
   const $settingsResetSection = document.getElementById("settingsResetSection");
   const $settingsCancel = document.getElementById("settingsCancel");
   const $settingsApply = document.getElementById("settingsApply");
@@ -1012,54 +1014,6 @@ export function initSettings(api) {
           .map(([title, groupEntries]) => ({ title, order: getGroupOrder(groupEntries), entries: groupEntries }))
           .sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title));
 
-        if (panel.key === "tools") {
-          const group = createGroup("Settings", "Import/export ABCarus settings.");
-
-          const makeActionRow = (label, buttonText, onClick) => {
-            const row = document.createElement("label");
-            row.className = "settings-row";
-            const labelSpan = document.createElement("span");
-            labelSpan.textContent = label;
-            row.appendChild(labelSpan);
-
-            const btn = document.createElement("button");
-            btn.type = "button";
-            btn.textContent = buttonText;
-            btn.addEventListener("click", onClick);
-            row.appendChild(btn);
-
-            const block = document.createElement("div");
-            block.className = "settings-entry";
-            block.dataset.settingsSearch = `${label} ${buttonText} settings import export`.toLowerCase();
-            block.appendChild(row);
-            group.appendChild(block);
-          };
-
-          makeActionRow("Export settings", "Export…", async () => {
-            if (!api || typeof api.exportSettings !== "function") return;
-            const res = await api.exportSettings().catch(() => null);
-            if (!res || !res.ok || !res.path) {
-              alert((res && res.error) ? res.error : "Failed to export settings.");
-              return;
-            }
-            const note = res.exportedHeader ? "\n(incl. user_settings.abc)" : "";
-            alert(`Settings exported:\n${res.path}${note}`);
-          });
-
-          makeActionRow("Import settings", "Import…", async () => {
-            if (!api || typeof api.importSettings !== "function") return;
-            const res = await api.importSettings().catch(() => null);
-            if (!res || !res.ok) {
-              alert((res && res.error) ? res.error : "Failed to import settings.");
-              return;
-            }
-            const note = res.importedHeader ? " (incl. user_settings.abc)" : "";
-            alert(`Settings imported${note}.\nThey will be used next time you start ABCarus.`);
-          });
-
-          panelEl.appendChild(group);
-        }
-
         for (const g of orderedGroups) {
           const groupEntries = g.entries || [];
           const normal = groupEntries.filter((e) => !e.advanced && e.ui && e.ui.input && e.ui.input !== "code");
@@ -1240,7 +1194,7 @@ export function initSettings(api) {
     $settingsResetSection.addEventListener("click", async () => {
       const meta = settingsPanelsByKey.get(lastActiveTab);
       const sectionLabel = meta ? meta.label : "this section";
-      if (!confirm(`Reset all settings in this section to defaults?\n\n(${sectionLabel})`)) return;
+      if (!confirm(`Restore defaults for this section?\n\n(${sectionLabel})`)) return;
 
       const patch = {};
       for (const entry of schema) {
@@ -1258,6 +1212,35 @@ export function initSettings(api) {
       await updateSettings(patch).catch(() => {});
       buildSettingsUi();
       if (typeof setActiveTab === "function") setActiveTab(lastActiveTab);
+    });
+  }
+
+  if ($settingsExport) {
+    $settingsExport.addEventListener("click", async () => {
+      if (!api || typeof api.exportSettings !== "function") return;
+      const res = await api.exportSettings().catch(() => null);
+      if (!res || !res.ok || !res.path) {
+        alert((res && res.error) ? res.error : "Failed to export settings.");
+        return;
+      }
+      const note = res.exportedHeader ? "\n(incl. user_settings.abc)" : "";
+      alert(`Settings exported:\n${res.path}${note}`);
+    });
+  }
+
+  if ($settingsImport) {
+    $settingsImport.addEventListener("click", async () => {
+      if (!api || typeof api.importSettings !== "function") return;
+      const res = await api.importSettings().catch(() => null);
+      if (!res || !res.ok) {
+        alert((res && res.error) ? res.error : "Failed to import settings.");
+        return;
+      }
+      if (res.settings) applySettings(res.settings);
+      buildSettingsUi();
+      if (typeof setActiveTab === "function") setActiveTab(lastActiveTab);
+      const note = res.importedHeader ? " (incl. user_settings.abc)" : "";
+      alert(`Settings imported${note}.\nSome changes apply immediately; others may require a restart.`);
     });
   }
 

@@ -69,7 +69,10 @@ function encodePropertiesFromSchema(settings, schema) {
       if (!entry || !entry.key) continue;
       // Keep global header text in file form (user_settings.abc) instead of embedding multi-line strings here.
       if (entry.key === "globalHeaderText") continue;
-      const raw = encodeValue(s[entry.key], entry.type);
+      const value = (Object.prototype.hasOwnProperty.call(s, entry.key) && s[entry.key] !== undefined)
+        ? s[entry.key]
+        : entry.default;
+      const raw = encodeValue(value, entry.type);
       lines.push(`${entry.key}=${raw}`);
     }
     lines.push("");
@@ -122,4 +125,3 @@ module.exports = {
   encodePropertiesFromSchema,
   parseSettingsPatchFromProperties,
 };
-

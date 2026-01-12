@@ -1481,6 +1481,13 @@ svg {
   display: inline-flex;
   align-items: center;
   min-width: 0;
+  gap: 8px;
+}
+
+.settings-search-label {
+  font-size: var(--font-size-xs);
+  color: var(--muted-text);
+  white-space: nowrap;
 }
 
 .settings-search input[type="text"] {
@@ -1518,6 +1525,9 @@ svg {
 
 .modal-footer .modal-footer-left {
   margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .modal-footer button.primary {
