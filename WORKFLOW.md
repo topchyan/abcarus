@@ -101,9 +101,8 @@ Notes:
 GitHub Actions “Artifacts” storage is quota-limited. If the quota is exhausted, workflows that use `actions/upload-artifact`
 will fail with “Artifact storage quota has been hit”.
 
-ABCarus avoids this for releases by uploading binaries to **GitHub Releases** via `.github/workflows/release-assets.yml`.
-The legacy `.github/workflows/build-windows.yml` workflow is kept as a **manual build/sanity check** and does not upload
-Actions artifacts.
+ABCarus avoids this for releases by uploading binaries to **GitHub Releases** via `.github/workflows/release-assets.yml`
+(instead of Actions Artifacts).
 
 ## If release script fails (EPERM / git issues)
 
