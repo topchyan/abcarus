@@ -6,9 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [0.19.5] - 2026-01-12
 ### Fixed
 - CI: macOS builds now run on supported GitHub Actions runners (macos-13 retired); release upload is skipped on non-tag runs.
-
 
 ## [0.19.4] - 2026-01-12
 ### Added
