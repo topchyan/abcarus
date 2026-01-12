@@ -69,7 +69,8 @@
     "mac": {
       "target": [
         "dmg"
-      ]
+      ],
+      "minimumSystemVersion": "10.15.0"
     }
   }
 }

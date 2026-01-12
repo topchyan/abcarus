@@ -37,6 +37,9 @@ Run on macOS:
 
 Output: `dist/electron-builder/`
 
+Minimum supported macOS:
+- Electron 28 supports **macOS 10.15 (Catalina) and up**. ABCarus sets `build.mac.minimumSystemVersion` accordingly.
+
 Note: DMG signing/notarization is not configured here; add it when preparing public releases.
 
 ## Linux (AppImage)
