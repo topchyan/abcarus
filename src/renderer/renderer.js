@@ -166,6 +166,7 @@ let playbackRange = {
 };
 let activePlaybackRange = null;
 let activePlaybackEndAbcOffset = null;
+let activePlaybackEndSymbol = null;
 let activeLoopRange = null; // {startOffset,endOffset,origin,loop} - stable loop bounds (may differ from resume start)
 var pendingPlaybackRangeOrigin = null;
 let suppressPlaybackRangeSelectionSync = false;
@@ -10970,6 +10971,7 @@ function stopPlaybackFromGuard(message) {
   resumeStartIdx = null;
   activePlaybackRange = null;
   activePlaybackEndAbcOffset = null;
+  activePlaybackEndSymbol = null;
   activeLoopRange = null;
   playbackStartArmed = false;
   currentPlaybackPlan = null;
@@ -11256,6 +11258,7 @@ function resetPlaybackState() {
   playbackIndexOffset = 0;
   activePlaybackRange = null;
   activePlaybackEndAbcOffset = null;
+  activePlaybackEndSymbol = null;
   activeLoopRange = null;
   playbackStartArmed = false;
   currentPlaybackPlan = null;
@@ -11541,15 +11544,16 @@ function ensurePlayer() {
       updatePlayButton();
       clearNoteSelection();
       clearPlaybackNoteOnEls();
-	      if (!shouldLoop) {
-	        resumeStartIdx = null;
-	        activePlaybackRange = null;
-	        activePlaybackEndAbcOffset = null;
-	        activeLoopRange = null;
-	        playbackStartArmed = false;
-	        currentPlaybackPlan = null;
-	        // Transport: end-of-tune behaves like Stop (playhead=0).
-	      }
+		      if (!shouldLoop) {
+		        resumeStartIdx = null;
+		        activePlaybackRange = null;
+		        activePlaybackEndAbcOffset = null;
+		        activePlaybackEndSymbol = null;
+		        activeLoopRange = null;
+		        playbackStartArmed = false;
+		        currentPlaybackPlan = null;
+		        // Transport: end-of-tune behaves like Stop (playhead=0).
+		      }
       if (shouldLoop && followPlayback && lastRenderIdx != null && editorView) {
         // When looping, keep the visual follow-cursor without mutating PlaybackRange (loop invariance).
         suppressPlaybackRangeSelectionSync = true;
@@ -11612,50 +11616,7 @@ function ensurePlayer() {
         }
         lastPlaybackOnIstart = i;
       }
-      if (
-        on
-        && activePlaybackEndAbcOffset != null
-        && Number.isFinite(activePlaybackEndAbcOffset)
-        && i >= activePlaybackEndAbcOffset
-      ) {
-        stopPlaybackForRestart();
-        isPlaying = false;
-        isPaused = false;
-        waitingForFirstNote = false;
-        setStatus("OK");
-        updatePlayButton();
-        clearNoteSelection();
-        if (activePlaybackRange && activePlaybackRange.loop) {
-          const loopRange = activeLoopRange || activePlaybackRange;
-          queueMicrotask(() => {
-            if (!loopRange || !activePlaybackRange || !activePlaybackRange.loop) return;
-            if (pendingPlaybackPlan) {
-              const plan = pendingPlaybackPlan;
-              pendingPlaybackPlan = null;
-              currentPlaybackPlan = plan;
-              applyPlaybackPlanSpeed(plan);
-              startPlaybackFromRange({
-                startOffset: plan.rangeStart,
-                endOffset: plan.rangeEnd,
-                origin: focusModeEnabled ? "focus" : "transport",
-                loop: plan.loopEnabled,
-              }).catch(() => {});
-              updatePracticeUi();
-              return;
-            }
-            startPlaybackFromRange(loopRange).catch(() => {});
-          });
-        } else {
-          resumeStartIdx = null;
-          activePlaybackRange = null;
-          activePlaybackEndAbcOffset = null;
-          activeLoopRange = null;
-          playbackStartArmed = false;
-          currentPlaybackPlan = null;
-          // Transport: end-of-range behaves like Stop (playhead=0).
-        }
-        return;
-      }
+	      // End-of-range handling is done by abc2svg's snd engine via `s_end` (see `activePlaybackEndSymbol`).
       const editorIdx = Math.max(0, i - playbackIndexOffset);
       const editorLen = editorView ? editorView.state.doc.length : 0;
       const fromInjected = editorLen && editorIdx >= editorLen;
@@ -11675,13 +11636,7 @@ function ensurePlayer() {
           stopPlaybackFromGuard("Loop invariance violated: PlaybackRange.startOffset mutated.");
           return;
         }
-	        if (activePlaybackRange && activePlaybackRange.endOffset != null) {
-	          const endAbc = Number.isFinite(activePlaybackEndAbcOffset) ? Number(activePlaybackEndAbcOffset) : null;
-	          if (Number.isFinite(endAbc) && i >= endAbc) {
-	            stopPlaybackFromGuard("End offset reached: stopping at end boundary.");
-	            return;
-	          }
-	        }
+	        // No extra end-of-range guard here: we rely on `s_end` to stop deterministically (and to allow looping).
         if (traceEnabled) {
           const timestamp = typeof performance !== "undefined" ? performance.now() : Date.now();
           const seq = (playbackTraceSeq += 1);
@@ -11969,6 +11924,7 @@ function stopPlaybackTransport() {
   resumeStartIdx = null;
   activePlaybackRange = null;
   activePlaybackEndAbcOffset = null;
+  activePlaybackEndSymbol = null;
   playbackStartArmed = false;
   currentPlaybackPlan = null;
   setStatus("OK");
@@ -14122,7 +14078,7 @@ function startPlaybackFromPrepared(startIdx) {
     } catch {}
   }
 
-  player.play(start, null, 0);
+  player.play(start, activePlaybackEndSymbol || null, 0);
   isPlaying = true;
   isPaused = false;
   if (!waitingForFirstNote) setStatus("Playing…");
@@ -14283,9 +14239,16 @@ async function startPlaybackFromRange(rangeOverride) {
     return;
   }
 
-	  // Switch semantics guard (Option B): playbackRange changes while playing are deferred; we also freeze loop start.
-	  activePlaybackRange = range;
+		  // Switch semantics guard (Option B): playbackRange changes while playing are deferred; we also freeze loop start.
+		  activePlaybackRange = range;
 		  activePlaybackEndAbcOffset = resolvePlaybackEndAbcOffset(range, startSym.istart);
+		  activePlaybackEndSymbol = (activePlaybackEndAbcOffset != null && Number.isFinite(activePlaybackEndAbcOffset))
+		    ? findSymbolAtOrAfter(Number(activePlaybackEndAbcOffset))
+		    : null;
+		  if (activePlaybackEndSymbol && Number.isFinite(activePlaybackEndSymbol.istart) && activePlaybackEndSymbol.istart <= startSym.istart) {
+		    activePlaybackEndSymbol = null;
+		    activePlaybackEndAbcOffset = null;
+		  }
 	  if (range && range.loop) {
 	    const loopBounds = computeFocusLoopPlaybackRange();
 	    activeLoopRange = loopBounds || {
