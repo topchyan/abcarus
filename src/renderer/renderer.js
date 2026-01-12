@@ -6332,6 +6332,18 @@ function buildMeasureStartsByNumberFromAbc2svg(firstSymbol) {
   return byNumber;
 }
 
+function neutralizeMidiDrumDirectivesForPlayback(text) {
+  const raw = String(text || "");
+  if (!/%%\s*MIDI\s+drum(on|bars)?\b/i.test(raw)) return raw;
+  // Keep line lengths stable (istart mapping) by replacing "%%" with "% " (comment).
+  return raw.split(/\r\n|\n|\r/).map((line) => {
+    if (!/^\s*%%\s*MIDI\s+drum(on|bars)?\b/i.test(line)) return line;
+    const idx = line.indexOf("%%");
+    if (idx < 0) return line;
+    return `${line.slice(0, idx)}% ${line.slice(idx + 2)}`;
+  }).join("\n");
+}
+
 function getRenderMeasureIndex() {
   if (!editorView) return null;
   const payload = getRenderPayload();
@@ -6346,7 +6358,8 @@ function getRenderMeasureIndex() {
       errmsg: () => {},
     };
     const abc = new AbcCtor(user);
-    abc.tosvg("nav_measures", payload.text || "");
+    const navText = neutralizeMidiDrumDirectivesForPlayback(payload.text || "");
+    abc.tosvg("nav_measures", navText);
     const tunes = abc.tunes || [];
     const first = tunes && tunes[0] ? tunes[0][0] : null;
     if (!first) return null;
@@ -13908,6 +13921,18 @@ async function preparePlayback() {
     showToast("Playback: 3/4-tone accidentals normalized (compat mode).", 3600);
   }
   abc.tosvg("play", playbackText);
+
+  // abc2svg requires %%MIDI drum/drumon/drumbars to be inside a voice; many real-world files place them in headers.
+  // Neutralize (comment out) these directives for tolerant playback while preserving istart mapping.
+  if (Array.isArray(playbackParseErrors) && playbackParseErrors.some((e) => /%%MIDI\\s+drum\\s+must be in a voice|%%MIDI\\s+drumon\\s+must be in a voice|%%MIDI\\s+drumbars\\s+must be in a voice/i.test(e.message || ""))) {
+    playbackSanitizeWarnings.push({ kind: "playback-midi-drums-neutralized" });
+    const abc2 = new AbcCtor(user);
+    playbackParseErrors = [];
+    playbackText = neutralizeMidiDrumDirectivesForPlayback(playbackText);
+    abc2.tosvg("play", playbackText);
+    abc.tunes = abc2.tunes;
+    showToast("Playback: MIDI drum directives ignored (compat mode).", 3600);
+  }
 
   // Tolerant playback mode: many real-world ABC files contain lyric/barline mismatches that stricter engines reject.
   // We keep the file unchanged; this only affects playback.
