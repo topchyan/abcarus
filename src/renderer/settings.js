@@ -25,6 +25,7 @@ const FALLBACK_SCHEMA = [
   { key: "usePortalFileDialogs", type: "boolean", default: true, section: "Dialogs", label: "Use portal file dialogs (Linux)", ui: { input: "checkbox" }, advanced: true },
   { key: "libraryAutoRenumberAfterMove", type: "boolean", default: false, section: "Library", label: "Auto-renumber X after move", ui: { input: "checkbox" } },
 	  { key: "followHighlightColor", type: "string", default: "#1e90ff", section: "Playback", label: "Follow highlight color", ui: { input: "color" } },
+	  { key: "followMeasureColor", type: "string", default: "", section: "Playback", label: "Follow staff color", ui: { input: "color" }, advanced: true },
 	  { key: "followHighlightBarOpacity", type: "number", default: 0.12, section: "Playback", label: "Follow bar opacity (%)", ui: { input: "percent", min: 0, max: 60, step: 1 }, advanced: true },
 	  { key: "followMeasureOpacity", type: "number", default: 0.08, section: "Playback", label: "Follow staff opacity (%)", ui: { input: "percent", min: 0, max: 30, step: 1 }, advanced: true },
 	  { key: "followPlayheadOpacity", type: "number", default: 0.7, section: "Playback", label: "Follow playhead opacity (%)", ui: { input: "percent", min: 0, max: 100, step: 1 }, advanced: true },

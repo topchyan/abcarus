@@ -10327,6 +10327,7 @@ let waitingForFirstNote = false;
 let isPreviewing = false;
 let followPlayback = true;
 let followHighlightColor = "#1e90ff";
+let followMeasureColor = "";
 let followHighlightBarOpacity = 0.12;
 let followMeasureOpacity = 0.08;
 let followPlayheadOpacity = 0.7;
@@ -12047,11 +12048,22 @@ function applyFollowHighlightCssVars() {
   root.style.setProperty("--abcarus-follow-bar-opacity", String(followHighlightBarOpacity));
   root.style.setProperty("--abcarus-follow-measure-opacity", String(followMeasureOpacity));
   root.style.setProperty("--abcarus-follow-playhead-opacity", String(followPlayheadOpacity));
+  if (followMeasureColor) {
+    root.style.setProperty("--abcarus-follow-measure-color", followMeasureColor);
+  } else {
+    root.style.removeProperty("--abcarus-follow-measure-color");
+  }
 }
 
 function setFollowHighlightFromSettings(settings) {
   if (!settings || typeof settings !== "object") return;
   followHighlightColor = normalizeHexColor(settings.followHighlightColor, followHighlightColor);
+  const measureColorRaw = String(settings.followMeasureColor || "").trim();
+  if (!measureColorRaw) {
+    followMeasureColor = "";
+  } else {
+    followMeasureColor = normalizeHexColor(measureColorRaw, followMeasureColor || followHighlightColor);
+  }
   followHighlightBarOpacity = clampNumber(settings.followHighlightBarOpacity, 0, 1, followHighlightBarOpacity);
   followMeasureOpacity = clampNumber(settings.followMeasureOpacity, 0, 1, followMeasureOpacity);
   followPlayheadOpacity = clampNumber(settings.followPlayheadOpacity, 0, 1, followPlayheadOpacity);

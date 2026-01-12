@@ -1085,7 +1085,7 @@ svg {
 }
 
 .svg-follow-measure {
-  fill: var(--abcarus-follow-color, #1e90ff);
+  fill: var(--abcarus-follow-measure-color, var(--abcarus-follow-color, #1e90ff));
   fill-opacity: var(--abcarus-follow-measure-opacity, 0.08);
   stroke: none;
 }

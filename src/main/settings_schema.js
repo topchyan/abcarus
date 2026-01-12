@@ -45,6 +45,16 @@ function getSettingsSchema() {
       ui: { input: "color" },
     },
     {
+      key: "followMeasureColor",
+      type: "string",
+      default: "",
+      section: "Playback",
+      label: "Follow staff color",
+      help: "Optional override for the Follow staff highlight color (leave empty to use Follow highlight color).",
+      ui: { input: "color" },
+      advanced: true,
+    },
+    {
       key: "followHighlightBarOpacity",
       type: "number",
       default: 0.12,
