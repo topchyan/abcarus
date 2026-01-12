@@ -615,31 +615,24 @@ function clearSvgPlayhead() {
   lastSvgPlayheadXCenter = null;
 }
 
-function getOrCreateSvgOverlayHost(svg) {
-  if (!svg) return null;
-  const existing = svg.querySelector("g.abcarus-svg-overlays");
-  if (existing) return existing;
-  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-  g.setAttribute("class", "abcarus-svg-overlays");
-  // Insert after <defs>/<style> so we don't break references, but still stay behind notes.
-  const children = Array.from(svg.childNodes || []);
-  let insertBefore = svg.firstChild;
-  for (const node of children) {
-    if (!node || node.nodeType !== 1) continue;
-    const tag = String(node.tagName || "").toLowerCase();
-    if (tag === "defs" || tag === "style") {
-      insertBefore = node.nextSibling;
-      continue;
-    }
-    break;
-  }
-  try {
-    svg.insertBefore(g, insertBefore || null);
-  } catch {
-    try { svg.appendChild(g); } catch {}
-  }
-  return g;
-}
+	function getOrCreateSvgOverlayHost(svg, parentEl) {
+	  if (!svg) return null;
+	  const hostParent = (parentEl && parentEl.nodeType === 1 && svg.contains(parentEl)) ? parentEl : svg;
+	  const existing = Array.from(hostParent.children || []).find((el) => {
+	    try { return el && el.matches && el.matches("g.abcarus-svg-overlays"); } catch { return false; }
+	  });
+	  if (existing) return existing;
+	  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+	  g.setAttribute("class", "abcarus-svg-overlays");
+	  // Keep overlays in the same transform context as notes/bars by inserting into their parent group.
+	  // Insert early so it stays behind notes.
+	  try {
+	    hostParent.insertBefore(g, hostParent.firstChild || null);
+	  } catch {
+	    try { hostParent.appendChild(g); } catch {}
+	  }
+	  return g;
+	}
 
 function getRectAttr(el, name) {
   const v = Number(el && typeof el.getAttribute === "function" ? el.getAttribute(name) : NaN);
@@ -688,10 +681,10 @@ function findNearestBarElForNote(noteEl) {
   return best;
 }
 
-function highlightSvgFollowMeasureForNote(noteEl, barEl) {
-  if (!noteEl) return false;
-  const svg = noteEl.ownerSVGElement;
-  if (!svg) return false;
+	function highlightSvgFollowMeasureForNote(noteEl, barEl) {
+	  if (!noteEl) return false;
+	  const svg = noteEl.ownerSVGElement;
+	  if (!svg) return false;
 
   const b = barEl || findNearestBarElForNote(noteEl);
   if (!b) return false;
@@ -756,15 +749,15 @@ function highlightSvgFollowMeasureForNote(noteEl, barEl) {
   const fallbackRight = lineMaxX != null ? (lineMaxX + pad) : (noteCenterX + 120);
   const leftX = (leftBarX != null) ? leftBarX : fallbackLeft;
   const rightX = (rightBarX != null) ? rightBarX : fallbackRight;
-  const width = Math.max(0, rightX - leftX);
-  if (width < 4) return false;
+	  const width = Math.max(0, rightX - leftX);
+	  if (width < 4) return false;
 
-  clearSvgFollowMeasureHighlight();
-  const host = getOrCreateSvgOverlayHost(svg);
-  if (!host) return false;
-  const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-  rect.setAttribute("class", "svg-follow-measure");
-  rect.setAttribute("x", String(leftX));
+	  clearSvgFollowMeasureHighlight();
+	  const host = getOrCreateSvgOverlayHost(svg, b && b.parentNode);
+	  if (!host) return false;
+	  const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+	  rect.setAttribute("class", "svg-follow-measure");
+	  rect.setAttribute("x", String(leftX));
   rect.setAttribute("y", String(bandTop));
   rect.setAttribute("width", String(width));
   rect.setAttribute("height", String(bandH));
@@ -807,13 +800,16 @@ function highlightSvgFollowBarAtEditorOffset(editorOffset) {
   return false;
 }
 
-function setSvgPlayheadFromElements(noteEl, preferredBarEl) {
-  if (!noteEl) {
-    clearSvgPlayhead();
-    return;
-  }
-  const svg = noteEl.ownerSVGElement;
-  if (!svg) return;
+	function setSvgPlayheadFromElements(noteEl, preferredBarEl) {
+	  if (!noteEl) {
+	    clearSvgPlayhead();
+	    return;
+	  }
+	  const svg = noteEl.ownerSVGElement;
+	  if (!svg) return;
+	  const hostParent = (noteEl.parentNode && noteEl.parentNode.nodeType === 1 && svg.contains(noteEl.parentNode))
+	    ? noteEl.parentNode
+	    : svg;
 
   const xRaw = Number(noteEl.getAttribute("x"));
   const wRaw = Number(noteEl.getAttribute("width"));
@@ -836,23 +832,23 @@ function setSvgPlayheadFromElements(noteEl, preferredBarEl) {
   const yTop = Math.max(0, y - pad);
   const height = Math.max(1, h + pad * 2);
 
-  if (lastSvgPlayheadSvg && lastSvgPlayheadSvg !== svg) {
-    clearSvgPlayhead();
-  }
-  if (!lastSvgPlayheadEl || lastSvgPlayheadSvg !== svg) {
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("class", "svg-playhead-line");
-    rect.setAttribute("width", String(clampNumber(followPlayheadWidth, 1, 6, 2)));
-    rect.setAttribute("rx", "1");
-    rect.setAttribute("ry", "1");
-    rect.setAttribute("pointer-events", "none");
-    svg.appendChild(rect);
-    lastSvgPlayheadEl = rect;
-    lastSvgPlayheadSvg = svg;
-  }
-  try {
-    // Place the playhead between the previous and current note positions when possible.
-    // Fallback: bias slightly left of the current note for better readability.
+	  if (lastSvgPlayheadSvg && lastSvgPlayheadSvg !== svg) {
+	    clearSvgPlayhead();
+	  }
+	  if (!lastSvgPlayheadEl || lastSvgPlayheadSvg !== svg || (lastSvgPlayheadEl && lastSvgPlayheadEl.parentNode !== hostParent)) {
+	    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+	    rect.setAttribute("class", "svg-playhead-line");
+	    rect.setAttribute("width", String(clampNumber(followPlayheadWidth, 1, 6, 2)));
+	    rect.setAttribute("rx", "1");
+	    rect.setAttribute("ry", "1");
+	    rect.setAttribute("pointer-events", "none");
+	    try { hostParent.appendChild(rect); } catch { try { svg.appendChild(rect); } catch {} }
+	    lastSvgPlayheadEl = rect;
+	    lastSvgPlayheadSvg = svg;
+	  }
+	  try {
+	    // Place the playhead between the previous and current note positions when possible.
+	    // Fallback: bias slightly left of the current note for better readability.
     const wSetting = clampNumber(followPlayheadWidth, 1, 6, 2);
     const halfW = wSetting / 2;
     const shift = clampNumber(followPlayheadShift, -20, 20, 0);
