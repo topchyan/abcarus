@@ -56,6 +56,26 @@ git push origin v0.19.2
 
 For the detailed checklist see `docs/RELEASE_CHECKLIST.md`.
 
+## Third-party updates (abc2svg)
+
+Upstream `abc2svg` updates usually arrive as a source snapshot under `third_party/_upd/` (not committed). The safe workflow:
+
+```bash
+# 1) Generate a review report (SAFE / HOLD)
+npm run thirdparty:review -- --candidate third_party/_upd/<abc2svg>.zip --abc2svg-build
+
+# 2) Apply the upgrade (keeps the change small and easy to revert)
+npm run abc2svg:upgrade -- --zip third_party/_upd/<abc2svg>.zip --apply
+
+# 3) Run local harness checks
+npm run test:measures
+npm run test:transpose
+npm run test:settings
+npm run test:truth-scale
+```
+
+Details + checklist live in `docs/third-party-review.md`.
+
 ## Verify release via `gh` (no browser)
 
 If you have GitHub CLI installed and authenticated (`gh auth login`), you can verify releases from the terminal:

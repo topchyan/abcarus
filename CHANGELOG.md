@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Playback: Focus Mode (F7) to hide panels and auto-fit the score for hands-free playing.
+
+### Changed
+- Playback: Follow now highlights the current staff segment (more readable than bar separators in many layouts).
+- Playback: Settings expose staff highlight color/opacity and current bar (staff segment) opacity.
+- Third-party: abc2svg runtime update (drum parsing/edge cases).
+
+### Fixed
+- Playback: auto-scroll behavior under zoom is more reliable.
+- Playback: Follow measure highlight alignment is consistent in Focus Mode.
 
 
 ## [0.19.2] - 2026-01-10
