@@ -34,10 +34,11 @@ const FALLBACK_SCHEMA = [
   { key: "followPlayheadBetweenNotesWeight", type: "number", default: 1, section: "Playback", label: "Playhead between notes (%)", ui: { input: "percent", min: 0, max: 100, step: 5 }, advanced: true },
   { key: "followPlayheadShift", type: "number", default: 0, section: "Playback", label: "Playhead horizontal shift (px)", ui: { input: "number", min: -20, max: 20, step: 1 }, advanced: true },
   { key: "followPlayheadFirstBias", type: "number", default: 6, section: "Playback", label: "First-note bias (px)", ui: { input: "number", min: 0, max: 20, step: 1 }, advanced: true },
-	  {
-	    key: "playbackAutoScrollMode",
-	    type: "string",
-	    default: "Keep Visible",
+  { key: "playbackNativeMidiDrums", type: "boolean", default: false, section: "Playback", label: "Use native abc2svg %%MIDI drum* (experimental)", ui: { input: "checkbox" }, advanced: true },
+		  {
+		    key: "playbackAutoScrollMode",
+		    type: "string",
+		    default: "Keep Visible",
 	    section: "Playback",
 	    label: "Playback auto-scroll",
 	    ui: {

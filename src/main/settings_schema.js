@@ -139,6 +139,16 @@ function getSettingsSchema() {
       advanced: true,
     },
     {
+      key: "playbackNativeMidiDrums",
+      type: "boolean",
+      default: false,
+      section: "Playback",
+      label: "Use native abc2svg %%MIDI drum* (experimental)",
+      help: "Experimental: try using abc2svg's native %%MIDI drum/drumon/drumoff/drumbars support instead of ABCarus's injected V:DRUM voice. May affect playback mapping in edge cases.",
+      ui: { input: "checkbox" },
+      advanced: true,
+    },
+    {
       key: "followPlayheadShift",
       type: "number",
       default: 0,

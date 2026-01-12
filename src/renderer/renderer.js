@@ -986,6 +986,10 @@ function shouldUseNativeMidiDrums() {
   // Runtime override via DevTools (no reload): window.__abcarusNativeMidiDrums = true/false
   if (window.__abcarusNativeMidiDrums === true) return true;
   if (window.__abcarusNativeMidiDrums === false) return false;
+  // If the user explicitly touched the setting, it wins over env defaults.
+  if (latestSettingsSnapshot && latestSettingsSnapshot.playbackNativeMidiDrumsSetByUser) {
+    return Boolean(latestSettingsSnapshot.playbackNativeMidiDrums);
+  }
   return NATIVE_MIDI_DRUMS_DEFAULT_ENABLED;
 }
 

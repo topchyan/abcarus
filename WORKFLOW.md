@@ -195,6 +195,7 @@ When reporting a bug, try to include: app version (About), OS/desktop, minimal A
 - Enable native drum handling for playback (dev only): `ABCARUS_DEV_NATIVE_MIDI_DRUMS=1 npm start`
 - Runtime toggle (DevTools): `window.__abcarusNativeMidiDrums = true|false`
 - Note: this is experimental; for compatibility it may move `%%MIDI drum*` directives that appear before `K:` to just after `K:` during playback parsing.
+- UI toggle: Settings → Playback (Advanced) → “Use native abc2svg %%MIDI drum* (experimental)”.
 
 **Keyboard shortcuts / key routing**
 ```bash

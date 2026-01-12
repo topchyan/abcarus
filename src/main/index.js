@@ -903,8 +903,13 @@ function applySettingsPatch(patch, { persistToSettingsFile = true } = {}) {
   next.editorNotesBold = Boolean(next.editorNotesBold);
   next.editorLyricsBold = Boolean(next.editorLyricsBold);
   next.autoAlignBarsAfterTransforms = Boolean(next.autoAlignBarsAfterTransforms);
+  next.playbackNativeMidiDrums = Boolean(next.playbackNativeMidiDrums);
+  next.playbackNativeMidiDrumsSetByUser = Boolean(next.playbackNativeMidiDrumsSetByUser);
   if (patch && Object.prototype.hasOwnProperty.call(patch, "usePortalFileDialogs")) {
     next.usePortalFileDialogsSetByUser = true;
+  }
+  if (patch && Object.prototype.hasOwnProperty.call(patch, "playbackNativeMidiDrums")) {
+    next.playbackNativeMidiDrumsSetByUser = true;
   }
   // Errors feature is intentionally session-only and always persisted as off.
   next.errorsEnabled = false;
