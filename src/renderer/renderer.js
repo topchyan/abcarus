@@ -11674,13 +11674,13 @@ function ensurePlayer() {
           stopPlaybackFromGuard("Loop invariance violated: PlaybackRange.startOffset mutated.");
           return;
         }
-        if (activePlaybackRange && activePlaybackRange.endOffset != null) {
-          const endAbc = Number(activePlaybackRange.endOffset) + playbackIndexOffset;
-          if (Number.isFinite(endAbc) && i > endAbc) {
-            stopPlaybackFromGuard("End offset violated: note beyond endOffset was emitted.");
-            return;
-          }
-        }
+	        if (activePlaybackRange && activePlaybackRange.endOffset != null) {
+	          const endAbc = Number.isFinite(activePlaybackEndAbcOffset) ? Number(activePlaybackEndAbcOffset) : null;
+	          if (Number.isFinite(endAbc) && i >= endAbc) {
+	            stopPlaybackFromGuard("End offset reached: stopping at end boundary.");
+	            return;
+	          }
+	        }
         if (traceEnabled) {
           const timestamp = typeof performance !== "undefined" ? performance.now() : Date.now();
           const seq = (playbackTraceSeq += 1);
@@ -14282,9 +14282,7 @@ async function startPlaybackFromRange(rangeOverride) {
 
 	  // Switch semantics guard (Option B): playbackRange changes while playing are deferred; we also freeze loop start.
 	  activePlaybackRange = range;
-	  activePlaybackEndAbcOffset = (range.endOffset == null) ? null : (Number(range.endOffset) + playbackIndexOffset);
-	  if (activePlaybackEndAbcOffset != null && !Number.isFinite(activePlaybackEndAbcOffset)) activePlaybackEndAbcOffset = null;
-	  if (activePlaybackEndAbcOffset != null && activePlaybackEndAbcOffset <= startSym.istart) activePlaybackEndAbcOffset = null;
+		  activePlaybackEndAbcOffset = resolvePlaybackEndAbcOffset(range, startSym.istart);
 	  if (range && range.loop) {
 	    const loopBounds = computeFocusLoopPlaybackRange();
 	    activeLoopRange = loopBounds || {
