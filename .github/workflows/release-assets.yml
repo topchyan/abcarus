@@ -72,6 +72,7 @@ jobs:
           sha256sum ABCarus-x86_64.AppImage ABCarus-x86_64-portable.tar.gz > SHA256SUMS-linux.txt
 
       - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -122,6 +123,7 @@ jobs:
           shasum -a 256 ABCarus-macos-arm64.dmg > SHA256SUMS-macos-arm64.txt
 
       - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -171,6 +173,7 @@ jobs:
           shasum -a 256 ABCarus-macos-x64.dmg > SHA256SUMS-macos-x64.txt
 
       - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -268,6 +271,7 @@ jobs:
           $lines | Out-File -Encoding ascii "dist/electron-builder/SHA256SUMS-windows.txt"
 
       - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
