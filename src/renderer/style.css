@@ -1435,17 +1435,19 @@ svg {
 }
 
 .modal-card.settings-card {
-  width: min(920px, 94vw);
-  resize: both;
+  width: min(960px, 96vw);
+  height: min(600px, 92vh);
   overflow: hidden;
-  min-width: 420px;
-  min-height: 320px;
+  min-width: 720px;
+  min-height: 520px;
   max-width: 96vw;
   max-height: 92vh;
 }
 
 .modal-card.settings-card .modal-header {
   cursor: move;
+  gap: 10px;
+  justify-content: flex-start;
 }
 
 .modal-card.settings-card.dragging .modal-header {
@@ -1460,6 +1462,38 @@ svg {
   overflow: hidden;
   padding: 0;
   display: block;
+}
+
+.settings-header-controls {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-header-controls .segmented button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+
+.settings-search {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.settings-search input[type="text"] {
+  width: 220px;
+  max-width: 30vw;
+  min-height: var(--button-height);
+  padding: 4px 8px;
+  border-radius: var(--radius-1);
+  border: 1px solid var(--border-color);
+  background: #fff;
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  box-sizing: border-box;
 }
 
 .modal-header,
@@ -1548,6 +1582,22 @@ svg {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+.settings-section-header {
+  padding: 12px 12px 0;
+}
+
+.settings-section-title {
+  font-weight: 700;
+  font-size: var(--font-size-ui);
+  line-height: var(--line-height-ui);
+}
+
+.settings-section-hint {
+  margin-top: 2px;
+  font-size: var(--font-size-xs);
+  color: var(--muted-text);
 }
 
 .settings-tabs {
@@ -1643,6 +1693,14 @@ svg {
   min-width: 0;
 }
 
+.settings-group {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-2);
+  background: #fff;
+  padding: 12px;
+  gap: 10px;
+}
+
 /* Let the entry grid own layout; the row becomes a lightweight container. */
 .settings-entry > .settings-row {
   display: contents;
@@ -1651,6 +1709,10 @@ svg {
 .settings-entry > .settings-help {
   grid-column: 1 / 2;
   margin-top: -2px;
+}
+
+.settings-group .settings-title {
+  margin-top: 0;
 }
 
 .settings-editor {
@@ -1799,7 +1861,7 @@ textarea {
 }
 
 .settings-row input[type="checkbox"] {
-  justify-self: end;
+  justify-self: start;
 }
 
 .settings-row input[type="text"],
@@ -1838,29 +1900,15 @@ textarea {
 }
 
 @media (max-width: 860px) {
+  /* Keep Settings in a stable 2-pane desktop layout; do not collapse to 1-column. */
   .modal-card.settings-card {
-    width: min(720px, 96vw);
-    min-width: 320px;
+    min-width: 720px;
   }
-
-  .settings-layout {
-    grid-template-columns: 220px 1fr;
-  }
-
   .settings-entry {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(220px, 1fr) minmax(240px, 420px);
   }
-
   .settings-row {
-    grid-template-columns: 1fr;
-  }
-
-  .settings-entry > .settings-help {
-    grid-column: 1 / 2;
-  }
-
-  .settings-row input[type="checkbox"] {
-    justify-self: start;
+    grid-template-columns: minmax(220px, 1fr) minmax(240px, 420px);
   }
 }
 
