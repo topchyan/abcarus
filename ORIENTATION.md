@@ -80,3 +80,23 @@ By policy (see `WORKFLOW.md` and `.gitignore`):
   - `npm run test:settings`
   - `npm run test:truth-scale`
 
+## Releases (patch/minor/major)
+
+ABCarus uses `scripts/release.mjs` (via `npm run release:*`) to prepare releases.
+It requires a clean git working tree and a non-empty `CHANGELOG.md` `## [Unreleased]` section.
+
+**Patch release sequence (typical)**
+- Ensure `master` is up to date and clean:
+  - `git checkout master && git pull`
+  - `npm run test:settings && npm run test:measures`
+- Add release notes to `CHANGELOG.md` under `## [Unreleased]` (must be non-empty), then commit:
+  - `git add CHANGELOG.md && git commit -m "docs: add unreleased notes for next patch"`
+- Prepare the release (bumps version, moves changelog entry, creates tag):
+  - `npm run release:patch`
+- Publish:
+  - `git push origin master`
+  - `git push origin vX.Y.Z`
+
+**CI gotchas**
+- If GitHub Actions fails with “GitHub Releases requires a tag”, you ran the release workflow on a branch ref; publishing happens only on tags (`refs/tags/v*`).
+- If GitHub retires runner images (e.g. `macos-13`), update `.github/workflows/release-assets.yml` and cut a new patch tag so the fixed workflow exists in the tag ref used by CI.
