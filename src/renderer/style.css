@@ -1581,6 +1581,7 @@ svg {
 .settings-content {
   display: flex;
   flex-direction: column;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -1826,6 +1827,19 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.settings-advanced-divider {
+  border-top: 1px solid var(--border-color);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.settings-advanced-label {
+  font-size: var(--font-size-xs);
+  color: var(--muted-text);
+  font-weight: 600;
+  margin-top: -2px;
 }
 
 .settings-advanced > summary {

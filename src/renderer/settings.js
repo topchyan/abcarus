@@ -285,9 +285,15 @@ export function initSettings(api) {
     selectEl.textContent = "";
 
     const fallback = "TimGM6mb.sf2";
+    const defaultName = String(defaultSettings.soundfontName || fallback);
     const current = String(currentSettings.soundfontName || fallback);
     const entries = Array.isArray(cachedSoundfonts) ? cachedSoundfonts : [];
     const normalized = [];
+
+    const optDefault = document.createElement("option");
+    optDefault.value = "";
+    optDefault.textContent = `Default (${safeBasename(defaultName).replace(/\\.sf2$/i, "")})`;
+    selectEl.appendChild(optDefault);
 
     for (const item of entries) {
       if (!item) continue;
@@ -301,8 +307,8 @@ export function initSettings(api) {
     if (current && !normalized.some((x) => x.name === current)) {
       normalized.unshift({ name: current, source: isSoundfontPath(current) ? "user" : "bundled" });
     }
-    if (!normalized.some((x) => x.name === fallback)) {
-      normalized.unshift({ name: fallback, source: "bundled" });
+    if (defaultName && !normalized.some((x) => x.name === defaultName)) {
+      normalized.unshift({ name: defaultName, source: isSoundfontPath(defaultName) ? "user" : "bundled" });
     }
 
     const seen = new Set();
@@ -317,7 +323,9 @@ export function initSettings(api) {
     }
 
     selectEl.value = prev;
-    if (selectEl.value !== prev) selectEl.value = current;
+    if (selectEl.value !== prev) {
+      selectEl.value = String(current) === String(defaultName) ? "" : current;
+    }
   }
 
   const controlByKey = new Map(); // key -> { entry, el, kind }
@@ -420,7 +428,13 @@ export function initSettings(api) {
       } else if (kind === "color" && meta.el) {
         meta.el.value = String(value || "#000000");
       } else if (kind === "select" && meta.el) {
-        meta.el.value = String(value || "");
+        if (key === "soundfontName") {
+          const fallback = "TimGM6mb.sf2";
+          const defaultName = String(defaultSettings.soundfontName || fallback);
+          meta.el.value = String(value || "") === defaultName ? "" : String(value || "");
+        } else {
+          meta.el.value = String(value || "");
+        }
       } else if ((kind === "number" || kind === "text") && meta.el) {
         meta.el.value = String(value == null ? "" : value);
       }
@@ -698,6 +712,12 @@ export function initSettings(api) {
       }
 
       select.addEventListener("change", () => {
+        if (entry.key === "soundfontName") {
+          const fallback = "TimGM6mb.sf2";
+          const defaultName = String(defaultSettings.soundfontName || fallback);
+          stageSetting(entry.key, select.value ? select.value : defaultName);
+          return;
+        }
         stageSetting(entry.key, select.value || "");
       });
 
@@ -992,6 +1012,54 @@ export function initSettings(api) {
           .map(([title, groupEntries]) => ({ title, order: getGroupOrder(groupEntries), entries: groupEntries }))
           .sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title));
 
+        if (panel.key === "tools") {
+          const group = createGroup("Settings", "Import/export ABCarus settings.");
+
+          const makeActionRow = (label, buttonText, onClick) => {
+            const row = document.createElement("label");
+            row.className = "settings-row";
+            const labelSpan = document.createElement("span");
+            labelSpan.textContent = label;
+            row.appendChild(labelSpan);
+
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.textContent = buttonText;
+            btn.addEventListener("click", onClick);
+            row.appendChild(btn);
+
+            const block = document.createElement("div");
+            block.className = "settings-entry";
+            block.dataset.settingsSearch = `${label} ${buttonText} settings import export`.toLowerCase();
+            block.appendChild(row);
+            group.appendChild(block);
+          };
+
+          makeActionRow("Export settings", "Export…", async () => {
+            if (!api || typeof api.exportSettings !== "function") return;
+            const res = await api.exportSettings().catch(() => null);
+            if (!res || !res.ok || !res.path) {
+              alert((res && res.error) ? res.error : "Failed to export settings.");
+              return;
+            }
+            const note = res.exportedHeader ? "\n(incl. user_settings.abc)" : "";
+            alert(`Settings exported:\n${res.path}${note}`);
+          });
+
+          makeActionRow("Import settings", "Import…", async () => {
+            if (!api || typeof api.importSettings !== "function") return;
+            const res = await api.importSettings().catch(() => null);
+            if (!res || !res.ok) {
+              alert((res && res.error) ? res.error : "Failed to import settings.");
+              return;
+            }
+            const note = res.importedHeader ? " (incl. user_settings.abc)" : "";
+            alert(`Settings imported${note}.\nThey will be used next time you start ABCarus.`);
+          });
+
+          panelEl.appendChild(group);
+        }
+
         for (const g of orderedGroups) {
           const groupEntries = g.entries || [];
           const normal = groupEntries.filter((e) => !e.advanced && e.ui && e.ui.input && e.ui.input !== "code");
@@ -1059,24 +1127,16 @@ export function initSettings(api) {
           }
 
           if (settingsMode === "advanced" && advanced.length) {
-            const details = document.createElement("details");
-            details.className = "settings-advanced";
-            const summary = document.createElement("summary");
-            summary.textContent = "Advanced options";
-            details.appendChild(summary);
+            const divider = document.createElement("div");
+            divider.className = "settings-advanced-divider";
+            group.appendChild(divider);
 
-            const detailsKey = `${panel.key}|${g.title}`;
-            details.open = advancedOpenState.has(detailsKey);
-            details.addEventListener("toggle", () => {
-              if (details.open) advancedOpenState.add(detailsKey);
-              else advancedOpenState.delete(detailsKey);
-            });
+            const label = document.createElement("div");
+            label.className = "settings-advanced-label";
+            label.textContent = "Advanced";
+            group.appendChild(label);
 
-            const inner = document.createElement("div");
-            inner.className = "settings-advanced-inner";
-            for (const entry of advanced) appendEntryBlock(entry, inner);
-            details.appendChild(inner);
-            group.appendChild(details);
+            for (const entry of advanced) appendEntryBlock(entry, group);
           }
 
           panelEl.appendChild(group);
