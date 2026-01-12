@@ -12066,6 +12066,26 @@ function pickStartFromListAtOrAfter(list, minRenderIdx) {
   return list[list.length - 1];
 }
 
+function findBoundaryAfter(sorted, target) {
+  if (!Array.isArray(sorted) || !sorted.length) return null;
+  const t = Number(target);
+  if (!Number.isFinite(t)) return null;
+  let lo = 0;
+  let hi = sorted.length - 1;
+  let best = null;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const v = sorted[mid];
+    if (v > t) {
+      best = v;
+      hi = mid - 1;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  return best;
+}
+
 function computeFocusLoopPlaybackRange() {
   if (!focusModeEnabled) return null;
   if (!playbackLoopEnabled) return null;
@@ -12095,7 +12115,7 @@ function computeFocusLoopPlaybackRange() {
     const endStart = pickStartFromListAtOrAfter(endList, startRender);
     if (Number.isFinite(endStart)) {
       // End offset is the *next* bar start after the chosen end measure start.
-      endRender = findBoundaryAtOrAfter(measureIndex.istarts, endStart + 1);
+      endRender = findBoundaryAfter(measureIndex.istarts, endStart);
     }
   }
 
@@ -12114,15 +12134,21 @@ function computeFocusLoopPlaybackRange() {
 
 function updatePracticeUi() {
   if ($practiceTempoWrap) $practiceTempoWrap.hidden = !focusModeEnabled;
-  if ($practiceTempo && focusModeEnabled) {
+  if ($practiceTempo && focusModeEnabled && document.activeElement !== $practiceTempo) {
     const value = String(practiceTempoMultiplier);
     if ($practiceTempo.value !== value) $practiceTempo.value = value;
   }
 
   if ($practiceLoopWrap) $practiceLoopWrap.hidden = !focusModeEnabled;
-  if ($practiceLoopEnabled) $practiceLoopEnabled.checked = Boolean(playbackLoopEnabled);
-  if ($practiceLoopFrom) $practiceLoopFrom.value = String(clampInt(playbackLoopFromMeasure, 0, 100000, 0) || 0);
-  if ($practiceLoopTo) $practiceLoopTo.value = String(clampInt(playbackLoopToMeasure, 0, 100000, 0) || 0);
+  if ($practiceLoopEnabled && document.activeElement !== $practiceLoopEnabled) {
+    $practiceLoopEnabled.checked = Boolean(playbackLoopEnabled);
+  }
+  if ($practiceLoopFrom && document.activeElement !== $practiceLoopFrom) {
+    $practiceLoopFrom.value = String(clampInt(playbackLoopFromMeasure, 0, 100000, 0) || 0);
+  }
+  if ($practiceLoopTo && document.activeElement !== $practiceLoopTo) {
+    $practiceLoopTo.value = String(clampInt(playbackLoopToMeasure, 0, 100000, 0) || 0);
+  }
 
   // Keep the pending plan in sync when Focus is on and playback is idle.
   if (focusModeEnabled && !isPlaybackBusy()) {
@@ -14325,6 +14351,12 @@ if ($practiceLoopEnabled) {
 }
 
 if ($practiceLoopFrom) {
+  $practiceLoopFrom.addEventListener("input", () => {
+    const next = clampLoopField($practiceLoopFrom.value);
+    playbackLoopFromMeasure = next;
+    syncPendingPlaybackPlan();
+    updatePracticeUi();
+  });
   $practiceLoopFrom.addEventListener("change", () => {
     const next = clampLoopField($practiceLoopFrom.value);
     playbackLoopFromMeasure = next;
@@ -14335,6 +14367,12 @@ if ($practiceLoopFrom) {
 }
 
 if ($practiceLoopTo) {
+  $practiceLoopTo.addEventListener("input", () => {
+    const next = clampLoopField($practiceLoopTo.value);
+    playbackLoopToMeasure = next;
+    syncPendingPlaybackPlan();
+    updatePracticeUi();
+  });
   $practiceLoopTo.addEventListener("change", () => {
     const next = clampLoopField($practiceLoopTo.value);
     playbackLoopToMeasure = next;
