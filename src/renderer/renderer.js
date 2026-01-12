@@ -13927,9 +13927,9 @@ async function preparePlayback() {
     const relocated = relocateMidiDrumDirectivesIntoBody(playbackText);
     if (relocated && relocated.moved > 0) {
       playbackText = relocated.text;
-      playbackSanitizeWarnings.push({ kind: "playback-midi-drums-relocated", moved: relocated.moved });
+      playbackSanitizeWarnings.push({ kind: "playback-midi-drums-moved-after-k", moved: relocated.moved });
       if (window.__abcarusDebugPlayback) {
-        showToast("Playback: relocated %%MIDI drum* directives (experimental).", 3200);
+        showToast("Playback: moved %%MIDI drum* after K: (experimental).", 3200);
       }
     }
   }
