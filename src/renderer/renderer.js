@@ -10958,6 +10958,7 @@ function stopPlaybackFromGuard(message) {
   lastPlaybackGuardMessage = String(message || "");
   try { recordDebugLog("warn", [`Playback guard: ${lastPlaybackGuardMessage}`]); } catch {}
   playbackGuardError(message);
+  try { scheduleAutoDump("playback-guard", lastPlaybackGuardMessage); } catch {}
   playbackStartToken += 1;
   if (player && (isPlaying || isPaused) && typeof player.stop === "function") {
     suppressOnEnd = true;
@@ -14209,6 +14210,7 @@ async function startPlaybackFromRange(rangeOverride) {
     if (startToken !== playbackStartToken) return;
     lastPlaybackAbortMessage = String(message || "");
     try { recordDebugLog("warn", [`Playback abort: ${lastPlaybackAbortMessage}`]); } catch {}
+    try { scheduleAutoDump("playback-abort", lastPlaybackAbortMessage); } catch {}
     waitingForFirstNote = false;
     isPlaying = false;
     isPaused = false;
@@ -14243,22 +14245,23 @@ async function startPlaybackFromRange(rangeOverride) {
     && player
   );
   waitingForFirstNote = true;
-  try {
-    if (!canReuse) {
-      stopPlaybackForRestart();
-      const desired = soundfontName || "TimGM6mb.sf2";
+	  try {
+	    if (!canReuse) {
+	      stopPlaybackForRestart();
+	      const desired = soundfontName || "TimGM6mb.sf2";
       setSoundfontCaption("Loading...");
       updateSoundfontLoadingStatus(desired);
-      await preparePlayback();
-    } else {
-      await ensureSoundfontReady();
-      stopPlaybackForRestart();
-    }
-  } catch (e) {
-    stopPlaybackFromGuard(`Playback start failed: ${(e && e.message) ? e.message : String(e)}`);
-    showToast("Playback failed to start. Try again.", 3200);
-    return;
-  }
+	      await preparePlayback();
+	    } else {
+	      await ensureSoundfontReady();
+	      stopPlaybackForRestart();
+	    }
+	  } catch (e) {
+	    try { scheduleAutoDump("playback-start-failed", (e && e.message) ? e.message : String(e)); } catch {}
+	    stopPlaybackFromGuard(`Playback start failed: ${(e && e.message) ? e.message : String(e)}`);
+	    showToast("Playback failed to start. Try again.", 3200);
+	    return;
+	  }
   if (startToken !== playbackStartToken) return;
 
   updatePracticeUi();
