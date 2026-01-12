@@ -143,6 +143,15 @@ git push origin vX.Y.Z
 
 The canonical list lives in `.gitignore`; this section documents intent.
 
+## Branch / Push etiquette (especially during debugging)
+
+To avoid spamming GitHub with WIP commits during rapid iteration:
+
+- Prefer **local-only iteration** while investigating a bug (uncommitted changes or local commits).
+- Do **not** push a branch until you have a coherent checkpoint (or someone explicitly asks to push/PR).
+- If you need to share progress mid-way, prefer a **single “checkpoint” push** with a clear message (or open a Draft PR), rather than many small pushes.
+- Once the fix is confirmed, squash/clean up as needed, then push and open/update the PR.
+
 ## Useful Environment Variables (Debug / Ops)
 
 **UI / platform diagnostics**
