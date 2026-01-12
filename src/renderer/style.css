@@ -1600,6 +1600,19 @@ svg {
   color: var(--muted-text);
 }
 
+.settings-no-results {
+  margin: 8px 12px 0;
+  padding: 8px 10px;
+  border: 1px dashed rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-1);
+  font-size: var(--font-size-sm);
+  color: var(--muted-text);
+}
+
+.settings-no-results.hidden {
+  display: none;
+}
+
 .settings-tabs {
   display: flex;
   flex-direction: column;
@@ -1707,7 +1720,7 @@ svg {
 }
 
 .settings-entry > .settings-help {
-  grid-column: 1 / 2;
+  grid-column: 1 / -1;
   margin-top: -2px;
 }
 
@@ -1722,6 +1735,10 @@ svg {
   min-height: 160px;
   overflow: hidden;
   flex: 1;
+}
+
+.settings-entry .settings-editor {
+  grid-column: 1 / -1;
 }
 
 .settings-editor .cm-editor {
@@ -1802,6 +1819,13 @@ textarea {
 .settings-advanced {
   border-top: 1px solid var(--border-color);
   padding-top: 10px;
+}
+
+.settings-advanced-inner {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .settings-advanced > summary {
