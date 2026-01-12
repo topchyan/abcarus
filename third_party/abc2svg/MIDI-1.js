@@ -7,7 +7,7 @@ b[n1[i]]=(qs*i+da)%12
 for(i=1;i<=n2.length;i++)
 b[n2[i]]=12-(qs*i-da)%12
 return b}
-var n,v,s,maps,o,q,n,qs,a=parm.split(/\s+/),abc=this,cfmt=abc.cfmt(),curvoice=abc.get_curvoice(),parse=abc.get_parse()
+var n,v,s,maps,o,q,qs,a=parm.split(/\s+/),abc=this,cfmt=abc.cfmt(),curvoice=abc.get_curvoice(),parse=abc.get_parse()
 if(curvoice){if(curvoice.ignore)
 return
 if(curvoice.chn==undefined)
@@ -31,17 +31,34 @@ if(!cfmt.chord)
 cfmt.chord={}
 cfmt.chord.vol=v
 break
-case"drum":case"drumon":case"drumoff":case"drumbars":if(!curvoice)
-break
+case"drum":case"drumon":case"drumoff":case"drumbars":if(!curvoice){abc.syntax(1,"$1 must be in a voice","%%MIDI "+a[1])
+break}
 cfmt.drum=1
 s=abc.new_block("mididrum")
 s.play=s.invis=1
-if(a[1][4]=='o')
-s.on=a[1][5]=='n'
-else if(a[1][4]=='b')
-s.nb=+a[2]
-else
-s.txt=a.slice(2)
+switch(a[1].slice(4)){case"on":s.on=1
+break
+case"off":s.on=0
+break
+case"bars":s.nb=+a[2]
+if(isNaN(s.nb))
+q=1
+break
+default:s.txt=a.slice(2)
+v=s.txt[0].match(/[dz][2-9]?/g)
+if(v&&v.join('')!=s.txt[0])
+v=null
+if(v){n=s.txt[0].match(/d/g).length
+v=s.txt.slice(1).join(' ')
+v=v.match(/[^dz\s][0-9]+/g)
+if(v&&(v.length==n||v.length==2*n))
+break}
+q=1
+break}
+if(q){abc.syntax(1,abc.errs.bad_val,"%%MIDI "+a[1])
+curvoice.last_sym=s.prev
+if(s.prev)
+s.prev.next=null}
 break
 case"gchord":case"gchordbars":case"gchordon":case"gchordoff":if(!cfmt.chord)
 cfmt.chord={}
