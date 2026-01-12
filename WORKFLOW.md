@@ -173,6 +173,14 @@ When reporting a bug, try to include: app version (About), OS/desktop, minimal A
 **Where logs go**
 - Electron main process logs go to the terminal you launched `npm start` from.
 - Renderer logs go to DevTools Console (View → Toggle Developer Tools).
+- Debug dumps are JSON files you can attach to issues/PRs. They include the active file path + tune identity near the top (`context.label`, `context.filePath`, `context.xNumber`).
+
+**Debug dumps (recommended)**
+- Manual dump: press `Ctrl+Shift+D` (or menu action) and save `abcarus-debug-*.json`.
+- Auto-dump on runtime errors (opt-in for development):
+  - `ABCARUS_DEV_AUTO_DUMP=1 npm start`
+  - Optional: `ABCARUS_DEV_AUTO_DUMP_DIR=/some/path` (override dump directory)
+  - Runtime toggle (DevTools): `window.__abcarusAutoDumpOnError = true|false`
 
 **Keyboard shortcuts / key routing**
 ```bash

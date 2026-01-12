@@ -961,6 +961,79 @@ function recordDebugLog(level, args, stackOverride) {
   if (debugLogBuffer.length > 300) debugLogBuffer.splice(0, debugLogBuffer.length - 300);
 }
 
+const devConfig = (() => {
+  try {
+    return (window.api && typeof window.api.getDevConfig === "function") ? (window.api.getDevConfig() || {}) : {};
+  } catch {
+    return {};
+  }
+})();
+const AUTO_DUMP_DEFAULT_ENABLED = String(devConfig.ABCARUS_DEV_AUTO_DUMP || "") === "1";
+const AUTO_DUMP_DIR_OVERRIDE = String(devConfig.ABCARUS_DEV_AUTO_DUMP_DIR || "");
+let autoDumpLastAtMs = 0;
+let autoDumpSeq = 0;
+
+function shouldAutoDump() {
+  // Runtime override via DevTools (no reload): window.__abcarusAutoDumpOnError = true/false
+  if (window.__abcarusAutoDumpOnError === true) return true;
+  if (window.__abcarusAutoDumpOnError === false) return false;
+  return AUTO_DUMP_DEFAULT_ENABLED;
+}
+
+function sanitizeDumpSlug(raw) {
+  const base = String(raw || "").trim().toLowerCase() || "event";
+  const cleaned = base.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return cleaned || "event";
+}
+
+function computeSuggestedDebugDumpDir() {
+  if (AUTO_DUMP_DIR_OVERRIDE) return AUTO_DUMP_DIR_OVERRIDE;
+  try {
+    const href = String(window.location && window.location.href ? window.location.href : "");
+    if (href.startsWith("file://") && window.api && typeof window.api.pathDirname === "function" && typeof window.api.pathJoin === "function") {
+      const p = decodeURIComponent(new URL(href).pathname || "");
+      if (p.includes("/src/renderer/")) {
+        const rendererDir = window.api.pathDirname(p);
+        const srcDir = window.api.pathDirname(rendererDir);
+        const rootDir = window.api.pathDirname(srcDir);
+        return window.api.pathJoin(rootDir, "scripts", "local", "debug_dumps");
+      }
+    }
+  } catch {}
+  return activeTuneMeta && activeTuneMeta.path ? safeDirname(activeTuneMeta.path) : "";
+}
+
+async function writeDebugDumpSnapshotToPath(filePath, { silent = false, reason = "" } = {}) {
+  if (!filePath) return { ok: false, error: "No file path." };
+  const snapshot = await buildDebugDumpSnapshot({ reason });
+  const json = safeJsonStringify(snapshot);
+  const res = await writeFile(filePath, json);
+  if (!res || !res.ok) {
+    if (!silent) {
+      await showSaveError((res && res.error) ? res.error : "Unable to write debug dump.");
+    }
+    return { ok: false, error: (res && res.error) ? res.error : "Unable to write debug dump." };
+  }
+  if (!silent) showToast(`Saved debug dump: ${safeBasename(filePath)}`, 3000);
+  return { ok: true, path: filePath };
+}
+
+function scheduleAutoDump(reason, extra) {
+  if (!shouldAutoDump()) return;
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  if (now - autoDumpLastAtMs < 6000) return;
+  autoDumpLastAtMs = now;
+  const seq = (autoDumpSeq += 1);
+  const slug = sanitizeDumpSlug(reason);
+  const fileName = `abcarus-auto-${nowCompactStamp()}-${slug}-${seq}.json`;
+  const dir = computeSuggestedDebugDumpDir();
+  if (!dir || !window.api || typeof window.api.mkdirp !== "function" || typeof window.api.pathJoin !== "function") return;
+  const target = window.api.pathJoin(dir, fileName);
+  window.api.mkdirp(dir).then(() => {
+    writeDebugDumpSnapshotToPath(target, { silent: true, reason: `${slug}${extra ? ` ${safeString(String(extra || ""), 2000)}` : ""}` }).catch(() => {});
+  }).catch(() => {});
+}
+
 (() => {
   // Console wrapping is opt-in to avoid overhead and surprising global side effects.
   // Enable via DevTools: `window.__abcarusDebugLog = true` then reload.
@@ -989,6 +1062,21 @@ function recordDebugLog(level, args, stackOverride) {
     } catch {}
   });
 })();
+
+// Auto-dumps are cheap when disabled and invaluable when debugging: opt-in via ABCARUS_DEV_AUTO_DUMP=1.
+window.addEventListener("error", (e) => {
+  try {
+    const msg = e && e.message ? String(e.message) : "window.error";
+    scheduleAutoDump("window-error", msg);
+  } catch {}
+});
+window.addEventListener("unhandledrejection", (e) => {
+  try {
+    const reason = e && e.reason ? e.reason : null;
+    const msg = reason && reason.message ? String(reason.message) : String(reason || "unhandledrejection");
+    scheduleAutoDump("unhandledrejection", msg);
+  } catch {}
+});
 
 const MIN_PANE_WIDTH = 220;
 const MIN_RIGHT_PANE_WIDTH = 220;
@@ -8051,11 +8139,28 @@ function safeJsonStringify(value) {
   );
 }
 
-async function buildDebugDumpSnapshot() {
+async function buildDebugDumpSnapshot({ reason = "" } = {}) {
   let aboutInfo = null;
   if (window.api && typeof window.api.getAboutInfo === "function") {
     try { aboutInfo = await window.api.getAboutInfo(); } catch {}
   }
+
+  const ctxPath = (activeTuneMeta && activeTuneMeta.path)
+    ? activeTuneMeta.path
+    : (currentDoc && currentDoc.path ? currentDoc.path : null);
+  const ctxBasename = (activeTuneMeta && activeTuneMeta.basename)
+    ? activeTuneMeta.basename
+    : (ctxPath ? safeBasename(ctxPath) : null);
+  const ctxX = (activeTuneMeta && activeTuneMeta.xNumber != null) ? activeTuneMeta.xNumber : null;
+  const ctxTitle = (activeTuneMeta && activeTuneMeta.title) ? activeTuneMeta.title : null;
+  const ctxId = (activeTuneMeta && activeTuneMeta.id) ? activeTuneMeta.id : null;
+  const ctxLabel = (() => {
+    const filePart = ctxBasename || (ctxPath ? safeBasename(ctxPath) : "");
+    const xPart = ctxX != null ? `X:${ctxX}` : "";
+    const titlePart = ctxTitle ? String(ctxTitle).trim() : "";
+    const mid = [xPart, titlePart].filter(Boolean).join(" ");
+    return [filePart, mid].filter(Boolean).join(" — ").trim() || null;
+  })();
 
   const playbackDebug = (window.__abcarusPlaybackDebug && typeof window.__abcarusPlaybackDebug === "object")
     ? window.__abcarusPlaybackDebug
@@ -8084,6 +8189,15 @@ async function buildDebugDumpSnapshot() {
   return {
     kind: "abcarus-debug-dump",
     createdAt: new Date().toISOString(),
+    reason: reason ? String(reason) : null,
+    context: {
+      label: ctxLabel,
+      filePath: ctxPath,
+      fileBasename: ctxBasename,
+      tuneId: ctxId,
+      xNumber: ctxX,
+      title: ctxTitle,
+    },
     about: aboutInfo,
     debugLog: debugLogBuffer.slice(),
     selection: editorView ? {
@@ -8185,22 +8299,7 @@ async function buildDebugDumpSnapshot() {
 async function dumpDebugToFile(filePathArg) {
   try {
     const suggested = `abcarus-debug-${nowCompactStamp()}.json`;
-    let suggestedDir = "";
-    try {
-      const href = String(window.location && window.location.href ? window.location.href : "");
-      if (href.startsWith("file://") && window.api && typeof window.api.pathDirname === "function" && typeof window.api.pathJoin === "function") {
-        const p = decodeURIComponent(new URL(href).pathname || "");
-        if (p.includes("/src/renderer/")) {
-          const rendererDir = window.api.pathDirname(p);
-          const srcDir = window.api.pathDirname(rendererDir);
-          const rootDir = window.api.pathDirname(srcDir);
-          suggestedDir = window.api.pathJoin(rootDir, "scripts", "local", "debug_dumps");
-        }
-      }
-    } catch {}
-    if (!suggestedDir) {
-      suggestedDir = activeTuneMeta && activeTuneMeta.path ? safeDirname(activeTuneMeta.path) : "";
-    }
+    let suggestedDir = computeSuggestedDebugDumpDir();
     if (suggestedDir) {
       const res = await mkdirp(suggestedDir);
       if (!res || !res.ok) {
@@ -8209,15 +8308,7 @@ async function dumpDebugToFile(filePathArg) {
     }
     const filePath = filePathArg || (await showSaveDialog(suggested, suggestedDir));
     if (!filePath) return { ok: false, cancelled: true };
-    const snapshot = await buildDebugDumpSnapshot();
-    const json = safeJsonStringify(snapshot);
-    const res = await writeFile(filePath, json);
-    if (!res || !res.ok) {
-      await showSaveError((res && res.error) ? res.error : "Unable to write debug dump.");
-      return { ok: false, error: (res && res.error) ? res.error : "Unable to write debug dump." };
-    }
-    showToast(`Saved debug dump: ${safeBasename(filePath)}`, 3000);
-    return { ok: true, path: filePath };
+    return await writeDebugDumpSnapshotToPath(filePath, { silent: false, reason: "manual" });
   } catch (e) {
     const msg = (e && e.message) ? e.message : String(e);
     await showSaveError(msg);
@@ -13748,6 +13839,7 @@ async function preparePlayback() {
     if (!playbackParseErrorToastShown) {
       playbackParseErrorToastShown = true;
       showToast("Playback parse error (see debug dump).", 3200);
+      scheduleAutoDump("playback-parse-error", entry && entry.message ? entry.message : String(message || ""));
     }
     if (/Not enough measure bars for lyric line/i.test(entry.message)) {
       // We'll attempt a playback-only fallback that ignores lyrics, so don't spam errors.
