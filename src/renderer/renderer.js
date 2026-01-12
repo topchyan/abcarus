@@ -13924,7 +13924,7 @@ async function preparePlayback() {
 
   // abc2svg requires %%MIDI drum/drumon/drumbars to be inside a voice; many real-world files place them in headers.
   // Neutralize (comment out) these directives for tolerant playback while preserving istart mapping.
-  if (Array.isArray(playbackParseErrors) && playbackParseErrors.some((e) => /%%MIDI\\s+drum\\s+must be in a voice|%%MIDI\\s+drumon\\s+must be in a voice|%%MIDI\\s+drumbars\\s+must be in a voice/i.test(e.message || ""))) {
+  if (Array.isArray(playbackParseErrors) && playbackParseErrors.some((e) => /%%MIDI\s+drum\s+must be in a voice|%%MIDI\s+drumon\s+must be in a voice|%%MIDI\s+drumbars\s+must be in a voice/i.test(e.message || ""))) {
     playbackSanitizeWarnings.push({ kind: "playback-midi-drums-neutralized" });
     const abc2 = new AbcCtor(user);
     playbackParseErrors = [];
