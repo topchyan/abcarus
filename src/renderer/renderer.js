@@ -12086,6 +12086,33 @@ function findBoundaryAfter(sorted, target) {
   return best;
 }
 
+function resolveMeasureStartRenderIdx(measureIndex, n, { minBound, minStartRenderIdx } = {}) {
+  if (!measureIndex) return null;
+  const num = clampInt(n, 0, 100000, 0);
+  if (num <= 0) return null;
+  const anchor = Number.isFinite(Number(measureIndex.anchor)) ? Number(measureIndex.anchor) : 0;
+  const istarts = Array.isArray(measureIndex.istarts) ? measureIndex.istarts : null;
+  const bound = Number.isFinite(Number(minBound)) ? Number(minBound) : null;
+
+  // Preferred: abc2svg bar_num mapping (can contain multiple occurrences due to repeats/voltas).
+  const list = (measureIndex.byNumber && typeof measureIndex.byNumber.get === "function")
+    ? measureIndex.byNumber.get(num)
+    : null;
+  if (Array.isArray(list) && list.length) {
+    const boundPick = (bound != null) ? pickStartFromListAtOrAfter(list, bound) : list[0];
+    const minPick = Number.isFinite(Number(minStartRenderIdx)) ? pickStartFromListAtOrAfter(list, Number(minStartRenderIdx)) : boundPick;
+    return Number.isFinite(Number(minPick)) ? Number(minPick) : Number(boundPick);
+  }
+
+  // Fallback: list-of-measures index (used by older/edge cases).
+  if (istarts && istarts.length) {
+    const slot = (num - 1) + anchor;
+    const v = istarts[Math.max(0, Math.min(istarts.length - 1, slot))];
+    if (Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
 function computeFocusLoopPlaybackRange() {
   if (!focusModeEnabled) return null;
   if (!playbackLoopEnabled) return null;
@@ -12096,23 +12123,19 @@ function computeFocusLoopPlaybackRange() {
   if (!measureIndex || !Array.isArray(measureIndex.istarts) || !measureIndex.istarts.length) return null;
 
   const renderOffset = Number(measureIndex.offset) || 0;
+  const anchor = Number.isFinite(Number(measureIndex.anchor)) ? Number(measureIndex.anchor) : 0;
+  const minBound = measureIndex.istarts[Math.max(0, Math.min(measureIndex.istarts.length - 1, anchor))];
 
   const fromMeasure = clampInt(playbackLoopFromMeasure, 0, 100000, 0);
   const toMeasure = clampInt(playbackLoopToMeasure, 0, 100000, 0);
 
   const fromNum = fromMeasure > 0 ? fromMeasure : 1;
-  const startList = (measureIndex.byNumber && typeof measureIndex.byNumber.get === "function")
-    ? measureIndex.byNumber.get(fromNum)
-    : null;
-  const startRender = Array.isArray(startList) && startList.length ? startList[0] : null;
+  const startRender = resolveMeasureStartRenderIdx(measureIndex, fromNum, { minBound });
   if (!Number.isFinite(startRender)) return null;
 
   let endRender = null;
   if (toMeasure > 0) {
-    const endList = (measureIndex.byNumber && typeof measureIndex.byNumber.get === "function")
-      ? measureIndex.byNumber.get(toMeasure)
-      : null;
-    const endStart = pickStartFromListAtOrAfter(endList, startRender);
+    const endStart = resolveMeasureStartRenderIdx(measureIndex, toMeasure, { minBound, minStartRenderIdx: startRender });
     if (Number.isFinite(endStart)) {
       // End offset is the *next* bar start after the chosen end measure start.
       endRender = findBoundaryAfter(measureIndex.istarts, endStart);
