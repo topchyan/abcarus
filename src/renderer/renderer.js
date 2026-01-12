@@ -193,6 +193,7 @@ let practiceBarHighlightRange = null; // {from,to} editor offsets
 let practiceBarHighlightVersion = 0;
 let lastSvgPracticeBarEls = [];
 let lastSvgFollowBarEls = [];
+let lastSvgFollowMeasureEls = [];
 let lastSvgPlayheadEl = null;
 let lastSvgPlayheadSvg = null;
 let lastSvgPlayheadXCenter = null;
@@ -598,6 +599,13 @@ function clearSvgFollowBarHighlight() {
   lastSvgFollowBarEls = [];
 }
 
+function clearSvgFollowMeasureHighlight() {
+  for (const el of lastSvgFollowMeasureEls) {
+    try { el.remove(); } catch {}
+  }
+  lastSvgFollowMeasureEls = [];
+}
+
 function clearSvgPlayhead() {
   if (lastSvgPlayheadEl) {
     try { lastSvgPlayheadEl.remove(); } catch {}
@@ -605,6 +613,160 @@ function clearSvgPlayhead() {
   lastSvgPlayheadEl = null;
   lastSvgPlayheadSvg = null;
   lastSvgPlayheadXCenter = null;
+}
+
+function getOrCreateSvgOverlayHost(svg) {
+  if (!svg) return null;
+  const existing = svg.querySelector("g.abcarus-svg-overlays");
+  if (existing) return existing;
+  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  g.setAttribute("class", "abcarus-svg-overlays");
+  // Insert after <defs>/<style> so we don't break references, but still stay behind notes.
+  const children = Array.from(svg.childNodes || []);
+  let insertBefore = svg.firstChild;
+  for (const node of children) {
+    if (!node || node.nodeType !== 1) continue;
+    const tag = String(node.tagName || "").toLowerCase();
+    if (tag === "defs" || tag === "style") {
+      insertBefore = node.nextSibling;
+      continue;
+    }
+    break;
+  }
+  try {
+    svg.insertBefore(g, insertBefore || null);
+  } catch {
+    try { svg.appendChild(g); } catch {}
+  }
+  return g;
+}
+
+function getRectAttr(el, name) {
+  const v = Number(el && typeof el.getAttribute === "function" ? el.getAttribute(name) : NaN);
+  return Number.isFinite(v) ? v : null;
+}
+
+function rectsOverlap(aTop, aBottom, bTop, bBottom) {
+  const top = Math.max(aTop, bTop);
+  const bottom = Math.min(aBottom, bBottom);
+  return bottom > top ? (bottom - top) : 0;
+}
+
+function findNearestBarElForNote(noteEl) {
+  if (!noteEl || !$out) return null;
+  const svg = noteEl.ownerSVGElement;
+  if (!svg) return null;
+  const nx = getRectAttr(noteEl, "x");
+  const ny = getRectAttr(noteEl, "y");
+  const nh = getRectAttr(noteEl, "height");
+  if (nx == null || ny == null || nh == null) return null;
+  const noteTop = ny;
+  const noteBottom = ny + nh;
+  const noteX = nx + (getRectAttr(noteEl, "width") || 0) * 0.5;
+
+  const barEls = Array.from(svg.querySelectorAll(".bar-hl"));
+  let best = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const el of barEls) {
+    const by = getRectAttr(el, "y");
+    const bh = getRectAttr(el, "height");
+    const bx = getRectAttr(el, "x");
+    if (by == null || bh == null || bx == null) continue;
+    const overlap = rectsOverlap(noteTop, noteBottom, by, by + bh);
+    if (overlap <= 0) continue;
+    // Prefer bars whose vertical span covers the note and are horizontally near the note.
+    const dx = Math.abs(bx - noteX);
+    const dy = Math.abs(by - noteTop);
+    const score = dx + dy * 0.25;
+    if (score < bestScore) {
+      bestScore = score;
+      best = el;
+    }
+  }
+  return best;
+}
+
+function highlightSvgFollowMeasureForNote(noteEl, barEl) {
+  if (!noteEl) return false;
+  const svg = noteEl.ownerSVGElement;
+  if (!svg) return false;
+
+  const b = barEl || findNearestBarElForNote(noteEl);
+  if (!b) return false;
+
+  const bandY = getRectAttr(b, "y");
+  const bandH = getRectAttr(b, "height");
+  if (bandY == null || bandH == null) return false;
+  const bandTop = bandY;
+  const bandBottom = bandY + bandH;
+
+  const noteX = getRectAttr(noteEl, "x");
+  const noteW = getRectAttr(noteEl, "width") || 0;
+  if (noteX == null) return false;
+  const noteCenterX = noteX + noteW * 0.5;
+
+  const barsOnLine = Array.from(svg.querySelectorAll(".bar-hl")).map((el) => {
+    const x = getRectAttr(el, "x");
+    const y = getRectAttr(el, "y");
+    const h = getRectAttr(el, "height");
+    if (x == null || y == null || h == null) return null;
+    const overlap = rectsOverlap(bandTop, bandBottom, y, y + h);
+    if (overlap <= 0) return null;
+    return { el, x, y, h };
+  }).filter(Boolean);
+
+  // Collect notes on the same staff band to approximate the visible line extents.
+  const notesOnLine = Array.from(svg.querySelectorAll(".note-hl")).map((el) => {
+    const x = getRectAttr(el, "x");
+    const y = getRectAttr(el, "y");
+    const w = getRectAttr(el, "width");
+    const h = getRectAttr(el, "height");
+    if (x == null || y == null || w == null || h == null) return null;
+    const overlap = rectsOverlap(bandTop, bandBottom, y, y + h);
+    if (overlap <= 0) return null;
+    return { x, y, w, h };
+  }).filter(Boolean);
+
+  let lineMinX = null;
+  let lineMaxX = null;
+  for (const n of notesOnLine) {
+    const left = n.x;
+    const right = n.x + n.w;
+    lineMinX = (lineMinX == null) ? left : Math.min(lineMinX, left);
+    lineMaxX = (lineMaxX == null) ? right : Math.max(lineMaxX, right);
+  }
+
+  let leftBarX = null;
+  let rightBarX = null;
+  for (const bar of barsOnLine) {
+    if (bar.x <= noteCenterX) {
+      leftBarX = (leftBarX == null) ? bar.x : Math.max(leftBarX, bar.x);
+    } else {
+      rightBarX = (rightBarX == null) ? bar.x : Math.min(rightBarX, bar.x);
+    }
+  }
+
+  const pad = 10;
+  const fallbackLeft = lineMinX != null ? Math.max(0, lineMinX - pad) : Math.max(0, noteCenterX - 120);
+  const fallbackRight = lineMaxX != null ? (lineMaxX + pad) : (noteCenterX + 120);
+  const leftX = (leftBarX != null) ? leftBarX : fallbackLeft;
+  const rightX = (rightBarX != null) ? rightBarX : fallbackRight;
+  const width = Math.max(0, rightX - leftX);
+  if (width < 4) return false;
+
+  clearSvgFollowMeasureHighlight();
+  const host = getOrCreateSvgOverlayHost(svg);
+  if (!host) return false;
+  const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  rect.setAttribute("class", "svg-follow-measure");
+  rect.setAttribute("x", String(leftX));
+  rect.setAttribute("y", String(bandTop));
+  rect.setAttribute("width", String(width));
+  rect.setAttribute("height", String(bandH));
+  rect.setAttribute("pointer-events", "none");
+  try { host.appendChild(rect); } catch {}
+  lastSvgFollowMeasureEls = [rect];
+  return true;
 }
 
 function highlightSvgFollowBarAtEditorOffset(editorOffset) {
@@ -10299,6 +10461,7 @@ function resetPlaybackUiState() {
   clearPlaybackNoteOnEls();
   clearSvgPlayhead();
   clearSvgFollowBarHighlight();
+  clearSvgFollowMeasureHighlight();
   clearSvgPracticeBarHighlight();
   setPracticeBarHighlight(null);
   lastPlaybackUiRenderIdx = null;
@@ -11107,25 +11270,9 @@ function schedulePlaybackUiUpdate(istart) {
     // Follow mode: emphasize bar + playhead line over per-note blinking.
     clearPlaybackNoteOnEls();
 
-    let barEl = null;
-    if (
-      followPlayback
-      && playbackState
-      && Array.isArray(playbackState.measureIstarts)
-      && playbackState.measureIstarts.length
-      && editorView
-    ) {
-      try {
-        const list = playbackState.measureIstarts;
-        const measureIndex = findMeasureIndex(i);
-        const startI = list[Math.max(0, Math.min(list.length - 1, measureIndex))] || 0;
-        const from = toEditorOffset(startI);
-        if (Number.isFinite(from)) {
-          highlightSvgFollowBarAtEditorOffset(from);
-          barEl = lastSvgFollowBarEls.length ? lastSvgFollowBarEls[0] : null;
-        }
-      } catch {}
-    }
+    // New approach: highlight the current *visual* staff segment (5 lines) instead of bar separators.
+    // This avoids ambiguity when the left barline of the current measure is on the previous system line.
+    clearSvgFollowBarHighlight();
 
     const els = $out.querySelectorAll("._" + renderIdx + "_");
     const noteEls = els && els.length
@@ -11133,11 +11280,9 @@ function schedulePlaybackUiUpdate(istart) {
       : [];
     const chosen = noteEls.length ? pickClosestNoteElement(noteEls) : null;
     if (chosen) {
-      if (barEl && barEl.ownerSVGElement && chosen.ownerSVGElement && barEl.ownerSVGElement !== chosen.ownerSVGElement) {
-        const sameSvg = lastSvgFollowBarEls.find((el) => el && el.ownerSVGElement === chosen.ownerSVGElement);
-        if (sameSvg) barEl = sameSvg;
-      }
-      setSvgPlayheadFromElements(chosen, barEl);
+      const nearestBar = findNearestBarElForNote(chosen);
+      setSvgPlayheadFromElements(chosen, nearestBar);
+      highlightSvgFollowMeasureForNote(chosen, nearestBar);
       const now = typeof performance !== "undefined" ? performance.now() : Date.now();
       if (now - lastPlaybackUiScrollAt > 90) {
         maybeScrollRenderToNote(chosen);
@@ -11148,6 +11293,7 @@ function schedulePlaybackUiUpdate(istart) {
     }
 
     clearSvgPlayhead();
+    clearSvgFollowMeasureHighlight();
     highlightSourceAt(editorIdx, true);
   });
 }
