@@ -971,6 +971,7 @@ const devConfig = (() => {
 })();
 const AUTO_DUMP_DEFAULT_ENABLED = String(devConfig.ABCARUS_DEV_AUTO_DUMP || "") === "1";
 const AUTO_DUMP_DIR_OVERRIDE = String(devConfig.ABCARUS_DEV_AUTO_DUMP_DIR || "");
+const NATIVE_MIDI_DRUMS_DEFAULT_ENABLED = String(devConfig.ABCARUS_DEV_NATIVE_MIDI_DRUMS || "") === "1";
 let autoDumpLastAtMs = 0;
 let autoDumpSeq = 0;
 
@@ -979,6 +980,13 @@ function shouldAutoDump() {
   if (window.__abcarusAutoDumpOnError === true) return true;
   if (window.__abcarusAutoDumpOnError === false) return false;
   return AUTO_DUMP_DEFAULT_ENABLED;
+}
+
+function shouldUseNativeMidiDrums() {
+  // Runtime override via DevTools (no reload): window.__abcarusNativeMidiDrums = true/false
+  if (window.__abcarusNativeMidiDrums === true) return true;
+  if (window.__abcarusNativeMidiDrums === false) return false;
+  return NATIVE_MIDI_DRUMS_DEFAULT_ENABLED;
 }
 
 function sanitizeDumpSlug(raw) {
@@ -6345,6 +6353,40 @@ function neutralizeMidiDrumDirectivesForPlayback(text) {
   }).join("\n");
 }
 
+function relocateMidiDrumDirectivesIntoBody(text) {
+  const lines = String(text || "").split(/\r\n|\n|\r/);
+  const drumLineRe = /^\s*%%\s*MIDI\s+drum(on|off|bars)?\b/i;
+  let insertAt = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (/^\s*K:/.test(line) || /^\s*\[\s*K:/.test(line)) {
+      insertAt = i + 1;
+      break;
+    }
+  }
+  if (insertAt < 0) return { text: String(text || ""), moved: 0 };
+
+  const moved = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (i >= insertAt) break;
+    const line = lines[i];
+    if (!drumLineRe.test(line)) continue;
+    moved.push(line);
+    // Leave a same-length comment behind to keep editor/istart mapping as stable as possible.
+    const idx = line.indexOf("%%");
+    if (idx >= 0) {
+      lines[i] = `${line.slice(0, idx)}% ${line.slice(idx + 2)}`;
+    } else {
+      lines[i] = `% ${line}`;
+    }
+  }
+  if (!moved.length) return { text: lines.join("\n"), moved: 0 };
+
+  // Insert original directives after K: so abc2svg treats them as being "in a voice" (native mididrum blocks).
+  lines.splice(insertAt, 0, ...moved, "%");
+  return { text: lines.join("\n"), moved: moved.length };
+}
+
 function getRenderMeasureIndex() {
   if (!editorView) return null;
   const payload = getRenderPayload();
@@ -10473,6 +10515,7 @@ let lastMeterMismatchToastKey = null;
 let lastPlaybackMeterMismatchWarning = null;
 let lastRepeatShortBarToastKey = null;
 let lastPlaybackRepeatShortBarWarning = null;
+let lastMidiDrumCompatToastKey = null;
 let lastPlaybackKeyOrderWarning = null;
 let playbackStartToken = 0;
 let lastPlaybackGuardMessage = "";
@@ -13660,13 +13703,15 @@ function getPlaybackPayload() {
   const baseText = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
   const gchordPreview = injectGchordOn(baseText, prefixPayload.offset || 0);
   const gchordPreviewText = (gchordPreview && gchordPreview.changed) ? gchordPreview.text : baseText;
-  const drumPreview = injectDrumPlayback(gchordPreviewText);
+  const nativeDrums = shouldUseNativeMidiDrums();
+  const drumPreview = nativeDrums ? { text: gchordPreviewText, changed: false } : injectDrumPlayback(gchordPreviewText);
   const previewText = normalizeBlankLinesForPlayback(
     normalizeDollarLineBreaksForPlayback(drumPreview && drumPreview.changed ? drumPreview.text : gchordPreviewText)
   );
   const expandRepeats = window.__abcarusPlaybackExpandRepeats === true;
   const repeatsFlag = expandRepeats ? "exp:on" : "exp:off";
-  const sourceKey = `${previewText}|||${prefixPayload.offset || 0}|||${repeatsFlag}`;
+  const drumsFlag = nativeDrums ? "drums:native" : "drums:inject";
+  const sourceKey = `${previewText}|||${prefixPayload.offset || 0}|||${repeatsFlag}|||${drumsFlag}`;
   if (lastPlaybackPayloadCache && lastPlaybackPayloadCache.key === sourceKey) {
     lastPlaybackMeta = lastPlaybackPayloadCache.meta
       || { drumInsertAtLine: null, drumLineCount: 0 };
@@ -13724,7 +13769,7 @@ function getPlaybackPayload() {
     }
   }
 
-  const drumInjected = injectDrumPlayback(payload.text);
+  const drumInjected = nativeDrums ? { text: payload.text, changed: false, insertAtLine: null, lineCount: 0 } : injectDrumPlayback(payload.text);
   if (drumInjected && drumInjected.signatureDiff) {
     lastDrumSignatureDiff = drumInjected.signatureDiff;
     playbackSanitizeWarnings.push({ kind: "drum-signature-mismatch", detail: drumInjected.signatureDiff });
@@ -13830,6 +13875,7 @@ async function preparePlayback() {
   };
   const abc = new AbcCtor(user);
   const playbackPayload = getPlaybackPayload();
+  const nativeMidiDrums = shouldUseNativeMidiDrums();
   lastPlaybackHasParts = /\nP\s*:/.test(`\n${playbackPayload.text || ""}`) || /\[\s*P\s*:/i.test(playbackPayload.text || "");
   if (Array.isArray(playbackSanitizeWarnings) && playbackSanitizeWarnings.length) {
     showToast("Playback may vary (ABC sanitized for stability).", 3600);
@@ -13877,6 +13923,16 @@ async function preparePlayback() {
     playbackText = normalizeAccThreeQuarterToneForAbc2svg(playbackText);
     showToast("Playback: 3/4-tone accidentals normalized (compat mode).", 3600);
   }
+  if (nativeMidiDrums) {
+    const relocated = relocateMidiDrumDirectivesIntoBody(playbackText);
+    if (relocated && relocated.moved > 0) {
+      playbackText = relocated.text;
+      playbackSanitizeWarnings.push({ kind: "playback-midi-drums-relocated", moved: relocated.moved });
+      if (window.__abcarusDebugPlayback) {
+        showToast("Playback: relocated %%MIDI drum* directives (experimental).", 3200);
+      }
+    }
+  }
   abc.tosvg("play", playbackText);
 
   // abc2svg requires %%MIDI drum/drumon/drumbars to be inside a voice; many real-world files place them in headers.
@@ -13885,10 +13941,32 @@ async function preparePlayback() {
     playbackSanitizeWarnings.push({ kind: "playback-midi-drums-neutralized" });
     const abc2 = new AbcCtor(user);
     playbackParseErrors = [];
+    if (nativeMidiDrums) {
+      // Experimental native path failed; fall back to our V:DRUM injection so drums still play after neutralization.
+      const injected = injectDrumPlayback(playbackText);
+      if (injected && injected.changed) {
+        playbackText = injected.text;
+        playbackSanitizeWarnings.push({ kind: "playback-native-midi-drums-fallback-to-inject" });
+        lastPlaybackMeta = { drumInsertAtLine: injected.insertAtLine, drumLineCount: injected.lineCount };
+      }
+    }
     playbackText = neutralizeMidiDrumDirectivesForPlayback(playbackText);
     abc2.tosvg("play", playbackText);
     abc.tunes = abc2.tunes;
-    showToast("Playback: MIDI drum directives ignored (compat mode).", 3600);
+    // Keep this low-noise: it's informational and can be common in real-world files.
+    // Record it for dumps; only show it in UI when debugging playback.
+    if (window.__abcarusDebugPlayback || window.__abcarusDebugDrums) {
+      addError(
+        "Warning: Playback ignored global %%MIDI drum* directives (must be inside a voice).",
+        null,
+        { skipMeasureRange: true }
+      );
+    }
+    const toastKey = getPlaybackSourceKey();
+    if (window.__abcarusDebugPlayback && toastKey && toastKey !== lastMidiDrumCompatToastKey) {
+      lastMidiDrumCompatToastKey = toastKey;
+      showToast("Playback: global %%MIDI drum* ignored (compat).", 2600);
+    }
   }
 
   // Tolerant playback mode: many real-world ABC files contain lyric/barline mismatches that stricter engines reject.
