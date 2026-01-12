@@ -143,6 +143,15 @@ git push origin vX.Y.Z
 
 The canonical list lives in `.gitignore`; this section documents intent.
 
+## Branch / Push etiquette (especially during debugging)
+
+To avoid spamming GitHub with WIP commits during rapid iteration:
+
+- Prefer **local-only iteration** while investigating a bug (uncommitted changes or local commits).
+- Do **not** push a branch until you have a coherent checkpoint (or someone explicitly asks to push/PR).
+- If you need to share progress mid-way, prefer a **single “checkpoint” push** with a clear message (or open a Draft PR), rather than many small pushes.
+- Once the fix is confirmed, squash/clean up as needed, then push and open/update the PR.
+
 ## Useful Environment Variables (Debug / Ops)
 
 **UI / platform diagnostics**
@@ -173,6 +182,20 @@ When reporting a bug, try to include: app version (About), OS/desktop, minimal A
 **Where logs go**
 - Electron main process logs go to the terminal you launched `npm start` from.
 - Renderer logs go to DevTools Console (View → Toggle Developer Tools).
+- Debug dumps are JSON files you can attach to issues/PRs. They include the active file path + tune identity near the top (`context.label`, `context.filePath`, `context.xNumber`).
+
+**Debug dumps (recommended)**
+- Manual dump: press `Ctrl+Shift+D` (or menu action) and save `abcarus-debug-*.json`.
+- Auto-dump on runtime errors (opt-in for development):
+  - `ABCARUS_DEV_AUTO_DUMP=1 npm start`
+  - Optional: `ABCARUS_DEV_AUTO_DUMP_DIR=/some/path` (override dump directory)
+  - Runtime toggle (DevTools): `window.__abcarusAutoDumpOnError = true|false`
+
+**Experimental: abc2svg native `%%MIDI drum*`**
+- Enable native drum handling for playback (dev only): `ABCARUS_DEV_NATIVE_MIDI_DRUMS=1 npm start`
+- Runtime toggle (DevTools): `window.__abcarusNativeMidiDrums = true|false`
+- Note: this is experimental; for compatibility it may move `%%MIDI drum*` directives that appear before `K:` to just after `K:` during playback parsing.
+- UI toggle: Settings → Playback (Advanced) → “Use native abc2svg %%MIDI drum* (experimental)”.
 
 **Keyboard shortcuts / key routing**
 ```bash

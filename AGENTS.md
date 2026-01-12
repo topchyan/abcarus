@@ -2,6 +2,9 @@
 
 This repo is a small Electron app for working with ABC notation.
 
+## Orientation (read first in new chats)
+- `ORIENTATION.md` — what to read, invariants, debug workflow, branch/push etiquette.
+
 ## Quick start
 - Install deps: `npm install`
 - Run app: `npm run start`

@@ -34,10 +34,11 @@ const FALLBACK_SCHEMA = [
   { key: "followPlayheadBetweenNotesWeight", type: "number", default: 1, section: "Playback", label: "Playhead between notes (%)", ui: { input: "percent", min: 0, max: 100, step: 5 }, advanced: true },
   { key: "followPlayheadShift", type: "number", default: 0, section: "Playback", label: "Playhead horizontal shift (px)", ui: { input: "number", min: -20, max: 20, step: 1 }, advanced: true },
   { key: "followPlayheadFirstBias", type: "number", default: 6, section: "Playback", label: "First-note bias (px)", ui: { input: "number", min: 0, max: 20, step: 1 }, advanced: true },
-	  {
-	    key: "playbackAutoScrollMode",
-	    type: "string",
-	    default: "Keep Visible",
+  { key: "playbackNativeMidiDrums", type: "boolean", default: false, section: "Playback", label: "Use native abc2svg %%MIDI drum* (experimental)", ui: { input: "checkbox" }, advanced: true },
+		  {
+		    key: "playbackAutoScrollMode",
+		    type: "string",
+		    default: "Keep Visible",
 	    section: "Playback",
 	    label: "Playback auto-scroll",
 	    ui: {
@@ -291,6 +292,7 @@ export function initSettings(api) {
     $settingsModal.classList.add("open");
     $settingsModal.setAttribute("aria-hidden", "false");
     if (typeof setActiveTab === "function") setActiveTab(lastActiveTab);
+    scheduleClampModalPosition();
     setTimeout(() => {
       if ($settingsFilter) {
         $settingsFilter.focus();
@@ -327,18 +329,59 @@ export function initSettings(api) {
     $settingsCard.style.transform = `translate(${x}px, ${y}px)`;
   }
 
+  function readModalPositionFromTransform() {
+    if (!$settingsCard) return null;
+    const current = String($settingsCard.style.transform || "");
+    const m = current.match(/translate\(\s*(-?\d+(?:\.\d+)?)px,\s*(-?\d+(?:\.\d+)?)px\)/);
+    if (!m) return null;
+    const x = Number(m[1]);
+    const y = Number(m[2]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  }
+
   function clampModalPosition(pos) {
     if (!$settingsCard) return pos;
     const x = Number(pos && pos.x);
     const y = Number(pos && pos.y);
     if (!Number.isFinite(x) || !Number.isFinite(y)) return { x: 0, y: 0 };
     const rect = $settingsCard.getBoundingClientRect();
-    const maxX = Math.max(0, (window.innerWidth - rect.width) / 2);
-    const maxY = Math.max(0, (window.innerHeight - rect.height) / 2);
+    const pad = 12;
+    const baseLeft = (window.innerWidth - rect.width) / 2;
+    const baseTop = (window.innerHeight - rect.height) / 2;
+
+    let minX = pad - baseLeft;
+    let maxX = (window.innerWidth - pad - rect.width) - baseLeft;
+    let minY = pad - baseTop;
+    let maxY = (window.innerHeight - pad - rect.height) - baseTop;
+
+    // If the modal is larger than the viewport, prefer keeping the top-left visible.
+    if (minX > maxX) {
+      maxX = minX;
+    }
+    if (minY > maxY) {
+      maxY = minY;
+    }
+
     return {
-      x: Math.max(-maxX, Math.min(maxX, x)),
-      y: Math.max(-maxY, Math.min(maxY, y)),
+      x: Math.max(minX, Math.min(maxX, x)),
+      y: Math.max(minY, Math.min(maxY, y)),
     };
+  }
+
+  function clampAndPersistModalPosition() {
+    if (!$settingsCard) return;
+    const pos = readModalPositionFromTransform() || readModalPosition() || { x: 0, y: 0 };
+    const clamped = clampModalPosition(pos);
+    applyModalPosition(clamped);
+    writeUiState({ settingsModalPos: clamped });
+  }
+
+  function scheduleClampModalPosition() {
+    if (!$settingsModal || !$settingsCard) return;
+    if (!$settingsModal.classList.contains("open")) return;
+    // Let layout settle (tab changes / advanced toggles can change height).
+    requestAnimationFrame(() => requestAnimationFrame(() => clampAndPersistModalPosition()));
   }
 
   function initSettingsDrag() {
@@ -346,7 +389,7 @@ export function initSettings(api) {
 
     const applyFromUi = () => {
       const pos = readModalPosition();
-      applyModalPosition(pos);
+      applyModalPosition(pos ? clampModalPosition(pos) : null);
     };
     applyFromUi();
 
@@ -731,6 +774,7 @@ export function initSettings(api) {
       panels.forEach((panel) => {
         panel.classList.toggle("active", panel.dataset.settingsPanel === name);
       });
+      scheduleClampModalPosition();
     };
 
     for (const panel of panels) {
@@ -902,6 +946,7 @@ export function initSettings(api) {
           }
         }
       }
+      scheduleClampModalPosition();
     };
   }
 
@@ -932,6 +977,7 @@ export function initSettings(api) {
       showAdvanced = Boolean($settingsShowAdvanced.checked);
       writeUiState({ showAdvanced });
       if (applySettingsFilter) applySettingsFilter($settingsFilter ? $settingsFilter.value : "");
+      scheduleClampModalPosition();
     });
   }
   if ($settingsReset) {
