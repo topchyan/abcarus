@@ -6,7 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Playback: experimental toggle “Use native abc2svg %%MIDI drum*” in Settings → Playback (Advanced), with safe fallback to injected `V:DRUM`.
 
+### Changed
+- Playback: Focus replaces Practice (speed + loop).
+
+### Fixed
+- Playback: loop edge cases (avoid silent stop when end <= start).
+- Settings: modal no longer “flies away” when Advanced enabled (position clamped).
 
 ## [0.19.3] - 2026-01-12
 ### Added
