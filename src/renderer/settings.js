@@ -401,6 +401,7 @@ export function initSettings(api) {
     if ($settingsModeBasic) $settingsModeBasic.setAttribute("aria-pressed", settingsMode === "basic" ? "true" : "false");
     if ($settingsModeAdvanced) $settingsModeAdvanced.setAttribute("aria-pressed", settingsMode === "advanced" ? "true" : "false");
     buildSettingsUi();
+    applySettings(currentSettings);
     if (applySettingsFilter && $settingsFilter) applySettingsFilter($settingsFilter.value);
   }
 
@@ -1100,6 +1101,8 @@ export function initSettings(api) {
       $settingsPanelsHost.appendChild(panelEl);
     }
 
+    // Rehydrate control values after rebuilding the UI (e.g. mode switch).
+    applySettings(currentSettings);
     setActiveTab(lastActiveTab);
 
     applySettingsFilter = (raw) => {
