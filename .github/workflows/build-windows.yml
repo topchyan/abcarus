@@ -2,9 +2,6 @@ name: Build Windows
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "v*"
 
 jobs:
   build-win:
@@ -114,14 +111,3 @@ jobs:
           $lines += "$( (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower() )  $(Split-Path -Leaf $zip)"
           $lines += "$( (Get-FileHash -Algorithm SHA256 $portable.FullName).Hash.ToLower() )  $($portable.Name)"
           $lines | Out-File -Encoding ascii "dist/electron-builder/SHA256SUMS-windows.txt"
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ABCarus-windows-x64
-          path: |
-            dist/electron-builder/*Setup*.exe
-            dist/electron-builder/ABCarus-portable-x64.exe
-            dist/electron-builder/ABCarus-win-unpacked-x64.zip
-            dist/electron-builder/SHA256SUMS-windows.txt
-          if-no-files-found: error

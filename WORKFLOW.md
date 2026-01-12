@@ -96,6 +96,15 @@ gh run list -L 10 --workflow release-assets.yml
 Notes:
 - `release-assets.yml` runs on `push` to tags `v*` and uploads artifacts to the GitHub Release for that tag.
 
+## GitHub Actions artifact quota
+
+GitHub Actions “Artifacts” storage is quota-limited. If the quota is exhausted, workflows that use `actions/upload-artifact`
+will fail with “Artifact storage quota has been hit”.
+
+ABCarus avoids this for releases by uploading binaries to **GitHub Releases** via `.github/workflows/release-assets.yml`.
+The legacy `.github/workflows/build-windows.yml` workflow is kept as a **manual build/sanity check** and does not upload
+Actions artifacts.
+
 ## If release script fails (EPERM / git issues)
 
 If `npm run release:*` fails due to git permissions or an “EPERM” error, do the minimal manual fallback:
