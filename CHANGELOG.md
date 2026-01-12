@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [0.19.3] - 2026-01-12
 ### Added
 - Playback: Focus Mode (F7) to hide panels and auto-fit the score for hands-free playing.
 
@@ -17,7 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Playback: auto-scroll behavior under zoom is more reliable.
 - Playback: Follow measure highlight alignment is consistent in Focus Mode.
-
 
 ## [0.19.2] - 2026-01-10
 ### Changed
