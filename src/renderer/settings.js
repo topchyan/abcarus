@@ -1222,6 +1222,7 @@ export function initSettings(api) {
     $settingsExport.addEventListener("click", async () => {
       if (!api || typeof api.exportSettings !== "function") return;
       const res = await api.exportSettings().catch(() => null);
+      if (res && res.ok === false && String(res.error || "").toLowerCase() === "canceled") return;
       if (!res || !res.ok || !res.path) {
         alert((res && res.error) ? res.error : "Failed to export settings.");
         return;
@@ -1235,6 +1236,7 @@ export function initSettings(api) {
     $settingsImport.addEventListener("click", async () => {
       if (!api || typeof api.importSettings !== "function") return;
       const res = await api.importSettings().catch(() => null);
+      if (res && res.ok === false && String(res.error || "").toLowerCase() === "canceled") return;
       if (!res || !res.ok) {
         alert((res && res.error) ? res.error : "Failed to import settings.");
         return;
