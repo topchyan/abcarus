@@ -1,7 +1,7 @@
 ---
 title: "ADR-0004: Set List as Snapshot-Based Assembly with Deterministic Export"
 date: 2026-01-13
-status: "Proposed"
+status: "Accepted"
 ---
 
 # ADR-0004: Set List as Snapshot-Based Assembly with Deterministic Export
@@ -34,6 +34,7 @@ Implement Set List as an **ephemeral workspace assembly tool**:
 ### Snapshot semantics
 
 - Adding a tune to the Set List captures the tune’s ABC text as it exists at that moment.
+- Snapshots are stored verbatim as text and are not structurally re-parsed until export.
 - The snapshot does not update if the source file changes later.
 - Updating a tune in the Set List is done explicitly by removing and re-adding it.
 
@@ -57,12 +58,13 @@ Set List provides a 3-state user choice for page breaks:
 
 Notes:
 - “Compact spacing” is separate from page breaks; spacing changes do not imply breaks.
-- “Auto” must be deterministic for a given set and option values.
+- “Auto” must be deterministic for a given set and option values. Any heuristic parameter (e.g. N systems) must be explicit user-visible settings or fixed constants.
 
 ### Preview separators
 
 The combined preview includes lightweight separators between tunes (e.g. show `T:` and `C:` as a “tune card”):
 - separators are UI-only and are not serialized into the exported `.abc`;
+- separators do not affect pagination logic;
 - no additional metadata beyond `T:` and `C:` is required.
 
 ## Strict-write / safety constraints
@@ -91,5 +93,4 @@ Negative / trade-offs:
 
 ## Status
 
-Proposed. Implement once the milestone is scheduled and UI placement is agreed.
-
+Accepted. Implement once the milestone is scheduled and UI placement is agreed.
