@@ -8751,9 +8751,11 @@ function renderSetList() {
 
       const actions = document.createElement("div");
       actions.className = "set-list-actions";
+      const upDisabled = i === 0;
+      const downDisabled = i === setListItems.length - 1;
       actions.innerHTML = `
-        <button type="button" class="set-list-btn" data-action="up" data-index="${i}" aria-label="Move up">↑</button>
-        <button type="button" class="set-list-btn" data-action="down" data-index="${i}" aria-label="Move down">↓</button>
+        <button type="button" class="set-list-btn" data-action="up" data-index="${i}" aria-label="Move up" ${upDisabled ? "disabled" : ""}>↑</button>
+        <button type="button" class="set-list-btn" data-action="down" data-index="${i}" aria-label="Move down" ${downDisabled ? "disabled" : ""}>↓</button>
         <button type="button" class="set-list-btn" data-action="remove" data-index="${i}" aria-label="Remove">✕</button>
       `;
 
@@ -8809,6 +8811,19 @@ function removeSetListItem(index) {
   setListItems = next;
 }
 
+function insertSetListItemAt(item, index) {
+  if (!item) return;
+  if (!Array.isArray(setListItems)) setListItems = [];
+  const idx = Number(index);
+  const next = setListItems.slice();
+  if (!Number.isFinite(idx) || idx < 0 || idx >= next.length) {
+    next.push(item);
+  } else {
+    next.splice(idx, 0, item);
+  }
+  setListItems = next;
+}
+
 function shouldInjectNewPageBeforeTune(tuneText, { mode, idx }) {
   if (idx <= 0) return false;
   if (mode === "none") return false;
@@ -8829,7 +8844,10 @@ function shouldInjectNewPageBeforeTune(tuneText, { mode, idx }) {
   return long;
 }
 
-async function addTuneToSetListByTuneId(tuneId, { fallbackTitle = "", fallbackComposer = "" } = {}) {
+async function addTuneToSetListByTuneId(
+  tuneId,
+  { fallbackTitle = "", fallbackComposer = "", insertIndex = null } = {}
+) {
   const id = String(tuneId || "").trim();
   if (!id) throw new Error("Missing tune id.");
 
@@ -8866,8 +8884,7 @@ async function addTuneToSetListByTuneId(tuneId, { fallbackTitle = "", fallbackCo
   }
 
   const entryId = `${id}::${Date.now()}::${Math.random().toString(16).slice(2)}`;
-  setListItems = Array.isArray(setListItems) ? setListItems.slice() : [];
-  setListItems.push({
+  const newItem = {
     id: entryId,
     sourceTuneId: id,
     sourcePath: res.file.path,
@@ -8876,7 +8893,8 @@ async function addTuneToSetListByTuneId(tuneId, { fallbackTitle = "", fallbackCo
     composer: res.tune.composer || fallbackComposer || "",
     text: slice,
     addedAtMs: Date.now(),
-  });
+  };
+  insertSetListItemAt(newItem, insertIndex);
 }
 
 function buildSetListExportAbc() {
@@ -10898,9 +10916,9 @@ if ($setListItems) {
   $setListItems.addEventListener("dragover", (e) => {
     if (!e) return;
     const row = e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
-    if (!row) return;
     e.preventDefault();
     try { if (e.dataTransfer) e.dataTransfer.dropEffect = "move"; } catch {}
+    if (!row) return;
   });
 
   $setListItems.addEventListener("dragenter", (e) => {
@@ -10919,24 +10937,37 @@ if ($setListItems) {
     if (!e) return;
     e.preventDefault();
     const row = e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
-    if (!row) return;
-    const toIdx = row.dataset ? Number(row.dataset.index) : NaN;
+    const toIdx = row && row.dataset ? Number(row.dataset.index) : (Array.isArray(setListItems) ? setListItems.length : 0);
+    let raw = "";
+    try { raw = e.dataTransfer ? e.dataTransfer.getData("text/plain") : ""; } catch {}
+
     let fromIdx = setListDragFromIndex;
     if (!Number.isFinite(fromIdx)) {
-      try {
-        const raw = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
-        const parsed = Number(raw);
-        if (Number.isFinite(parsed)) fromIdx = parsed;
-      } catch {}
+      const parsed = Number(raw);
+      if (Number.isFinite(parsed)) fromIdx = parsed;
     }
-    if (!Number.isFinite(fromIdx) || !Number.isFinite(toIdx)) return;
-    moveSetListItem(fromIdx, toIdx);
-    renderSetList();
+
+    if (Number.isFinite(fromIdx)) {
+      if (!Number.isFinite(toIdx)) return;
+      moveSetListItem(fromIdx, toIdx);
+      renderSetList();
+      return;
+    }
+
+    const tuneId = String(raw || "").trim();
+    if (!tuneId) return;
+    addTuneToSetListByTuneId(tuneId, { insertIndex: toIdx }).then(() => {
+      showToast("Added to Set List.", 2000);
+      renderSetList();
+    }).catch((err) => {
+      showToast(err && err.message ? err.message : String(err), 5000);
+    });
   });
 
   $setListItems.addEventListener("click", (e) => {
     const btn = e && e.target && e.target.closest ? e.target.closest(".set-list-btn") : null;
     if (!btn) return;
+    if (btn.disabled) return;
     const action = btn.dataset ? btn.dataset.action : "";
     const index = btn.dataset ? btn.dataset.index : "";
     if (action === "remove") {
@@ -10971,6 +11002,10 @@ if ($setListModal) {
 
 if ($setListClear) {
   $setListClear.addEventListener("click", () => {
+    if (Array.isArray(setListItems) && setListItems.length) {
+      const ok = window.confirm("Clear Set List? This cannot be undone.");
+      if (!ok) return;
+    }
     setListItems = [];
     renderSetList();
   });

@@ -10,6 +10,7 @@ ABCarus is a desktop app for working with music in ABC notation. It is optimized
 - Editing, preview, and errors
 - Saving (replace vs append)
 - Managing tunes (copy/move/delete)
+- Set List (build a playlist file)
 - Playback
 - Print and export
 - Import/export MusicXML
@@ -113,6 +114,26 @@ In the library tree you can:
 
 Move semantics:
 - Moving a tune copies it to the target file (assigning a new `X:`) and removes it from the source file.
+
+## 7) Set List (build a playlist file)
+
+Set List is a lightweight “assembly workspace” for building a new `.abc` file out of existing tunes, in a chosen order.
+
+- Open: `View → Set List…`
+- Add tunes:
+  - Library tree: right-click a tune → `Add to Set List`
+  - Library Catalog: select a row → `Add to Set List`
+  - Active tune: right-click in the editor → `Add Active Tune to Set List`
+- Reorder: drag-and-drop inside the Set List, or use ↑ / ↓.
+- Remove: `✕` per row, or `Clear` to reset the list.
+
+Export/print:
+- `Export ABC…` saves a new `.abc` file.
+- `Export PDF…` / `Print…` render the assembled list as a printable document.
+
+Important notes:
+- Export normalizes `X:` as `1..N` in the exported/printed output (to encode order and avoid conflicts).
+- Set List entries are snapshots: if the source file changes later, the Set List does not update automatically. Remove+re-add if you need a refreshed version.
 
 ## 7) Playback (audio)
 
