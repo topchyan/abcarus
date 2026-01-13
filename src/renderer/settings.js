@@ -1120,13 +1120,18 @@ export function initSettings(api) {
     }
 
     const panels = [
+      // Core
       { key: "general", label: "General", sections: ["General"] },
+      // Editing
       { key: "editor", label: "Editor", sections: ["Editor"] },
+      { key: "fonts", label: "Fonts", sections: ["Fonts"] },
+      // Playback
       { key: "playback", label: "Playback", sections: ["Playback"] },
+      // Workflow
       { key: "tools", label: "Tools", sections: ["Tools"] },
       { key: "library", label: "Library", sections: ["Library"] },
       { key: "dialogs", label: "Dialogs", sections: ["Dialogs"] },
-      { key: "fonts", label: "Fonts", sections: ["Fonts"] },
+      // Advanced
       { key: "header", label: "Header", sections: ["Header"] },
     ];
     const panelKeys = new Set(panels.map((p) => p.key));
@@ -1169,7 +1174,24 @@ export function initSettings(api) {
       scheduleClampModalPosition();
     };
 
-    for (const panel of panels) {
+    const tabGroups = [
+      { title: "Core", keys: ["general"] },
+      { title: "Editing", keys: ["editor", "fonts"] },
+      { title: "Playback", keys: ["playback"] },
+      { title: "Workflow", keys: ["tools", "library", "dialogs"] },
+      { title: "Advanced", keys: ["header"] },
+    ];
+
+    for (const group of tabGroups) {
+      const groupEl = document.createElement("div");
+      groupEl.className = "settings-tab-group";
+      groupEl.textContent = group.title;
+      groupEl.setAttribute("aria-hidden", "true");
+      $settingsTabsHost.appendChild(groupEl);
+
+      for (const key of group.keys) {
+        const panel = panels.find((p) => p.key === key);
+        if (!panel) continue;
       const tab = document.createElement("button");
       tab.type = "button";
       tab.className = "settings-tab";
@@ -1290,6 +1312,7 @@ export function initSettings(api) {
       }
 
       $settingsPanelsHost.appendChild(panelEl);
+    }
     }
 
     // Rehydrate control values after rebuilding the UI (e.g. mode switch).

@@ -1648,6 +1648,21 @@ svg {
   padding-right: 2px;
 }
 
+.settings-tab-group {
+  margin-top: 10px;
+  margin-bottom: 2px;
+  padding: 0 10px;
+  font-size: var(--font-size-xs);
+  color: var(--muted-text);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+
+.settings-tab-group:first-child {
+  margin-top: 0;
+}
+
 .settings-tabs .settings-tab {
   width: 100%;
   text-align: left;
