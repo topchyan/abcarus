@@ -311,6 +311,7 @@
       </div>
       <div class="modal-footer">
         <div class="modal-footer-left">
+          <button id="setListHeader" type="button">Header…</button>
           <label class="set-list-inline">
             <span>Page breaks</span>
             <select id="setListPageBreaks">
@@ -328,6 +329,25 @@
         <button id="setListSaveAbc" class="primary" type="button">Export ABC…</button>
         <button id="setListExportPdf" type="button">Export PDF…</button>
         <button id="setListPrint" type="button">Print…</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="setListHeaderModal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-label="Set List Header">
+      <div class="modal-header">
+        <div class="modal-title">Set List Header</div>
+        <button class="modal-close" id="setListHeaderClose" type="button">Close</button>
+      </div>
+      <div class="modal-body">
+        <div class="set-list-empty">
+          This header is inserted at the top of exported Set List files and used for Set List print/PDF rendering.
+        </div>
+        <textarea id="setListHeaderText" rows="10" spellcheck="false"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button id="setListHeaderReset" type="button">Reset</button>
+        <button id="setListHeaderSave" class="primary" type="button">Save</button>
       </div>
     </div>
   </div>
