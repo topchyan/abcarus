@@ -94,9 +94,7 @@ const SETTINGS_SECTION_HINTS = {
   general: "General application settings.",
   editor: "Editor appearance and behavior.",
   playback: "Playback behavior and visuals.",
-  tools: "Tools and transformations.",
-  library: "Library and catalog behavior.",
-  dialogs: "Dialog behavior and defaults.",
+  options: "App options (tools, library, dialogs).",
   fonts: "Fonts and soundfonts used for rendering and playback.",
   header: "Global ABC directives prepended during render/playback.",
 };
@@ -225,7 +223,7 @@ export function initSettings(api) {
   let cachedFontLists = { notation: [], text: [] };
   let cachedFontDirs = { bundledDir: "", userDir: "" };
   let cachedSoundfonts = [];
-  const knownTabs = new Set(["general", "editor", "playback", "tools", "library", "dialogs", "fonts", "header"]);
+  const knownTabs = new Set(["general", "editor", "fonts", "playback", "options", "header"]);
   let dragState = null;
   let draftPatch = {};
   let isSettingsOpen = false;
@@ -1120,19 +1118,12 @@ export function initSettings(api) {
     }
 
     const panels = [
-      // Core
       { key: "general", label: "General", sections: ["General"] },
-      // Editing
       { key: "editor", label: "Editor", sections: ["Editor"] },
       { key: "fonts", label: "Fonts", sections: ["Fonts"] },
-      // Playback
       { key: "playback", label: "Playback", sections: ["Playback"] },
-      // Workflow
-      { key: "tools", label: "Tools", sections: ["Tools"] },
-      { key: "library", label: "Library", sections: ["Library"] },
-      { key: "dialogs", label: "Dialogs", sections: ["Dialogs"] },
-      // Advanced
-      { key: "header", label: "Header", sections: ["Header"] },
+      { key: "options", label: "Options", sections: ["Tools", "Library", "Dialogs"] },
+      { key: "header", label: "Global Header", sections: ["Header"] },
     ];
     const panelKeys = new Set(panels.map((p) => p.key));
     settingsPanelsByKey = new Map(panels.map((p) => [p.key, p]));
@@ -1174,24 +1165,7 @@ export function initSettings(api) {
       scheduleClampModalPosition();
     };
 
-    const tabGroups = [
-      { title: "Core", keys: ["general"] },
-      { title: "Editing", keys: ["editor", "fonts"] },
-      { title: "Playback", keys: ["playback"] },
-      { title: "Workflow", keys: ["tools", "library", "dialogs"] },
-      { title: "Advanced", keys: ["header"] },
-    ];
-
-    for (const group of tabGroups) {
-      const groupEl = document.createElement("div");
-      groupEl.className = "settings-tab-group";
-      groupEl.textContent = group.title;
-      groupEl.setAttribute("aria-hidden", "true");
-      $settingsTabsHost.appendChild(groupEl);
-
-      for (const key of group.keys) {
-        const panel = panels.find((p) => p.key === key);
-        if (!panel) continue;
+    for (const panel of panels) {
       const tab = document.createElement("button");
       tab.type = "button";
       tab.className = "settings-tab";
@@ -1312,7 +1286,6 @@ export function initSettings(api) {
       }
 
       $settingsPanelsHost.appendChild(panelEl);
-    }
     }
 
     // Rehydrate control values after rebuilding the UI (e.g. mode switch).
@@ -1514,7 +1487,8 @@ export function initSettings(api) {
     const key = String(raw || "").trim().toLowerCase();
     if (!key) return "general";
     if (key === "main") return "general";
-    if (key === "import" || key === "importexport" || key === "import/export" || key === "xml") return "tools";
+    if (key === "import" || key === "importexport" || key === "import/export" || key === "xml") return "options";
+    if (key === "tools" || key === "library" || key === "dialogs") return "options";
     if (knownTabs.has(key)) return key;
     return "general";
   }
