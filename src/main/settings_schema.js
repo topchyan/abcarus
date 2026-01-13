@@ -375,7 +375,6 @@ function getSettingsSchema() {
           { value: "\"Liberation Mono\", monospace", label: "Liberation Mono" },
           { value: "\"Consolas\", monospace", label: "Consolas" },
           { value: "\"Menlo\", monospace", label: "Menlo" },
-          { value: "__custom__", label: "Custom…" },
         ],
       },
     },

@@ -354,6 +354,37 @@ export function initSettings(api) {
     } catch {}
   }
 
+  function getEditorFontCustomFamilies() {
+    const ui = readUiState() || {};
+    const raw = ui.editorFontFamilyCustoms;
+    if (!Array.isArray(raw)) return [];
+    const out = [];
+    const seen = new Set();
+    for (const item of raw) {
+      const s = String(item || "").trim();
+      if (!s) continue;
+      if (seen.has(s)) continue;
+      seen.add(s);
+      out.push(s);
+      if (out.length >= 20) break;
+    }
+    return out;
+  }
+
+  function setEditorFontCustomFamilies(list) {
+    const next = [];
+    const seen = new Set();
+    for (const item of Array.isArray(list) ? list : []) {
+      const s = String(item || "").trim();
+      if (!s) continue;
+      if (seen.has(s)) continue;
+      seen.add(s);
+      next.push(s);
+      if (next.length >= 20) break;
+    }
+    writeUiState({ editorFontFamilyCustoms: next });
+  }
+
   async function updateSettings(patch) {
     const next = await store.update(patch);
     if (next) applySettings(next);
@@ -709,10 +740,23 @@ export function initSettings(api) {
         for (const rawOpt of entry.ui.options) {
           const isObj = rawOpt && typeof rawOpt === "object";
           const value = isObj ? rawOpt.value : rawOpt;
+          if (isEditorFontFamily && String(value) === "__custom__") continue;
           const label = isObj ? (rawOpt.label != null ? rawOpt.label : rawOpt.value) : rawOpt;
           const option = document.createElement("option");
           option.value = String(value || "");
           option.textContent = String(label || "");
+          select.appendChild(option);
+        }
+      }
+
+      if (isEditorFontFamily) {
+        const customs = getEditorFontCustomFamilies();
+        for (const s of customs) {
+          if (Array.from(select.options).some((o) => String(o.value) === s)) continue;
+          const label = s.length > 44 ? `${s.slice(0, 44)}…` : s;
+          const option = document.createElement("option");
+          option.value = s;
+          option.textContent = `Custom: ${label}`;
           select.appendChild(option);
         }
       }
@@ -726,18 +770,6 @@ export function initSettings(api) {
         }
         if (isEditorFontFamily) {
           const defaultFamily = String(defaultSettings.editorFontFamily || entry.default || "");
-          if (select.value === "__custom__") {
-            const current = String(getEffectiveSettings().editorFontFamily || defaultFamily);
-            const next = prompt("Enter a CSS font-family stack:", current);
-            if (next == null) {
-              applySettings(currentSettings);
-              return;
-            }
-            const trimmed = String(next).trim();
-            stageSetting(entry.key, trimmed || defaultFamily);
-            applySettings(currentSettings);
-            return;
-          }
           stageSetting(entry.key, select.value ? select.value : defaultFamily);
           return;
         }
@@ -756,7 +788,7 @@ export function initSettings(api) {
         }
       }
 
-      if (!isFontSelect && !isSoundfontSelect) {
+      if (!isFontSelect && !isSoundfontSelect && !isEditorFontFamily) {
         row.appendChild(select);
         controlByKey.set(entry.key, { entry, el: select });
         return row;
@@ -770,6 +802,30 @@ export function initSettings(api) {
       addBtn.type = "button";
       addBtn.textContent = "Add…";
       addBtn.addEventListener("click", async () => {
+        if (isEditorFontFamily) {
+          const defaultFamily = String(defaultSettings.editorFontFamily || entry.default || "");
+          const current = String(getEffectiveSettings().editorFontFamily || defaultFamily);
+          const next = prompt("Enter a CSS font-family stack:", current);
+          if (next == null) return;
+          const trimmed = String(next).trim();
+          if (!trimmed) return;
+          const customs = getEditorFontCustomFamilies();
+          if (!customs.includes(trimmed)) {
+            customs.unshift(trimmed);
+            setEditorFontCustomFamilies(customs);
+          }
+          if (!Array.from(select.options).some((o) => String(o.value) === trimmed)) {
+            const label = trimmed.length > 44 ? `${trimmed.slice(0, 44)}…` : trimmed;
+            const option = document.createElement("option");
+            option.value = trimmed;
+            option.textContent = `Custom: ${label}`;
+            select.insertBefore(option, select.firstChild);
+          }
+          select.value = trimmed;
+          stageSetting(entry.key, trimmed);
+          applySettings(currentSettings);
+          return;
+        }
         if (isSoundfontSelect) {
           if (!api || typeof api.pickSoundfont !== "function") return;
           const picked = await api.pickSoundfont().catch(() => null);
@@ -827,6 +883,20 @@ export function initSettings(api) {
       removeBtn.type = "button";
       removeBtn.textContent = "Remove";
       removeBtn.addEventListener("click", async () => {
+        if (isEditorFontFamily) {
+          const current = String(select.value || "");
+          const customs = getEditorFontCustomFamilies();
+          if (!current || !customs.includes(current)) return;
+          if (!confirm("Remove this custom editor font entry?")) return;
+          setEditorFontCustomFamilies(customs.filter((x) => x !== current));
+          const opt = Array.from(select.options).find((o) => String(o.value) === current);
+          if (opt) opt.remove();
+          const defaultFamily = String(defaultSettings.editorFontFamily || entry.default || "");
+          select.value = defaultFamily;
+          stageSetting(entry.key, defaultFamily);
+          applySettings(currentSettings);
+          return;
+        }
         if (isSoundfontSelect) {
           const current = String(select.value || "");
           if (!current) return;
@@ -887,6 +957,11 @@ export function initSettings(api) {
 
       const updateRemoveEnabled = () => {
         const current = String(select.value || "");
+        if (isEditorFontFamily) {
+          removeBtn.disabled = !getEditorFontCustomFamilies().includes(current);
+          removeBtn.title = removeBtn.disabled ? "Only custom entries can be removed." : "";
+          return;
+        }
         if (isSoundfontSelect) {
           removeBtn.disabled = !isSoundfontPath(current);
           removeBtn.title = removeBtn.disabled ? "Bundled soundfonts cannot be removed." : "";
