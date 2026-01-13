@@ -147,16 +147,28 @@ See `NOTICE.md` for licenses and attribution details.
 
 ### Inspiration
 
-Projects that inspired ABCarus:
+| Name | Project(s) | Why it matters to ABCarus | Link |
+|---|---|---|---|
+| Chris Walshaw | ABC notation | Where ABC comes from and where the spec lives | https://abcnotation.com/ |
+| Jean‑François Moine | abc2svg, txtmus, abcm2ps | The rendering engine we build on (abc2svg) and a lot of ABC craft around it | http://moinejf.free.fr/ |
+| Seymour Shlien | EasyABC, runabc, midiexplorer | A long-running desktop editor that shaped many real-world workflows | https://ifdo.ca/~seymour/runabc/top.html |
+| James Allwright | abcMIDI | The classic ABC→MIDI toolbox many people still rely on | https://abcmidi.sourceforge.io/ |
+| Michael Eskin | ABC Transcription Tools | A huge set of practical online helpers for everyday ABC work | https://michaeleskin.com/abctools/abctools.html |
+| Paul Rosen | abcjs | One of the most common ABC renderers on the web | https://www.abcjs.net/ |
+| Johan Vromans | ChordPro | A strong song/chords world that overlaps with ABC use cases | https://www.chordpro.org/ |
+| Willem Vree | abc2xml, xml2abc | The MusicXML bridge (ABC ↔ MusicXML) | https://wim.vree.org/ |
+| Sergio Di Mico | AbcToSheet | Another take on turning ABC into sheet music | https://abctosheet.my.to/ |
+| Benoît Rouits | qabc, redrose | Small, sharp ABC projects worth studying | https://github.com/be1 |
+| MTG | SymbTr | Research angle on symbolic music data | https://github.com/MTG/symbtr |
 
-- EasyABC — https://sourceforge.net/projects/easyabc/
-- Michael Eskin's ABC Transcription Tools — https://michaeleskin.com/abctools/abctools.html
-- Jef Moine's abc2svg / txtmus — http://moinejf.free.fr/
-- Willem Vree (abc2xml / xml2abc) — https://wim.vree.org/
-- abcMIDI (James Allwright author, Seymour Shlien, current maintainer) — https://abcmidi.sourceforge.io/
-- abc2js (Paul Rosen) — https://www.abcjs.net/
-- AbcToSheet (Sergio Di Mico) — https://abctosheet.my.to/
-- SymbTr research project — https://github.com/MTG/symbtr
+### Personal acknowledgements
+
+These are personal sources of inspiration and gratitude, separate from the technical projects above:
+
+- Houshamadyan — a project to reconstruct Ottoman Armenian town and village life: https://www.houshamadyan.org/home.html
+- Ara Dinkjian — composer, musician, and oud teacher: https://www.aradinkjian.com/
+- Corpus Musicae Ottomanicae: https://corpus-musicae-ottomanicae.de/content/index.xml
+- My Lord and Savior Yeshua
 
 ### Licensing
 
