@@ -798,6 +798,25 @@ export function initSettings(api) {
       wrap.className = "settings-select-row";
       wrap.appendChild(select);
 
+      let editorFontCustomUi = null;
+      let editorFontCustomInput = null;
+
+      const hideEditorFontCustomUi = () => {
+        if (!editorFontCustomUi) return;
+        editorFontCustomUi.style.display = "none";
+        if (editorFontCustomInput) editorFontCustomInput.value = "";
+      };
+
+      const showEditorFontCustomUi = (initialValue) => {
+        if (!isEditorFontFamily) return;
+        if (!editorFontCustomUi || !editorFontCustomInput) return;
+        editorFontCustomUi.style.display = "";
+        editorFontCustomInput.value = String(initialValue || "");
+        setTimeout(() => {
+          try { editorFontCustomInput.focus(); editorFontCustomInput.select(); } catch {}
+        }, 0);
+      };
+
       const addBtn = document.createElement("button");
       addBtn.type = "button";
       addBtn.textContent = "Add…";
@@ -805,25 +824,7 @@ export function initSettings(api) {
         if (isEditorFontFamily) {
           const defaultFamily = String(defaultSettings.editorFontFamily || entry.default || "");
           const current = String(getEffectiveSettings().editorFontFamily || defaultFamily);
-          const next = prompt("Enter a CSS font-family stack:", current);
-          if (next == null) return;
-          const trimmed = String(next).trim();
-          if (!trimmed) return;
-          const customs = getEditorFontCustomFamilies();
-          if (!customs.includes(trimmed)) {
-            customs.unshift(trimmed);
-            setEditorFontCustomFamilies(customs);
-          }
-          if (!Array.from(select.options).some((o) => String(o.value) === trimmed)) {
-            const label = trimmed.length > 44 ? `${trimmed.slice(0, 44)}…` : trimmed;
-            const option = document.createElement("option");
-            option.value = trimmed;
-            option.textContent = `Custom: ${label}`;
-            select.insertBefore(option, select.firstChild);
-          }
-          select.value = trimmed;
-          stageSetting(entry.key, trimmed);
-          applySettings(currentSettings);
+          showEditorFontCustomUi(current);
           return;
         }
         if (isSoundfontSelect) {
@@ -887,7 +888,6 @@ export function initSettings(api) {
           const current = String(select.value || "");
           const customs = getEditorFontCustomFamilies();
           if (!current || !customs.includes(current)) return;
-          if (!confirm("Remove this custom editor font entry?")) return;
           setEditorFontCustomFamilies(customs.filter((x) => x !== current));
           const opt = Array.from(select.options).find((o) => String(o.value) === current);
           if (opt) opt.remove();
@@ -972,6 +972,76 @@ export function initSettings(api) {
       };
       select.addEventListener("change", updateRemoveEnabled);
       updateRemoveEnabled();
+
+      if (isEditorFontFamily) {
+        editorFontCustomUi = document.createElement("div");
+        editorFontCustomUi.className = "settings-editor-font-custom";
+        editorFontCustomUi.style.display = "none";
+
+        const label = document.createElement("div");
+        label.className = "settings-help";
+        label.textContent = "Custom font-family stack (CSS).";
+        editorFontCustomUi.appendChild(label);
+
+        const inputRow = document.createElement("div");
+        inputRow.className = "settings-editor-font-custom-row";
+
+        editorFontCustomInput = document.createElement("input");
+        editorFontCustomInput.type = "text";
+        editorFontCustomInput.placeholder = "\"Noto Sans Mono\", monospace";
+        inputRow.appendChild(editorFontCustomInput);
+
+        const okBtn = document.createElement("button");
+        okBtn.type = "button";
+        okBtn.textContent = "OK";
+        inputRow.appendChild(okBtn);
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.textContent = "Cancel";
+        inputRow.appendChild(cancelBtn);
+
+        editorFontCustomUi.appendChild(inputRow);
+
+        const commitCustom = () => {
+          const trimmed = String(editorFontCustomInput.value || "").trim();
+          if (!trimmed) {
+            hideEditorFontCustomUi();
+            return;
+          }
+          const customs = getEditorFontCustomFamilies();
+          if (!customs.includes(trimmed)) {
+            customs.unshift(trimmed);
+            setEditorFontCustomFamilies(customs);
+          }
+          if (!Array.from(select.options).some((o) => String(o.value) === trimmed)) {
+            const shortLabel = trimmed.length > 44 ? `${trimmed.slice(0, 44)}…` : trimmed;
+            const option = document.createElement("option");
+            option.value = trimmed;
+            option.textContent = `Custom: ${shortLabel}`;
+            select.insertBefore(option, select.firstChild);
+          }
+          select.value = trimmed;
+          stageSetting(entry.key, trimmed);
+          applySettings(currentSettings);
+          hideEditorFontCustomUi();
+          updateRemoveEnabled();
+        };
+
+        okBtn.addEventListener("click", commitCustom);
+        cancelBtn.addEventListener("click", () => hideEditorFontCustomUi());
+        editorFontCustomInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commitCustom();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            hideEditorFontCustomUi();
+          }
+        });
+
+        wrap.appendChild(editorFontCustomUi);
+      }
 
       wrap.appendChild(addBtn);
       wrap.appendChild(removeBtn);
