@@ -8526,6 +8526,19 @@ document.addEventListener("library-modal:closed", () => {
   libraryListYieldedByThisOpen = false;
 });
 
+document.addEventListener("set-list:add", (ev) => {
+  try {
+    const row = ev && ev.detail && ev.detail.row ? ev.detail.row : null;
+    if (!row) return;
+    addTuneToSetListFromLibraryRow(row).then(() => {
+      showToast("Added to Set List.", 2000);
+      if ($setListModal && $setListModal.classList.contains("open")) renderSetList();
+    }).catch((e) => {
+      showToast(e && e.message ? e.message : String(e), 5000);
+    });
+  } catch {}
+});
+
 function openLibraryListFromCurrentLibraryIndex() {
   if (!libraryIndex || !libraryIndex.root || !Array.isArray(libraryIndex.files) || !libraryIndex.files.length) {
     setStatus("Load a library folder first.");
@@ -8597,7 +8610,15 @@ function renderSetList() {
       meta.className = "set-list-meta";
       meta.textContent = item.composer ? String(item.composer) : "";
 
-      row.append(idx, title, meta);
+      const actions = document.createElement("div");
+      actions.className = "set-list-actions";
+      actions.innerHTML = `
+        <button type="button" class="set-list-btn" data-action="up" data-index="${i}" aria-label="Move up">↑</button>
+        <button type="button" class="set-list-btn" data-action="down" data-index="${i}" aria-label="Move down">↓</button>
+        <button type="button" class="set-list-btn" data-action="remove" data-index="${i}" aria-label="Remove">✕</button>
+      `;
+
+      row.append(idx, title, meta, actions);
       $setListItems.append(row);
     }
   }
@@ -8624,6 +8645,69 @@ function closeSetList() {
   if (!$setListModal) return;
   $setListModal.classList.remove("open");
   $setListModal.setAttribute("aria-hidden", "true");
+}
+
+function moveSetListItem(fromIndex, toIndex) {
+  if (!Array.isArray(setListItems)) setListItems = [];
+  const from = Number(fromIndex);
+  const to = Number(toIndex);
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return;
+  if (from < 0 || from >= setListItems.length) return;
+  if (to < 0 || to >= setListItems.length) return;
+  if (from === to) return;
+  const next = setListItems.slice();
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  setListItems = next;
+}
+
+function removeSetListItem(index) {
+  if (!Array.isArray(setListItems)) setListItems = [];
+  const idx = Number(index);
+  if (!Number.isFinite(idx) || idx < 0 || idx >= setListItems.length) return;
+  const next = setListItems.slice();
+  next.splice(idx, 1);
+  setListItems = next;
+}
+
+async function addTuneToSetListFromLibraryRow(rowData) {
+  const tuneId = rowData && rowData.tuneId ? String(rowData.tuneId) : "";
+  if (!tuneId) throw new Error("Missing tune id.");
+  const res = findTuneById(tuneId);
+  if (!res) throw new Error("Tune not found in library.");
+
+  const readRes = await readFile(res.file.path);
+  if (!readRes || !readRes.ok) throw new Error(readRes && readRes.error ? readRes.error : "Unable to read file.");
+  const content = String(readRes.data || "");
+
+  const startOffset = Number(res.tune.startOffset);
+  const endOffset = Number(res.tune.endOffset);
+  if (!Number.isFinite(startOffset) || !Number.isFinite(endOffset) || startOffset < 0 || endOffset <= startOffset || endOffset > content.length) {
+    throw new Error("Refusing to add: tune offsets look stale. Refresh the library and try again.");
+  }
+  const slice = content.slice(startOffset, endOffset);
+  const trimmed = slice.replace(/^\s+/, "");
+  const xMatch = trimmed.match(/^X:\s*(\d+)/);
+  if (!xMatch) {
+    throw new Error("Refusing to add: tune offsets look stale. Refresh the library and try again.");
+  }
+  const expectedX = String(res.tune.xNumber || "");
+  if (expectedX && xMatch[1] !== expectedX) {
+    throw new Error(`Refusing to add: tune offsets look stale (expected X:${expectedX}). Refresh the library and try again.`);
+  }
+
+  const entryId = `${tuneId}::${Date.now()}::${Math.random().toString(16).slice(2)}`;
+  setListItems = Array.isArray(setListItems) ? setListItems.slice() : [];
+  setListItems.push({
+    id: entryId,
+    sourceTuneId: tuneId,
+    sourcePath: res.file.path,
+    xNumber: res.tune.xNumber || "",
+    title: res.tune.title || rowData.title || "",
+    composer: res.tune.composer || rowData.composer || "",
+    text: slice,
+    addedAtMs: Date.now(),
+  });
 }
 
 if ($xIssuesClose) {
@@ -10573,6 +10657,29 @@ if ($aboutCopy) {
 if ($setListClose) {
   $setListClose.addEventListener("click", () => {
     closeSetList();
+  });
+}
+
+if ($setListItems) {
+  $setListItems.addEventListener("click", (e) => {
+    const btn = e && e.target && e.target.closest ? e.target.closest(".set-list-btn") : null;
+    if (!btn) return;
+    const action = btn.dataset ? btn.dataset.action : "";
+    const index = btn.dataset ? btn.dataset.index : "";
+    if (action === "remove") {
+      removeSetListItem(index);
+      renderSetList();
+      return;
+    }
+    if (action === "up") {
+      moveSetListItem(index, Number(index) - 1);
+      renderSetList();
+      return;
+    }
+    if (action === "down") {
+      moveSetListItem(index, Number(index) + 1);
+      renderSetList();
+    }
   });
 }
 

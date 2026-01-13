@@ -7,6 +7,7 @@
   const $open = document.getElementById("libOpen");
   const $status = document.getElementById("libStatus");
   const $modal = $overlay ? $overlay.querySelector(".lib-modal") : null;
+  let $addToSetList = null;
 
   const STORAGE_TABLE_STATE_KEY = "abcarus.libraryModal.tableState.v1";
   const STORAGE_FILTER_KEY = "abcarus.libraryModal.filter.v1";
@@ -344,9 +345,20 @@
     $open.disabled = !selectedRowData;
   }
 
+  function syncAddToSetListEnabled() {
+    if (!$addToSetList) return;
+    $addToSetList.disabled = !selectedRowData;
+  }
+
+  function requestAddToSetList(rowData) {
+    if (!rowData) return;
+    document.dispatchEvent(new CustomEvent("set-list:add", { detail: { row: rowData } }));
+  }
+
     function setSelectedRowData(data) {
       selectedRowData = data || null;
       syncOpenButtonEnabled();
+      syncAddToSetListEnabled();
       resetStatus();
     }
 
@@ -678,6 +690,26 @@
     if (!$overlay || !$filter) return;
     const controls = $overlay.querySelector(".lib-controls");
     if (!controls) return;
+    if (controls.querySelector("#libClear") && controls.querySelector("#libAddToSetList")) return;
+
+    if (!controls.querySelector("#libAddToSetList")) {
+      const btn = document.createElement("button");
+      btn.id = "libAddToSetList";
+      btn.type = "button";
+      btn.className = "lib-btn";
+      btn.textContent = "Add to Set List";
+      btn.disabled = !selectedRowData;
+      btn.addEventListener("click", () => {
+        if (!selectedRowData) return;
+        requestAddToSetList(selectedRowData);
+      });
+      $addToSetList = btn;
+      const insertBeforeEl = controls.querySelector("#libClear");
+      controls.insertBefore(btn, insertBeforeEl);
+    } else {
+      $addToSetList = controls.querySelector("#libAddToSetList");
+    }
+
     if (controls.querySelector("#libClear")) return;
 
     const btn = document.createElement("button");

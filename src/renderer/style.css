@@ -1621,6 +1621,32 @@ svg {
   white-space: nowrap;
 }
 
+.set-list-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.set-list-btn {
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-1);
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.set-list-btn:hover {
+  background: #f6f6f6;
+}
+
+.set-list-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .set-list-inline {
   display: inline-flex;
   align-items: center;
