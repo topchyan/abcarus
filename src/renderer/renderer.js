@@ -7471,8 +7471,11 @@ async function renderSetListSvgMarkupForPrint(options = {}) {
     if (breakBefore) flush();
 
     const renumbered = ensureXNumberInAbc(raw, i + 1);
+    const prefix = buildHeaderPrefix(item.headerText || "", false, renumbered);
+    const block = prefix.text ? `${prefix.text}${renumbered}` : renumbered;
     const context = { tuneLabel: buildPrintTuneLabel(tune) };
-    const res = await renderAbcToSvgMarkup(renumbered, { errorContext: context });
+    setErrorLineOffsetFromHeader(prefix.text);
+    const res = await renderAbcToSvgMarkup(block, { errorContext: context });
     const tuneErrors = res.errors ? res.errors.slice() : [];
     if (!res.ok && res.error) tuneErrors.push({ message: res.error });
 
@@ -8866,6 +8869,9 @@ async function addTuneToSetListByTuneId(
   const readRes = await readFile(res.file.path);
   if (!readRes || !readRes.ok) throw new Error(readRes && readRes.error ? readRes.error : "Unable to read file.");
   const content = String(readRes.data || "");
+  const entryHeader = (activeFilePath && pathsEqual(activeFilePath, res.file.path))
+    ? getHeaderEditorValue()
+    : (res.file.headerText || "");
 
   const startOffset = Number(res.tune.startOffset);
   const endOffset = Number(res.tune.endOffset);
@@ -8891,6 +8897,7 @@ async function addTuneToSetListByTuneId(
     xNumber: res.tune.xNumber || "",
     title: res.tune.title || fallbackTitle || "",
     composer: res.tune.composer || fallbackComposer || "",
+    headerText: entryHeader,
     text: slice,
     addedAtMs: Date.now(),
   };
