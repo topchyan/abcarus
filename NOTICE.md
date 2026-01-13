@@ -88,6 +88,18 @@ These fonts are bundled for rendering only; they are not sold separately.
 
 ---
 
+## Editor fonts
+
+ABCarus ships the following font for the editor UI:
+
+### Noto Sans Mono
+- Copyright: The Noto Project Authors
+- License: SIL Open Font License 1.1
+- License text: `assets/fonts/editor/noto-sans-mono/OFL.txt`
+- Project: https://github.com/notofonts/latin-greek-cyrillic
+
+---
+
 ## CodeMirror
 
 ABCarus uses **CodeMirror** as the text editor component.
