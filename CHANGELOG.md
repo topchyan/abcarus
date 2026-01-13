@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [0.20.0] - 2026-01-13
 ### Added
 - Editor: bundle Noto Sans Mono (OFL) and allow adding custom editor fonts by file.
 - Settings: footer actions (OK/Cancel/Apply) and import/export from the dialog.
@@ -18,7 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Settings: preserve values when switching Basic/Advanced.
 - Settings: do not show “Canceled” popup on import/export cancel.
-
 
 ## [0.19.5] - 2026-01-12
 ### Fixed
