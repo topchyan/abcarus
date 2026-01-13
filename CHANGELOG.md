@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Editor: bundle Noto Sans Mono (OFL) and allow adding custom editor fonts by file.
+- Settings: footer actions (OK/Cancel/Apply) and import/export from the dialog.
+
+### Changed
+- Settings: redesigned desktop modal with stable layout and improved grouping.
+- Settings: simplify navigation (General, Editor, Fonts, Playback, Options, Global Header); Options combines Tools/Library/Dialogs.
+- Menus (Linux/Windows): move Settings/Fonts into Edit menu; remove separate Settings menu.
+
+### Fixed
+- Settings: preserve values when switching Basic/Advanced.
+- Settings: do not show “Canceled” popup on import/export cancel.
 
 
 ## [0.19.5] - 2026-01-12
