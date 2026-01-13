@@ -109,6 +109,16 @@ const $aboutModal = document.getElementById("aboutModal");
 const $aboutClose = document.getElementById("aboutClose");
 const $aboutInfo = document.getElementById("aboutInfo");
 const $aboutCopy = document.getElementById("aboutCopy");
+const $setListModal = document.getElementById("setListModal");
+const $setListClose = document.getElementById("setListClose");
+const $setListEmpty = document.getElementById("setListEmpty");
+const $setListItems = document.getElementById("setListItems");
+const $setListClear = document.getElementById("setListClear");
+const $setListSaveAbc = document.getElementById("setListSaveAbc");
+const $setListExportPdf = document.getElementById("setListExportPdf");
+const $setListPrint = document.getElementById("setListPrint");
+const $setListPageBreaks = document.getElementById("setListPageBreaks");
+const $setListCompact = document.getElementById("setListCompact");
 const $disclaimerModal = document.getElementById("disclaimerModal");
 const $disclaimerOk = document.getElementById("disclaimerOk");
 const $headerStateMarker = document.getElementById("headerStateMarker");
@@ -156,6 +166,10 @@ let rawMode = false;
 let rawModeFilePath = null;
 let rawModeHeaderEndOffset = 0;
 let rawModeOriginalTuneId = null;
+
+let setListItems = [];
+let setListPageBreaks = "perTune"; // perTune | none | auto
+let setListCompact = false;
 
 // PlaybackRange must be initialized before initEditor() runs (selection listeners fire early).
 let playbackRange = {
@@ -8558,6 +8572,60 @@ function closeAbout() {
   $aboutModal.setAttribute("aria-hidden", "true");
 }
 
+function renderSetList() {
+  if (!$setListEmpty || !$setListItems) return;
+  const hasItems = Array.isArray(setListItems) && setListItems.length > 0;
+  $setListEmpty.hidden = hasItems;
+  $setListItems.hidden = !hasItems;
+
+  $setListItems.textContent = "";
+  if (hasItems) {
+    for (let i = 0; i < setListItems.length; i++) {
+      const item = setListItems[i] || {};
+      const row = document.createElement("div");
+      row.className = "set-list-row";
+
+      const idx = document.createElement("div");
+      idx.className = "set-list-idx";
+      idx.textContent = String(i + 1);
+
+      const title = document.createElement("div");
+      title.className = "set-list-title";
+      title.textContent = String(item.title || "Untitled");
+
+      const meta = document.createElement("div");
+      meta.className = "set-list-meta";
+      meta.textContent = item.composer ? String(item.composer) : "";
+
+      row.append(idx, title, meta);
+      $setListItems.append(row);
+    }
+  }
+
+  if ($setListPageBreaks) $setListPageBreaks.value = setListPageBreaks;
+  if ($setListCompact) $setListCompact.checked = !!setListCompact;
+
+  const disableActions = !hasItems;
+  if ($setListClear) $setListClear.disabled = disableActions;
+  if ($setListSaveAbc) $setListSaveAbc.disabled = disableActions;
+  if ($setListExportPdf) $setListExportPdf.disabled = disableActions;
+  if ($setListPrint) $setListPrint.disabled = disableActions;
+}
+
+function openSetList() {
+  if (!$setListModal) return;
+  renderSetList();
+  $setListModal.classList.add("open");
+  $setListModal.setAttribute("aria-hidden", "false");
+  if ($setListPageBreaks) $setListPageBreaks.focus();
+}
+
+function closeSetList() {
+  if (!$setListModal) return;
+  $setListModal.classList.remove("open");
+  $setListModal.setAttribute("aria-hidden", "true");
+}
+
 if ($xIssuesClose) {
   $xIssuesClose.addEventListener("click", () => closeXIssuesModal());
 }
@@ -10089,6 +10157,7 @@ function wireMenuActions() {
       else if (actionType === "libraryList") {
         openLibraryListFromCurrentLibraryIndex();
       }
+      else if (actionType === "setList") openSetList();
       else if (actionType === "toggleLibrary") toggleLibrary();
       else if (actionType === "toggleFocusMode") toggleFocusMode();
       else if (actionType === "renumberXInFile") await renumberXInActiveFile();
@@ -10498,6 +10567,67 @@ if ($aboutCopy) {
       logErr(e && e.message ? e.message : String(e));
       setStatus("Copy failed.");
     }
+  });
+}
+
+if ($setListClose) {
+  $setListClose.addEventListener("click", () => {
+    closeSetList();
+  });
+}
+
+if ($setListModal) {
+  $setListModal.addEventListener("click", (e) => {
+    if (e.target === $setListModal) closeSetList();
+  });
+  $setListModal.addEventListener("keydown", (e) => {
+    if (!e) return;
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeSetList();
+  });
+}
+
+if ($setListClear) {
+  $setListClear.addEventListener("click", () => {
+    setListItems = [];
+    renderSetList();
+  });
+}
+
+if ($setListPageBreaks) {
+  $setListPageBreaks.addEventListener("change", () => {
+    setListPageBreaks = String($setListPageBreaks.value || "perTune");
+    renderSetList();
+  });
+}
+
+if ($setListCompact) {
+  $setListCompact.addEventListener("change", () => {
+    setListCompact = !!$setListCompact.checked;
+    renderSetList();
+  });
+}
+
+if ($setListSaveAbc) {
+  $setListSaveAbc.addEventListener("click", () => {
+    if (!Array.isArray(setListItems) || setListItems.length === 0) return;
+    showToast("Set List export is not implemented yet.", 2400);
+  });
+}
+
+if ($setListExportPdf) {
+  $setListExportPdf.addEventListener("click", () => {
+    if (!Array.isArray(setListItems) || setListItems.length === 0) return;
+    showToast("Set List export is not implemented yet.", 2400);
+  });
+}
+
+if ($setListPrint) {
+  $setListPrint.addEventListener("click", () => {
+    if (!Array.isArray(setListItems) || setListItems.length === 0) return;
+    showToast("Set List export is not implemented yet.", 2400);
   });
 }
 
