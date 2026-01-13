@@ -737,7 +737,8 @@ async function printWithDialog(svgMarkup) {
 
 async function exportPdf(svgMarkup, filePath) {
   return withPrintWindow(svgMarkup, async (contents) => {
-    const pdfData = await contents.printToPDF({ printBackground: true, marginsType: 0 });
+    const noMargins = String(svgMarkup || "").includes("<!--abcarus:pdf-no-margins-->");
+    const pdfData = await contents.printToPDF({ printBackground: true, marginsType: noMargins ? 1 : 0 });
     await fs.promises.writeFile(filePath, pdfData);
     return { ok: true, path: filePath };
   }, { show: false });
@@ -747,7 +748,8 @@ async function previewPdf(svgMarkup) {
   const tmpName = `abc-preview-${Date.now()}.pdf`;
   const tmpPath = path.join(app.getPath("temp"), tmpName);
   const res = await withPrintWindow(svgMarkup, async (contents) => {
-    const pdfData = await contents.printToPDF({ printBackground: true, marginsType: 0 });
+    const noMargins = String(svgMarkup || "").includes("<!--abcarus:pdf-no-margins-->");
+    const pdfData = await contents.printToPDF({ printBackground: true, marginsType: noMargins ? 1 : 0 });
     await fs.promises.writeFile(tmpPath, pdfData);
     return { ok: true, path: tmpPath };
   }, { show: false });
@@ -761,7 +763,8 @@ async function printViaPdf(svgMarkup) {
   const tmpName = `abc-print-${Date.now()}.pdf`;
   const tmpPath = path.join(app.getPath("temp"), tmpName);
   const res = await withPrintWindow(svgMarkup, async (contents) => {
-    const pdfData = await contents.printToPDF({ printBackground: true, marginsType: 0 });
+    const noMargins = String(svgMarkup || "").includes("<!--abcarus:pdf-no-margins-->");
+    const pdfData = await contents.printToPDF({ printBackground: true, marginsType: noMargins ? 1 : 0 });
     await fs.promises.writeFile(tmpPath, pdfData);
     return { ok: true, path: tmpPath };
   }, { show: false });

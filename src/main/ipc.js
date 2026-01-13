@@ -476,7 +476,8 @@ function registerIpcHandlers(ctx) {
     if (typeof exportPdf === "function") return exportPdf(svgMarkup, filePath);
     return withMainPrintMode(async (contents) => {
       try {
-        const pdfData = await contents.printToPDF({ printBackground: true, marginsType: 0 });
+        const noMargins = String(svgMarkup || "").includes("<!--abcarus:pdf-no-margins-->");
+        const pdfData = await contents.printToPDF({ printBackground: true, marginsType: noMargins ? 1 : 0 });
         await fs.promises.writeFile(filePath, pdfData);
         return { ok: true };
       } catch (e) {
