@@ -1,0 +1,27 @@
+name: Documentation issue
+description: Report unclear or incorrect documentation
+title: "docs: "
+labels: ["documentation"]
+body:
+  - type: textarea
+    id: where
+    attributes:
+      label: Where is the problem?
+      description: Link to file/section or paste path (e.g. docs/packaging.md).
+      placeholder: "docs/USER_GUIDE.md section 8"
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: What is unclear or incorrect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested wording (optional)
+    validations:
+      required: false

@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: ABCarus User Guide
+    url: https://github.com/topchyan/abcarus/blob/master/docs/USER_GUIDE.md
+    about: How to use ABCarus (tunes, library, save/append, import/export).
+  - name: Workflow / release notes
+    url: https://github.com/topchyan/abcarus/blob/master/WORKFLOW.md
+    about: Dev + release workflow, debug flags, common gotchas.
+  - name: ABC notation reference
+    url: https://abcnotation.com/
+    about: General ABC notation documentation (not ABCarus-specific).
+  - name: ABCusers community (Groups.io)
+    url: https://groups.io/g/abcusers/topics
+    about: Discuss ABC notation and tooling with the community.

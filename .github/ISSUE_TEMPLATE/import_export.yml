@@ -1,0 +1,71 @@
+name: Import / Export (MusicXML, Python)
+description: Issues related to MusicXML import/export, Python runtime, converters
+title: "import/export: "
+labels: ["bug", "import-export"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: ABCarus version
+      placeholder: "vX.Y.Z"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux
+        - Windows
+        - macOS
+    validations:
+      required: true
+
+  - type: textarea
+    id: scenario
+    attributes:
+      label: Scenario
+      description: What operation and what app state (active file/tune, library open, raw mode)?
+      placeholder: |
+        Operation: Import (XML/MXL → ABC) or Export (ABC → MusicXML)
+        App state: active file is …, active tune is …, raw mode on/off, …
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1) …
+        2) …
+        3) …
+    validations:
+      required: true
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Exact error message / dialog text
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: debug_dump
+    attributes:
+      label: Debug dump (recommended)
+      description: Attach `abcarus-debug-*.json` from Help → Diagnostics → Save Debug Dump…
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I confirm I had an active target `.abc` file open/selected when importing.
+          required: false
+        - label: I confirm whether `ABCARUS_ALLOW_SYSTEM_PYTHON=1` is set (dev only).
+          required: false

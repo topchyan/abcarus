@@ -1,0 +1,119 @@
+name: Bug report
+description: Report a reproducible problem in ABCarus
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. ABCarus is tune-oriented and file-safety is strict, so **repro steps + a debug dump** help a lot.
+
+        Before filing:
+        - Try the latest release if possible.
+        - If this involves file writes (save/move/rename/import), please keep a backup.
+
+  - type: input
+    id: version
+    attributes:
+      label: ABCarus version
+      description: From About (e.g. v0.20.1). Include build/commit if shown.
+      placeholder: "vX.Y.Z"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - Linux
+        - Windows
+        - macOS
+    validations:
+      required: true
+
+  - type: input
+    id: os_details
+    attributes:
+      label: OS details
+      description: Linux distro + desktop/WM; Windows version; macOS version + CPU (arm64/x64).
+      placeholder: "Ubuntu 22.04 / GNOME (Wayland), Windows 11 23H2, macOS 14 arm64"
+    validations:
+      required: false
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: One or two sentences.
+      placeholder: "When I …, ABCarus …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+      placeholder: "I expected …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Numbered steps, from a fresh app start if possible.
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: data
+    attributes:
+      label: Minimal sample (recommended)
+      description: Paste minimal ABC that reproduces the issue, or attach a small file. Remove private data.
+      render: text
+      placeholder: |
+        X:1
+        T:...
+        M:...
+        L:...
+        K:...
+        ...
+    validations:
+      required: false
+
+  - type: textarea
+    id: debug_dump
+    attributes:
+      label: Debug dump / diagnostics (highly recommended)
+      description: |
+        Attach the `abcarus-debug-*.json` created via Help → Diagnostics → Save Debug Dump….
+        If you can’t attach, paste key fields (example): context.filePath, context.xNumber, context.label.
+      placeholder: "Attach file(s) or paste relevant fields here."
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / error messages
+      description: Paste terminal output (main process) and DevTools console output (renderer), if relevant.
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Quick checks
+      options:
+        - label: I can reproduce this on the latest release.
+          required: false
+        - label: I included clear repro steps.
+          required: true
+        - label: If this involves file writes/import/export, I have a backup of the affected file(s).
+          required: false

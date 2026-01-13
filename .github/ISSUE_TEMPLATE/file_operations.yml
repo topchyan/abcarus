@@ -1,0 +1,62 @@
+name: File operations (save/move/rename/append)
+description: Bugs around modifying files, strict-write guards, stale offsets, permissions
+title: "fileops: "
+labels: ["bug", "file-ops"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: ABCarus version
+      placeholder: "vX.Y.Z"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux
+        - Windows
+        - macOS
+    validations:
+      required: true
+
+  - type: textarea
+    id: operation
+    attributes:
+      label: What operation failed?
+      placeholder: |
+        - Save / Save As
+        - Append to Active File
+        - Move/Copy/Delete tune
+        - Rename file/folder
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment details (important)
+      placeholder: |
+        - Is the file read-only?
+        - Is it on a network drive / cloud sync folder?
+        - Did the file change on disk (another editor) during the operation?
+        - Any non-ASCII characters / spaces in paths?
+    validations:
+      required: false
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+
+  - type: textarea
+    id: debug_dump
+    attributes:
+      label: Debug dump (highly recommended)
+      description: Attach `abcarus-debug-*.json` from Help → Diagnostics → Save Debug Dump…
+    validations:
+      required: false

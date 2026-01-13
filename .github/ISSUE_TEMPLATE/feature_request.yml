@@ -1,0 +1,44 @@
+name: Feature request
+description: Suggest an improvement to ABCarus
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please focus on the user-facing problem first. ABCarus prefers simple, auditable behavior and avoids risky automatic rewrites.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / use case
+      description: What are you trying to do?
+      placeholder: "When working with …, I need to …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the desired UX and defaults.
+      placeholder: "Add a menu item / dialog / setting that …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      placeholder: "Current workaround is …, alternative is …"
+    validations:
+      required: false
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact and risk
+      description: Any file-safety or compatibility concerns? Would this change existing workflows?
+      placeholder: "Risk: … / Compatibility: …"
+    validations:
+      required: false
