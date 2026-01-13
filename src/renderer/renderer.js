@@ -171,6 +171,93 @@ let setListItems = [];
 let setListPageBreaks = "perTune"; // perTune | none | auto
 let setListCompact = false;
 
+const SET_LIST_STORAGE_KEY = "abcarus.setList.v1";
+let setListSaveTimer = null;
+
+function safeReadJsonLocalStorage(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function safeWriteJsonLocalStorage(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function saveSetListToStorageNow() {
+  const payload = {
+    version: "1",
+    savedAtMs: Date.now(),
+    pageBreaks: setListPageBreaks,
+    compact: !!setListCompact,
+    items: Array.isArray(setListItems) ? setListItems.map((it) => ({
+      id: it && it.id ? String(it.id) : "",
+      sourceTuneId: it && it.sourceTuneId ? String(it.sourceTuneId) : "",
+      sourcePath: it && it.sourcePath ? String(it.sourcePath) : "",
+      xNumber: it && it.xNumber ? String(it.xNumber) : "",
+      title: it && it.title ? String(it.title) : "",
+      composer: it && it.composer ? String(it.composer) : "",
+      headerText: it && it.headerText ? String(it.headerText) : "",
+      text: it && it.text ? String(it.text) : "",
+      addedAtMs: it && Number.isFinite(Number(it.addedAtMs)) ? Number(it.addedAtMs) : Date.now(),
+    })) : [],
+  };
+  safeWriteJsonLocalStorage(SET_LIST_STORAGE_KEY, payload);
+}
+
+function scheduleSaveSetList() {
+  if (setListSaveTimer) clearTimeout(setListSaveTimer);
+  setListSaveTimer = setTimeout(() => {
+    setListSaveTimer = null;
+    saveSetListToStorageNow();
+  }, 250);
+}
+
+function loadSetListFromStorage() {
+  const saved = safeReadJsonLocalStorage(SET_LIST_STORAGE_KEY);
+  if (!saved || typeof saved !== "object") return;
+  const version = saved && saved.version ? String(saved.version) : "";
+  if (version !== "1") return;
+
+  const pageBreaks = saved.pageBreaks ? String(saved.pageBreaks) : "perTune";
+  if (pageBreaks === "perTune" || pageBreaks === "none" || pageBreaks === "auto") {
+    setListPageBreaks = pageBreaks;
+  }
+  setListCompact = Boolean(saved.compact);
+
+  const itemsRaw = Array.isArray(saved.items) ? saved.items : [];
+  const items = [];
+  for (const it of itemsRaw) {
+    if (!it || typeof it !== "object") continue;
+    const text = typeof it.text === "string" ? it.text : "";
+    if (!text.trim()) continue;
+    items.push({
+      id: typeof it.id === "string" && it.id ? it.id : `${Date.now()}::${Math.random().toString(16).slice(2)}`,
+      sourceTuneId: typeof it.sourceTuneId === "string" ? it.sourceTuneId : "",
+      sourcePath: typeof it.sourcePath === "string" ? it.sourcePath : "",
+      xNumber: typeof it.xNumber === "string" ? it.xNumber : "",
+      title: typeof it.title === "string" ? it.title : "",
+      composer: typeof it.composer === "string" ? it.composer : "",
+      headerText: typeof it.headerText === "string" ? it.headerText : "",
+      text,
+      addedAtMs: Number.isFinite(Number(it.addedAtMs)) ? Number(it.addedAtMs) : Date.now(),
+    });
+    if (items.length >= 500) break;
+  }
+  setListItems = items;
+}
+
+loadSetListFromStorage();
+
 // PlaybackRange must be initialized before initEditor() runs (selection listeners fire early).
 let playbackRange = {
   startOffset: 0,
@@ -8803,6 +8890,7 @@ function moveSetListItem(fromIndex, toIndex) {
   const [item] = next.splice(from, 1);
   next.splice(to, 0, item);
   setListItems = next;
+  scheduleSaveSetList();
 }
 
 function removeSetListItem(index) {
@@ -8812,6 +8900,7 @@ function removeSetListItem(index) {
   const next = setListItems.slice();
   next.splice(idx, 1);
   setListItems = next;
+  scheduleSaveSetList();
 }
 
 function insertSetListItemAt(item, index) {
@@ -8825,6 +8914,7 @@ function insertSetListItemAt(item, index) {
     next.splice(idx, 0, item);
   }
   setListItems = next;
+  scheduleSaveSetList();
 }
 
 function shouldInjectNewPageBeforeTune(tuneText, { mode, idx }) {
@@ -11014,6 +11104,7 @@ if ($setListClear) {
       if (!ok) return;
     }
     setListItems = [];
+    scheduleSaveSetList();
     renderSetList();
   });
 }
@@ -11021,6 +11112,7 @@ if ($setListClear) {
 if ($setListPageBreaks) {
   $setListPageBreaks.addEventListener("change", () => {
     setListPageBreaks = String($setListPageBreaks.value || "perTune");
+    scheduleSaveSetList();
     renderSetList();
   });
 }
@@ -11028,6 +11120,7 @@ if ($setListPageBreaks) {
 if ($setListCompact) {
   $setListCompact.addEventListener("change", () => {
     setListCompact = !!$setListCompact.checked;
+    scheduleSaveSetList();
     renderSetList();
   });
 }

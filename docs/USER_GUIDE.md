@@ -134,6 +134,7 @@ Export/print:
 Important notes:
 - Export normalizes `X:` as `1..N` in the exported/printed output (to encode order and avoid conflicts).
 - Set List entries are snapshots: if the source file changes later, the Set List does not update automatically. Remove+re-add if you need a refreshed version.
+- The last Set List is restored when you restart ABCarus (stored locally on this machine). Use `Clear` to remove it.
 
 ## 7) Playback (audio)
 
