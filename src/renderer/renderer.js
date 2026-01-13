@@ -7507,7 +7507,10 @@ async function runPrintSetListAction(type) {
     return;
   }
 
-  const svgMarkup = applyPrintDebugMarkup(renderRes.svg);
+  let svgMarkup = applyPrintDebugMarkup(renderRes.svg);
+  if (setListCompact) {
+    svgMarkup = `<style>body{padding:12px !important}</style>\n${svgMarkup}`;
+  }
   let res = null;
   if (type === "print" && typeof window.api.printDialog === "function") {
     res = await window.api.printDialog(svgMarkup);
