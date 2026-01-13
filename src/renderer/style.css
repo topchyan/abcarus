@@ -1596,6 +1596,15 @@ svg {
   min-width: 0;
 }
 
+.set-list-row.drag-over {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(31, 106, 208, 0.18);
+}
+
+.set-list-row.dragging {
+  opacity: 0.7;
+}
+
 .set-list-row .set-list-idx {
   color: var(--muted-text);
   min-width: 2.5em;

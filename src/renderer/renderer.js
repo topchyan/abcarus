@@ -8597,6 +8597,8 @@ function renderSetList() {
       const item = setListItems[i] || {};
       const row = document.createElement("div");
       row.className = "set-list-row";
+      row.draggable = true;
+      row.dataset.index = String(i);
 
       const idx = document.createElement("div");
       idx.className = "set-list-idx";
@@ -10661,6 +10663,70 @@ if ($setListClose) {
 }
 
 if ($setListItems) {
+  let setListDragFromIndex = null;
+
+  $setListItems.addEventListener("dragstart", (e) => {
+    const row = e && e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
+    if (!row) return;
+    const idx = row.dataset ? Number(row.dataset.index) : NaN;
+    if (!Number.isFinite(idx)) return;
+    setListDragFromIndex = idx;
+    row.classList.add("dragging");
+    try {
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", String(idx));
+      }
+    } catch {}
+  });
+
+  $setListItems.addEventListener("dragend", () => {
+    setListDragFromIndex = null;
+    const rows = $setListItems.querySelectorAll(".set-list-row.dragging");
+    for (const r of rows) r.classList.remove("dragging");
+    const over = $setListItems.querySelectorAll(".set-list-row.drag-over");
+    for (const r of over) r.classList.remove("drag-over");
+  });
+
+  $setListItems.addEventListener("dragover", (e) => {
+    if (!e) return;
+    const row = e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
+    if (!row) return;
+    e.preventDefault();
+    try { if (e.dataTransfer) e.dataTransfer.dropEffect = "move"; } catch {}
+  });
+
+  $setListItems.addEventListener("dragenter", (e) => {
+    const row = e && e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
+    if (!row) return;
+    row.classList.add("drag-over");
+  });
+
+  $setListItems.addEventListener("dragleave", (e) => {
+    const row = e && e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
+    if (!row) return;
+    row.classList.remove("drag-over");
+  });
+
+  $setListItems.addEventListener("drop", (e) => {
+    if (!e) return;
+    e.preventDefault();
+    const row = e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
+    if (!row) return;
+    const toIdx = row.dataset ? Number(row.dataset.index) : NaN;
+    let fromIdx = setListDragFromIndex;
+    if (!Number.isFinite(fromIdx)) {
+      try {
+        const raw = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
+        const parsed = Number(raw);
+        if (Number.isFinite(parsed)) fromIdx = parsed;
+      } catch {}
+    }
+    if (!Number.isFinite(fromIdx) || !Number.isFinite(toIdx)) return;
+    moveSetListItem(fromIdx, toIdx);
+    renderSetList();
+  });
+
   $setListItems.addEventListener("click", (e) => {
     const btn = e && e.target && e.target.closest ? e.target.closest(".set-list-btn") : null;
     if (!btn) return;
