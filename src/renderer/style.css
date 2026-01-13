@@ -1957,22 +1957,6 @@ textarea {
   min-width: 0;
 }
 
-.settings-select-row .settings-editor-font-custom {
-  grid-column: 1 / -1;
-}
-
-.settings-editor-font-custom-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 8px;
-  align-items: center;
-  margin-top: 6px;
-}
-
-.settings-editor-font-custom-row input[type="text"] {
-  width: 100%;
-}
-
 .settings-select-row select {
   min-width: 0;
 }

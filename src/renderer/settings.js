@@ -354,9 +354,9 @@ export function initSettings(api) {
     } catch {}
   }
 
-  function getEditorFontCustomFamilies() {
+  function getEditorFontUserFiles() {
     const ui = readUiState() || {};
-    const raw = ui.editorFontFamilyCustoms;
+    const raw = ui.editorFontUserFiles;
     if (!Array.isArray(raw)) return [];
     const out = [];
     const seen = new Set();
@@ -366,12 +366,12 @@ export function initSettings(api) {
       if (seen.has(s)) continue;
       seen.add(s);
       out.push(s);
-      if (out.length >= 20) break;
+      if (out.length >= 50) break;
     }
     return out;
   }
 
-  function setEditorFontCustomFamilies(list) {
+  function setEditorFontUserFiles(list) {
     const next = [];
     const seen = new Set();
     for (const item of Array.isArray(list) ? list : []) {
@@ -380,9 +380,9 @@ export function initSettings(api) {
       if (seen.has(s)) continue;
       seen.add(s);
       next.push(s);
-      if (next.length >= 20) break;
+      if (next.length >= 50) break;
     }
-    writeUiState({ editorFontFamilyCustoms: next });
+    writeUiState({ editorFontUserFiles: next });
   }
 
   async function updateSettings(patch) {
@@ -424,6 +424,38 @@ export function initSettings(api) {
     applySettings(currentSettings);
   }
 
+  function toFileUrl(filePath) {
+    const raw = String(filePath || "");
+    if (!raw) return "";
+    const s = raw.replace(/\\/g, "/");
+    if (/^[a-zA-Z]:\\/.test(raw)) return encodeURI(`file:///${s}`);
+    if (s.startsWith("/")) return encodeURI(`file://${s}`);
+    return encodeURI(`file://${s}`);
+  }
+
+  function ensureEditorUserFontFaces() {
+    const userDir = String(cachedFontDirs && cachedFontDirs.userDir ? cachedFontDirs.userDir : "");
+    if (!userDir) return;
+    const files = getEditorFontUserFiles();
+    const rules = [];
+    for (const fileName of files) {
+      const safeName = String(fileName || "").trim();
+      if (!safeName) continue;
+      const abs = `${userDir.replace(/\\/g, "/").replace(/\/$/, "")}/${safeName}`;
+      const url = toFileUrl(abs);
+      if (!url) continue;
+      const family = `ABCarus User Font: ${safeName}`;
+      rules.push(`@font-face{font-family:"${family.replace(/"/g, '\\"')}";src:url("${url}") format("truetype");font-weight:normal;font-style:normal;}`);
+    }
+    let styleEl = document.getElementById("abcarusEditorUserFonts");
+    if (!styleEl) {
+      styleEl = document.createElement("style");
+      styleEl.id = "abcarusEditorUserFonts";
+      document.head.appendChild(styleEl);
+    }
+    styleEl.textContent = rules.join("\n");
+  }
+
   function setSettingsMode(nextMode) {
     const next = nextMode === "advanced" ? "advanced" : "basic";
     if (settingsMode === next) return;
@@ -439,6 +471,7 @@ export function initSettings(api) {
   function applySettings(settings) {
     currentSettings = { ...defaultSettings, ...(settings || {}) };
     const effectiveSettings = getEffectiveSettings();
+    if (isSettingsOpen) ensureEditorUserFontFaces();
 
     const root = document.documentElement.style;
     root.setProperty("--editor-font-family", effectiveSettings.editorFontFamily);
@@ -466,6 +499,18 @@ export function initSettings(api) {
           const fallback = "TimGM6mb.sf2";
           const defaultName = String(defaultSettings.soundfontName || fallback);
           meta.el.value = String(value || "") === defaultName ? "" : String(value || "");
+        } else if (key === "editorFontFamily") {
+          const defaultFamily = String(defaultSettings.editorFontFamily || "");
+          const systemFamily = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+          const v = String(value || "");
+          if (v === defaultFamily) {
+            meta.el.value = "";
+          } else if (v === systemFamily) {
+            meta.el.value = "__system__";
+          } else {
+            const m = v.match(/ABCarus User Font: ([^"]+)/);
+            meta.el.value = m ? `user:${String(m[1] || "")}` : "";
+          }
         } else {
           meta.el.value = String(value || "");
         }
@@ -726,6 +771,117 @@ export function initSettings(api) {
       const isSoundfontSelect = optionsKey === "soundfonts";
       const isEditorFontFamily = entry.key === "editorFontFamily";
 
+      if (isEditorFontFamily) {
+        const defaultFamily = String(defaultSettings.editorFontFamily || entry.default || "");
+        const systemFamily = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+
+        const optDefault = document.createElement("option");
+        optDefault.value = "";
+        optDefault.textContent = "Default (bundled)";
+        select.appendChild(optDefault);
+
+        const optSystem = document.createElement("option");
+        optSystem.value = "__system__";
+        optSystem.textContent = "System monospace";
+        select.appendChild(optSystem);
+
+        const userFiles = getEditorFontUserFiles();
+        for (const fileName of userFiles) {
+          const safe = String(fileName || "").trim();
+          if (!safe) continue;
+          const option = document.createElement("option");
+          option.value = `user:${safe}`;
+          option.textContent = `${safe} (user)`;
+          select.appendChild(option);
+        }
+
+        select.addEventListener("change", () => {
+          const v = String(select.value || "");
+          if (!v) {
+            stageSetting(entry.key, defaultFamily);
+            return;
+          }
+          if (v === "__system__") {
+            stageSetting(entry.key, systemFamily);
+            return;
+          }
+          const m = v.match(/^user:(.+)$/);
+          if (m) {
+            const file = String(m[1] || "");
+            const family = `\"ABCarus User Font: ${file}\", ${systemFamily}`;
+            stageSetting(entry.key, family);
+            return;
+          }
+        });
+
+        const wrap = document.createElement("div");
+        wrap.className = "settings-select-row";
+        wrap.appendChild(select);
+
+        const addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.textContent = "Add…";
+        addBtn.addEventListener("click", async () => {
+          if (!api || typeof api.pickFont !== "function" || typeof api.installFont !== "function") return;
+          const pick = await api.pickFont().catch(() => null);
+          if (!pick || !pick.ok || !pick.path) return;
+          const res = await api.installFont(pick.path).catch(() => null);
+          if (!res || !res.ok || !res.name) return;
+          const next = getEditorFontUserFiles();
+          if (!next.includes(res.name)) {
+            next.unshift(res.name);
+            setEditorFontUserFiles(next);
+          }
+          const option = document.createElement("option");
+          option.value = `user:${res.name}`;
+          option.textContent = `${res.name} (user)`;
+          select.appendChild(option);
+          select.value = option.value;
+          ensureEditorUserFontFaces();
+          const family = `\"ABCarus User Font: ${res.name}\", ${systemFamily}`;
+          stageSetting(entry.key, family);
+        });
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.textContent = "Remove";
+
+        const updateRemoveEnabled = () => {
+          const v = String(select.value || "");
+          const m = v.match(/^user:(.+)$/);
+          const file = m ? String(m[1] || "") : "";
+          removeBtn.disabled = !file || !getEditorFontUserFiles().includes(file);
+        };
+
+        removeBtn.addEventListener("click", async () => {
+          const v = String(select.value || "");
+          const m = v.match(/^user:(.+)$/);
+          const file = m ? String(m[1] || "") : "";
+          if (!file) return;
+          const list = getEditorFontUserFiles();
+          if (!list.includes(file)) return;
+          if (!api || typeof api.removeFont !== "function") return;
+          const res = await api.removeFont(file).catch(() => null);
+          if (!res || !res.ok) return;
+          setEditorFontUserFiles(list.filter((x) => x !== file));
+          const opt = Array.from(select.options).find((o) => String(o.value) === `user:${file}`);
+          if (opt) opt.remove();
+          select.value = "";
+          stageSetting(entry.key, defaultFamily);
+          ensureEditorUserFontFaces();
+          updateRemoveEnabled();
+        });
+
+        select.addEventListener("change", updateRemoveEnabled);
+        updateRemoveEnabled();
+
+        wrap.appendChild(addBtn);
+        wrap.appendChild(removeBtn);
+        row.appendChild(wrap);
+        controlByKey.set(entry.key, { entry, el: select });
+        return row;
+      }
+
       if (isFontSelect) {
         populateFontSelect(select, optionsKey);
       } else if (isSoundfontSelect) {
@@ -749,18 +905,6 @@ export function initSettings(api) {
         }
       }
 
-      if (isEditorFontFamily) {
-        const customs = getEditorFontCustomFamilies();
-        for (const s of customs) {
-          if (Array.from(select.options).some((o) => String(o.value) === s)) continue;
-          const label = s.length > 44 ? `${s.slice(0, 44)}…` : s;
-          const option = document.createElement("option");
-          option.value = s;
-          option.textContent = `Custom: ${label}`;
-          select.appendChild(option);
-        }
-      }
-
       select.addEventListener("change", () => {
         if (entry.key === "soundfontName") {
           const fallback = "TimGM6mb.sf2";
@@ -768,27 +912,10 @@ export function initSettings(api) {
           stageSetting(entry.key, select.value ? select.value : defaultName);
           return;
         }
-        if (isEditorFontFamily) {
-          const defaultFamily = String(defaultSettings.editorFontFamily || entry.default || "");
-          stageSetting(entry.key, select.value ? select.value : defaultFamily);
-          return;
-        }
         stageSetting(entry.key, select.value || "");
       });
 
-      if (isEditorFontFamily) {
-        const current = String(getEffectiveSettings().editorFontFamily || defaultSettings.editorFontFamily || entry.default || "");
-        const has = Array.from(select.options).some((o) => String(o.value) === current);
-        if (current && !has) {
-          const label = current.length > 52 ? `${current.slice(0, 52)}…` : current;
-          const option = document.createElement("option");
-          option.value = current;
-          option.textContent = `Current: ${label}`;
-          select.insertBefore(option, select.firstChild);
-        }
-      }
-
-      if (!isFontSelect && !isSoundfontSelect && !isEditorFontFamily) {
+      if (!isFontSelect && !isSoundfontSelect) {
         row.appendChild(select);
         controlByKey.set(entry.key, { entry, el: select });
         return row;
@@ -798,35 +925,10 @@ export function initSettings(api) {
       wrap.className = "settings-select-row";
       wrap.appendChild(select);
 
-      let editorFontCustomUi = null;
-      let editorFontCustomInput = null;
-
-      const hideEditorFontCustomUi = () => {
-        if (!editorFontCustomUi) return;
-        editorFontCustomUi.style.display = "none";
-        if (editorFontCustomInput) editorFontCustomInput.value = "";
-      };
-
-      const showEditorFontCustomUi = (initialValue) => {
-        if (!isEditorFontFamily) return;
-        if (!editorFontCustomUi || !editorFontCustomInput) return;
-        editorFontCustomUi.style.display = "";
-        editorFontCustomInput.value = String(initialValue || "");
-        setTimeout(() => {
-          try { editorFontCustomInput.focus(); editorFontCustomInput.select(); } catch {}
-        }, 0);
-      };
-
       const addBtn = document.createElement("button");
       addBtn.type = "button";
       addBtn.textContent = "Add…";
       addBtn.addEventListener("click", async () => {
-        if (isEditorFontFamily) {
-          const defaultFamily = String(defaultSettings.editorFontFamily || entry.default || "");
-          const current = String(getEffectiveSettings().editorFontFamily || defaultFamily);
-          showEditorFontCustomUi(current);
-          return;
-        }
         if (isSoundfontSelect) {
           if (!api || typeof api.pickSoundfont !== "function") return;
           const picked = await api.pickSoundfont().catch(() => null);
@@ -884,19 +986,6 @@ export function initSettings(api) {
       removeBtn.type = "button";
       removeBtn.textContent = "Remove";
       removeBtn.addEventListener("click", async () => {
-        if (isEditorFontFamily) {
-          const current = String(select.value || "");
-          const customs = getEditorFontCustomFamilies();
-          if (!current || !customs.includes(current)) return;
-          setEditorFontCustomFamilies(customs.filter((x) => x !== current));
-          const opt = Array.from(select.options).find((o) => String(o.value) === current);
-          if (opt) opt.remove();
-          const defaultFamily = String(defaultSettings.editorFontFamily || entry.default || "");
-          select.value = defaultFamily;
-          stageSetting(entry.key, defaultFamily);
-          applySettings(currentSettings);
-          return;
-        }
         if (isSoundfontSelect) {
           const current = String(select.value || "");
           if (!current) return;
@@ -957,11 +1046,6 @@ export function initSettings(api) {
 
       const updateRemoveEnabled = () => {
         const current = String(select.value || "");
-        if (isEditorFontFamily) {
-          removeBtn.disabled = !getEditorFontCustomFamilies().includes(current);
-          removeBtn.title = removeBtn.disabled ? "Only custom entries can be removed." : "";
-          return;
-        }
         if (isSoundfontSelect) {
           removeBtn.disabled = !isSoundfontPath(current);
           removeBtn.title = removeBtn.disabled ? "Bundled soundfonts cannot be removed." : "";
@@ -972,76 +1056,6 @@ export function initSettings(api) {
       };
       select.addEventListener("change", updateRemoveEnabled);
       updateRemoveEnabled();
-
-      if (isEditorFontFamily) {
-        editorFontCustomUi = document.createElement("div");
-        editorFontCustomUi.className = "settings-editor-font-custom";
-        editorFontCustomUi.style.display = "none";
-
-        const label = document.createElement("div");
-        label.className = "settings-help";
-        label.textContent = "Custom font-family stack (CSS).";
-        editorFontCustomUi.appendChild(label);
-
-        const inputRow = document.createElement("div");
-        inputRow.className = "settings-editor-font-custom-row";
-
-        editorFontCustomInput = document.createElement("input");
-        editorFontCustomInput.type = "text";
-        editorFontCustomInput.placeholder = "\"Noto Sans Mono\", monospace";
-        inputRow.appendChild(editorFontCustomInput);
-
-        const okBtn = document.createElement("button");
-        okBtn.type = "button";
-        okBtn.textContent = "OK";
-        inputRow.appendChild(okBtn);
-
-        const cancelBtn = document.createElement("button");
-        cancelBtn.type = "button";
-        cancelBtn.textContent = "Cancel";
-        inputRow.appendChild(cancelBtn);
-
-        editorFontCustomUi.appendChild(inputRow);
-
-        const commitCustom = () => {
-          const trimmed = String(editorFontCustomInput.value || "").trim();
-          if (!trimmed) {
-            hideEditorFontCustomUi();
-            return;
-          }
-          const customs = getEditorFontCustomFamilies();
-          if (!customs.includes(trimmed)) {
-            customs.unshift(trimmed);
-            setEditorFontCustomFamilies(customs);
-          }
-          if (!Array.from(select.options).some((o) => String(o.value) === trimmed)) {
-            const shortLabel = trimmed.length > 44 ? `${trimmed.slice(0, 44)}…` : trimmed;
-            const option = document.createElement("option");
-            option.value = trimmed;
-            option.textContent = `Custom: ${shortLabel}`;
-            select.insertBefore(option, select.firstChild);
-          }
-          select.value = trimmed;
-          stageSetting(entry.key, trimmed);
-          applySettings(currentSettings);
-          hideEditorFontCustomUi();
-          updateRemoveEnabled();
-        };
-
-        okBtn.addEventListener("click", commitCustom);
-        cancelBtn.addEventListener("click", () => hideEditorFontCustomUi());
-        editorFontCustomInput.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            commitCustom();
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            hideEditorFontCustomUi();
-          }
-        });
-
-        wrap.appendChild(editorFontCustomUi);
-      }
 
       wrap.appendChild(addBtn);
       wrap.appendChild(removeBtn);

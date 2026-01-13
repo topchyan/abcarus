@@ -365,18 +365,7 @@ function getSettingsSchema() {
       groupOrder: 10,
       label: "Font family",
       help: "Font used in the ABC editor.",
-      ui: {
-        input: "select",
-        options: [
-          { value: "\"ABCarus Noto Sans Mono\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", label: "Bundled: Noto Sans Mono" },
-          { value: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", label: "System monospace (ui-monospace)" },
-          { value: "\"Noto Sans Mono\", monospace", label: "Noto Sans Mono (system)" },
-          { value: "\"DejaVu Sans Mono\", monospace", label: "DejaVu Sans Mono" },
-          { value: "\"Liberation Mono\", monospace", label: "Liberation Mono" },
-          { value: "\"Consolas\", monospace", label: "Consolas" },
-          { value: "\"Menlo\", monospace", label: "Menlo" },
-        ],
-      },
+      ui: { input: "select", options: [] },
     },
     {
       key: "editorFontSize",
