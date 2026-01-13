@@ -95,6 +95,14 @@ gh run list -L 10 --workflow release-assets.yml
 
 Notes:
 - `release-assets.yml` runs on `push` to tags `v*` and uploads artifacts to the GitHub Release for that tag.
+- It also supports manual runs (workflow_dispatch) with inputs:
+  - `ref`: git ref to build (use a tag like `vX.Y.Z` to publish)
+  - `publish`: when `true`, uploads artifacts to the GitHub Release (only for `ref` starting with `v`)
+
+Manual rebuild example (no browser):
+```bash
+gh workflow run release-assets.yml -f ref=vX.Y.Z -f publish=true
+```
 
 ## GitHub Actions artifact quota
 

@@ -6,19 +6,21 @@ Support Windows x64 with portable import/export by bundling a minimal Python run
 - `third_party/abc2xml/abc2xml.py`
 - `third_party/xml2abc/xml2abc.py`
 
-## Why embeddable Python
+## Why bundled Python (PBS)
 
-Python “embeddable” for Windows is a minimal distribution intended to be shipped with applications. It is typically much smaller than a full install (no `pip` by default) and is suitable when we only need the standard library.
+ABCarus prefers a bundled Python runtime installed from a committed python-build-standalone (PBS) lock file:
+- deterministic and repeatable across contributors and CI;
+- no requirement for users to install Python.
 
-Practical size expectation (Windows x64):
-- Embeddable ZIP: ~8–12 MB
-- Unpacked: ~20–35 MB (varies by Python version)
+Details:
+- PBS workflow (locks + installers): `docs/python-build-standalone.md`
+- Runtime resolution order: `docs/python-runtime.md`
 
 ## Runtime layout in ABCarus
 
 Place the runtime at:
 - `third_party/python-embed/win-x64/`
-  - expected executable: `python.exe` (python-build-standalone install)
+  - expected executable: `python.exe` (PBS install)
 
 This folder is gitignored.
 
@@ -28,7 +30,7 @@ ABCarus does not rely on system Python by default.
 
 ## Notes
 
-- The embeddable distribution should include its `pythonXY.zip` / `_pth` configuration so `python -c "print('ok')"` works out of the box.
+- System Python fallback is opt-in only via `ABCARUS_ALLOW_SYSTEM_PYTHON=1`.
 - ABCarus sets `PYTHONIOENCODING=utf-8` and, for bundled runtimes, also sets `PYTHONHOME` to the runtime root.
 
 ## Legacy (temporary)

@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Help: add an in-app user guide (`Help → ABCarus User Guide`) and a new `docs/USER_GUIDE.md`.
+
+### Changed
+- Docs: consolidate workflow/release/packaging notes and reduce duplication across reference files.
+
+### Fixed
+- Import (MusicXML): require an active target `.abc` file, confirm append, then append the imported tune to the end of that file with `X:max+1` and activate it.
+
 
 
 ## [0.20.0] - 2026-01-13

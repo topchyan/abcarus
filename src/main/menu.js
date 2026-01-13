@@ -216,6 +216,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
     role: isMac ? "help" : undefined,
     submenu: [
       { label: "ABC Guide (F1)", accelerator: "F1", click: () => sendMenuAction("helpGuide") },
+      { label: "ABCarus User Guide", click: () => sendMenuAction("helpUserGuide") },
       { type: "separator" },
       { label: "Diagnostics", submenu: buildDiagnosticsSubmenu(sendMenuAction) },
       { label: "Open Settings Folder", click: () => sendMenuAction("openSettingsFolder") },

@@ -9593,9 +9593,30 @@ async function fileNew() {
 }
 
 async function fileNewFromTemplate() {
-  const ok = await ensureSafeToAbandonCurrentDoc("creating a new file");
+  const targetPath = (activeTuneMeta && activeTuneMeta.path)
+    ? String(activeTuneMeta.path)
+    : (activeFilePath ? String(activeFilePath) : "");
+  if (!targetPath) {
+    showToast("Open/select a target .abc file first.", 2800);
+    return;
+  }
+
+  const ok = await ensureSafeToAbandonCurrentDoc("creating a new tune");
   if (!ok) return;
-  setActiveTuneText(TEMPLATE_ABC, null, { markDirty: true });
+
+  let nextX = "";
+  try {
+    const res = await getFileContentCached(targetPath);
+    if (res && res.ok) nextX = getNextXNumber(res.data || "");
+  } catch {}
+
+  const withX = ensureXNumberInAbc(TEMPLATE_ABC, nextX || "");
+  setNewTuneDraftInActiveFile(withX, {
+    filePath: targetPath,
+    basename: (activeTuneMeta && activeTuneMeta.basename) ? activeTuneMeta.basename : safeBasename(targetPath),
+    xNumber: nextX,
+  });
+  showToast("New tune draft from template (Save will append to the active file).", 3200);
 }
 
 function buildNewTuneDraftTemplate(nextX) {
@@ -9686,9 +9707,16 @@ async function fileOpen() {
 }
 
 async function importMusicXml() {
-  const ok = await ensureSafeToAbandonCurrentDoc("importing a file");
-  if (!ok) return;
   if (!window.api || typeof window.api.importMusicXml !== "function") return;
+
+  const targetPath = (activeTuneMeta && activeTuneMeta.path)
+    ? String(activeTuneMeta.path)
+    : (activeFilePath ? String(activeFilePath) : "");
+  if (!targetPath) {
+    showToast("Open/select a target .abc file first, then import MusicXML.", 3600);
+    setStatus("Ready");
+    return;
+  }
 
   setStatus("Importing…");
   const res = await window.api.importMusicXml();
@@ -9704,14 +9732,83 @@ async function importMusicXml() {
     return;
   }
 
-  if (!currentDoc) setCurrentDocument(createBlankDocument());
   const fallbackTitle = deriveTitleFromPath(res.sourcePath);
   let prepared = ensureTitleInAbc(res.abcText || "", fallbackTitle);
   prepared = normalizeMeasuresLineBreaks(transformMeasuresPerLine(prepared, 4));
   const aligned = alignBarsInText(prepared);
   const finalText = aligned || prepared;
-  setActiveTuneText(finalText, null);
-  if (currentDoc) currentDoc.dirty = true;
+
+  if (targetPath) {
+    const confirm = await confirmAppendToFile(targetPath);
+    if (confirm !== "append") {
+      setStatus("Ready");
+      return;
+    }
+
+    const ok = await ensureSafeToAbandonCurrentDoc("importing a file");
+    if (!ok) {
+      setStatus("Ready");
+      return;
+    }
+
+    try {
+      await withFileLock(targetPath, async () => {
+        const readRes = await readFile(targetPath);
+        if (!readRes || !readRes.ok) throw new Error((readRes && readRes.error) ? readRes.error : "Unable to read target file.");
+        const before = String(readRes.data || "");
+        const nextX = getNextXNumber(before);
+        const withX = ensureXNumberInAbc(finalText, nextX);
+        const updated = appendTuneToContent(before, withX);
+        const writeRes = await writeFile(targetPath, updated);
+        if (!writeRes || !writeRes.ok) throw new Error((writeRes && writeRes.error) ? writeRes.error : "Unable to append to file.");
+        setFileContentInCache(targetPath, updated);
+
+        const updatedFile = await refreshLibraryFile(targetPath);
+        if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
+          const tune = updatedFile.tunes[updatedFile.tunes.length - 1];
+          activeTuneId = tune.id;
+          markActiveTuneButton(activeTuneId);
+          const tuneText = updated.slice(tune.startOffset, tune.endOffset);
+          setActiveTuneText(tuneText, {
+            id: tune.id,
+            path: updatedFile.path,
+            basename: updatedFile.basename,
+            xNumber: tune.xNumber,
+            title: tune.title || "",
+            composer: tune.composer || "",
+            key: tune.key || "",
+            startLine: tune.startLine,
+            endLine: tune.endLine,
+            startOffset: tune.startOffset,
+            endOffset: tune.endOffset,
+          });
+        } else {
+          // Fallback: open as an unsaved document if the file is not part of the library index.
+          setActiveTuneText(withX, null, { markDirty: false });
+          if (currentDoc) currentDoc.dirty = false;
+        }
+      });
+    } catch (e) {
+      const msg = e && e.message ? e.message : String(e);
+      logErr(msg);
+      setStatus("Error");
+      await showSaveError(msg);
+      return;
+    }
+
+    if (res.warnings) logErr(`Import warning: ${res.warnings}`);
+    setStatus("OK");
+    return;
+  }
+
+  const ok = await ensureSafeToAbandonCurrentDoc("importing a file");
+  if (!ok) {
+    setStatus("Ready");
+    return;
+  }
+
+  if (!currentDoc) setCurrentDocument(createBlankDocument());
+  setActiveTuneText(finalText, null, { markDirty: true });
   if (res.warnings) logErr(`Import warning: ${res.warnings}`);
   setStatus("OK");
 }
@@ -10019,6 +10116,7 @@ function wireMenuActions() {
       else if (actionType === "playGotoMeasure") await goToMeasureFromMenu();
       else if (actionType === "resetLayout") resetLayout();
       else if (actionType === "helpGuide") await openExternal("https://abcplus.sourceforge.net/abcplus_en.pdf");
+      else if (actionType === "helpUserGuide") await openExternal("https://github.com/topchyan/abcarus/blob/master/docs/USER_GUIDE.md");
       else if (actionType === "helpLink" && action && action.url) await openExternal(action.url);
       else if (actionType === "about") await openAbout();
       else if (actionType === "transformTransposeUp") await applyAbc2abcTransform({ transposeSemitones: 1 });

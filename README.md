@@ -37,6 +37,7 @@ See `docs/DISCLAIMER.md` and `CHANGELOG.md`.
 [sha-mac-x64]: https://github.com/topchyan/abcarus/releases/latest/download/SHA256SUMS-macos-x64.txt
 
 ## Project docs (recommended starting points)
+- User Guide (how to use the app): `docs/USER_GUIDE.md`
 - Quick workflow (dev + release): `WORKFLOW.md`
 - Detailed release checklist: `docs/RELEASE_CHECKLIST.md`
 - `docs/README.md` (developer documentation index)

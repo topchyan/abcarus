@@ -7,7 +7,7 @@ This repo is a small Electron app for working with ABC notation.
 
 ## Quick start
 - Install deps: `npm install`
-- Run app: `npm run start`
+- Run app: `npm start`
 
 ## Project layout
 - `src/main/` Electron main process (window, IPC, menu).

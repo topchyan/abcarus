@@ -2,17 +2,14 @@
 
 This project uses Semantic Versioning (SemVer) and Keep a Changelog.
 
-## Versioning rules
-- MAJOR: incompatible changes or removals that require user action.
-- MINOR: new features or behavior changes that remain backward compatible.
-- PATCH: bug fixes and small improvements with no behavior change.
+Versioning details live in `docs/VERSIONING.md` (to avoid duplicating rules across multiple files).
 
 ## Tags
 - Tags are annotated and follow `vX.Y.Z`.
 - A tag indicates a release build.
 
 ## Release process
-1) Ensure `main` is green and the working tree is clean.
+1) Ensure `master` is green and the working tree is clean.
 2) Decide version bump (patch/minor/major).
 3) Run one of:
    - `npm run release:patch`
@@ -24,6 +21,16 @@ This project uses Semantic Versioning (SemVer) and Keep a Changelog.
 5) Create a GitHub Release from the new CHANGELOG section.
    - CI builds and uploads artifacts on tag push via `.github/workflows/release-assets.yml`.
    - You typically only need to write/paste the release notes; artifacts are uploaded automatically to the GitHub Release for that tag.
+
+## CI: Release Assets workflow
+
+`.github/workflows/release-assets.yml`:
+- runs automatically on tag pushes matching `v*`;
+- can be run manually (workflow_dispatch) to rebuild artifacts for an existing tag.
+
+Manual rebuild (upload to GitHub Release):
+- Run the workflow with `ref: vX.Y.Z` and `publish: true`.
+- `publish` is ignored for non-tag refs; uploads are only allowed for `v*` tags.
 
 ## Practical checklist
 For a step-by-step “one-shot” release workflow (deploy + AppImage + push), see:
@@ -37,13 +44,7 @@ Use Keep a Changelog headings:
 - Removed
 - Security
 
-## Pre-releases
-- Use `X.Y.Z-alpha.N`, `X.Y.Z-beta.N`, or `X.Y.Z-rc.N`.
-- Pre-releases may be tagged but should be clearly labeled in GitHub Releases.
-
-## Dev builds
-- Dev builds are any commit not exactly on a `vX.Y.Z` tag.
-- Version info should include build number and commit hash.
+Pre-releases and build metadata are documented in `docs/VERSIONING.md`.
 
 ## Release notes template
 ```

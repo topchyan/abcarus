@@ -4,16 +4,19 @@ ABCarus supports:
 - Linux: AppImage via scripts under `scripts/`
 - Windows/macOS: `electron-builder` (run on the target OS)
 
-## Bundled Python policy
+## Python runtime (PBS)
 
-Import/export uses Python tools (`abc2xml`, `xml2abc`) and requires a bundled PBS runtime by default.
-System Python is disabled unless explicitly enabled with:
-- `ABCARUS_ALLOW_SYSTEM_PYTHON=1`
+Import/export uses Python tools (`abc2xml`, `xml2abc`) and expects a bundled Python runtime installed from python-build-standalone (PBS).
+
+References:
+- PBS policy + lock/install workflow: `docs/python-build-standalone.md`
+- Runtime resolution order and system fallback (`ABCARUS_ALLOW_SYSTEM_PYTHON=1`): `docs/python-runtime.md`
+- Windows runtime layout notes: `docs/windows.md`
 
 Before packaging, install the PBS runtime for your platform:
 - Update lock: `node devtools/pbs/pbs-update-lock.mjs --platform=<platform>`
 - Install: `bash devtools/pbs/pbs-install-unix.sh <platform>` (Linux/macOS) or
-  `powershell -ExecutionPolicy Bypass -File devtools/pbs/pbs-install-windows.ps1 -Platform win-x64` (Windows)
+  `pwsh -ExecutionPolicy Bypass -File devtools/pbs/pbs-install-windows.ps1 -Platform win-x64` (Windows)
 The `dist:*` scripts include a pre-check that fails fast if the runtime is missing:
 - `npm run pbs:check-runtime`
 
@@ -22,7 +25,7 @@ The `dist:*` scripts include a pre-check that fails fast if the runtime is missi
 Run on Windows:
 - `npm install`
 - `npm run pbs:check`
-- `powershell -ExecutionPolicy Bypass -File devtools/pbs/pbs-install-windows.ps1 -Platform win-x64`
+- `pwsh -ExecutionPolicy Bypass -File devtools/pbs/pbs-install-windows.ps1 -Platform win-x64`
 - `npm run dist:win`
 
 Output: `dist/electron-builder/`

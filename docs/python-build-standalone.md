@@ -46,7 +46,7 @@ Windows:
 
 Convenience wrappers:
 - Unix: `bash devtools/pbs/pbs-update-all.sh`
-- Windows: `powershell -ExecutionPolicy Bypass -File devtools/pbs/pbs-update-all.ps1`
+- Windows: `pwsh -ExecutionPolicy Bypass -File devtools/pbs/pbs-update-all.ps1`
 
 ## Install runtime (from lock)
 
@@ -56,11 +56,14 @@ Linux/macOS:
 - `bash devtools/pbs/pbs-install-unix.sh darwin-arm64`
 
 Windows:
-- `powershell -ExecutionPolicy Bypass -File devtools/pbs/pbs-install-windows.ps1 -Platform win-x64`
+- `pwsh -ExecutionPolicy Bypass -File devtools/pbs/pbs-install-windows.ps1 -Platform win-x64`
 
 Convenience wrappers:
 - Unix: `bash devtools/pbs/pbs-install-all.sh`
-- Windows: `powershell -ExecutionPolicy Bypass -File devtools/pbs/pbs-install-all.ps1`
+- Windows: `pwsh -ExecutionPolicy Bypass -File devtools/pbs/pbs-install-all.ps1`
+
+Windows runtime layout notes:
+- `docs/windows.md`
 
 ## Lock sanity check
 

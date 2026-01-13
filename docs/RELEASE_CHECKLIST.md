@@ -30,7 +30,7 @@ Where to find:
 ## 0) Preconditions
 
 - You are on the right branch (usually `master`).
-- You can run the app locally: `npm run start`
+- You can run the app locally: `npm start`
 - AppImage toolchain is available (see `scripts/README.md`).
 
 ## Local-only files (do not commit)
@@ -96,10 +96,16 @@ Tip: if you don’t want to use the browser, you can confirm the release and att
 
 ## 5) Create GitHub Release (manual)
 
-1) Go to the GitHub repository.
-2) Create a new Release from tag `vX.Y.Z`.
-3) Paste the release notes from `CHANGELOG.md` section `## [X.Y.Z] - ...`.
-4) (Optional) Wait for CI: `.github/workflows/release-assets.yml` uploads the platform artifacts for that tag.
+You want a GitHub Release for human-readable notes (title/body). Assets are uploaded by CI for the tag.
+
+1) Create (or edit) the GitHub Release for tag `vX.Y.Z`.
+2) Paste the release notes from `CHANGELOG.md` section `## [X.Y.Z] - ...`.
+
+Notes:
+- CI (`.github/workflows/release-assets.yml`) uploads platform artifacts on tag push.
+- If you need to rebuild/re-upload assets for an existing tag, run the workflow manually with:
+  - `ref: vX.Y.Z`
+  - `publish: true`
 
 ## 6) Troubleshooting AppImage build
 
