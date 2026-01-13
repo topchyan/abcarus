@@ -297,26 +297,28 @@
     </div>
   </div>
 
-  <div class="modal" id="setListModal" aria-hidden="true">
-    <div class="modal-card" role="dialog" aria-label="Set List">
-      <div class="modal-header">
-        <div class="modal-title">Set List</div>
-        <button class="modal-close" id="setListClose" type="button">Close</button>
-      </div>
-      <div class="modal-body">
-        <div id="setListEmpty" class="set-list-empty">
-          Add tunes to build an ordered list, preview it, and export it as a new .abc file.
-        </div>
-        <div id="setListItems" class="set-list-items" hidden></div>
-      </div>
-      <div class="modal-footer">
-        <div class="modal-footer-left">
-          <button id="setListHeader" type="button">Header…</button>
-          <label class="set-list-inline">
-            <span>Page breaks</span>
-            <select id="setListPageBreaks">
-              <option value="perTune">Per tune</option>
-              <option value="none">None</option>
+	  <div class="modal" id="setListModal" aria-hidden="true">
+	    <div class="modal-card" role="dialog" aria-label="Set List">
+	      <div class="modal-header">
+	        <div class="modal-title">Set List</div>
+	        <div class="set-list-header-controls">
+	          <button id="setListHeader" type="button">Header…</button>
+	          <button class="modal-close" id="setListClose" type="button">Close</button>
+	        </div>
+	      </div>
+	      <div class="modal-body">
+	        <div id="setListEmpty" class="set-list-empty">
+	          Add tunes to build an ordered list, preview it, and export it as a new .abc file.
+	        </div>
+	        <div id="setListItems" class="set-list-items" hidden></div>
+	      </div>
+	      <div class="modal-footer">
+	        <div class="modal-footer-left">
+	          <label class="set-list-inline">
+	            <span>Page breaks</span>
+	            <select id="setListPageBreaks">
+	              <option value="perTune">Per tune</option>
+	              <option value="none">None</option>
               <option value="auto">Auto</option>
             </select>
           </label>

@@ -1666,6 +1666,13 @@ svg {
   min-width: 120px;
 }
 
+.set-list-header-controls {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 #setListHeaderText {
   width: 100%;
   resize: vertical;
