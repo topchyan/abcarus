@@ -7412,6 +7412,122 @@ async function runPrintAllAction(type) {
   }
 }
 
+function getSetListSuggestedBaseName() {
+  const base = getSongbookSuggestedBaseName();
+  return sanitizeFileBaseName(`${base || "set-list"} - set-list`);
+}
+
+async function renderSetListSvgMarkupForPrint(options = {}) {
+  const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+  if (!Array.isArray(setListItems) || setListItems.length === 0) {
+    return { ok: false, error: "No tunes in Set List." };
+  }
+
+  const entry = { basename: "Set List" };
+  const blocks = [];
+  let current = [];
+  const summary = [];
+
+  const flush = () => {
+    if (!current.length) return;
+    blocks.push(current);
+    current = [];
+  };
+
+  const total = setListItems.length;
+  for (let i = 0; i < total; i += 1) {
+    const item = setListItems[i] || {};
+    const raw = String(item.text || "");
+    if (onProgress && (i % 5 === 0 || i === total - 1)) onProgress(i + 1, total);
+    if (!raw.trim()) continue;
+
+    const tune = {
+      id: item.sourceTuneId || item.id || "",
+      xNumber: String(i + 1),
+      title: item.title || "",
+      preview: item.title || `X:${i + 1}`,
+    };
+
+    const breakBefore = setListPageBreaks === "perTune"
+      ? i > 0
+      : shouldInjectNewPageBeforeTune(raw, { mode: setListPageBreaks, idx: i });
+    if (breakBefore) flush();
+
+    const renumbered = ensureXNumberInAbc(raw, i + 1);
+    const context = { tuneLabel: buildPrintTuneLabel(tune) };
+    const res = await renderAbcToSvgMarkup(renumbered, { errorContext: context });
+    const tuneErrors = res.errors ? res.errors.slice() : [];
+    if (!res.ok && res.error) tuneErrors.push({ message: res.error });
+
+    if (tuneErrors.length) {
+      const uniqueKeys = new Set(tuneErrors.map((err) => {
+        const msg = err && err.message ? err.message : "Unknown error";
+        const loc = err && err.loc ? `Line ${err.loc.line}, Col ${err.loc.col}` : "";
+        return `${msg}|${loc}`;
+      }));
+      summary.push({ tune, count: uniqueKeys.size });
+      current.push(buildPrintErrorCard(entry, tune, tuneErrors).trim());
+    }
+
+    if (res.svg && res.svg.trim()) {
+      current.push(res.svg.trim());
+    }
+
+    if (setListPageBreaks === "perTune") flush();
+  }
+  flush();
+
+  if (!blocks.length) return { ok: false, error: "No SVG output produced." };
+
+  const parts = [];
+  if (summary.length) {
+    parts.push(buildPrintErrorSummary(entry, summary, total).trim());
+  }
+  for (const block of blocks) {
+    parts.push(`<div class="print-tune">${block.join("\n")}</div>`);
+  }
+  return { ok: true, svg: parts.join("\n") };
+}
+
+async function runPrintSetListAction(type) {
+  if (!window.api) return;
+  if (!Array.isArray(setListItems) || setListItems.length === 0) {
+    setStatus("No Set List to print.");
+    return;
+  }
+  setStatus("Rendering…");
+  const renderRes = await renderSetListSvgMarkupForPrint({
+    onProgress: (current, total) => {
+      setStatus(`Rendering tunes… ${current}/${total}`);
+    },
+  });
+  if (!renderRes.ok) {
+    setStatus("Error");
+    logErr(renderRes.error || "Unable to render.");
+    return;
+  }
+
+  const svgMarkup = applyPrintDebugMarkup(renderRes.svg);
+  let res = null;
+  if (type === "print" && typeof window.api.printDialog === "function") {
+    res = await window.api.printDialog(svgMarkup);
+  } else if (type === "pdf" && typeof window.api.exportPdf === "function") {
+    res = await window.api.exportPdf(svgMarkup, getSetListSuggestedBaseName());
+  } else if (type === "preview" && typeof window.api.printPreview === "function") {
+    res = await window.api.printPreview(svgMarkup);
+  }
+
+  if (res && res.ok) {
+    setStatus("OK");
+    if (type === "pdf" && res.path) {
+      showToast(`Exported PDF: ${res.path}`);
+    }
+  } else if (res && res.error && res.error !== "Canceled") {
+    setStatus("Error");
+    logErr(res.error);
+  }
+}
+
 function setCurrentDocument(doc) {
   currentDoc = doc;
   updateUIFromDocument(doc);
@@ -10853,14 +10969,14 @@ if ($setListSaveAbc) {
 if ($setListExportPdf) {
   $setListExportPdf.addEventListener("click", () => {
     if (!Array.isArray(setListItems) || setListItems.length === 0) return;
-    showToast("Set List export is not implemented yet.", 2400);
+    runPrintSetListAction("pdf").catch(() => {});
   });
 }
 
 if ($setListPrint) {
   $setListPrint.addEventListener("click", () => {
     if (!Array.isArray(setListItems) || setListItems.length === 0) return;
-    showToast("Set List export is not implemented yet.", 2400);
+    runPrintSetListAction("print").catch(() => {});
   });
 }
 
