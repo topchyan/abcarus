@@ -5804,6 +5804,20 @@ function initContextMenu() {
       hideContextMenu();
       return;
     }
+    if (action === "addToSetList" && menuTarget) {
+      const tuneId = menuTarget.type === "tune"
+        ? menuTarget.tuneId
+        : (menuTarget.type === "editor" ? activeTuneId : null);
+      hideContextMenu();
+      try {
+        await addTuneToSetListByTuneId(tuneId);
+        showToast("Added to Set List.", 2000);
+        if ($setListModal && $setListModal.classList.contains("open")) renderSetList();
+      } catch (e) {
+        showToast(e && e.message ? e.message : String(e), 5000);
+      }
+      return;
+    }
     if (action === "pasteTune" && menuTarget && menuTarget.type === "file") {
       await pasteClipboardToFile(menuTarget.filePath);
       hideContextMenu();
@@ -5897,6 +5911,7 @@ function showContextMenuAt(x, y, target) {
   contextMenuTarget = target;
   if (target.type === "tune") {
     buildContextMenuItems([
+      { label: "Add to Set List", action: "addToSetList" },
       { label: "Copy Tune", action: "copyTune" },
       { label: "Duplicate Tune", action: "duplicateTune" },
       { label: "Cut Tune", action: "cutTune" },
@@ -5923,7 +5938,9 @@ function showContextMenuAt(x, y, target) {
       { label: "Clear Search", action: "clearSearch", disabled: !libraryTextFilter },
     ]);
   } else if (target.type === "editor") {
+    const canAdd = Boolean(activeTuneId) && !rawMode;
     buildContextMenuItems([
+      { label: "Add Active Tune to Set List", action: "addToSetList", disabled: !canAdd },
       { label: "Cut", action: "editorCut" },
       { label: "Copy", action: "editorCopy" },
       { label: "Paste", action: "editorPaste" },
@@ -8649,7 +8666,8 @@ document.addEventListener("set-list:add", (ev) => {
   try {
     const row = ev && ev.detail && ev.detail.row ? ev.detail.row : null;
     if (!row) return;
-    addTuneToSetListFromLibraryRow(row).then(() => {
+    const tuneId = row && row.tuneId ? String(row.tuneId) : "";
+    addTuneToSetListByTuneId(tuneId, { fallbackTitle: row.title, fallbackComposer: row.composer }).then(() => {
       showToast("Added to Set List.", 2000);
       if ($setListModal && $setListModal.classList.contains("open")) renderSetList();
     }).catch((e) => {
@@ -8811,6 +8829,56 @@ function shouldInjectNewPageBeforeTune(tuneText, { mode, idx }) {
   return long;
 }
 
+async function addTuneToSetListByTuneId(tuneId, { fallbackTitle = "", fallbackComposer = "" } = {}) {
+  const id = String(tuneId || "").trim();
+  if (!id) throw new Error("Missing tune id.");
+
+  if (currentDoc && currentDoc.dirty && activeTuneId && id === activeTuneId) {
+    const choice = await confirmUnsavedChanges("adding this tune to Set List");
+    if (choice === "cancel") return;
+    if (choice === "save") {
+      const ok = await performSaveFlow();
+      if (!ok) return;
+    }
+  }
+
+  const res = findTuneById(id);
+  if (!res) throw new Error("Tune not found in library.");
+
+  const readRes = await readFile(res.file.path);
+  if (!readRes || !readRes.ok) throw new Error(readRes && readRes.error ? readRes.error : "Unable to read file.");
+  const content = String(readRes.data || "");
+
+  const startOffset = Number(res.tune.startOffset);
+  const endOffset = Number(res.tune.endOffset);
+  if (!Number.isFinite(startOffset) || !Number.isFinite(endOffset) || startOffset < 0 || endOffset <= startOffset || endOffset > content.length) {
+    throw new Error("Refusing to add: tune offsets look stale. Refresh the library and try again.");
+  }
+  const slice = content.slice(startOffset, endOffset);
+  const trimmed = slice.replace(/^\s+/, "");
+  const xMatch = trimmed.match(/^X:\s*(\d+)/);
+  if (!xMatch) {
+    throw new Error("Refusing to add: tune offsets look stale. Refresh the library and try again.");
+  }
+  const expectedX = String(res.tune.xNumber || "");
+  if (expectedX && xMatch[1] !== expectedX) {
+    throw new Error(`Refusing to add: tune offsets look stale (expected X:${expectedX}). Refresh the library and try again.`);
+  }
+
+  const entryId = `${id}::${Date.now()}::${Math.random().toString(16).slice(2)}`;
+  setListItems = Array.isArray(setListItems) ? setListItems.slice() : [];
+  setListItems.push({
+    id: entryId,
+    sourceTuneId: id,
+    sourcePath: res.file.path,
+    xNumber: res.tune.xNumber || "",
+    title: res.tune.title || fallbackTitle || "",
+    composer: res.tune.composer || fallbackComposer || "",
+    text: slice,
+    addedAtMs: Date.now(),
+  });
+}
+
 function buildSetListExportAbc() {
   if (!Array.isArray(setListItems) || setListItems.length === 0) return "";
   let out = "";
@@ -8849,46 +8917,6 @@ async function exportSetListAsAbc() {
     return false;
   });
   if (ok) showToast("Exported.", 2400);
-}
-
-async function addTuneToSetListFromLibraryRow(rowData) {
-  const tuneId = rowData && rowData.tuneId ? String(rowData.tuneId) : "";
-  if (!tuneId) throw new Error("Missing tune id.");
-  const res = findTuneById(tuneId);
-  if (!res) throw new Error("Tune not found in library.");
-
-  const readRes = await readFile(res.file.path);
-  if (!readRes || !readRes.ok) throw new Error(readRes && readRes.error ? readRes.error : "Unable to read file.");
-  const content = String(readRes.data || "");
-
-  const startOffset = Number(res.tune.startOffset);
-  const endOffset = Number(res.tune.endOffset);
-  if (!Number.isFinite(startOffset) || !Number.isFinite(endOffset) || startOffset < 0 || endOffset <= startOffset || endOffset > content.length) {
-    throw new Error("Refusing to add: tune offsets look stale. Refresh the library and try again.");
-  }
-  const slice = content.slice(startOffset, endOffset);
-  const trimmed = slice.replace(/^\s+/, "");
-  const xMatch = trimmed.match(/^X:\s*(\d+)/);
-  if (!xMatch) {
-    throw new Error("Refusing to add: tune offsets look stale. Refresh the library and try again.");
-  }
-  const expectedX = String(res.tune.xNumber || "");
-  if (expectedX && xMatch[1] !== expectedX) {
-    throw new Error(`Refusing to add: tune offsets look stale (expected X:${expectedX}). Refresh the library and try again.`);
-  }
-
-  const entryId = `${tuneId}::${Date.now()}::${Math.random().toString(16).slice(2)}`;
-  setListItems = Array.isArray(setListItems) ? setListItems.slice() : [];
-  setListItems.push({
-    id: entryId,
-    sourceTuneId: tuneId,
-    sourcePath: res.file.path,
-    xNumber: res.tune.xNumber || "",
-    title: res.tune.title || rowData.title || "",
-    composer: res.tune.composer || rowData.composer || "",
-    text: slice,
-    addedAtMs: Date.now(),
-  });
 }
 
 if ($xIssuesClose) {
