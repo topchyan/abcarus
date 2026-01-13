@@ -112,6 +112,13 @@ function buildMenuTemplate(appState, sendMenuAction) {
       { role: "paste" },
       ...(isMac ? [{ role: "pasteAndMatchStyle" }] : []),
       { role: "selectAll" },
+      ...(isMac
+        ? []
+        : [
+          { type: "separator" },
+          { label: "Settings…", accelerator: "CmdOrCtrl+,", click: () => sendMenuAction("settings") },
+          { label: "Fonts…", accelerator: "F9", click: () => sendMenuAction("fonts") },
+        ]),
     ],
   };
 
@@ -133,18 +140,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
     ],
   };
 
-	  const settingsMenu = isMac
-	    ? null
-	    : {
-	      label: "Settings",
-	      submenu: [
-	        { label: "Settings…", accelerator: "CmdOrCtrl+,", click: () => sendMenuAction("settings") },
-	        { label: "Fonts…", accelerator: "F9", click: () => sendMenuAction("fonts") },
-	        { type: "separator" },
-	        { label: "Export Settings…", click: () => sendMenuAction("exportSettings") },
-	        { label: "Import Settings…", click: () => sendMenuAction("importSettings") },
-	      ],
-	    };
+	  const settingsMenu = null;
 
   const playMenu = {
     label: "Play",
@@ -275,7 +271,6 @@ function buildMenuTemplate(appState, sendMenuAction) {
     {
       ...viewMenu,
     },
-    ...(settingsMenu ? [settingsMenu] : []),
     playMenu,
     toolsMenu,
     ...(macWindowMenu ? [macWindowMenu] : []),

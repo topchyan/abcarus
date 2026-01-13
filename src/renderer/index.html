@@ -218,28 +218,47 @@
     <div class="modal-card settings-card" role="dialog" aria-label="Settings">
       <div class="modal-header">
         <div class="modal-title">Settings</div>
-        <button class="modal-close" id="settingsClose" type="button">Close</button>
+        <div class="settings-header-controls" aria-label="Settings controls">
+          <div class="segmented" role="group" aria-label="Settings mode">
+            <button id="settingsModeBasic" type="button" aria-pressed="true">Basic</button>
+            <button id="settingsModeAdvanced" type="button" aria-pressed="false">Advanced</button>
+          </div>
+          <label class="settings-search">
+            <span class="settings-search-label">Search</span>
+            <input id="settingsFilter" type="text" aria-label="Search settings" placeholder="Search…" />
+          </label>
+        </div>
+        <!-- Legacy control kept for compatibility until settings.js is updated (Prompt 4). -->
+        <button class="modal-close" id="settingsClose" type="button" hidden>Close</button>
       </div>
       <div class="modal-body">
         <div class="settings-layout" aria-label="Settings layout">
           <div class="settings-nav">
-            <label class="settings-filter">
-              <span>Search</span>
-              <input id="settingsFilter" type="text" placeholder="Zoom, follow, XML…" />
-            </label>
-            <label class="settings-toggle">
-              <input id="settingsShowAdvanced" type="checkbox" />
-              <span>Show advanced</span>
-            </label>
+            <!-- Legacy control kept for compatibility; hidden in the new UI (Prompt 4 removes reliance). -->
+            <input id="settingsShowAdvanced" type="checkbox" hidden />
             <div class="settings-tabs" id="settingsTabs" role="tablist" aria-label="Settings sections"></div>
           </div>
           <div class="settings-content">
+            <div class="settings-section-header" aria-label="Settings section">
+              <div id="settingsSectionTitle" class="settings-section-title"></div>
+              <div id="settingsSectionHint" class="settings-section-hint"></div>
+            </div>
+            <div id="settingsNoResults" class="settings-no-results hidden" role="status" aria-live="polite"></div>
             <div class="settings-panels" id="settingsPanels"></div>
           </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button id="settingsReset" type="button">Reset Defaults</button>
+        <div class="modal-footer-left">
+          <button id="settingsExport" type="button">Export…</button>
+          <button id="settingsImport" type="button">Import…</button>
+          <button id="settingsResetSection" type="button">Defaults</button>
+        </div>
+        <button id="settingsCancel" type="button">Cancel</button>
+        <button id="settingsApply" type="button">Apply</button>
+        <button id="settingsOk" class="primary" type="button">OK</button>
+        <!-- Legacy control kept for compatibility until settings.js is updated (Prompt 4). -->
+        <button id="settingsReset" type="button" hidden>Reset Defaults</button>
       </div>
     </div>
   </div>

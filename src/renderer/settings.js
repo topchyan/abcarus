@@ -1,3 +1,85 @@
+/*
+PLAN (Architect prompts 1→7) — Settings dialog redesign (desktop-grade)
+
+Scope for this prompt: plan only. Do NOT implement yet.
+Allowed files for the full sequence: `src/renderer/index.html`, `src/renderer/style.css`, `src/renderer/settings.js`
+(and `src/renderer/settings_store.js` only if section reset needs a helper).
+
+Current state (audit notes, high-level):
+- Markup: Settings modal lives in `src/renderer/index.html` under `#settingsModal` with left-nav containing
+  Search (`#settingsFilter`) and “Show advanced” checkbox (`#settingsShowAdvanced`), tabs container `#settingsTabs`,
+  panels container `#settingsPanels`, footer buttons `#settingsReset` + `#settingsClose`.
+- CSS: `.modal-card.settings-card` is resizable and there are responsive rules that reflow to 1-column; multiple scroll
+  containers can cause “jumping”.
+- JS: `settings.js` builds tabs/panels from schema, uses `details.settings-advanced` per section, search currently
+  filters across all panels and can change active tab; settings apply immediately via `store.update`.
+
+Target layout (DOM changes in `index.html`):
+1) Header:
+   - Keep title “Settings”.
+   - Add header controls: segmented mode switch (buttons `#settingsModeBasic`, `#settingsModeAdvanced`, aria-pressed)
+     and Search input moved here (keep id `#settingsFilter`, accessible label/aria-label).
+2) Left pane:
+   - Navigation only: keep `#settingsTabs` list.
+   - Remove Search and remove “Show advanced” checkbox from visible UI (no `#settingsShowAdvanced` in UI).
+3) Right pane:
+   - Add section header bar above content: `#settingsSectionTitle` and optional `#settingsSectionHint`.
+   - Keep `#settingsNoResults` and `#settingsPanels`.
+4) Footer:
+   - Left: `#settingsResetSection` (“Reset Section…”).
+   - Right: `#settingsCancel`, `#settingsApply`, `#settingsOk`.
+   - Remove/stop using old ids `#settingsReset` / `#settingsClose` (updated in JS in later prompts).
+
+Desktop styling changes in `style.css`:
+- Remove free resize on settings modal (`resize: both`).
+- Stable geometry: set a default size (e.g. ~960×600) with min/max constraints; no responsive 1-column collapse.
+- Single-scroll rule: only right pane content scrolls (`.settings-panels`); left nav is fixed-width and stable.
+- Left nav: strong selected state, clean list.
+- Right pane: section header bar typography; groups as “cards” (`.settings-group`), consistent spacing.
+- Rows: predictable 2-column alignment; avoid far-right floating checkboxes; inputs not overly wide.
+- Advanced: disclosure (`details.settings-advanced`) styled like desktop preferences.
+
+Behavior changes in `settings.js`:
+1) Modes:
+   - Introduce `settingsMode = 'basic'|'advanced'` persisted in localStorage (UI state only).
+   - Basic mode shows only non-advanced settings; Advanced mode shows all settings, with advanced entries inside
+     per-group disclosure “Advanced options” (collapsed by default).
+2) Sections:
+   - Keep an `activeSectionId` persisted in localStorage; update `#settingsSectionTitle/#settingsSectionHint` on change.
+3) Rendering:
+   - Render entries exactly once (fix duplication risks, e.g. global header enable appearing twice).
+   - Group entries into `.settings-group` cards; within each group place an “Advanced options” disclosure as needed.
+4) Search:
+   - Search applies to the active section only; does not change left nav selection.
+   - When query is empty: normal view; when non-empty: hide non-matching entries; show `#settingsNoResults` if none.
+   - Search query is NOT persisted across restarts.
+5) Footer semantics:
+   - Switch to staged edits so Cancel has no side effects:
+     - Maintain `draftSettingsPatch` (in-memory) while dialog is open; controls update draft only.
+     - Apply/OK: send the accumulated patch via `store.update`, then clear draft; OK closes.
+     - Cancel: discard draft and close; reload persisted settings next open.
+   - Reset Section…:
+     - Confirm.
+     - Reset only keys belonging to active section (based on schema entries rendered in that section).
+     - Apply reset via `store.update`, keep dialog open.
+6) Safety checks (QA prompt 6+):
+   - After editing this file, run: `node --experimental-default-type=module --check src/renderer/settings.js`.
+
+Minimal touch-points:
+- `index.html`: only `#settingsModal` subtree changes (header/nav/content/footer), keep ids required by JS.
+- `style.css`: only settings-related selectors (.settings-*, .modal-card.settings-card) and override media query behavior.
+- `settings.js`: rewrite UI wiring to new ids and staged apply model; avoid reflow/jumping; keep store API unchanged.
+*/
+
+/*
+SETTINGS UX (maintainer summary)
+- Basic/Advanced mode is UI-only and persisted in localStorage.
+- Changes are staged while Settings is open; `Apply`/`OK` commits via `store.update`, `Cancel` discards.
+- Search filters within the active section only and never changes the active section.
+- Advanced settings render only in Advanced mode inside per-group “Advanced options” disclosures.
+- “Reset Section…” resets only the active section keys to schema defaults.
+*/
+
 import {
   EditorView,
   EditorState,
@@ -8,6 +90,14 @@ import { createSettingsStore } from "./settings_store.js";
 
 const ZOOM_STEP = 0.1;
 const SETTINGS_UI_STATE_KEY = "abcarus.settings.uiState.v1";
+const SETTINGS_SECTION_HINTS = {
+  general: "General application settings.",
+  editor: "Editor appearance and behavior.",
+  playback: "Playback behavior and visuals.",
+  options: "App options (tools, library, dialogs).",
+  fonts: "Fonts and soundfonts used for rendering and playback.",
+  header: "Global ABC directives prepended during render/playback.",
+};
 
 const FALLBACK_SCHEMA = [
   { key: "renderZoom", type: "number", default: 1, section: "General", label: "Score zoom (%)", ui: { input: "percent", min: 50, max: 800, step: 5 } },
@@ -18,8 +108,8 @@ const FALLBACK_SCHEMA = [
   { key: "editorLyricsBold", type: "boolean", default: true, section: "Editor", label: "Bold inline lyrics", ui: { input: "checkbox" } },
   { key: "useNativeTranspose", type: "boolean", default: true, section: "Tools", label: "Use native transpose", ui: { input: "checkbox" } },
   { key: "autoAlignBarsAfterTransforms", type: "boolean", default: false, section: "Tools", label: "Auto-align bars after transforms", ui: { input: "checkbox" }, advanced: true },
-  { key: "abc2xmlArgs", type: "string", default: "", section: "Import/Export", label: "abc2xml flags", ui: { input: "text", placeholder: "-x -y=value" }, advanced: true },
-  { key: "xml2abcArgs", type: "string", default: "", section: "Import/Export", label: "xml2abc flags", ui: { input: "text", placeholder: "-x -y=value" }, advanced: true },
+  { key: "abc2xmlArgs", type: "string", default: "", section: "Tools", group: "Import/Export", groupOrder: 20, label: "abc2xml flags", ui: { input: "text", placeholder: "-x -y=value" }, advanced: true },
+  { key: "xml2abcArgs", type: "string", default: "", section: "Tools", group: "Import/Export", groupOrder: 20, label: "xml2abc flags", ui: { input: "text", placeholder: "-x -y=value" }, advanced: true },
   { key: "globalHeaderEnabled", type: "boolean", default: true, section: "Header", label: "Enable global header", ui: { input: "checkbox" } },
   { key: "globalHeaderText", type: "string", default: "", section: "Header", label: "Global header", ui: { input: "code" } },
   { key: "usePortalFileDialogs", type: "boolean", default: true, section: "Dialogs", label: "Use portal file dialogs (Linux)", ui: { input: "checkbox" }, advanced: true },
@@ -100,12 +190,25 @@ export function initSettings(api) {
   const $settingsModal = document.getElementById("settingsModal");
   const $settingsCard = $settingsModal ? $settingsModal.querySelector(".modal-card") : null;
   const $settingsHeader = $settingsModal ? $settingsModal.querySelector(".modal-header") : null;
-  const $settingsClose = document.getElementById("settingsClose");
-  const $settingsReset = document.getElementById("settingsReset");
   const $settingsFilter = document.getElementById("settingsFilter");
-  const $settingsShowAdvanced = document.getElementById("settingsShowAdvanced");
+  const $settingsModeBasic = document.getElementById("settingsModeBasic");
+  const $settingsModeAdvanced = document.getElementById("settingsModeAdvanced");
+  const $settingsSectionTitle = document.getElementById("settingsSectionTitle");
+  const $settingsSectionHint = document.getElementById("settingsSectionHint");
+  const $settingsNoResults = document.getElementById("settingsNoResults");
   const $settingsTabsHost = document.getElementById("settingsTabs");
   const $settingsPanelsHost = document.getElementById("settingsPanels");
+  const $settingsExport = document.getElementById("settingsExport");
+  const $settingsImport = document.getElementById("settingsImport");
+  const $settingsResetSection = document.getElementById("settingsResetSection");
+  const $settingsCancel = document.getElementById("settingsCancel");
+  const $settingsApply = document.getElementById("settingsApply");
+  const $settingsOk = document.getElementById("settingsOk");
+
+  // Legacy controls kept in HTML for compatibility.
+  const $settingsClose = document.getElementById("settingsClose");
+  const $settingsReset = document.getElementById("settingsReset");
+  const $settingsShowAdvanced = document.getElementById("settingsShowAdvanced");
   const $renderPane = document.querySelector(".render-pane");
   const $editorPane = document.querySelector(".editor-pane");
 
@@ -114,14 +217,18 @@ export function initSettings(api) {
   let currentSettings = { ...defaultSettings };
   let activePane = "render";
   let lastActiveTab = "general";
-  let showAdvanced = false;
+  let settingsMode = "basic"; // "basic" | "advanced" (UI state only)
   let setActiveTab = null;
   let applySettingsFilter = null;
   let cachedFontLists = { notation: [], text: [] };
   let cachedFontDirs = { bundledDir: "", userDir: "" };
   let cachedSoundfonts = [];
-  const knownTabs = new Set(["general", "editor", "playback", "tools", "library", "dialogs", "fonts", "xml", "header"]);
+  const knownTabs = new Set(["general", "editor", "fonts", "playback", "options", "header"]);
   let dragState = null;
+  let draftPatch = {};
+  let isSettingsOpen = false;
+  let advancedOpenState = new Set(); // session-only: "tab|group"
+  let settingsPanelsByKey = new Map();
 
   function formatFontOptionLabel(ref) {
     const raw = String(ref || "");
@@ -178,9 +285,15 @@ export function initSettings(api) {
     selectEl.textContent = "";
 
     const fallback = "TimGM6mb.sf2";
+    const defaultName = String(defaultSettings.soundfontName || fallback);
     const current = String(currentSettings.soundfontName || fallback);
     const entries = Array.isArray(cachedSoundfonts) ? cachedSoundfonts : [];
     const normalized = [];
+
+    const optDefault = document.createElement("option");
+    optDefault.value = "";
+    optDefault.textContent = `Default (${safeBasename(defaultName).replace(/\\.sf2$/i, "")})`;
+    selectEl.appendChild(optDefault);
 
     for (const item of entries) {
       if (!item) continue;
@@ -194,8 +307,8 @@ export function initSettings(api) {
     if (current && !normalized.some((x) => x.name === current)) {
       normalized.unshift({ name: current, source: isSoundfontPath(current) ? "user" : "bundled" });
     }
-    if (!normalized.some((x) => x.name === fallback)) {
-      normalized.unshift({ name: fallback, source: "bundled" });
+    if (defaultName && !normalized.some((x) => x.name === defaultName)) {
+      normalized.unshift({ name: defaultName, source: isSoundfontPath(defaultName) ? "user" : "bundled" });
     }
 
     const seen = new Set();
@@ -210,7 +323,9 @@ export function initSettings(api) {
     }
 
     selectEl.value = prev;
-    if (selectEl.value !== prev) selectEl.value = current;
+    if (selectEl.value !== prev) {
+      selectEl.value = String(current) === String(defaultName) ? "" : current;
+    }
   }
 
   const controlByKey = new Map(); // key -> { entry, el, kind }
@@ -237,29 +352,140 @@ export function initSettings(api) {
     } catch {}
   }
 
+  function getEditorFontUserFiles() {
+    const ui = readUiState() || {};
+    const raw = ui.editorFontUserFiles;
+    if (!Array.isArray(raw)) return [];
+    const out = [];
+    const seen = new Set();
+    for (const item of raw) {
+      const s = String(item || "").trim();
+      if (!s) continue;
+      if (seen.has(s)) continue;
+      seen.add(s);
+      out.push(s);
+      if (out.length >= 50) break;
+    }
+    return out;
+  }
+
+  function setEditorFontUserFiles(list) {
+    const next = [];
+    const seen = new Set();
+    for (const item of Array.isArray(list) ? list : []) {
+      const s = String(item || "").trim();
+      if (!s) continue;
+      if (seen.has(s)) continue;
+      seen.add(s);
+      next.push(s);
+      if (next.length >= 50) break;
+    }
+    writeUiState({ editorFontUserFiles: next });
+  }
+
   async function updateSettings(patch) {
     const next = await store.update(patch);
     if (next) applySettings(next);
   }
 
+  function getEffectiveSettings() {
+    return { ...defaultSettings, ...currentSettings, ...(draftPatch || {}) };
+  }
+
+  function setDraftPatch(next) {
+    draftPatch = next && typeof next === "object" ? next : {};
+    if ($settingsApply) $settingsApply.disabled = Object.keys(draftPatch).length === 0;
+  }
+
+  function discardDraftPatch() {
+    setDraftPatch({});
+    applySettings(currentSettings);
+  }
+
+  async function applyDraftPatch() {
+    const patch = draftPatch || {};
+    if (!patch || Object.keys(patch).length === 0) return true;
+    const next = await store.update(patch).catch(() => null);
+    if (!next) return false;
+    setDraftPatch({});
+    applySettings(next);
+    return true;
+  }
+
+  function stageSetting(key, value) {
+    if (!key) return;
+    const effective = getEffectiveSettings();
+    if (Object.is(effective[key], value)) return;
+    const next = { ...(draftPatch || {}) };
+    next[key] = value;
+    setDraftPatch(next);
+    applySettings(currentSettings);
+  }
+
+  function toFileUrl(filePath) {
+    const raw = String(filePath || "");
+    if (!raw) return "";
+    const s = raw.replace(/\\/g, "/");
+    if (/^[a-zA-Z]:\\/.test(raw)) return encodeURI(`file:///${s}`);
+    if (s.startsWith("/")) return encodeURI(`file://${s}`);
+    return encodeURI(`file://${s}`);
+  }
+
+  function ensureEditorUserFontFaces() {
+    const userDir = String(cachedFontDirs && cachedFontDirs.userDir ? cachedFontDirs.userDir : "");
+    if (!userDir) return;
+    const files = getEditorFontUserFiles();
+    const rules = [];
+    for (const fileName of files) {
+      const safeName = String(fileName || "").trim();
+      if (!safeName) continue;
+      const abs = `${userDir.replace(/\\/g, "/").replace(/\/$/, "")}/${safeName}`;
+      const url = toFileUrl(abs);
+      if (!url) continue;
+      const family = `ABCarus User Font: ${safeName}`;
+      rules.push(`@font-face{font-family:"${family.replace(/"/g, '\\"')}";src:url("${url}") format("truetype");font-weight:normal;font-style:normal;}`);
+    }
+    let styleEl = document.getElementById("abcarusEditorUserFonts");
+    if (!styleEl) {
+      styleEl = document.createElement("style");
+      styleEl.id = "abcarusEditorUserFonts";
+      document.head.appendChild(styleEl);
+    }
+    styleEl.textContent = rules.join("\n");
+  }
+
+  function setSettingsMode(nextMode) {
+    const next = nextMode === "advanced" ? "advanced" : "basic";
+    if (settingsMode === next) return;
+    settingsMode = next;
+    writeUiState({ settingsMode });
+    if ($settingsModeBasic) $settingsModeBasic.setAttribute("aria-pressed", settingsMode === "basic" ? "true" : "false");
+    if ($settingsModeAdvanced) $settingsModeAdvanced.setAttribute("aria-pressed", settingsMode === "advanced" ? "true" : "false");
+    buildSettingsUi();
+    applySettings(currentSettings);
+    if (applySettingsFilter && $settingsFilter) applySettingsFilter($settingsFilter.value);
+  }
+
   function applySettings(settings) {
     currentSettings = { ...defaultSettings, ...(settings || {}) };
+    const effectiveSettings = getEffectiveSettings();
+    if (isSettingsOpen) ensureEditorUserFontFaces();
 
     const root = document.documentElement.style;
-    root.setProperty("--editor-font-family", currentSettings.editorFontFamily);
-    root.setProperty("--editor-font-size", `${currentSettings.editorFontSize}px`);
-    root.setProperty("--editor-notes-weight", currentSettings.editorNotesBold ? "600" : "400");
-    root.setProperty("--editor-lyrics-weight", currentSettings.editorLyricsBold ? "600" : "400");
+    root.setProperty("--editor-font-family", effectiveSettings.editorFontFamily);
+    root.setProperty("--editor-font-size", `${effectiveSettings.editorFontSize}px`);
+    root.setProperty("--editor-notes-weight", effectiveSettings.editorNotesBold ? "600" : "400");
+    root.setProperty("--editor-lyrics-weight", effectiveSettings.editorLyricsBold ? "600" : "400");
     if (!(document.body && document.body.classList.contains("focus-mode"))) {
-      root.setProperty("--render-zoom", String(currentSettings.renderZoom));
+      root.setProperty("--render-zoom", String(effectiveSettings.renderZoom));
     }
-    root.setProperty("--editor-zoom", String(currentSettings.editorZoom));
+    root.setProperty("--editor-zoom", String(effectiveSettings.editorZoom));
 
     for (const [key, meta] of controlByKey.entries()) {
       const entry = meta.entry;
       if (!entry || !entry.ui) continue;
       const kind = entry.ui.input;
-      const value = currentSettings[key];
+      const value = effectiveSettings[key];
       if (kind === "checkbox" && meta.el) {
         meta.el.checked = Boolean(value);
       } else if (kind === "percent" && meta.el) {
@@ -267,14 +493,32 @@ export function initSettings(api) {
       } else if (kind === "color" && meta.el) {
         meta.el.value = String(value || "#000000");
       } else if (kind === "select" && meta.el) {
-        meta.el.value = String(value || "");
+        if (key === "soundfontName") {
+          const fallback = "TimGM6mb.sf2";
+          const defaultName = String(defaultSettings.soundfontName || fallback);
+          meta.el.value = String(value || "") === defaultName ? "" : String(value || "");
+        } else if (key === "editorFontFamily") {
+          const defaultFamily = String(defaultSettings.editorFontFamily || "");
+          const systemFamily = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+          const v = String(value || "");
+          if (v === defaultFamily) {
+            meta.el.value = "";
+          } else if (v === systemFamily) {
+            meta.el.value = "__system__";
+          } else {
+            const m = v.match(/ABCarus User Font: ([^"]+)/);
+            meta.el.value = m ? `user:${String(m[1] || "")}` : "";
+          }
+        } else {
+          meta.el.value = String(value || "");
+        }
       } else if ((kind === "number" || kind === "text") && meta.el) {
         meta.el.value = String(value == null ? "" : value);
       }
     }
 
     if (globalHeaderView) {
-      const nextText = String(currentSettings.globalHeaderText || "");
+      const nextText = String(effectiveSettings.globalHeaderText || "");
       const doc = globalHeaderView.state.doc.toString();
       if (doc !== nextText) {
         suppressGlobalUpdate = true;
@@ -289,9 +533,12 @@ export function initSettings(api) {
 
   function openSettings() {
     if (!$settingsModal) return;
+    isSettingsOpen = true;
     $settingsModal.classList.add("open");
     $settingsModal.setAttribute("aria-hidden", "false");
+    if ($settingsFilter) $settingsFilter.value = "";
     if (typeof setActiveTab === "function") setActiveTab(lastActiveTab);
+    if (applySettingsFilter && $settingsFilter) applySettingsFilter($settingsFilter.value);
     scheduleClampModalPosition();
     setTimeout(() => {
       if ($settingsFilter) {
@@ -301,8 +548,12 @@ export function initSettings(api) {
     }, 0);
   }
 
-  function closeSettings() {
+  function closeSettings({ discardDraft = false } = {}) {
     if (!$settingsModal) return;
+    isSettingsOpen = false;
+    if (discardDraft) discardDraftPatch();
+    if ($settingsFilter) $settingsFilter.value = "";
+    if (applySettingsFilter && $settingsFilter) applySettingsFilter("");
     $settingsModal.classList.remove("open");
     $settingsModal.setAttribute("aria-hidden", "true");
   }
@@ -473,7 +724,7 @@ export function initSettings(api) {
       input = document.createElement("input");
       input.type = "checkbox";
       input.addEventListener("change", () => {
-        updateSettings({ [entry.key]: Boolean(input.checked) }).catch(() => {});
+        stageSetting(entry.key, Boolean(input.checked));
       });
       row.appendChild(input);
       controlByKey.set(entry.key, { entry, el: input });
@@ -489,9 +740,9 @@ export function initSettings(api) {
       input.addEventListener("change", () => {
         const raw = Number(input.value);
         if (kind === "percent") {
-          updateSettings({ [entry.key]: raw / 100 }).catch(() => {});
+          stageSetting(entry.key, raw / 100);
         } else {
-          updateSettings({ [entry.key]: raw }).catch(() => {});
+          stageSetting(entry.key, raw);
         }
       });
       row.appendChild(input);
@@ -504,7 +755,7 @@ export function initSettings(api) {
       input.type = "text";
       if (entry.ui.placeholder) input.placeholder = String(entry.ui.placeholder);
       input.addEventListener("change", () => {
-        updateSettings({ [entry.key]: input.value || "" }).catch(() => {});
+        stageSetting(entry.key, input.value || "");
       });
       row.appendChild(input);
       controlByKey.set(entry.key, { entry, el: input });
@@ -516,19 +767,134 @@ export function initSettings(api) {
       const optionsKey = entry.ui && entry.ui.options ? String(entry.ui.options) : "";
       const isFontSelect = optionsKey === "notationFonts" || optionsKey === "textFonts";
       const isSoundfontSelect = optionsKey === "soundfonts";
+      const isEditorFontFamily = entry.key === "editorFontFamily";
+
+      if (isEditorFontFamily) {
+        const defaultFamily = String(defaultSettings.editorFontFamily || entry.default || "");
+        const systemFamily = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+
+        const optDefault = document.createElement("option");
+        optDefault.value = "";
+        optDefault.textContent = "Default (bundled)";
+        select.appendChild(optDefault);
+
+        const optSystem = document.createElement("option");
+        optSystem.value = "__system__";
+        optSystem.textContent = "System monospace";
+        select.appendChild(optSystem);
+
+        const userFiles = getEditorFontUserFiles();
+        for (const fileName of userFiles) {
+          const safe = String(fileName || "").trim();
+          if (!safe) continue;
+          const option = document.createElement("option");
+          option.value = `user:${safe}`;
+          option.textContent = `${safe} (user)`;
+          select.appendChild(option);
+        }
+
+        select.addEventListener("change", () => {
+          const v = String(select.value || "");
+          if (!v) {
+            stageSetting(entry.key, defaultFamily);
+            return;
+          }
+          if (v === "__system__") {
+            stageSetting(entry.key, systemFamily);
+            return;
+          }
+          const m = v.match(/^user:(.+)$/);
+          if (m) {
+            const file = String(m[1] || "");
+            const family = `\"ABCarus User Font: ${file}\", ${systemFamily}`;
+            stageSetting(entry.key, family);
+            return;
+          }
+        });
+
+        const wrap = document.createElement("div");
+        wrap.className = "settings-select-row";
+        wrap.appendChild(select);
+
+        const addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.textContent = "Add…";
+        addBtn.addEventListener("click", async () => {
+          if (!api || typeof api.pickFont !== "function" || typeof api.installFont !== "function") return;
+          const pick = await api.pickFont().catch(() => null);
+          if (!pick || !pick.ok || !pick.path) return;
+          const res = await api.installFont(pick.path).catch(() => null);
+          if (!res || !res.ok || !res.name) return;
+          const next = getEditorFontUserFiles();
+          if (!next.includes(res.name)) {
+            next.unshift(res.name);
+            setEditorFontUserFiles(next);
+          }
+          const option = document.createElement("option");
+          option.value = `user:${res.name}`;
+          option.textContent = `${res.name} (user)`;
+          select.appendChild(option);
+          select.value = option.value;
+          ensureEditorUserFontFaces();
+          const family = `\"ABCarus User Font: ${res.name}\", ${systemFamily}`;
+          stageSetting(entry.key, family);
+        });
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.textContent = "Remove";
+
+        const updateRemoveEnabled = () => {
+          const v = String(select.value || "");
+          const m = v.match(/^user:(.+)$/);
+          const file = m ? String(m[1] || "") : "";
+          removeBtn.disabled = !file || !getEditorFontUserFiles().includes(file);
+        };
+
+        removeBtn.addEventListener("click", async () => {
+          const v = String(select.value || "");
+          const m = v.match(/^user:(.+)$/);
+          const file = m ? String(m[1] || "") : "";
+          if (!file) return;
+          const list = getEditorFontUserFiles();
+          if (!list.includes(file)) return;
+          if (!api || typeof api.removeFont !== "function") return;
+          const res = await api.removeFont(file).catch(() => null);
+          if (!res || !res.ok) return;
+          setEditorFontUserFiles(list.filter((x) => x !== file));
+          const opt = Array.from(select.options).find((o) => String(o.value) === `user:${file}`);
+          if (opt) opt.remove();
+          select.value = "";
+          stageSetting(entry.key, defaultFamily);
+          ensureEditorUserFontFaces();
+          updateRemoveEnabled();
+        });
+
+        select.addEventListener("change", updateRemoveEnabled);
+        updateRemoveEnabled();
+
+        wrap.appendChild(addBtn);
+        wrap.appendChild(removeBtn);
+        row.appendChild(wrap);
+        controlByKey.set(entry.key, { entry, el: select });
+        return row;
+      }
 
       if (isFontSelect) {
         populateFontSelect(select, optionsKey);
       } else if (isSoundfontSelect) {
         populateSoundfontSelect(select);
       } else if (Array.isArray(entry.ui && entry.ui.options)) {
-        const optDefault = document.createElement("option");
-        optDefault.value = "";
-        optDefault.textContent = "Default";
-        select.appendChild(optDefault);
+        if (!isEditorFontFamily) {
+          const optDefault = document.createElement("option");
+          optDefault.value = "";
+          optDefault.textContent = "Default";
+          select.appendChild(optDefault);
+        }
         for (const rawOpt of entry.ui.options) {
           const isObj = rawOpt && typeof rawOpt === "object";
           const value = isObj ? rawOpt.value : rawOpt;
+          if (isEditorFontFamily && String(value) === "__custom__") continue;
           const label = isObj ? (rawOpt.label != null ? rawOpt.label : rawOpt.value) : rawOpt;
           const option = document.createElement("option");
           option.value = String(value || "");
@@ -538,7 +904,13 @@ export function initSettings(api) {
       }
 
       select.addEventListener("change", () => {
-        updateSettings({ [entry.key]: select.value || "" }).catch(() => {});
+        if (entry.key === "soundfontName") {
+          const fallback = "TimGM6mb.sf2";
+          const defaultName = String(defaultSettings.soundfontName || fallback);
+          stageSetting(entry.key, select.value ? select.value : defaultName);
+          return;
+        }
+        stageSetting(entry.key, select.value || "");
       });
 
       if (!isFontSelect && !isSoundfontSelect) {
@@ -570,17 +942,14 @@ export function initSettings(api) {
               return;
             }
           }
-          const current = (api.getSettings ? await api.getSettings().catch(() => ({})) : {}) || {};
-          const existing = Array.isArray(current.soundfontPaths) ? current.soundfontPaths : [];
+          const existing = Array.isArray(currentSettings.soundfontPaths) ? currentSettings.soundfontPaths : [];
           const nextPaths = existing.includes(picked) ? existing : [...existing, picked];
-          if (api.updateSettings) {
-            await api.updateSettings({ soundfontPaths: nextPaths, soundfontName: picked }).catch(() => {});
-          }
+          await updateSettings({ soundfontPaths: nextPaths, soundfontName: picked }).catch(() => {});
           const list = await api.listSoundfonts().catch(() => []);
           cachedSoundfonts = Array.isArray(list) ? list : [];
           populateSoundfontSelect(select);
           select.value = picked;
-          select.dispatchEvent(new Event("change", { bubbles: true }));
+          stageSetting(entry.key, picked);
           return;
         }
 
@@ -608,7 +977,7 @@ export function initSettings(api) {
         populateFontSelect(select, optionsKey);
         const newRef = `user:${String(res.name || "")}`;
         select.value = newRef;
-        select.dispatchEvent(new Event("change", { bubbles: true }));
+        stageSetting(entry.key, newRef);
       });
 
       const removeBtn = document.createElement("button");
@@ -629,19 +998,16 @@ export function initSettings(api) {
           } else if (!confirm(`Remove "${label}" from the list?`)) {
             return;
           }
-          const settings = (api && api.getSettings) ? await api.getSettings().catch(() => ({})) : {};
-          const existing = Array.isArray(settings.soundfontPaths) ? settings.soundfontPaths : [];
+          const existing = Array.isArray(currentSettings.soundfontPaths) ? currentSettings.soundfontPaths : [];
           const nextPaths = existing.filter((item) => item !== current);
           const fallback = "TimGM6mb.sf2";
           const nextName = current === String(currentSettings.soundfontName || "") ? fallback : String(currentSettings.soundfontName || fallback);
-          if (api && api.updateSettings) {
-            await api.updateSettings({ soundfontPaths: nextPaths, soundfontName: nextName }).catch(() => {});
-          }
+          await updateSettings({ soundfontPaths: nextPaths, soundfontName: nextName }).catch(() => {});
           const list = await api.listSoundfonts().catch(() => []);
           cachedSoundfonts = Array.isArray(list) ? list : [];
           populateSoundfontSelect(select);
           select.value = nextName;
-          select.dispatchEvent(new Event("change", { bubbles: true }));
+          stageSetting(entry.key, nextName);
           return;
         }
 
@@ -673,7 +1039,7 @@ export function initSettings(api) {
         }
         populateFontSelect(select, optionsKey);
         select.value = "";
-        select.dispatchEvent(new Event("change", { bubbles: true }));
+        stageSetting(entry.key, "");
       });
 
       const updateRemoveEnabled = () => {
@@ -701,7 +1067,7 @@ export function initSettings(api) {
       input.type = "color";
       input.addEventListener("change", () => {
         const v = String(input.value || "").trim();
-        updateSettings({ [entry.key]: v }).catch(() => {});
+        stageSetting(entry.key, v);
       });
       row.appendChild(input);
       controlByKey.set(entry.key, { entry, el: input });
@@ -733,6 +1099,10 @@ export function initSettings(api) {
     $settingsTabsHost.textContent = "";
     $settingsPanelsHost.textContent = "";
     controlByKey.clear();
+    if (globalHeaderView) {
+      try { globalHeaderView.destroy(); } catch {}
+      globalHeaderView = null;
+    }
 
     const bySectionRaw = groupSchemaForModal(schema);
     const bySection = new Map();
@@ -750,30 +1120,48 @@ export function initSettings(api) {
     const panels = [
       { key: "general", label: "General", sections: ["General"] },
       { key: "editor", label: "Editor", sections: ["Editor"] },
-      { key: "playback", label: "Playback", sections: ["Playback"] },
-      { key: "tools", label: "Tools", sections: ["Tools"] },
-      { key: "library", label: "Library", sections: ["Library"] },
-      { key: "dialogs", label: "Dialogs", sections: ["Dialogs"] },
       { key: "fonts", label: "Fonts", sections: ["Fonts"] },
-      { key: "xml", label: "Import/Export", sections: ["Import/Export"] },
-      { key: "header", label: "Header", sections: ["Header"] },
+      { key: "playback", label: "Playback", sections: ["Playback"] },
+      { key: "options", label: "Options", sections: ["Tools", "Library", "Dialogs"] },
+      { key: "header", label: "Global Header", sections: ["Header"] },
     ];
     const panelKeys = new Set(panels.map((p) => p.key));
+    settingsPanelsByKey = new Map(panels.map((p) => [p.key, p]));
+
+    const uiState = readUiState();
+    if (uiState && (uiState.settingsMode === "basic" || uiState.settingsMode === "advanced")) {
+      settingsMode = uiState.settingsMode;
+    }
+    if (uiState && uiState.activeTab) {
+      const rawTab = normalizeTabKey(uiState.activeTab);
+      if (panelKeys.has(rawTab)) lastActiveTab = rawTab;
+    }
+    writeUiState({ activeTab: lastActiveTab, settingsMode });
+    if ($settingsModeBasic) $settingsModeBasic.setAttribute("aria-pressed", settingsMode === "basic" ? "true" : "false");
+    if ($settingsModeAdvanced) $settingsModeAdvanced.setAttribute("aria-pressed", settingsMode === "advanced" ? "true" : "false");
 
     setActiveTab = (name) => {
-      lastActiveTab = String(name || "general");
+      lastActiveTab = normalizeTabKey(name || "general");
       writeUiState({ activeTab: lastActiveTab });
       const tabs = Array.from($settingsTabsHost.querySelectorAll("[data-settings-tab]"));
       const panels = Array.from($settingsPanelsHost.querySelectorAll("[data-settings-panel]"));
       tabs.forEach((tab) => {
-        const active = tab.dataset.settingsTab === name;
+        const active = tab.dataset.settingsTab === lastActiveTab;
         tab.classList.toggle("active", active);
         tab.setAttribute("aria-selected", active ? "true" : "false");
         tab.tabIndex = active ? 0 : -1;
       });
       panels.forEach((panel) => {
-        panel.classList.toggle("active", panel.dataset.settingsPanel === name);
+        panel.classList.toggle("active", panel.dataset.settingsPanel === lastActiveTab);
       });
+      const meta = settingsPanelsByKey.get(lastActiveTab);
+      if ($settingsSectionTitle) $settingsSectionTitle.textContent = meta ? meta.label : "";
+      if ($settingsSectionHint) {
+        const hint = SETTINGS_SECTION_HINTS[lastActiveTab] || "";
+        $settingsSectionHint.textContent = hint;
+        $settingsSectionHint.style.display = hint ? "" : "none";
+      }
+      if (applySettingsFilter && $settingsFilter) applySettingsFilter($settingsFilter.value);
       scheduleClampModalPosition();
     };
 
@@ -794,22 +1182,42 @@ export function initSettings(api) {
 
       for (const sectionName of panel.sections) {
         const entries = bySection.get(sectionName) || [];
-        const normal = entries.filter((e) => !e.advanced && e.ui && e.ui.input !== "code");
-        const advanced = entries.filter((e) => e.advanced && e.ui && e.ui.input !== "code");
+        const groups = new Map(); // groupTitle -> entries[]
+        for (const entry of entries) {
+          const title = entry && entry.group ? String(entry.group) : sectionName;
+          if (!groups.has(title)) groups.set(title, []);
+          groups.get(title).push(entry);
+        }
 
-        const hasCode = entries.some((e) => e.ui && e.ui.input === "code");
+        const getGroupOrder = (groupEntries) => {
+          let best = Infinity;
+          for (const entry of groupEntries) {
+            const n = Number(entry && entry.groupOrder);
+            if (Number.isFinite(n)) best = Math.min(best, n);
+          }
+          return best === Infinity ? 999 : best;
+        };
 
-        if (normal.length || hasCode) {
-          let groupHelp = null;
-          if (sectionName === "Header") groupHelp = "Prepended before file headers and tunes during render/playback.";
-          if (sectionName === "Playback") groupHelp = "Playback-related settings.";
-          const group = createGroup(sectionName, groupHelp);
-          for (const entry of normal) {
+        const orderedGroups = Array.from(groups.entries())
+          .map(([title, groupEntries]) => ({ title, order: getGroupOrder(groupEntries), entries: groupEntries }))
+          .sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title));
+
+        for (const g of orderedGroups) {
+          const groupEntries = g.entries || [];
+          const normal = groupEntries.filter((e) => !e.advanced && e.ui && e.ui.input && e.ui.input !== "code");
+          const advanced = groupEntries.filter((e) => e.advanced && e.ui && e.ui.input && e.ui.input !== "code");
+          const codeEntry = groupEntries.find((e) => e.ui && e.ui.input === "code");
+
+          if (!normal.length && !(settingsMode === "advanced" && advanced.length) && !codeEntry) continue;
+
+          const group = createGroup(g.title, null);
+
+          const appendEntryBlock = (entry, host) => {
             const row = createRow(entry);
-            if (!row) continue;
+            if (!row) return;
             const block = document.createElement("div");
             block.className = "settings-entry";
-            block.dataset.settingsSearch = `${entry.key} ${entry.label || ""} ${sectionName}`.toLowerCase();
+            block.dataset.settingsSearch = `${entry.key} ${entry.label || ""} ${entry.help || ""} ${sectionName} ${g.title}`.toLowerCase();
             block.appendChild(row);
             if (entry.help) {
               const help = document.createElement("div");
@@ -817,133 +1225,107 @@ export function initSettings(api) {
               help.textContent = String(entry.help);
               block.appendChild(help);
             }
-            group.appendChild(block);
+            host.appendChild(block);
+          };
+
+          for (const entry of normal) appendEntryBlock(entry, group);
+
+          if (codeEntry) {
+            const editorBlock = document.createElement("div");
+            editorBlock.className = "settings-entry";
+            editorBlock.dataset.settingsSearch = `${codeEntry.key} ${codeEntry.label || ""} ${codeEntry.help || ""} ${sectionName} ${g.title}`.toLowerCase();
+
+            const editorHost = document.createElement("div");
+            editorHost.className = "settings-editor";
+            editorHost.setAttribute("aria-label", String(codeEntry.label || "Settings editor"));
+            editorBlock.appendChild(editorHost);
+
+            if (codeEntry.help) {
+              const help = document.createElement("div");
+              help.className = "settings-help";
+              help.textContent = String(codeEntry.help);
+              editorBlock.appendChild(help);
+            }
+
+            const updateListener = EditorView.updateListener.of((update) => {
+              if (!update.docChanged || suppressGlobalUpdate) return;
+              if (globalUpdateTimer) clearTimeout(globalUpdateTimer);
+              globalUpdateTimer = setTimeout(() => {
+                if (!globalHeaderView) return;
+                stageSetting(codeEntry.key, globalHeaderView.state.doc.toString());
+              }, 400);
+            });
+            const state = EditorState.create({
+              doc: "",
+              extensions: [
+                basicSetup,
+                updateListener,
+                EditorState.tabSize.of(2),
+                indentUnit.of("  "),
+              ],
+            });
+            globalHeaderView = new EditorView({ state, parent: editorHost });
+            group.appendChild(editorBlock);
           }
 
-          if (hasCode) {
-            const enabledEntry = entries.find((e) => e.key === "globalHeaderEnabled");
-            const textEntry = entries.find((e) => e.key === "globalHeaderText");
-            if (enabledEntry) {
-              const row = createRow(enabledEntry);
-              if (row) group.appendChild(row);
-            }
-            if (textEntry) {
-              const editorHost = document.createElement("div");
-              editorHost.className = "settings-editor";
-              editorHost.setAttribute("aria-label", "Global header");
-              group.appendChild(editorHost);
+          if (settingsMode === "advanced" && advanced.length) {
+            const divider = document.createElement("div");
+            divider.className = "settings-advanced-divider";
+            group.appendChild(divider);
 
-              const updateListener = EditorView.updateListener.of((update) => {
-                if (!update.docChanged || suppressGlobalUpdate) return;
-                if (globalUpdateTimer) clearTimeout(globalUpdateTimer);
-                globalUpdateTimer = setTimeout(() => {
-                  if (!globalHeaderView) return;
-                  const text = globalHeaderView.state.doc.toString();
-                  updateSettings({ globalHeaderText: text }).catch(() => {});
-                }, 400);
-              });
-              const state = EditorState.create({
-                doc: "",
-                extensions: [
-                  basicSetup,
-                  updateListener,
-                  EditorState.tabSize.of(2),
-                  indentUnit.of("  "),
-                ],
-              });
-              globalHeaderView = new EditorView({ state, parent: editorHost });
-            }
+            const label = document.createElement("div");
+            label.className = "settings-advanced-label";
+            label.textContent = "Advanced";
+            group.appendChild(label);
+
+            for (const entry of advanced) appendEntryBlock(entry, group);
           }
 
           panelEl.appendChild(group);
-        }
-
-        if (advanced.length) {
-          const details = document.createElement("details");
-          details.className = "settings-advanced";
-          const summary = document.createElement("summary");
-          summary.textContent = `${sectionName} (Advanced)`;
-          details.appendChild(summary);
-          const inner = document.createElement("div");
-          inner.className = "settings-group";
-          for (const entry of advanced) {
-            const row = createRow(entry);
-            if (!row) continue;
-            const block = document.createElement("div");
-            block.className = "settings-entry";
-            block.dataset.settingsSearch = `${entry.key} ${entry.label || ""} ${sectionName}`.toLowerCase();
-            block.appendChild(row);
-            if (entry.help) {
-              const help = document.createElement("div");
-              help.className = "settings-help";
-              help.textContent = String(entry.help);
-              block.appendChild(help);
-            }
-            inner.appendChild(block);
-          }
-          details.appendChild(inner);
-          panelEl.appendChild(details);
         }
       }
 
       $settingsPanelsHost.appendChild(panelEl);
     }
 
-    const uiState = readUiState();
-    if (uiState && uiState.activeTab) {
-      const rawTab = String(uiState.activeTab || "");
-      const mapped = rawTab === "main" ? "general" : (rawTab === "globals" ? "header" : rawTab);
-      if (panelKeys.has(mapped)) lastActiveTab = mapped;
-    }
+    // Rehydrate control values after rebuilding the UI (e.g. mode switch).
+    applySettings(currentSettings);
     setActiveTab(lastActiveTab);
 
     applySettingsFilter = (raw) => {
       const needle = String(raw || "").trim().toLowerCase();
-      const blocks = Array.from($settingsPanelsHost.querySelectorAll(".settings-entry"));
-      const groups = Array.from($settingsPanelsHost.querySelectorAll(".settings-group"));
-      const advancedBlocks = Array.from($settingsPanelsHost.querySelectorAll(".settings-advanced"));
+      const panelEl = $settingsPanelsHost.querySelector(`[data-settings-panel="${lastActiveTab}"]`);
+      if (!panelEl) return;
 
-      const openAdvanced = Boolean(needle) || showAdvanced;
-      for (const d of advancedBlocks) d.open = openAdvanced;
+      const blocks = Array.from(panelEl.querySelectorAll(".settings-entry"));
+      const groups = Array.from(panelEl.querySelectorAll(".settings-group"));
 
+      const anyQuery = Boolean(needle);
       for (const block of blocks) {
         const hay = String(block.dataset.settingsSearch || "");
-        const ok = !needle || hay.includes(needle);
-        block.style.display = ok ? "" : "none";
+        block.style.display = !anyQuery || hay.includes(needle) ? "" : "none";
       }
 
+      let anyVisible = false;
       for (const group of groups) {
-        const title = group.querySelector(".settings-title");
-        const anyVisible = Boolean(group.querySelector(".settings-entry:not([style*='display: none'])"));
-        if (title) title.style.display = anyVisible ? "" : "none";
+        const visible = Boolean(group.querySelector(".settings-entry:not([style*='display: none'])"));
+        group.style.display = visible ? "" : "none";
+        if (visible) anyVisible = true;
       }
 
-      for (const d of advancedBlocks) {
-        if (!openAdvanced) {
-          d.style.display = "none";
-          continue;
-        }
-        if (!needle) {
-          d.style.display = "";
-          continue;
-        }
-        const anyVisible = Boolean(d.querySelector(".settings-entry:not([style*='display: none'])"));
-        d.style.display = anyVisible ? "" : "none";
-      }
-
-      if (needle && typeof setActiveTab === "function") {
-        const hasVisibleEntry = (panelKey) => {
-          const key = String(panelKey || "");
-          const panelEl = $settingsPanelsHost.querySelector(`[data-settings-panel="${key}"]`);
-          if (!panelEl) return false;
-          return Boolean(panelEl.querySelector(".settings-entry:not([style*='display: none'])"));
-        };
-
-        if (!hasVisibleEntry(lastActiveTab)) {
-          const firstMatch = panels.find((p) => hasVisibleEntry(p.key));
-          if (firstMatch && firstMatch.key && firstMatch.key !== lastActiveTab) {
-            setActiveTab(firstMatch.key);
-          }
+      if ($settingsNoResults) {
+        if (!anyQuery) {
+          $settingsNoResults.classList.add("hidden");
+          $settingsNoResults.textContent = "";
+        } else if (!anyVisible) {
+          $settingsNoResults.classList.remove("hidden");
+          $settingsNoResults.textContent =
+            settingsMode === "basic"
+              ? "No matches in this section (Basic mode). Try Advanced."
+              : "No matches in this section.";
+        } else {
+          $settingsNoResults.classList.add("hidden");
+          $settingsNoResults.textContent = "";
         }
       }
       scheduleClampModalPosition();
@@ -951,33 +1333,22 @@ export function initSettings(api) {
   }
 
   if ($settingsClose) {
-    $settingsClose.addEventListener("click", () => closeSettings());
+    $settingsClose.addEventListener("click", () => closeSettings({ discardDraft: true }));
   }
   if ($settingsModal) {
     $settingsModal.addEventListener("click", (e) => {
-      if (e.target === $settingsModal) closeSettings();
+      if (e.target === $settingsModal) closeSettings({ discardDraft: true });
     });
     $settingsModal.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        closeSettings();
+        closeSettings({ discardDraft: true });
       }
     });
   }
   if ($settingsFilter) {
     $settingsFilter.addEventListener("input", () => {
       if (applySettingsFilter) applySettingsFilter($settingsFilter.value);
-    });
-  }
-  if ($settingsShowAdvanced) {
-    const uiState = readUiState();
-    showAdvanced = Boolean(uiState && uiState.showAdvanced);
-    $settingsShowAdvanced.checked = showAdvanced;
-    $settingsShowAdvanced.addEventListener("change", () => {
-      showAdvanced = Boolean($settingsShowAdvanced.checked);
-      writeUiState({ showAdvanced });
-      if (applySettingsFilter) applySettingsFilter($settingsFilter ? $settingsFilter.value : "");
-      scheduleClampModalPosition();
     });
   }
   if ($settingsReset) {
@@ -991,6 +1362,77 @@ export function initSettings(api) {
         patch[entry.key] = entry.default;
       }
       updateSettings(patch).catch(() => {});
+    });
+  }
+  if ($settingsModeBasic) $settingsModeBasic.addEventListener("click", () => setSettingsMode("basic"));
+  if ($settingsModeAdvanced) $settingsModeAdvanced.addEventListener("click", () => setSettingsMode("advanced"));
+  if ($settingsCancel) $settingsCancel.addEventListener("click", () => closeSettings({ discardDraft: true }));
+  if ($settingsApply) {
+    $settingsApply.disabled = true;
+    $settingsApply.addEventListener("click", async () => {
+      await applyDraftPatch().catch(() => {});
+      if (applySettingsFilter && $settingsFilter) applySettingsFilter($settingsFilter.value);
+    });
+  }
+  if ($settingsOk) {
+    $settingsOk.addEventListener("click", async () => {
+      await applyDraftPatch().catch(() => {});
+      closeSettings({ discardDraft: false });
+    });
+  }
+  if ($settingsResetSection) {
+    $settingsResetSection.addEventListener("click", async () => {
+      const meta = settingsPanelsByKey.get(lastActiveTab);
+      const sectionLabel = meta ? meta.label : "this section";
+      if (!confirm(`Restore defaults for this section?\n\n(${sectionLabel})`)) return;
+
+      const patch = {};
+      for (const entry of schema) {
+        if (!entry || !entry.key || !entry.ui || !entry.ui.input || entry.legacy) continue;
+        if (entry.key === "drumVelocityMap") continue;
+        if (String(entry.section || "").toLowerCase() === "drums") continue;
+        if (!meta || !meta.sections.includes(String(entry.section || ""))) continue;
+        patch[entry.key] = entry.default;
+      }
+
+      const nextDraft = { ...(draftPatch || {}) };
+      for (const key of Object.keys(patch)) delete nextDraft[key];
+      setDraftPatch(nextDraft);
+
+      await updateSettings(patch).catch(() => {});
+      buildSettingsUi();
+      if (typeof setActiveTab === "function") setActiveTab(lastActiveTab);
+    });
+  }
+
+  if ($settingsExport) {
+    $settingsExport.addEventListener("click", async () => {
+      if (!api || typeof api.exportSettings !== "function") return;
+      const res = await api.exportSettings().catch(() => null);
+      if (res && res.ok === false && String(res.error || "").toLowerCase() === "canceled") return;
+      if (!res || !res.ok || !res.path) {
+        alert((res && res.error) ? res.error : "Failed to export settings.");
+        return;
+      }
+      const note = res.exportedHeader ? "\n(incl. user_settings.abc)" : "";
+      alert(`Settings exported:\n${res.path}${note}`);
+    });
+  }
+
+  if ($settingsImport) {
+    $settingsImport.addEventListener("click", async () => {
+      if (!api || typeof api.importSettings !== "function") return;
+      const res = await api.importSettings().catch(() => null);
+      if (res && res.ok === false && String(res.error || "").toLowerCase() === "canceled") return;
+      if (!res || !res.ok) {
+        alert((res && res.error) ? res.error : "Failed to import settings.");
+        return;
+      }
+      if (res.settings) applySettings(res.settings);
+      buildSettingsUi();
+      if (typeof setActiveTab === "function") setActiveTab(lastActiveTab);
+      const note = res.importedHeader ? " (incl. user_settings.abc)" : "";
+      alert(`Settings imported${note}.\nSome changes apply immediately; others may require a restart.`);
     });
   }
 
@@ -1045,7 +1487,8 @@ export function initSettings(api) {
     const key = String(raw || "").trim().toLowerCase();
     if (!key) return "general";
     if (key === "main") return "general";
-    if (key === "import" || key === "importexport" || key === "import/export") return "xml";
+    if (key === "import" || key === "importexport" || key === "import/export" || key === "xml") return "options";
+    if (key === "tools" || key === "library" || key === "dialogs") return "options";
     if (knownTabs.has(key)) return key;
     return "general";
   }
