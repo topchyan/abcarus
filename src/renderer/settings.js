@@ -693,16 +693,19 @@ export function initSettings(api) {
       const optionsKey = entry.ui && entry.ui.options ? String(entry.ui.options) : "";
       const isFontSelect = optionsKey === "notationFonts" || optionsKey === "textFonts";
       const isSoundfontSelect = optionsKey === "soundfonts";
+      const isEditorFontFamily = entry.key === "editorFontFamily";
 
       if (isFontSelect) {
         populateFontSelect(select, optionsKey);
       } else if (isSoundfontSelect) {
         populateSoundfontSelect(select);
       } else if (Array.isArray(entry.ui && entry.ui.options)) {
-        const optDefault = document.createElement("option");
-        optDefault.value = "";
-        optDefault.textContent = "Default";
-        select.appendChild(optDefault);
+        if (!isEditorFontFamily) {
+          const optDefault = document.createElement("option");
+          optDefault.value = "";
+          optDefault.textContent = "Default";
+          select.appendChild(optDefault);
+        }
         for (const rawOpt of entry.ui.options) {
           const isObj = rawOpt && typeof rawOpt === "object";
           const value = isObj ? rawOpt.value : rawOpt;
@@ -721,8 +724,37 @@ export function initSettings(api) {
           stageSetting(entry.key, select.value ? select.value : defaultName);
           return;
         }
+        if (isEditorFontFamily) {
+          const defaultFamily = String(defaultSettings.editorFontFamily || entry.default || "");
+          if (select.value === "__custom__") {
+            const current = String(getEffectiveSettings().editorFontFamily || defaultFamily);
+            const next = prompt("Enter a CSS font-family stack:", current);
+            if (next == null) {
+              applySettings(currentSettings);
+              return;
+            }
+            const trimmed = String(next).trim();
+            stageSetting(entry.key, trimmed || defaultFamily);
+            applySettings(currentSettings);
+            return;
+          }
+          stageSetting(entry.key, select.value ? select.value : defaultFamily);
+          return;
+        }
         stageSetting(entry.key, select.value || "");
       });
+
+      if (isEditorFontFamily) {
+        const current = String(getEffectiveSettings().editorFontFamily || defaultSettings.editorFontFamily || entry.default || "");
+        const has = Array.from(select.options).some((o) => String(o.value) === current);
+        if (current && !has) {
+          const label = current.length > 52 ? `${current.slice(0, 52)}…` : current;
+          const option = document.createElement("option");
+          option.value = current;
+          option.textContent = `Current: ${label}`;
+          select.insertBefore(option, select.firstChild);
+        }
+      }
 
       if (!isFontSelect && !isSoundfontSelect) {
         row.appendChild(select);
