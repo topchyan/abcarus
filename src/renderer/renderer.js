@@ -3536,7 +3536,7 @@ function setActiveTuneText(text, metadata, options = {}) {
   scheduleRenderNow({ clearOutput: true });
 }
 
-function setLibraryVisible(visible) {
+function setLibraryVisible(visible, { persist = true } = {}) {
   isLibraryVisible = visible;
   document.body.classList.toggle("library-hidden", !visible);
   if (visible) {
@@ -3544,7 +3544,9 @@ function setLibraryVisible(visible) {
   } else if ($main) {
     $main.style.gridTemplateColumns = `0px 0px 1fr`;
   }
-  scheduleSaveLibraryPrefs({ libraryPaneVisible: Boolean(visible) });
+  if (persist) {
+    scheduleSaveLibraryPrefs({ libraryPaneVisible: Boolean(visible) });
+  }
 }
 
 function toggleLibrary() {
@@ -11365,6 +11367,7 @@ let playbackNeedsReprepare = false;
 
 let focusModeEnabled = false;
 let focusPrevRenderZoom = null;
+let focusPrevLibraryVisible = null;
 
 function setRenderZoomCss(zoom) {
   const v = Number(zoom);
@@ -11416,6 +11419,13 @@ function setFocusModeEnabled(nextEnabled) {
   focusModeEnabled = next;
   if (focusModeEnabled) {
     focusPrevRenderZoom = readRenderZoomCss();
+    focusPrevLibraryVisible = isLibraryVisible;
+    if (isLibraryVisible) {
+      setLibraryVisible(false, { persist: false });
+      requestAnimationFrame(() => {
+        try { resetRightPaneSplit(); } catch {}
+      });
+    }
     requestAnimationFrame(() => {
       const fit = computeFocusFitZoom();
       // Focus is a "stage" mode: it chooses the zoom independently to reduce unused margins
@@ -11434,6 +11444,13 @@ function setFocusModeEnabled(nextEnabled) {
   } else if (focusPrevRenderZoom != null) {
     setRenderZoomCss(focusPrevRenderZoom);
     focusPrevRenderZoom = null;
+    if (focusPrevLibraryVisible) {
+      setLibraryVisible(true, { persist: false });
+      requestAnimationFrame(() => {
+        try { resetRightPaneSplit(); } catch {}
+      });
+    }
+    focusPrevLibraryVisible = null;
   }
   updateFocusModeUi();
 }
