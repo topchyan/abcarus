@@ -8672,6 +8672,66 @@ function removeSetListItem(index) {
   setListItems = next;
 }
 
+function shouldInjectNewPageBeforeTune(tuneText, { mode, idx }) {
+  if (idx <= 0) return false;
+  if (mode === "none") return false;
+  if (mode === "perTune") return true;
+  if (mode !== "auto") return false;
+  const text = String(tuneText || "");
+  const lines = text.split(/\r\n|\n|\r/);
+  const nonEmpty = [];
+  for (let i = 0; i < lines.length; i++) {
+    const l = String(lines[i] || "").trim();
+    if (!l) continue;
+    nonEmpty.push(l);
+    if (nonEmpty.length >= 3) break;
+  }
+  if (nonEmpty.some((l) => l.startsWith("%%newpage"))) return false;
+  const lineCount = lines.length;
+  const long = lineCount >= 80 || text.length >= 5000;
+  return long;
+}
+
+function buildSetListExportAbc() {
+  if (!Array.isArray(setListItems) || setListItems.length === 0) return "";
+  let out = "";
+
+  for (let i = 0; i < setListItems.length; i++) {
+    const item = setListItems[i] || {};
+    const raw = String(item.text || "");
+    if (!raw.trim()) continue;
+
+    let tune = raw;
+    const inject = shouldInjectNewPageBeforeTune(tune, { mode: setListPageBreaks, idx: i });
+    if (inject) tune = `%%newpage\n${tune}`;
+
+    tune = ensureXNumberInAbc(tune, i + 1);
+    out = appendTuneToContent(out, tune);
+  }
+  return out;
+}
+
+async function exportSetListAsAbc() {
+  if (!Array.isArray(setListItems) || setListItems.length === 0) return;
+  const base = getSuggestedBaseName();
+  const suggestedName = `${base ? `${base}-` : ""}set-list.abc`;
+  const suggestedDir = getDefaultSaveDir();
+  const filePath = await showSaveDialog(suggestedName, suggestedDir);
+  if (!filePath) return;
+  const content = buildSetListExportAbc();
+  if (!content.trim()) {
+    showToast("Nothing to export.", 2400);
+    return;
+  }
+  const ok = await withFileLock(filePath, async () => {
+    const res = await writeFile(filePath, content);
+    if (res && res.ok) return true;
+    await showSaveError((res && res.error) ? res.error : "Unable to export set list.");
+    return false;
+  });
+  if (ok) showToast("Exported.", 2400);
+}
+
 async function addTuneToSetListFromLibraryRow(rowData) {
   const tuneId = rowData && rowData.tuneId ? String(rowData.tuneId) : "";
   if (!tuneId) throw new Error("Missing tune id.");
@@ -10786,7 +10846,7 @@ if ($setListCompact) {
 if ($setListSaveAbc) {
   $setListSaveAbc.addEventListener("click", () => {
     if (!Array.isArray(setListItems) || setListItems.length === 0) return;
-    showToast("Set List export is not implemented yet.", 2400);
+    exportSetListAsAbc().catch(() => {});
   });
 }
 
