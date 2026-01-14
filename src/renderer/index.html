@@ -297,6 +297,63 @@
     </div>
   </div>
 
+	  <div class="modal" id="setListModal" aria-hidden="true">
+	    <div class="modal-card" role="dialog" aria-label="Set List">
+	      <div class="modal-header">
+	        <div class="modal-title">Set List</div>
+	        <div class="set-list-header-controls">
+	          <button id="setListHeader" type="button">Header…</button>
+	          <button class="modal-close" id="setListClose" type="button">Close</button>
+	        </div>
+	      </div>
+	      <div class="modal-body">
+	        <div id="setListEmpty" class="set-list-empty">
+	          Add tunes to build an ordered list, preview it, and export it as a new .abc file.
+	        </div>
+	        <div id="setListItems" class="set-list-items" hidden></div>
+	      </div>
+	      <div class="modal-footer">
+	        <div class="modal-footer-left">
+	          <label class="set-list-inline">
+	            <span>Page breaks</span>
+	            <select id="setListPageBreaks">
+	              <option value="perTune">Per tune</option>
+	              <option value="none">None</option>
+              <option value="auto">Auto</option>
+            </select>
+          </label>
+          <label class="set-list-inline">
+            <input id="setListCompact" type="checkbox" />
+            <span>Compact spacing</span>
+          </label>
+        </div>
+        <button id="setListClear" type="button">Clear</button>
+        <button id="setListSaveAbc" class="primary" type="button">Export ABC…</button>
+        <button id="setListExportPdf" type="button">Export PDF…</button>
+        <button id="setListPrint" type="button">Print…</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="setListHeaderModal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-label="Set List Header">
+      <div class="modal-header">
+        <div class="modal-title">Set List Header</div>
+        <button class="modal-close" id="setListHeaderClose" type="button">Close</button>
+      </div>
+      <div class="modal-body">
+        <div class="set-list-empty">
+          This header is inserted at the top of exported Set List files and used for Set List print/PDF rendering.
+        </div>
+        <textarea id="setListHeaderText" rows="10" spellcheck="false"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button id="setListHeaderReset" type="button">Reset</button>
+        <button id="setListHeaderSave" class="primary" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="xIssuesModal" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-label="X Issues">
       <div class="modal-header">

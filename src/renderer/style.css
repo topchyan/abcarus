@@ -1574,6 +1574,114 @@ svg {
   min-width: 0;
 }
 
+.set-list-empty {
+  color: var(--muted-text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.set-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.set-list-row {
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-1);
+  background: #fff;
+  min-width: 0;
+}
+
+.set-list-row.drag-over {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(31, 106, 208, 0.18);
+}
+
+.set-list-row.dragging {
+  opacity: 0.7;
+}
+
+.set-list-row .set-list-idx {
+  color: var(--muted-text);
+  min-width: 2.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.set-list-row .set-list-title {
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.set-list-row .set-list-meta {
+  margin-left: auto;
+  color: var(--muted-text);
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.set-list-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.set-list-btn {
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-1);
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.set-list-btn:hover {
+  background: #f6f6f6;
+}
+
+.set-list-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.set-list-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.set-list-inline select {
+  min-width: 120px;
+}
+
+.set-list-header-controls {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#setListHeaderText {
+  width: 100%;
+  resize: vertical;
+  min-height: 160px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .modal input[type="text"],
 .modal input[type="number"],
 .modal select,

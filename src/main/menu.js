@@ -129,6 +129,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
       ...(isMac ? [{ type: "separator" }, { role: "togglefullscreen" }] : []),
       { type: "separator" },
       { label: "Library Catalog…", accelerator: "CmdOrCtrl+Shift+L", click: () => sendMenuAction("libraryList") },
+      { label: "Set List…", click: () => sendMenuAction("setList") },
       { label: "Toggle Library", accelerator: "CmdOrCtrl+L", click: () => sendMenuAction("toggleLibrary") },
       { label: "Toggle File Header", accelerator: "CmdOrCtrl+Alt+H", click: () => sendMenuAction("toggleFileHeader") },
       { label: "Playback Focus Mode", accelerator: "F7", click: () => sendMenuAction("toggleFocusMode") },

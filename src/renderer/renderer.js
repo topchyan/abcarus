@@ -109,6 +109,22 @@ const $aboutModal = document.getElementById("aboutModal");
 const $aboutClose = document.getElementById("aboutClose");
 const $aboutInfo = document.getElementById("aboutInfo");
 const $aboutCopy = document.getElementById("aboutCopy");
+const $setListModal = document.getElementById("setListModal");
+const $setListClose = document.getElementById("setListClose");
+const $setListEmpty = document.getElementById("setListEmpty");
+const $setListItems = document.getElementById("setListItems");
+const $setListHeader = document.getElementById("setListHeader");
+const $setListClear = document.getElementById("setListClear");
+const $setListSaveAbc = document.getElementById("setListSaveAbc");
+const $setListExportPdf = document.getElementById("setListExportPdf");
+const $setListPrint = document.getElementById("setListPrint");
+const $setListPageBreaks = document.getElementById("setListPageBreaks");
+const $setListCompact = document.getElementById("setListCompact");
+const $setListHeaderModal = document.getElementById("setListHeaderModal");
+const $setListHeaderClose = document.getElementById("setListHeaderClose");
+const $setListHeaderText = document.getElementById("setListHeaderText");
+const $setListHeaderReset = document.getElementById("setListHeaderReset");
+const $setListHeaderSave = document.getElementById("setListHeaderSave");
 const $disclaimerModal = document.getElementById("disclaimerModal");
 const $disclaimerOk = document.getElementById("disclaimerOk");
 const $headerStateMarker = document.getElementById("headerStateMarker");
@@ -119,24 +135,43 @@ T:Untitled
 K:none
 `;
 const TEMPLATE_ABC = `X:1
-T:Title          % Required for identification
-T:Subtitle       % Useful if applicable
-C:Composer       % Highly Important
-H:History        % Informational
-O:Origin         % Informational
-N:Notes          % Informational
-S:Source         % Informational
-Z:Copyright      % Important, if applicable
-F:From           % URL or File
-G:Grouping       % Not important
-L:1/8            % Note length, highly useful
-M:4/4            % Meter, highly useful
-Q:1/4=60 "Slow"  % Tempo, highly useful
-V:1 clef=treble  % Voice definition, highly useful
-K:C              % Key, Required, must precede the score
-P:A
-  A2 A2 E4  | E2 E2 A4  :||
-w:AB-Ca-rus | AB-Ca-rus
+T:Կատակային Պար
+T:Humoresque Dance
+R:Dance
+C:Հայ ժողովրդական / Armenian Folk
+S:YouTube (see link)
+F:https://www.youtube.com/watch?v=HrPq4KFGYXQ
+Z:ABC transcription: ABCarus
+P:(A B C A B)
+L:1/16
+Q:1/4=100
+M:6/8
+K:A
+%%stretchlast
+%%MIDI program 71
+%%MIDI bassvol 80
+%%MIDI bassprog 32
+%%MIDI chordvol 100
+%%MIDI chordprog 46
+%%MIDI gchord fcfc
+%%MIDI beatstring fpmpmpfpmpmp
+%%MIDI drumon
+%%MIDI drum d3dd2d2d2d2   39 42 42 39 42 36   50 90 90 50 90 90
+%%writefields P 1
+%%partsbox 1
+%--------------------------------------------------------
+[P:A]
+"A"    ee2e2d c2dcBA      | "E"  B2cBAG   "A"   AGABcd  |
+ee2e2d c2dcBA             | "E"  B2cBAG   "A"   ABGA3  :|
+%
+[P:B]
+"F#m"  FF2FcB "Bm" B2cBAG | "C#" A2GABG   "F#m" FcBABG  |
+"F#m"  FF2FcA "Bm" BAcB2G | "C#" AGBABG   "F#m" ABGF3  :|
+%
+[P:C]
+"E7"   EEE2FG "A" AGABcd  | "E"  e2dc2B   "A"   AGBAGF  |
+"E7"   EEE2FG "A" ABcde2  | "E"  e2dc2B   "A"   AGBA3  :|
+%--------------------------------------------------------
 `;
 
 let currentDoc = null;
@@ -156,6 +191,122 @@ let rawMode = false;
 let rawModeFilePath = null;
 let rawModeHeaderEndOffset = 0;
 let rawModeOriginalTuneId = null;
+
+let setListItems = [];
+let setListPageBreaks = "perTune"; // perTune | none | auto
+let setListCompact = false;
+let setListHeaderText = "%%stretchlast 1\n";
+
+const SET_LIST_STORAGE_KEY = "abcarus.setList.v1";
+let setListSaveTimer = null;
+
+function safeReadJsonLocalStorage(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function safeWriteJsonLocalStorage(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function saveSetListToStorageNow() {
+  const payload = {
+    version: "1",
+    savedAtMs: Date.now(),
+    pageBreaks: setListPageBreaks,
+    compact: !!setListCompact,
+    headerText: String(setListHeaderText || ""),
+    items: Array.isArray(setListItems) ? setListItems.map((it) => ({
+      id: it && it.id ? String(it.id) : "",
+      sourceTuneId: it && it.sourceTuneId ? String(it.sourceTuneId) : "",
+      sourcePath: it && it.sourcePath ? String(it.sourcePath) : "",
+      xNumber: it && it.xNumber ? String(it.xNumber) : "",
+      title: it && it.title ? String(it.title) : "",
+      composer: it && it.composer ? String(it.composer) : "",
+      headerText: it && it.headerText ? String(it.headerText) : "",
+      text: it && it.text ? String(it.text) : "",
+      addedAtMs: it && Number.isFinite(Number(it.addedAtMs)) ? Number(it.addedAtMs) : Date.now(),
+    })) : [],
+  };
+  safeWriteJsonLocalStorage(SET_LIST_STORAGE_KEY, payload);
+}
+
+function scheduleSaveSetList() {
+  if (setListSaveTimer) clearTimeout(setListSaveTimer);
+  setListSaveTimer = setTimeout(() => {
+    setListSaveTimer = null;
+    saveSetListToStorageNow();
+  }, 250);
+}
+
+function loadSetListFromStorage() {
+  const saved = safeReadJsonLocalStorage(SET_LIST_STORAGE_KEY);
+  if (!saved || typeof saved !== "object") return;
+  const version = saved && saved.version ? String(saved.version) : "";
+  if (version !== "1") return;
+
+  const pageBreaks = saved.pageBreaks ? String(saved.pageBreaks) : "perTune";
+  if (pageBreaks === "perTune" || pageBreaks === "none" || pageBreaks === "auto") {
+    setListPageBreaks = pageBreaks;
+  }
+  setListCompact = Boolean(saved.compact);
+  if (typeof saved.headerText === "string") {
+    setListHeaderText = saved.headerText;
+  }
+
+  const itemsRaw = Array.isArray(saved.items) ? saved.items : [];
+  const items = [];
+  for (const it of itemsRaw) {
+    if (!it || typeof it !== "object") continue;
+    const text = typeof it.text === "string" ? it.text : "";
+    if (!text.trim()) continue;
+    items.push({
+      id: typeof it.id === "string" && it.id ? it.id : `${Date.now()}::${Math.random().toString(16).slice(2)}`,
+      sourceTuneId: typeof it.sourceTuneId === "string" ? it.sourceTuneId : "",
+      sourcePath: typeof it.sourcePath === "string" ? it.sourcePath : "",
+      xNumber: typeof it.xNumber === "string" ? it.xNumber : "",
+      title: typeof it.title === "string" ? it.title : "",
+      composer: typeof it.composer === "string" ? it.composer : "",
+      headerText: typeof it.headerText === "string" ? it.headerText : "",
+      text,
+      addedAtMs: Number.isFinite(Number(it.addedAtMs)) ? Number(it.addedAtMs) : Date.now(),
+    });
+    if (items.length >= 500) break;
+  }
+  setListItems = items;
+}
+
+loadSetListFromStorage();
+
+function normalizeSetListHeaderTemplate(text) {
+  const raw = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const trimmed = raw.replace(/\s+$/, "");
+  if (!trimmed) return "";
+  return `${trimmed}\n`;
+}
+
+function getSetListFileHeaderText() {
+  const tpl = normalizeSetListHeaderTemplate(setListHeaderText);
+  if (!tpl) return "";
+  return `% Generated by ABCarus Set List\n${tpl}`;
+}
+
+function shouldUseZeroPageMarginsForSetList() {
+  const header = String(setListHeaderText || "");
+  const hasLeft0 = /^\s*%%\s*leftmargin\s+0(\s|$)/im.test(header);
+  const hasRight0 = /^\s*%%\s*rightmargin\s+0(\s|$)/im.test(header);
+  return hasLeft0 && hasRight0;
+}
 
 // PlaybackRange must be initialized before initEditor() runs (selection listeners fire early).
 let playbackRange = {
@@ -181,6 +332,9 @@ let playbackTraceSeq = 0;
 	let playbackLoopEnabled = false;
 	let playbackLoopFromMeasure = 0;
 	let playbackLoopToMeasure = 0;
+	let playbackLoopTuneId = null;
+	const FOCUS_LOOP_DEFAULT_FROM = 1;
+	const FOCUS_LOOP_DEFAULT_TO = 4;
 	let currentPlaybackPlan = null;
 	let pendingPlaybackPlan = null;
 let transportPlayheadOffset = 0; // editor offset used for next transport start
@@ -3401,10 +3555,13 @@ function setActiveTuneText(text, metadata, options = {}) {
     updateHeaderStateUI();
   }
   updateFileHeaderPanel();
+  if (metadata && metadata.id) {
+    maybeResetFocusLoopForTune(metadata.id);
+  }
   scheduleRenderNow({ clearOutput: true });
 }
 
-function setLibraryVisible(visible) {
+function setLibraryVisible(visible, { persist = true } = {}) {
   isLibraryVisible = visible;
   document.body.classList.toggle("library-hidden", !visible);
   if (visible) {
@@ -3412,7 +3569,9 @@ function setLibraryVisible(visible) {
   } else if ($main) {
     $main.style.gridTemplateColumns = `0px 0px 1fr`;
   }
-  scheduleSaveLibraryPrefs({ libraryPaneVisible: Boolean(visible) });
+  if (persist) {
+    scheduleSaveLibraryPrefs({ libraryPaneVisible: Boolean(visible) });
+  }
 }
 
 function toggleLibrary() {
@@ -5790,6 +5949,20 @@ function initContextMenu() {
       hideContextMenu();
       return;
     }
+    if (action === "addToSetList" && menuTarget) {
+      const tuneId = menuTarget.type === "tune"
+        ? menuTarget.tuneId
+        : (menuTarget.type === "editor" ? activeTuneId : null);
+      hideContextMenu();
+      try {
+        await addTuneToSetListByTuneId(tuneId);
+        showToast("Added to Set List.", 2000);
+        if ($setListModal && $setListModal.classList.contains("open")) renderSetList();
+      } catch (e) {
+        showToast(e && e.message ? e.message : String(e), 5000);
+      }
+      return;
+    }
     if (action === "pasteTune" && menuTarget && menuTarget.type === "file") {
       await pasteClipboardToFile(menuTarget.filePath);
       hideContextMenu();
@@ -5883,6 +6056,7 @@ function showContextMenuAt(x, y, target) {
   contextMenuTarget = target;
   if (target.type === "tune") {
     buildContextMenuItems([
+      { label: "Add to Set List", action: "addToSetList" },
       { label: "Copy Tune", action: "copyTune" },
       { label: "Duplicate Tune", action: "duplicateTune" },
       { label: "Cut Tune", action: "cutTune" },
@@ -5909,7 +6083,9 @@ function showContextMenuAt(x, y, target) {
       { label: "Clear Search", action: "clearSearch", disabled: !libraryTextFilter },
     ]);
   } else if (target.type === "editor") {
+    const canAdd = Boolean(activeTuneId) && !rawMode;
     buildContextMenuItems([
+      { label: "Add Active Tune to Set List", action: "addToSetList", disabled: !canAdd },
       { label: "Cut", action: "editorCut" },
       { label: "Copy", action: "editorCopy" },
       { label: "Paste", action: "editorPaste" },
@@ -6898,12 +7074,39 @@ function sanitizeFileBaseName(text) {
   return cleaned.replace(/\s+/g, "-").slice(0, 80);
 }
 
+function pickPreferredLatinText(candidates) {
+  const list = Array.isArray(candidates) ? candidates : [];
+  let fallback = "";
+  let best = "";
+  let bestScore = -1;
+  for (const raw of list) {
+    const text = String(raw || "").trim();
+    if (!text) continue;
+    if (!fallback) fallback = text;
+    const latin = latinize(text).trim();
+    const letters = (latin.match(/[A-Za-z]/g) || []).length;
+    const score = letters > 0 ? letters : 0;
+    if (score > bestScore) {
+      bestScore = score;
+      best = text;
+    }
+  }
+  return best || fallback || "";
+}
+
+function hasAsciiAlnum(text) {
+  const latin = latinize(String(text || "")).trim();
+  return /[A-Za-z0-9]/.test(latin);
+}
+
 function parseAbcHeaderFields(text) {
-  const fields = { title: "", composer: "", key: "" };
+  const fields = { titles: [], title: "", composer: "", key: "" };
   const lines = String(text || "").split(/\r\n|\n|\r/);
   for (const line of lines) {
-    if (!fields.title && /^T:/.test(line)) {
-      fields.title = line.replace(/^T:\s*/, "").trim();
+    if (/^T:/.test(line)) {
+      const t = line.replace(/^T:\s*/, "").trim();
+      if (t) fields.titles.push(t);
+      if (!fields.title) fields.title = t;
     } else if (!fields.composer && /^C:/.test(line)) {
       fields.composer = line.replace(/^C:\s*/, "").trim();
     } else if (!fields.key && /^K:/.test(line)) {
@@ -6911,6 +7114,8 @@ function parseAbcHeaderFields(text) {
       break;
     }
   }
+  const preferred = pickPreferredLatinText(fields.titles);
+  if (preferred) fields.title = preferred;
   return fields;
 }
 
@@ -6935,11 +7140,11 @@ function parseTuneIdentityFields(text) {
 
 function getSuggestedBaseName() {
   const parsed = parseAbcHeaderFields(getEditorValue());
-  const title = (activeTuneMeta && activeTuneMeta.title) || parsed.title || "untitled";
-  const composer = (activeTuneMeta && activeTuneMeta.composer) || parsed.composer || "";
-  const key = (activeTuneMeta && activeTuneMeta.key) || parsed.key || "";
-  const parts = [title, composer, key].filter(Boolean);
-  return sanitizeFileBaseName(parts.join(" - "));
+  const title = parsed.title || (activeTuneMeta && activeTuneMeta.title) || "untitled";
+  const composerCandidate = parsed.composer || (activeTuneMeta && activeTuneMeta.composer) || "";
+  const composer = hasAsciiAlnum(composerCandidate) ? composerCandidate : "";
+  const parts = composer ? [title, composer] : [title];
+  return sanitizeFileBaseName(parts.join("_"));
 }
 
 function getPlaybackText() {
@@ -7393,6 +7598,147 @@ async function runPrintAllAction(type) {
       showToast(`Exported PDF: ${res.path}`);
     }
   } else if (res && res.error) {
+    setStatus("Error");
+    logErr(res.error);
+  }
+}
+
+function getSetListSuggestedBaseName() {
+  const base = getSongbookSuggestedBaseName();
+  return sanitizeFileBaseName(`${base || "set-list"} - set-list`);
+}
+
+async function renderSetListSvgMarkupForPrint(options = {}) {
+  const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+  const includeIssueCards = options.includeIssueCards !== false;
+  const includeIssueSummary = options.includeIssueSummary !== false;
+  if (!Array.isArray(setListItems) || setListItems.length === 0) {
+    return { ok: false, error: "No tunes in Set List." };
+  }
+
+  const entry = { basename: "Set List" };
+  const blocks = [];
+  let current = [];
+  const summary = [];
+
+  const flush = () => {
+    if (!current.length) return;
+    blocks.push(current);
+    current = [];
+  };
+
+  const total = setListItems.length;
+  for (let i = 0; i < total; i += 1) {
+    const item = setListItems[i] || {};
+    const raw = String(item.text || "");
+    if (onProgress && (i % 5 === 0 || i === total - 1)) onProgress(i + 1, total);
+    if (!raw.trim()) continue;
+
+    const tune = {
+      id: item.sourceTuneId || item.id || "",
+      xNumber: String(i + 1),
+      title: item.title || "",
+      preview: item.title || `X:${i + 1}`,
+    };
+
+    const breakBefore = setListPageBreaks === "perTune"
+      ? i > 0
+      : shouldInjectNewPageBeforeTune(raw, { mode: setListPageBreaks, idx: i });
+    if (breakBefore) flush();
+
+    const renumbered = ensureXNumberInAbc(raw, i + 1);
+    const combinedHeader = `${getSetListFileHeaderText()}${item.headerText || ""}`;
+    const prefix = buildHeaderPrefix(combinedHeader, false, renumbered);
+    const block = prefix.text ? `${prefix.text}${renumbered}` : renumbered;
+    const context = { tuneLabel: buildPrintTuneLabel(tune) };
+    setErrorLineOffsetFromHeader(prefix.text);
+    const res = await renderAbcToSvgMarkup(block, { errorContext: context });
+    const tuneErrors = res.errors ? res.errors.slice() : [];
+    if (!res.ok && res.error) tuneErrors.push({ message: res.error });
+
+    if (tuneErrors.length) {
+      const uniqueKeys = new Set(tuneErrors.map((err) => {
+        const msg = err && err.message ? err.message : "Unknown error";
+        const loc = err && err.loc ? `Line ${err.loc.line}, Col ${err.loc.col}` : "";
+        return `${msg}|${loc}`;
+      }));
+      summary.push({ tune, count: uniqueKeys.size });
+      if (includeIssueCards) current.push(buildPrintErrorCard(entry, tune, tuneErrors).trim());
+    }
+
+    if (res.svg && res.svg.trim()) {
+      current.push(res.svg.trim());
+    }
+
+    if (setListPageBreaks === "perTune") flush();
+  }
+  flush();
+
+  if (!blocks.length) return { ok: false, error: "No SVG output produced." };
+
+  const parts = [];
+  if (includeIssueSummary && summary.length) {
+    parts.push(buildPrintErrorSummary(entry, summary, total).trim());
+  }
+  for (const block of blocks) {
+    parts.push(`<div class="print-tune">${block.join("\n")}</div>`);
+  }
+  const issues = {
+    totalTunes: total,
+    tunesWithIssues: summary.length,
+    totalErrors: summary.reduce((sum, item) => sum + (Number.isFinite(Number(item.count)) ? Number(item.count) : 0), 0),
+  };
+  return { ok: true, svg: parts.join("\n"), issues };
+}
+
+async function runPrintSetListAction(type) {
+  if (!window.api) return;
+  if (!Array.isArray(setListItems) || setListItems.length === 0) {
+    setStatus("No Set List to print.");
+    return;
+  }
+  setStatus("Rendering…");
+  const showIssuesInMarkup = type === "preview";
+  const renderRes = await renderSetListSvgMarkupForPrint({
+    includeIssueCards: showIssuesInMarkup,
+    includeIssueSummary: showIssuesInMarkup,
+    onProgress: (current, total) => {
+      setStatus(`Rendering tunes… ${current}/${total}`);
+    },
+  });
+  if (!renderRes.ok) {
+    setStatus("Error");
+    logErr(renderRes.error || "Unable to render.");
+    return;
+  }
+
+  let svgMarkup = applyPrintDebugMarkup(renderRes.svg);
+  const zeroMargins = shouldUseZeroPageMarginsForSetList();
+  if (zeroMargins) {
+    svgMarkup = `<!--abcarus:pdf-no-margins-->\n<style>body{padding:0 !important}</style>\n${svgMarkup}`;
+  }
+  if (setListCompact) {
+    svgMarkup = `<style>body{padding:12px !important}</style>\n${svgMarkup}`;
+  }
+  let res = null;
+  if (type === "print" && typeof window.api.printDialog === "function") {
+    res = await window.api.printDialog(svgMarkup);
+  } else if (type === "pdf" && typeof window.api.exportPdf === "function") {
+    res = await window.api.exportPdf(svgMarkup, getSetListSuggestedBaseName());
+  } else if (type === "preview" && typeof window.api.printPreview === "function") {
+    res = await window.api.printPreview(svgMarkup);
+  }
+
+  if (res && res.ok) {
+    setStatus("OK");
+    if (type === "pdf" && res.path) {
+      const issues = renderRes.issues || null;
+      const suffix = (issues && issues.tunesWithIssues)
+        ? ` (${issues.tunesWithIssues} tunes had issues; use Preview for details)`
+        : "";
+      showToast(`Exported PDF: ${res.path}${suffix}`);
+    }
+  } else if (res && res.error && res.error !== "Canceled") {
     setStatus("Error");
     logErr(res.error);
   }
@@ -8512,6 +8858,20 @@ document.addEventListener("library-modal:closed", () => {
   libraryListYieldedByThisOpen = false;
 });
 
+document.addEventListener("set-list:add", (ev) => {
+  try {
+    const row = ev && ev.detail && ev.detail.row ? ev.detail.row : null;
+    if (!row) return;
+    const tuneId = row && row.tuneId ? String(row.tuneId) : "";
+    addTuneToSetListByTuneId(tuneId, { fallbackTitle: row.title, fallbackComposer: row.composer }).then(() => {
+      showToast("Added to Set List.", 2000);
+      if ($setListModal && $setListModal.classList.contains("open")) renderSetList();
+    }).catch((e) => {
+      showToast(e && e.message ? e.message : String(e), 5000);
+    });
+  } catch {}
+});
+
 function openLibraryListFromCurrentLibraryIndex() {
   if (!libraryIndex || !libraryIndex.root || !Array.isArray(libraryIndex.files) || !libraryIndex.files.length) {
     setStatus("Load a library folder first.");
@@ -8556,6 +8916,244 @@ function closeAbout() {
   if (!$aboutModal) return;
   $aboutModal.classList.remove("open");
   $aboutModal.setAttribute("aria-hidden", "true");
+}
+
+function renderSetList() {
+  if (!$setListEmpty || !$setListItems) return;
+  const hasItems = Array.isArray(setListItems) && setListItems.length > 0;
+  $setListEmpty.hidden = hasItems;
+  $setListItems.hidden = !hasItems;
+
+  $setListItems.textContent = "";
+  if (hasItems) {
+    for (let i = 0; i < setListItems.length; i++) {
+      const item = setListItems[i] || {};
+      const row = document.createElement("div");
+      row.className = "set-list-row";
+      row.draggable = true;
+      row.dataset.index = String(i);
+
+      const idx = document.createElement("div");
+      idx.className = "set-list-idx";
+      idx.textContent = String(i + 1);
+
+      const title = document.createElement("div");
+      title.className = "set-list-title";
+      title.textContent = String(item.title || "Untitled");
+
+      const meta = document.createElement("div");
+      meta.className = "set-list-meta";
+      meta.textContent = item.composer ? String(item.composer) : "";
+
+      const actions = document.createElement("div");
+      actions.className = "set-list-actions";
+      const upDisabled = i === 0;
+      const downDisabled = i === setListItems.length - 1;
+      actions.innerHTML = `
+        <button type="button" class="set-list-btn" data-action="up" data-index="${i}" aria-label="Move up" ${upDisabled ? "disabled" : ""}>↑</button>
+        <button type="button" class="set-list-btn" data-action="down" data-index="${i}" aria-label="Move down" ${downDisabled ? "disabled" : ""}>↓</button>
+        <button type="button" class="set-list-btn" data-action="remove" data-index="${i}" aria-label="Remove">✕</button>
+      `;
+
+      row.append(idx, title, meta, actions);
+      $setListItems.append(row);
+    }
+  }
+
+  if ($setListPageBreaks) $setListPageBreaks.value = setListPageBreaks;
+  if ($setListCompact) $setListCompact.checked = !!setListCompact;
+
+  const disableActions = !hasItems;
+  if ($setListClear) $setListClear.disabled = disableActions;
+  if ($setListSaveAbc) $setListSaveAbc.disabled = disableActions;
+  if ($setListExportPdf) $setListExportPdf.disabled = disableActions;
+  if ($setListPrint) $setListPrint.disabled = disableActions;
+}
+
+function openSetList() {
+  if (!$setListModal) return;
+  renderSetList();
+  $setListModal.classList.add("open");
+  $setListModal.setAttribute("aria-hidden", "false");
+  if ($setListPageBreaks) $setListPageBreaks.focus();
+}
+
+function closeSetList() {
+  if (!$setListModal) return;
+  $setListModal.classList.remove("open");
+  $setListModal.setAttribute("aria-hidden", "true");
+}
+
+function openSetListHeaderEditor() {
+  if (!$setListHeaderModal || !$setListHeaderText) return;
+  $setListHeaderText.value = String(setListHeaderText || "");
+  $setListHeaderModal.classList.add("open");
+  $setListHeaderModal.setAttribute("aria-hidden", "false");
+  $setListHeaderText.focus();
+}
+
+function closeSetListHeaderEditor() {
+  if (!$setListHeaderModal) return;
+  $setListHeaderModal.classList.remove("open");
+  $setListHeaderModal.setAttribute("aria-hidden", "true");
+}
+
+function moveSetListItem(fromIndex, toIndex) {
+  if (!Array.isArray(setListItems)) setListItems = [];
+  const from = Number(fromIndex);
+  const to = Number(toIndex);
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return;
+  if (from < 0 || from >= setListItems.length) return;
+  if (to < 0 || to >= setListItems.length) return;
+  if (from === to) return;
+  const next = setListItems.slice();
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  setListItems = next;
+  scheduleSaveSetList();
+}
+
+function removeSetListItem(index) {
+  if (!Array.isArray(setListItems)) setListItems = [];
+  const idx = Number(index);
+  if (!Number.isFinite(idx) || idx < 0 || idx >= setListItems.length) return;
+  const next = setListItems.slice();
+  next.splice(idx, 1);
+  setListItems = next;
+  scheduleSaveSetList();
+}
+
+function insertSetListItemAt(item, index) {
+  if (!item) return;
+  if (!Array.isArray(setListItems)) setListItems = [];
+  const idx = Number(index);
+  const next = setListItems.slice();
+  if (!Number.isFinite(idx) || idx < 0 || idx >= next.length) {
+    next.push(item);
+  } else {
+    next.splice(idx, 0, item);
+  }
+  setListItems = next;
+  scheduleSaveSetList();
+}
+
+function shouldInjectNewPageBeforeTune(tuneText, { mode, idx }) {
+  if (idx <= 0) return false;
+  if (mode === "none") return false;
+  if (mode === "perTune") return true;
+  if (mode !== "auto") return false;
+  const text = String(tuneText || "");
+  const lines = text.split(/\r\n|\n|\r/);
+  const nonEmpty = [];
+  for (let i = 0; i < lines.length; i++) {
+    const l = String(lines[i] || "").trim();
+    if (!l) continue;
+    nonEmpty.push(l);
+    if (nonEmpty.length >= 3) break;
+  }
+  if (nonEmpty.some((l) => l.startsWith("%%newpage"))) return false;
+  const lineCount = lines.length;
+  const long = lineCount >= 80 || text.length >= 5000;
+  return long;
+}
+
+async function addTuneToSetListByTuneId(
+  tuneId,
+  { fallbackTitle = "", fallbackComposer = "", insertIndex = null } = {}
+) {
+  const id = String(tuneId || "").trim();
+  if (!id) throw new Error("Missing tune id.");
+
+  if (currentDoc && currentDoc.dirty && activeTuneId && id === activeTuneId) {
+    const choice = await confirmUnsavedChanges("adding this tune to Set List");
+    if (choice === "cancel") return;
+    if (choice === "save") {
+      const ok = await performSaveFlow();
+      if (!ok) return;
+    }
+  }
+
+  const res = findTuneById(id);
+  if (!res) throw new Error("Tune not found in library.");
+
+  const readRes = await readFile(res.file.path);
+  if (!readRes || !readRes.ok) throw new Error(readRes && readRes.error ? readRes.error : "Unable to read file.");
+  const content = String(readRes.data || "");
+  const entryHeader = (activeFilePath && pathsEqual(activeFilePath, res.file.path))
+    ? getHeaderEditorValue()
+    : (res.file.headerText || "");
+
+  const startOffset = Number(res.tune.startOffset);
+  const endOffset = Number(res.tune.endOffset);
+  if (!Number.isFinite(startOffset) || !Number.isFinite(endOffset) || startOffset < 0 || endOffset <= startOffset || endOffset > content.length) {
+    throw new Error("Refusing to add: tune offsets look stale. Refresh the library and try again.");
+  }
+  const slice = content.slice(startOffset, endOffset);
+  const trimmed = slice.replace(/^\s+/, "");
+  const xMatch = trimmed.match(/^X:\s*(\d+)/);
+  if (!xMatch) {
+    throw new Error("Refusing to add: tune offsets look stale. Refresh the library and try again.");
+  }
+  const expectedX = String(res.tune.xNumber || "");
+  if (expectedX && xMatch[1] !== expectedX) {
+    throw new Error(`Refusing to add: tune offsets look stale (expected X:${expectedX}). Refresh the library and try again.`);
+  }
+
+  const entryId = `${id}::${Date.now()}::${Math.random().toString(16).slice(2)}`;
+  const newItem = {
+    id: entryId,
+    sourceTuneId: id,
+    sourcePath: res.file.path,
+    xNumber: res.tune.xNumber || "",
+    title: res.tune.title || fallbackTitle || "",
+    composer: res.tune.composer || fallbackComposer || "",
+    headerText: entryHeader,
+    text: slice,
+    addedAtMs: Date.now(),
+  };
+  insertSetListItemAt(newItem, insertIndex);
+}
+
+function buildSetListExportAbc() {
+  if (!Array.isArray(setListItems) || setListItems.length === 0) return "";
+  let out = "";
+  const fileHeader = getSetListFileHeaderText();
+  if (fileHeader.trim()) out = `${fileHeader}\n`;
+
+  for (let i = 0; i < setListItems.length; i++) {
+    const item = setListItems[i] || {};
+    const raw = String(item.text || "");
+    if (!raw.trim()) continue;
+
+    let tune = raw;
+    const inject = shouldInjectNewPageBeforeTune(tune, { mode: setListPageBreaks, idx: i });
+    if (inject) tune = `%%newpage\n${tune}`;
+
+    tune = ensureXNumberInAbc(tune, i + 1);
+    out = appendTuneToContent(out, tune);
+  }
+  return out;
+}
+
+async function exportSetListAsAbc() {
+  if (!Array.isArray(setListItems) || setListItems.length === 0) return;
+  const base = getSuggestedBaseName();
+  const suggestedName = `${base ? `${base}-` : ""}set-list.abc`;
+  const suggestedDir = getDefaultSaveDir();
+  const filePath = await showSaveDialog(suggestedName, suggestedDir);
+  if (!filePath) return;
+  const content = buildSetListExportAbc();
+  if (!content.trim()) {
+    showToast("Nothing to export.", 2400);
+    return;
+  }
+  const ok = await withFileLock(filePath, async () => {
+    const res = await writeFile(filePath, content);
+    if (res && res.ok) return true;
+    await showSaveError((res && res.error) ? res.error : "Unable to export set list.");
+    return false;
+  });
+  if (ok) showToast("Exported.", 2400);
 }
 
 if ($xIssuesClose) {
@@ -9593,16 +10191,17 @@ async function fileNew() {
 }
 
 async function fileNewFromTemplate() {
+  const ok = await ensureSafeToAbandonCurrentDoc("creating a new tune");
+  if (!ok) return;
+
   const targetPath = (activeTuneMeta && activeTuneMeta.path)
     ? String(activeTuneMeta.path)
     : (activeFilePath ? String(activeFilePath) : "");
   if (!targetPath) {
-    showToast("Open/select a target .abc file first.", 2800);
+    setActiveTuneText(TEMPLATE_ABC, null, { markDirty: true });
+    showToast("Template opened.", 1800);
     return;
   }
-
-  const ok = await ensureSafeToAbandonCurrentDoc("creating a new tune");
-  if (!ok) return;
 
   let nextX = "";
   try {
@@ -9667,7 +10266,11 @@ function setNewTuneDraftInActiveFile(text, { filePath, basename, xNumber } = {})
 async function fileNewTune() {
   const entry = getActiveFileEntry();
   if (!entry || !entry.path) {
-    showToast("Load a library file first.", 2400);
+    const ok = await ensureSafeToAbandonCurrentDoc("creating a new tune");
+    if (!ok) return;
+    const template = ensureXNumberInAbc(buildNewTuneDraftTemplate(""), 1);
+    setActiveTuneText(template, null, { markDirty: true });
+    showToast("New tune draft opened.", 1800);
     return;
   }
   const ok = await ensureSafeToAbandonCurrentDoc("creating a new tune");
@@ -10089,6 +10692,7 @@ function wireMenuActions() {
       else if (actionType === "libraryList") {
         openLibraryListFromCurrentLibraryIndex();
       }
+      else if (actionType === "setList") openSetList();
       else if (actionType === "toggleLibrary") toggleLibrary();
       else if (actionType === "toggleFocusMode") toggleFocusMode();
       else if (actionType === "renumberXInFile") await renumberXInActiveFile();
@@ -10501,6 +11105,216 @@ if ($aboutCopy) {
   });
 }
 
+if ($setListClose) {
+  $setListClose.addEventListener("click", () => {
+    closeSetList();
+  });
+}
+
+if ($setListHeader) {
+  $setListHeader.addEventListener("click", () => {
+    openSetListHeaderEditor();
+  });
+}
+
+if ($setListItems) {
+  let setListDragFromIndex = null;
+
+  $setListItems.addEventListener("dragstart", (e) => {
+    const row = e && e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
+    if (!row) return;
+    const idx = row.dataset ? Number(row.dataset.index) : NaN;
+    if (!Number.isFinite(idx)) return;
+    setListDragFromIndex = idx;
+    row.classList.add("dragging");
+    try {
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", String(idx));
+      }
+    } catch {}
+  });
+
+  $setListItems.addEventListener("dragend", () => {
+    setListDragFromIndex = null;
+    const rows = $setListItems.querySelectorAll(".set-list-row.dragging");
+    for (const r of rows) r.classList.remove("dragging");
+    const over = $setListItems.querySelectorAll(".set-list-row.drag-over");
+    for (const r of over) r.classList.remove("drag-over");
+  });
+
+  $setListItems.addEventListener("dragover", (e) => {
+    if (!e) return;
+    const row = e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
+    e.preventDefault();
+    try { if (e.dataTransfer) e.dataTransfer.dropEffect = "move"; } catch {}
+    if (!row) return;
+  });
+
+  $setListItems.addEventListener("dragenter", (e) => {
+    const row = e && e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
+    if (!row) return;
+    row.classList.add("drag-over");
+  });
+
+  $setListItems.addEventListener("dragleave", (e) => {
+    const row = e && e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
+    if (!row) return;
+    row.classList.remove("drag-over");
+  });
+
+  $setListItems.addEventListener("drop", (e) => {
+    if (!e) return;
+    e.preventDefault();
+    const row = e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
+    const toIdx = row && row.dataset ? Number(row.dataset.index) : (Array.isArray(setListItems) ? setListItems.length : 0);
+    let raw = "";
+    try { raw = e.dataTransfer ? e.dataTransfer.getData("text/plain") : ""; } catch {}
+
+    let fromIdx = setListDragFromIndex;
+    if (!Number.isFinite(fromIdx)) {
+      const parsed = Number(raw);
+      if (Number.isFinite(parsed)) fromIdx = parsed;
+    }
+
+    if (Number.isFinite(fromIdx)) {
+      if (!Number.isFinite(toIdx)) return;
+      moveSetListItem(fromIdx, toIdx);
+      renderSetList();
+      return;
+    }
+
+    const tuneId = String(raw || "").trim();
+    if (!tuneId) return;
+    addTuneToSetListByTuneId(tuneId, { insertIndex: toIdx }).then(() => {
+      showToast("Added to Set List.", 2000);
+      renderSetList();
+    }).catch((err) => {
+      showToast(err && err.message ? err.message : String(err), 5000);
+    });
+  });
+
+  $setListItems.addEventListener("click", (e) => {
+    const btn = e && e.target && e.target.closest ? e.target.closest(".set-list-btn") : null;
+    if (!btn) return;
+    if (btn.disabled) return;
+    const action = btn.dataset ? btn.dataset.action : "";
+    const index = btn.dataset ? btn.dataset.index : "";
+    if (action === "remove") {
+      removeSetListItem(index);
+      renderSetList();
+      return;
+    }
+    if (action === "up") {
+      moveSetListItem(index, Number(index) - 1);
+      renderSetList();
+      return;
+    }
+    if (action === "down") {
+      moveSetListItem(index, Number(index) + 1);
+      renderSetList();
+    }
+  });
+}
+
+if ($setListModal) {
+  $setListModal.addEventListener("click", (e) => {
+    if (e.target === $setListModal) closeSetList();
+  });
+  $setListModal.addEventListener("keydown", (e) => {
+    if (!e) return;
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeSetList();
+  });
+}
+
+if ($setListHeaderClose) {
+  $setListHeaderClose.addEventListener("click", () => {
+    closeSetListHeaderEditor();
+  });
+}
+
+if ($setListHeaderModal) {
+  $setListHeaderModal.addEventListener("click", (e) => {
+    if (e.target === $setListHeaderModal) closeSetListHeaderEditor();
+  });
+  $setListHeaderModal.addEventListener("keydown", (e) => {
+    if (!e) return;
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeSetListHeaderEditor();
+  });
+}
+
+if ($setListHeaderReset) {
+  $setListHeaderReset.addEventListener("click", () => {
+    if (!$setListHeaderText) return;
+    $setListHeaderText.value = "%%stretchlast 1\n";
+    $setListHeaderText.focus();
+  });
+}
+
+if ($setListHeaderSave) {
+  $setListHeaderSave.addEventListener("click", () => {
+    if (!$setListHeaderText) return;
+    setListHeaderText = String($setListHeaderText.value || "");
+    scheduleSaveSetList();
+    closeSetListHeaderEditor();
+  });
+}
+
+if ($setListClear) {
+  $setListClear.addEventListener("click", () => {
+    if (Array.isArray(setListItems) && setListItems.length) {
+      const ok = window.confirm("Clear Set List? This cannot be undone.");
+      if (!ok) return;
+    }
+    setListItems = [];
+    scheduleSaveSetList();
+    renderSetList();
+  });
+}
+
+if ($setListPageBreaks) {
+  $setListPageBreaks.addEventListener("change", () => {
+    setListPageBreaks = String($setListPageBreaks.value || "perTune");
+    scheduleSaveSetList();
+    renderSetList();
+  });
+}
+
+if ($setListCompact) {
+  $setListCompact.addEventListener("change", () => {
+    setListCompact = !!$setListCompact.checked;
+    scheduleSaveSetList();
+    renderSetList();
+  });
+}
+
+if ($setListSaveAbc) {
+  $setListSaveAbc.addEventListener("click", () => {
+    if (!Array.isArray(setListItems) || setListItems.length === 0) return;
+    exportSetListAsAbc().catch(() => {});
+  });
+}
+
+if ($setListExportPdf) {
+  $setListExportPdf.addEventListener("click", () => {
+    if (!Array.isArray(setListItems) || setListItems.length === 0) return;
+    runPrintSetListAction("pdf").catch(() => {});
+  });
+}
+
+if ($setListPrint) {
+  $setListPrint.addEventListener("click", () => {
+    if (!Array.isArray(setListItems) || setListItems.length === 0) return;
+    runPrintSetListAction("print").catch(() => {});
+  });
+}
+
 if ($disclaimerOk) {
   $disclaimerOk.addEventListener("click", () => {
     dismissDisclaimer();
@@ -10626,6 +11440,7 @@ let playbackNeedsReprepare = false;
 
 let focusModeEnabled = false;
 let focusPrevRenderZoom = null;
+let focusPrevLibraryVisible = null;
 
 function setRenderZoomCss(zoom) {
   const v = Number(zoom);
@@ -10677,6 +11492,13 @@ function setFocusModeEnabled(nextEnabled) {
   focusModeEnabled = next;
   if (focusModeEnabled) {
     focusPrevRenderZoom = readRenderZoomCss();
+    focusPrevLibraryVisible = isLibraryVisible;
+    if (isLibraryVisible) {
+      setLibraryVisible(false, { persist: false });
+      requestAnimationFrame(() => {
+        try { resetRightPaneSplit(); } catch {}
+      });
+    }
     requestAnimationFrame(() => {
       const fit = computeFocusFitZoom();
       // Focus is a "stage" mode: it chooses the zoom independently to reduce unused margins
@@ -10695,6 +11517,16 @@ function setFocusModeEnabled(nextEnabled) {
   } else if (focusPrevRenderZoom != null) {
     setRenderZoomCss(focusPrevRenderZoom);
     focusPrevRenderZoom = null;
+    if (focusPrevLibraryVisible) {
+      setLibraryVisible(true, { persist: false });
+      requestAnimationFrame(() => {
+        try { resetRightPaneSplit(); } catch {}
+      });
+    }
+    focusPrevLibraryVisible = null;
+  }
+  if (focusModeEnabled) {
+    maybeResetFocusLoopForTune(activeTuneId, { updateUi: false });
   }
   updateFocusModeUi();
 }
@@ -12385,11 +13217,36 @@ function updatePracticeUi() {
   }
 }
 
+function normalizeLoopBounds(fromMeasure, toMeasure, { changedField } = {}) {
+  const from = clampInt(fromMeasure, 0, 100000, 0);
+  const to = clampInt(toMeasure, 0, 100000, 0);
+  if (from > 0 && to > 0 && from > to) {
+    if (changedField === "to") return { from: to, to };
+    return { from, to: from };
+  }
+  return { from, to };
+}
+
+function maybeResetFocusLoopForTune(tuneId, { updateUi = true } = {}) {
+  if (!focusModeEnabled) return;
+  const id = tuneId != null ? String(tuneId) : "";
+  if (!id) return;
+  const savedId = playbackLoopTuneId != null ? String(playbackLoopTuneId) : "";
+  if (savedId && savedId === id) return;
+
+  const normalized = normalizeLoopBounds(FOCUS_LOOP_DEFAULT_FROM, FOCUS_LOOP_DEFAULT_TO);
+  playbackLoopFromMeasure = normalized.from;
+  playbackLoopToMeasure = normalized.to;
+  syncPendingPlaybackPlan();
+  if (updateUi) updatePracticeUi();
+}
+
 function setLoopFromSettings(settings) {
   if (!settings || typeof settings !== "object") return;
   playbackLoopEnabled = Boolean(settings.playbackLoopEnabled);
   playbackLoopFromMeasure = clampInt(settings.playbackLoopFromMeasure, 0, 100000, 0);
   playbackLoopToMeasure = clampInt(settings.playbackLoopToMeasure, 0, 100000, 0);
+  playbackLoopTuneId = (typeof settings.playbackLoopTuneId === "string") ? settings.playbackLoopTuneId : null;
   updatePracticeUi();
 }
 
@@ -14643,32 +15500,56 @@ if ($practiceLoopEnabled) {
 if ($practiceLoopFrom) {
   $practiceLoopFrom.addEventListener("input", () => {
     const next = clampLoopField($practiceLoopFrom.value);
-    playbackLoopFromMeasure = next;
+    const normalized = normalizeLoopBounds(next, playbackLoopToMeasure, { changedField: "from" });
+    playbackLoopFromMeasure = normalized.from;
+    playbackLoopToMeasure = normalized.to;
     syncPendingPlaybackPlan();
     updatePracticeUi();
   });
   $practiceLoopFrom.addEventListener("change", () => {
     const next = clampLoopField($practiceLoopFrom.value);
-    playbackLoopFromMeasure = next;
+    const normalized = normalizeLoopBounds(next, playbackLoopToMeasure, { changedField: "from" });
+    playbackLoopFromMeasure = normalized.from;
+    playbackLoopToMeasure = normalized.to;
     syncPendingPlaybackPlan();
     updatePracticeUi();
-    persistLoopSettingsPatch({ playbackLoopFromMeasure: next }).catch(() => {});
+    const patch = {
+      playbackLoopFromMeasure: playbackLoopFromMeasure,
+      playbackLoopToMeasure: playbackLoopToMeasure,
+    };
+    if (activeTuneId) {
+      playbackLoopTuneId = String(activeTuneId);
+      patch.playbackLoopTuneId = playbackLoopTuneId;
+    }
+    persistLoopSettingsPatch(patch).catch(() => {});
   });
 }
 
 if ($practiceLoopTo) {
   $practiceLoopTo.addEventListener("input", () => {
     const next = clampLoopField($practiceLoopTo.value);
-    playbackLoopToMeasure = next;
+    const normalized = normalizeLoopBounds(playbackLoopFromMeasure, next, { changedField: "to" });
+    playbackLoopFromMeasure = normalized.from;
+    playbackLoopToMeasure = normalized.to;
     syncPendingPlaybackPlan();
     updatePracticeUi();
   });
   $practiceLoopTo.addEventListener("change", () => {
     const next = clampLoopField($practiceLoopTo.value);
-    playbackLoopToMeasure = next;
+    const normalized = normalizeLoopBounds(playbackLoopFromMeasure, next, { changedField: "to" });
+    playbackLoopFromMeasure = normalized.from;
+    playbackLoopToMeasure = normalized.to;
     syncPendingPlaybackPlan();
     updatePracticeUi();
-    persistLoopSettingsPatch({ playbackLoopToMeasure: next }).catch(() => {});
+    const patch = {
+      playbackLoopFromMeasure: playbackLoopFromMeasure,
+      playbackLoopToMeasure: playbackLoopToMeasure,
+    };
+    if (activeTuneId) {
+      playbackLoopTuneId = String(activeTuneId);
+      patch.playbackLoopTuneId = playbackLoopTuneId;
+    }
+    persistLoopSettingsPatch(patch).catch(() => {});
   });
 }
 
