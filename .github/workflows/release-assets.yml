@@ -81,6 +81,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
+          prerelease: ${{ contains((github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name), '-') }}
           files: |
             dist/appimage/ABCarus-x86_64.AppImage
             dist/appimage/ABCarus-x86_64-portable.tar.gz
@@ -133,6 +134,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
+          prerelease: ${{ contains((github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name), '-') }}
           files: |
             dist/electron-builder/ABCarus-macos-arm64.dmg
             dist/electron-builder/SHA256SUMS-macos-arm64.txt
@@ -184,6 +186,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
+          prerelease: ${{ contains((github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name), '-') }}
           files: |
             dist/electron-builder/ABCarus-macos-x64.dmg
             dist/electron-builder/SHA256SUMS-macos-x64.txt
@@ -283,6 +286,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
+          prerelease: ${{ contains((github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name), '-') }}
           files: |
             dist/electron-builder/ABCarus-setup-x64.exe
             dist/electron-builder/ABCarus-win-unpacked-x64.zip

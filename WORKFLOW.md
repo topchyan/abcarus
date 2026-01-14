@@ -56,6 +56,14 @@ git push origin v0.19.2
 
 For the detailed checklist see `docs/RELEASE_CHECKLIST.md`.
 
+## Release Channels: Stable vs RC (Unstable)
+
+- **Stable** releases use tags like `vX.Y.Z` (e.g. `v0.20.2`) and are treated as the default “Latest” channel.
+- **RC / Unstable** releases use tags like `vX.Y.Z-rc.N` (e.g. `v0.20.3-rc.1`).
+
+GitHub Actions will automatically mark any tag that contains a `-` (for example `-rc.1`) as a GitHub **Pre-release**
+when uploading assets via `.github/workflows/release-assets.yml`.
+
 ## Third-party updates (abc2svg)
 
 Upstream `abc2svg` updates usually arrive as a source snapshot under `third_party/_upd/` (not committed). The safe workflow:
