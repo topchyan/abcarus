@@ -135,24 +135,43 @@ T:Untitled
 K:none
 `;
 const TEMPLATE_ABC = `X:1
-T:Title          % Required for identification
-T:Subtitle       % Useful if applicable
-C:Composer       % Highly Important
-H:History        % Informational
-O:Origin         % Informational
-N:Notes          % Informational
-S:Source         % Informational
-Z:Copyright      % Important, if applicable
-F:From           % URL or File
-G:Grouping       % Not important
-L:1/8            % Note length, highly useful
-M:4/4            % Meter, highly useful
-Q:1/4=60 "Slow"  % Tempo, highly useful
-V:1 clef=treble  % Voice definition, highly useful
-K:C              % Key, Required, must precede the score
-P:A
-  A2 A2 E4  | E2 E2 A4  :||
-w:AB-Ca-rus | AB-Ca-rus
+T:Կատակային Պար
+T:Humoresque Dance
+R:Dance
+C:Հայ ժողովրդական / Armenian Folk
+S:YouTube (see link)
+F:https://www.youtube.com/watch?v=HrPq4KFGYXQ
+Z:ABC transcription: ABCarus
+P:(A B C A B)
+L:1/16
+Q:1/4=100
+M:6/8
+K:A
+%%stretchlast
+%%MIDI program 71
+%%MIDI bassvol 80
+%%MIDI bassprog 32
+%%MIDI chordvol 100
+%%MIDI chordprog 46
+%%MIDI gchord fcfc
+%%MIDI beatstring fpmpmpfpmpmp
+%%MIDI drumon
+%%MIDI drum d3dd2d2d2d2   39 42 42 39 42 36   50 90 90 50 90 90
+%%writefields P 1
+%%partsbox 1
+%--------------------------------------------------------
+[P:A]
+"A"    ee2e2d c2dcBA      | "E"  B2cBAG   "A"   AGABcd  |
+ee2e2d c2dcBA             | "E"  B2cBAG   "A"   ABGA3  :|
+%
+[P:B]
+"F#m"  FF2FcB "Bm" B2cBAG | "C#" A2GABG   "F#m" FcBABG  |
+"F#m"  FF2FcA "Bm" BAcB2G | "C#" AGBABG   "F#m" ABGF3  :|
+%
+[P:C]
+"E7"   EEE2FG "A" AGABcd  | "E"  e2dc2B   "A"   AGBAGF  |
+"E7"   EEE2FG "A" ABcde2  | "E"  e2dc2B   "A"   AGBA3  :|
+%--------------------------------------------------------
 `;
 
 let currentDoc = null;
@@ -313,6 +332,9 @@ let playbackTraceSeq = 0;
 	let playbackLoopEnabled = false;
 	let playbackLoopFromMeasure = 0;
 	let playbackLoopToMeasure = 0;
+	let playbackLoopTuneId = null;
+	const FOCUS_LOOP_DEFAULT_FROM = 1;
+	const FOCUS_LOOP_DEFAULT_TO = 4;
 	let currentPlaybackPlan = null;
 	let pendingPlaybackPlan = null;
 let transportPlayheadOffset = 0; // editor offset used for next transport start
@@ -3533,6 +3555,9 @@ function setActiveTuneText(text, metadata, options = {}) {
     updateHeaderStateUI();
   }
   updateFileHeaderPanel();
+  if (metadata && metadata.id) {
+    maybeResetFocusLoopForTune(metadata.id);
+  }
   scheduleRenderNow({ clearOutput: true });
 }
 
@@ -7049,12 +7074,39 @@ function sanitizeFileBaseName(text) {
   return cleaned.replace(/\s+/g, "-").slice(0, 80);
 }
 
+function pickPreferredLatinText(candidates) {
+  const list = Array.isArray(candidates) ? candidates : [];
+  let fallback = "";
+  let best = "";
+  let bestScore = -1;
+  for (const raw of list) {
+    const text = String(raw || "").trim();
+    if (!text) continue;
+    if (!fallback) fallback = text;
+    const latin = latinize(text).trim();
+    const letters = (latin.match(/[A-Za-z]/g) || []).length;
+    const score = letters > 0 ? letters : 0;
+    if (score > bestScore) {
+      bestScore = score;
+      best = text;
+    }
+  }
+  return best || fallback || "";
+}
+
+function hasAsciiAlnum(text) {
+  const latin = latinize(String(text || "")).trim();
+  return /[A-Za-z0-9]/.test(latin);
+}
+
 function parseAbcHeaderFields(text) {
-  const fields = { title: "", composer: "", key: "" };
+  const fields = { titles: [], title: "", composer: "", key: "" };
   const lines = String(text || "").split(/\r\n|\n|\r/);
   for (const line of lines) {
-    if (!fields.title && /^T:/.test(line)) {
-      fields.title = line.replace(/^T:\s*/, "").trim();
+    if (/^T:/.test(line)) {
+      const t = line.replace(/^T:\s*/, "").trim();
+      if (t) fields.titles.push(t);
+      if (!fields.title) fields.title = t;
     } else if (!fields.composer && /^C:/.test(line)) {
       fields.composer = line.replace(/^C:\s*/, "").trim();
     } else if (!fields.key && /^K:/.test(line)) {
@@ -7062,6 +7114,8 @@ function parseAbcHeaderFields(text) {
       break;
     }
   }
+  const preferred = pickPreferredLatinText(fields.titles);
+  if (preferred) fields.title = preferred;
   return fields;
 }
 
@@ -7086,11 +7140,11 @@ function parseTuneIdentityFields(text) {
 
 function getSuggestedBaseName() {
   const parsed = parseAbcHeaderFields(getEditorValue());
-  const title = (activeTuneMeta && activeTuneMeta.title) || parsed.title || "untitled";
-  const composer = (activeTuneMeta && activeTuneMeta.composer) || parsed.composer || "";
-  const key = (activeTuneMeta && activeTuneMeta.key) || parsed.key || "";
-  const parts = [title, composer, key].filter(Boolean);
-  return sanitizeFileBaseName(parts.join(" - "));
+  const title = parsed.title || (activeTuneMeta && activeTuneMeta.title) || "untitled";
+  const composerCandidate = parsed.composer || (activeTuneMeta && activeTuneMeta.composer) || "";
+  const composer = hasAsciiAlnum(composerCandidate) ? composerCandidate : "";
+  const parts = composer ? [title, composer] : [title];
+  return sanitizeFileBaseName(parts.join("_"));
 }
 
 function getPlaybackText() {
@@ -7556,6 +7610,8 @@ function getSetListSuggestedBaseName() {
 
 async function renderSetListSvgMarkupForPrint(options = {}) {
   const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+  const includeIssueCards = options.includeIssueCards !== false;
+  const includeIssueSummary = options.includeIssueSummary !== false;
   if (!Array.isArray(setListItems) || setListItems.length === 0) {
     return { ok: false, error: "No tunes in Set List." };
   }
@@ -7607,7 +7663,7 @@ async function renderSetListSvgMarkupForPrint(options = {}) {
         return `${msg}|${loc}`;
       }));
       summary.push({ tune, count: uniqueKeys.size });
-      current.push(buildPrintErrorCard(entry, tune, tuneErrors).trim());
+      if (includeIssueCards) current.push(buildPrintErrorCard(entry, tune, tuneErrors).trim());
     }
 
     if (res.svg && res.svg.trim()) {
@@ -7621,13 +7677,18 @@ async function renderSetListSvgMarkupForPrint(options = {}) {
   if (!blocks.length) return { ok: false, error: "No SVG output produced." };
 
   const parts = [];
-  if (summary.length) {
+  if (includeIssueSummary && summary.length) {
     parts.push(buildPrintErrorSummary(entry, summary, total).trim());
   }
   for (const block of blocks) {
     parts.push(`<div class="print-tune">${block.join("\n")}</div>`);
   }
-  return { ok: true, svg: parts.join("\n") };
+  const issues = {
+    totalTunes: total,
+    tunesWithIssues: summary.length,
+    totalErrors: summary.reduce((sum, item) => sum + (Number.isFinite(Number(item.count)) ? Number(item.count) : 0), 0),
+  };
+  return { ok: true, svg: parts.join("\n"), issues };
 }
 
 async function runPrintSetListAction(type) {
@@ -7637,7 +7698,10 @@ async function runPrintSetListAction(type) {
     return;
   }
   setStatus("Rendering…");
+  const showIssuesInMarkup = type === "preview";
   const renderRes = await renderSetListSvgMarkupForPrint({
+    includeIssueCards: showIssuesInMarkup,
+    includeIssueSummary: showIssuesInMarkup,
     onProgress: (current, total) => {
       setStatus(`Rendering tunes… ${current}/${total}`);
     },
@@ -7668,7 +7732,11 @@ async function runPrintSetListAction(type) {
   if (res && res.ok) {
     setStatus("OK");
     if (type === "pdf" && res.path) {
-      showToast(`Exported PDF: ${res.path}`);
+      const issues = renderRes.issues || null;
+      const suffix = (issues && issues.tunesWithIssues)
+        ? ` (${issues.tunesWithIssues} tunes had issues; use Preview for details)`
+        : "";
+      showToast(`Exported PDF: ${res.path}${suffix}`);
     }
   } else if (res && res.error && res.error !== "Canceled") {
     setStatus("Error");
@@ -10123,16 +10191,17 @@ async function fileNew() {
 }
 
 async function fileNewFromTemplate() {
+  const ok = await ensureSafeToAbandonCurrentDoc("creating a new tune");
+  if (!ok) return;
+
   const targetPath = (activeTuneMeta && activeTuneMeta.path)
     ? String(activeTuneMeta.path)
     : (activeFilePath ? String(activeFilePath) : "");
   if (!targetPath) {
-    showToast("Open/select a target .abc file first.", 2800);
+    setActiveTuneText(TEMPLATE_ABC, null, { markDirty: true });
+    showToast("Template opened.", 1800);
     return;
   }
-
-  const ok = await ensureSafeToAbandonCurrentDoc("creating a new tune");
-  if (!ok) return;
 
   let nextX = "";
   try {
@@ -10197,7 +10266,11 @@ function setNewTuneDraftInActiveFile(text, { filePath, basename, xNumber } = {})
 async function fileNewTune() {
   const entry = getActiveFileEntry();
   if (!entry || !entry.path) {
-    showToast("Load a library file first.", 2400);
+    const ok = await ensureSafeToAbandonCurrentDoc("creating a new tune");
+    if (!ok) return;
+    const template = ensureXNumberInAbc(buildNewTuneDraftTemplate(""), 1);
+    setActiveTuneText(template, null, { markDirty: true });
+    showToast("New tune draft opened.", 1800);
     return;
   }
   const ok = await ensureSafeToAbandonCurrentDoc("creating a new tune");
@@ -11451,6 +11524,9 @@ function setFocusModeEnabled(nextEnabled) {
       });
     }
     focusPrevLibraryVisible = null;
+  }
+  if (focusModeEnabled) {
+    maybeResetFocusLoopForTune(activeTuneId, { updateUi: false });
   }
   updateFocusModeUi();
 }
@@ -13141,11 +13217,36 @@ function updatePracticeUi() {
   }
 }
 
+function normalizeLoopBounds(fromMeasure, toMeasure, { changedField } = {}) {
+  const from = clampInt(fromMeasure, 0, 100000, 0);
+  const to = clampInt(toMeasure, 0, 100000, 0);
+  if (from > 0 && to > 0 && from > to) {
+    if (changedField === "to") return { from: to, to };
+    return { from, to: from };
+  }
+  return { from, to };
+}
+
+function maybeResetFocusLoopForTune(tuneId, { updateUi = true } = {}) {
+  if (!focusModeEnabled) return;
+  const id = tuneId != null ? String(tuneId) : "";
+  if (!id) return;
+  const savedId = playbackLoopTuneId != null ? String(playbackLoopTuneId) : "";
+  if (savedId && savedId === id) return;
+
+  const normalized = normalizeLoopBounds(FOCUS_LOOP_DEFAULT_FROM, FOCUS_LOOP_DEFAULT_TO);
+  playbackLoopFromMeasure = normalized.from;
+  playbackLoopToMeasure = normalized.to;
+  syncPendingPlaybackPlan();
+  if (updateUi) updatePracticeUi();
+}
+
 function setLoopFromSettings(settings) {
   if (!settings || typeof settings !== "object") return;
   playbackLoopEnabled = Boolean(settings.playbackLoopEnabled);
   playbackLoopFromMeasure = clampInt(settings.playbackLoopFromMeasure, 0, 100000, 0);
   playbackLoopToMeasure = clampInt(settings.playbackLoopToMeasure, 0, 100000, 0);
+  playbackLoopTuneId = (typeof settings.playbackLoopTuneId === "string") ? settings.playbackLoopTuneId : null;
   updatePracticeUi();
 }
 
@@ -15399,32 +15500,56 @@ if ($practiceLoopEnabled) {
 if ($practiceLoopFrom) {
   $practiceLoopFrom.addEventListener("input", () => {
     const next = clampLoopField($practiceLoopFrom.value);
-    playbackLoopFromMeasure = next;
+    const normalized = normalizeLoopBounds(next, playbackLoopToMeasure, { changedField: "from" });
+    playbackLoopFromMeasure = normalized.from;
+    playbackLoopToMeasure = normalized.to;
     syncPendingPlaybackPlan();
     updatePracticeUi();
   });
   $practiceLoopFrom.addEventListener("change", () => {
     const next = clampLoopField($practiceLoopFrom.value);
-    playbackLoopFromMeasure = next;
+    const normalized = normalizeLoopBounds(next, playbackLoopToMeasure, { changedField: "from" });
+    playbackLoopFromMeasure = normalized.from;
+    playbackLoopToMeasure = normalized.to;
     syncPendingPlaybackPlan();
     updatePracticeUi();
-    persistLoopSettingsPatch({ playbackLoopFromMeasure: next }).catch(() => {});
+    const patch = {
+      playbackLoopFromMeasure: playbackLoopFromMeasure,
+      playbackLoopToMeasure: playbackLoopToMeasure,
+    };
+    if (activeTuneId) {
+      playbackLoopTuneId = String(activeTuneId);
+      patch.playbackLoopTuneId = playbackLoopTuneId;
+    }
+    persistLoopSettingsPatch(patch).catch(() => {});
   });
 }
 
 if ($practiceLoopTo) {
   $practiceLoopTo.addEventListener("input", () => {
     const next = clampLoopField($practiceLoopTo.value);
-    playbackLoopToMeasure = next;
+    const normalized = normalizeLoopBounds(playbackLoopFromMeasure, next, { changedField: "to" });
+    playbackLoopFromMeasure = normalized.from;
+    playbackLoopToMeasure = normalized.to;
     syncPendingPlaybackPlan();
     updatePracticeUi();
   });
   $practiceLoopTo.addEventListener("change", () => {
     const next = clampLoopField($practiceLoopTo.value);
-    playbackLoopToMeasure = next;
+    const normalized = normalizeLoopBounds(playbackLoopFromMeasure, next, { changedField: "to" });
+    playbackLoopFromMeasure = normalized.from;
+    playbackLoopToMeasure = normalized.to;
     syncPendingPlaybackPlan();
     updatePracticeUi();
-    persistLoopSettingsPatch({ playbackLoopToMeasure: next }).catch(() => {});
+    const patch = {
+      playbackLoopFromMeasure: playbackLoopFromMeasure,
+      playbackLoopToMeasure: playbackLoopToMeasure,
+    };
+    if (activeTuneId) {
+      playbackLoopTuneId = String(activeTuneId);
+      patch.playbackLoopTuneId = playbackLoopTuneId;
+    }
+    persistLoopSettingsPatch(patch).catch(() => {});
   });
 }
 
