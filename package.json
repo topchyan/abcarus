@@ -1,8 +1,15 @@
 {
   "name": "abc-electron-proto",
   "version": "0.20.2",
+  "description": "Desktop application for working with music in ABC notation.",
   "main": "src/main/index.js",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/topchyan/abcarus.git"
+  },
+  "homepage": "https://github.com/topchyan/abcarus",
   "scripts": {
     "start": "electron .",
     "appimage": "bash scripts/build_appimage.sh",

@@ -18,7 +18,7 @@ See `docs/DISCLAIMER.md` and `CHANGELOG.md`.
 - Release page: [GitHub Releases][releases-latest]
 - Linux: [AppImage][dl-linux-appimage] · [Portable (AppDir tar.gz)][dl-linux-portable] · [SHA256][sha-linux]
 - Windows: [Setup][dl-win-setup] · [Portable (.exe)][dl-win-portable] · [Portable (win-unpacked zip)][dl-win-unpacked] · [SHA256][sha-windows]
-- macOS: [DMG (arm64)][dl-mac-arm64] · [DMG (x64)][dl-mac-x64] · [SHA256 (arm64)][sha-mac-arm64] · [SHA256 (x64)][sha-mac-x64]
+- macOS (experimental): [DMG (arm64)][dl-mac-arm64] · [DMG (x64)][dl-mac-x64] · [SHA256 (arm64)][sha-mac-arm64] · [SHA256 (x64)][sha-mac-x64]
 
 [releases-latest]: https://github.com/topchyan/abcarus/releases/latest
 
