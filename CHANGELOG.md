@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [0.20.3] - 2026-01-14
 ### Changed
 - Packaging metadata: add repository/homepage/license fields for better tooling interoperability.
 - Docs: clarify macOS downloads as experimental.
@@ -13,8 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Third-party notices: correct abc2svg upstream link and record local patch notes.
 - abc2svg tooling: patch vendored `abc2mid` to load drum support for `%%MIDI drum*` inputs.
-
-
 
 ## [0.20.2] - 2026-01-14
 ### Added
