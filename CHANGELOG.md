@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [0.20.2] - 2026-01-14
 ### Added
 - Set List: snapshot-based tune assembly with drag & drop reorder, print/PDF/export, and optional header template.
 
@@ -18,7 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Focus: loop range remembers values per tune and prevents invalid `from > to`.
 - Set List: hide error summary cards in exported/printed PDFs (Preview-only).
 - New Tune / New Tune from Template: allow opening drafts without an active library file (use normal Save/Close flow).
-
 
 ## [0.20.1] - 2026-01-13
 ### Added
