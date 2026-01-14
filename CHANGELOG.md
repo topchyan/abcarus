@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Set List: snapshot-based tune assembly with drag & drop reorder, print/PDF/export, and optional header template.
+
+### Changed
+- Templates: replace the default template tune with “Կատակային Պար / Humoresque Dance”.
+- Save As: suggest filenames as `<T>_<C>.abc` (prefers latin `T:` when multiple titles are present).
+
+### Fixed
+- Focus: hide Library Tree while in Focus mode (restores on exit) so the score is centered.
+- Focus: loop range remembers values per tune and prevents invalid `from > to`.
+- Set List: hide error summary cards in exported/printed PDFs (Preview-only).
+- New Tune / New Tune from Template: allow opening drafts without an active library file (use normal Save/Close flow).
 
 
 ## [0.20.1] - 2026-01-13
