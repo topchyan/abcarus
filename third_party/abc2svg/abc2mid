@@ -138,6 +138,7 @@ followed by the character of a ABC information field.")
 
 	load(path + "util/sndgen.js")	// sound generator
 	load(path + "util/chord.js")	// chord generator
+	load(path + "util/drum.js")	// drum generator (for %%MIDI drum*)
 	load(path + "midigen.js")	// MIDI generator
 
 	// parse the ABC code

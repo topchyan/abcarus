@@ -11,10 +11,12 @@ ABCarus uses **abc2svg** for rendering and basic playback of ABC notation.
 - Project: abc2svg
 - Author: Jean-François Moine
 - License: GNU Lesser General Public License (LGPL)
-- Website: https://github.com/leesavide/abc2svg
+- Website: https://chiselapp.com/user/moinejf/repository/abc2svg
 
 abc2svg is used as an external library.
-No modifications have been made to the abc2svg source code unless explicitly stated.
+
+Local patches:
+- `third_party/abc2svg/abc2mid`: load `util/drum.js` to avoid a crash when generating MIDI from tunes that use `%%MIDI drum*`.
 
 ---
 
