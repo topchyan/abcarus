@@ -20,6 +20,10 @@ See `docs/DISCLAIMER.md` and `CHANGELOG.md`.
 - Windows: [Setup][dl-win-setup] · [Portable (.exe)][dl-win-portable] · [Portable (win-unpacked zip)][dl-win-unpacked] · [SHA256][sha-windows]
 - macOS (experimental): [DMG (arm64)][dl-mac-arm64] · [DMG (x64)][dl-mac-x64] · [SHA256 (arm64)][sha-mac-arm64] · [SHA256 (x64)][sha-mac-x64]
 
+macOS note: builds are currently not notarized. On some macOS versions, Gatekeeper may report the app as “damaged” and refuse to open it.
+After verifying the SHA256 sums, you can remove the quarantine attribute:
+`xattr -dr com.apple.quarantine /Applications/ABCarus.app`.
+
 [releases-latest]: https://github.com/topchyan/abcarus/releases/latest
 
 [dl-linux-appimage]: https://github.com/topchyan/abcarus/releases/latest/download/ABCarus-x86_64.AppImage
