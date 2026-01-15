@@ -12314,11 +12314,15 @@ function schedulePlaybackUiUpdate(istart) {
     const fromInjected = editorLen && editorIdx >= editorLen;
     if (fromInjected) return;
 
-    if (followVoiceId || followVoiceIndex != null) {
+    if (followVoiceId != null || followVoiceIndex != null) {
       const symbol = findSymbolAtOrBefore(i);
       if (symbol && symbol.p_v) {
-        const sameId = followVoiceId && symbol.p_v.id === followVoiceId;
-        const sameIndex = followVoiceIndex != null && symbol.p_v.v === followVoiceIndex;
+        const wantId = followVoiceId != null ? String(followVoiceId) : null;
+        const wantIndex = followVoiceIndex != null ? Number(followVoiceIndex) : null;
+        const symId = symbol.p_v.id != null ? String(symbol.p_v.id) : "";
+        const symIndex = Number.isFinite(symbol.p_v.v) ? Number(symbol.p_v.v) : null;
+        const sameId = wantId && symId && symId === wantId;
+        const sameIndex = wantIndex != null && symIndex != null && symIndex === wantIndex;
         if (!sameId && !sameIndex) return;
       }
     }
@@ -12339,10 +12343,24 @@ function schedulePlaybackUiUpdate(istart) {
     // This avoids ambiguity when the left barline of the current measure is on the previous system line.
     clearSvgFollowBarHighlight();
 
-    const els = $out.querySelectorAll("._" + renderIdx + "_");
-    const noteEls = els && els.length
+    let els = $out.querySelectorAll("._" + renderIdx + "_");
+    let noteEls = els && els.length
       ? Array.from(els).filter((el) => el.classList && el.classList.contains("note-hl"))
       : [];
+    if (!noteEls.length && Number.isFinite(renderIdx)) {
+      // Deterministic fallback: search backward for a nearby mapped note.
+      // Some playback istart values do not land exactly on a `note-hl` anchor (multi-voice, ties, etc.).
+      const maxBack = 240;
+      for (let d = 1; d <= maxBack; d += 1) {
+        const probe = renderIdx - d;
+        if (probe < 0) break;
+        els = $out.querySelectorAll("._" + probe + "_");
+        noteEls = els && els.length
+          ? Array.from(els).filter((el) => el.classList && el.classList.contains("note-hl"))
+          : [];
+        if (noteEls.length) break;
+      }
+    }
     const chosen = noteEls.length ? pickClosestNoteElement(noteEls) : null;
     if (chosen) {
       const nearestBar = findNearestBarElForNote(chosen);
