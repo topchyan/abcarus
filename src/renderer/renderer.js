@@ -14449,6 +14449,7 @@ function normalizeKeyFieldToBeLastBeforeBodyForPlayback(text) {
   const isFieldLine = (line) => /^\s*[A-Za-z]:/.test(line);
   const isContinuationLine = (line) => /^\s*\+:\s*/.test(line);
   const isKeyLine = (line) => /^\s*K:/.test(line);
+  const isVoiceLine = (line) => /^\s*V:/.test(line);
   const isCommentLine = (line) => /^\s*%/.test(line);
   const isDirectiveLine = (line) => /^\s*%%/.test(line);
   const beginsBlock = (trimmed) => {
@@ -14512,10 +14513,33 @@ function normalizeKeyFieldToBeLastBeforeBodyForPlayback(text) {
     }
     if (!hasPostKeyHeader) return false;
 
-    const kLine = lines[kIdx];
-    lines.splice(kIdx, 1);
     const insertAt = bodyStart - 1;
-    lines.splice(insertAt, 0, kLine);
+    if (insertAt <= kIdx) return false;
+
+    // Offset-stable normalization:
+    // Instead of moving lines (which shifts character offsets and breaks Follow/SVG mapping),
+    // relocate the *content* of K: to the last header line slot while preserving line lengths.
+    //
+    // We intentionally sacrifice the original content of the destination line (typically %%score / directives),
+    // but keep all other post-K header lines (notably V:) intact.
+    //
+    // If the last header line is a voice header, we refuse to do the swap (losing V: would break playback).
+    // In that rare case, we keep the original order and let other compat paths handle playback.
+    const dstRaw = lines[insertAt] || "";
+    if (isVoiceLine(dstRaw)) return false;
+
+    const kLine = lines[kIdx] || "";
+    const dstLen = String(dstRaw).length;
+    const kTrimmed = kLine.replace(/[\r\n]+$/, "");
+    const kPadded = (kTrimmed.length >= dstLen)
+      ? kTrimmed.slice(0, dstLen)
+      : (kTrimmed + " ".repeat(dstLen - kTrimmed.length));
+
+    const srcLen = String(kLine).length;
+    const placeholder = srcLen <= 0 ? "%" : (`%${" ".repeat(Math.max(0, srcLen - 1))}`);
+
+    lines[kIdx] = placeholder;
+    lines[insertAt] = kPadded;
     return true;
   };
 
