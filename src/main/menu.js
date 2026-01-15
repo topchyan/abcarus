@@ -133,6 +133,14 @@ function buildMenuTemplate(appState, sendMenuAction) {
       { label: "Toggle Library", accelerator: "CmdOrCtrl+L", click: () => sendMenuAction("toggleLibrary") },
       { label: "Toggle File Header", accelerator: "CmdOrCtrl+Alt+H", click: () => sendMenuAction("toggleFileHeader") },
       { label: "Playback Focus Mode", accelerator: "F7", click: () => sendMenuAction("toggleFocusMode") },
+      { label: "Toggle Split Orientation", accelerator: "CmdOrCtrl+Alt+\\", click: () => sendMenuAction("toggleSplitOrientation") },
+      {
+        label: "Split Orientation",
+        submenu: [
+          { label: "Vertical", click: () => sendMenuAction({ type: "setSplitOrientation", value: "vertical" }) },
+          { label: "Horizontal", click: () => sendMenuAction({ type: "setSplitOrientation", value: "horizontal" }) },
+        ],
+      },
       { type: "separator" },
       { label: "Zoom In", accelerator: "CmdOrCtrl+=", click: () => sendMenuAction("zoomIn") },
       { label: "Zoom Out", accelerator: "CmdOrCtrl+-", click: () => sendMenuAction("zoomOut") },
@@ -225,6 +233,8 @@ function buildMenuTemplate(appState, sendMenuAction) {
       { label: "ABC Notation Homepage", click: () => sendMenuAction({ type: "helpLink", url: "https://abcnotation.com/" }) },
       { label: "ABCusers (Groups.io)", click: () => sendMenuAction({ type: "helpLink", url: "https://groups.io/g/abcusers/topics" }) },
       { label: "ABCNotation User Group (Facebook)", click: () => sendMenuAction({ type: "helpLink", url: "https://www.facebook.com/groups/498671610282070" }) },
+      { type: "separator" },
+      { label: "Report an Issue…", click: () => sendMenuAction({ type: "helpLink", url: "https://github.com/topchyan/abcarus/issues/new/choose" }) },
       ...(isMac ? [] : [{ type: "separator" }, { label: "About", click: () => sendMenuAction("about") }]),
     ],
   };

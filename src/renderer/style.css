@@ -78,6 +78,7 @@ body {
 
 body.raw-mode .right-split {
   grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
 }
 
 body.raw-mode .split-divider,
@@ -133,7 +134,22 @@ header {
 }
 
 .header-row-top {
-  justify-content: space-between;
+  justify-content: center;
+}
+
+.left-controls {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.center-controls {
+  flex: 0 0 auto;
+  justify-content: center;
+}
+
+.right-controls {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .practice-controls {
@@ -922,6 +938,26 @@ body.resizing * {
   overflow: hidden;
 }
 
+body.right-split-horizontal .right-split {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr 6px 1fr;
+}
+
+body.right-split-horizontal .render-pane {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+body.right-split-horizontal .split-divider {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+body.right-split-horizontal .editor-pane {
+  grid-column: 1;
+  grid-row: 3;
+}
+
 .render-pane {
   flex: 1;
   overflow: scroll;
@@ -958,6 +994,17 @@ body.resizing * {
   border-left: 1px solid #d0d0d0;
   border-right: 1px solid #d0d0d0;
   touch-action: none;
+}
+
+body.right-split-horizontal .split-divider {
+  width: 100%;
+  height: 6px;
+  cursor: row-resize;
+  background: linear-gradient(0deg, #f4f4f4, #dcdcdc, #f4f4f4);
+  border-left: none;
+  border-right: none;
+  border-top: 1px solid #d0d0d0;
+  border-bottom: 1px solid #d0d0d0;
 }
 
 body.resizing-rows,
