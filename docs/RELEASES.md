@@ -28,6 +28,16 @@ Versioning details live in `docs/VERSIONING.md` (to avoid duplicating rules acro
 - runs automatically on tag pushes matching `v*`;
 - can be run manually (workflow_dispatch) to rebuild artifacts for an existing tag.
 
+## macOS Gatekeeper note (experimental builds)
+
+ABCarus macOS DMGs are currently not notarized. On some macOS versions, Gatekeeper may report the app as “damaged” and refuse to open it.
+
+After verifying the SHA256 sums, you can remove the quarantine attribute:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/ABCarus.app
+```
+
 Manual rebuild (upload to GitHub Release):
 - Run the workflow with `ref: vX.Y.Z` and `publish: true`.
 - `publish` is ignored for non-tag refs; uploads are only allowed for `v*` tags.
