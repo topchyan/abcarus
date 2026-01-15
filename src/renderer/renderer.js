@@ -1247,6 +1247,7 @@ window.addEventListener("unhandledrejection", (e) => {
 
 const MIN_PANE_WIDTH = 220;
 const MIN_RIGHT_PANE_WIDTH = 220;
+const MIN_RIGHT_PANE_HEIGHT = 180;
 const MIN_ERROR_PANE_HEIGHT = 120;
 const USE_ERROR_OVERLAY = true;
 const LIBRARY_SEARCH_DEBOUNCE_MS = 180;
@@ -1392,19 +1393,109 @@ function initPaneResizer() {
 }
 
 let lastEditorWidth = 320;
+let lastEditorHeight = 240;
+let rightSplitOrientation = "vertical"; // "vertical" | "horizontal"
+let rightSplitRatioVertical = 0.5;
+let rightSplitRatioHorizontal = 0.5;
+let suppressFollowScrollUntilMs = 0;
+
+let layoutPrefsSaveTimer = null;
+let pendingLayoutPrefsPatch = null;
+const LAYOUT_PREFS_SAVE_DEBOUNCE_MS = 300;
+
+function clampRatio(value, fallback = 0.5) {
+  const v = Number(value);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.max(0.1, Math.min(0.9, v));
+}
+
+function scheduleSaveLayoutPrefs(patch) {
+  if (!patch || typeof patch !== "object") return;
+  if (!window.api || typeof window.api.updateSettings !== "function") return;
+  pendingLayoutPrefsPatch = { ...(pendingLayoutPrefsPatch || {}), ...patch };
+  if (layoutPrefsSaveTimer) clearTimeout(layoutPrefsSaveTimer);
+  layoutPrefsSaveTimer = setTimeout(async () => {
+    const nextPatch = pendingLayoutPrefsPatch;
+    pendingLayoutPrefsPatch = null;
+    layoutPrefsSaveTimer = null;
+    if (!nextPatch) return;
+    try { await window.api.updateSettings(nextPatch); } catch {}
+  }, LAYOUT_PREFS_SAVE_DEBOUNCE_MS);
+}
+
+function isNormalModeForSplitToggle() {
+  return !rawMode && !focusModeEnabled;
+}
+
+function applyRightSplitOrientation(next) {
+  const normalized = (next === "horizontal") ? "horizontal" : "vertical";
+  rightSplitOrientation = normalized;
+  document.body.classList.toggle("right-split-horizontal", normalized === "horizontal");
+  if ($splitDivider) {
+    $splitDivider.setAttribute("aria-orientation", normalized === "horizontal" ? "horizontal" : "vertical");
+  }
+}
+
+function applyRightSplitSizesFromRatio() {
+  if (!$rightSplit || !$splitDivider || !$editorPane) return;
+  if (rawMode) {
+    $rightSplit.style.gridTemplateColumns = "1fr";
+    $rightSplit.style.gridTemplateRows = "1fr";
+    return;
+  }
+  const dividerSize = (rightSplitOrientation === "horizontal")
+    ? ($splitDivider.offsetHeight || 6)
+    : ($splitDivider.offsetWidth || 6);
+
+  if (rightSplitOrientation === "horizontal") {
+    const total = $rightSplit.clientHeight;
+    const min = Math.min(MIN_RIGHT_PANE_HEIGHT, Math.max(0, (total - dividerSize) / 2));
+    const ratio = clampRatio(rightSplitRatioHorizontal, 0.5);
+    const wanted = (total - dividerSize) * ratio;
+    const clamped = Math.max(min, Math.min(wanted, total - min - dividerSize));
+    lastEditorHeight = clamped;
+    $rightSplit.style.gridTemplateColumns = "1fr";
+    $rightSplit.style.gridTemplateRows = `${Math.round(clamped)}px ${dividerSize}px 1fr`;
+  } else {
+    const total = $rightSplit.clientWidth;
+    const min = Math.min(MIN_RIGHT_PANE_WIDTH, Math.max(0, (total - dividerSize) / 2));
+    const ratio = clampRatio(rightSplitRatioVertical, 0.5);
+    const wanted = (total - dividerSize) * ratio;
+    const clamped = Math.max(min, Math.min(wanted, total - min - dividerSize));
+    lastEditorWidth = clamped;
+    $rightSplit.style.gridTemplateRows = "1fr";
+    $rightSplit.style.gridTemplateColumns = `${Math.round(clamped)}px ${dividerSize}px 1fr`;
+  }
+}
 
 function setRightPaneSizes(leftWidth) {
   if (!$rightSplit || !$splitDivider || !$renderPane || !$editorPane) return;
   if (rawMode) {
     $rightSplit.style.gridTemplateColumns = "1fr";
+    $rightSplit.style.gridTemplateRows = "1fr";
     return;
   }
-  const total = $rightSplit.clientWidth;
-  const dividerWidth = $splitDivider.offsetWidth || 6;
-  const min = Math.min(MIN_RIGHT_PANE_WIDTH, Math.max(0, (total - dividerWidth) / 2));
-  const clamped = Math.max(min, Math.min(leftWidth, total - min - dividerWidth));
-  lastEditorWidth = clamped;
-  $rightSplit.style.gridTemplateColumns = `${clamped}px ${dividerWidth}px 1fr`;
+  if (rightSplitOrientation === "horizontal") {
+    const total = $rightSplit.clientHeight;
+    const dividerHeight = $splitDivider.offsetHeight || 6;
+    const min = Math.min(MIN_RIGHT_PANE_HEIGHT, Math.max(0, (total - dividerHeight) / 2));
+    const clamped = Math.max(min, Math.min(leftWidth, total - min - dividerHeight));
+    lastEditorHeight = clamped;
+    rightSplitRatioHorizontal = clampRatio((total - dividerHeight) ? (clamped / (total - dividerHeight)) : rightSplitRatioHorizontal, rightSplitRatioHorizontal);
+    $rightSplit.style.gridTemplateColumns = "1fr";
+    $rightSplit.style.gridTemplateRows = `${Math.round(clamped)}px ${dividerHeight}px 1fr`;
+    scheduleSaveLayoutPrefs({ layoutSplitRatioHorizontal: rightSplitRatioHorizontal });
+  } else {
+    const total = $rightSplit.clientWidth;
+    const dividerWidth = $splitDivider.offsetWidth || 6;
+    const min = Math.min(MIN_RIGHT_PANE_WIDTH, Math.max(0, (total - dividerWidth) / 2));
+    const clamped = Math.max(min, Math.min(leftWidth, total - min - dividerWidth));
+    lastEditorWidth = clamped;
+    rightSplitRatioVertical = clampRatio((total - dividerWidth) ? (clamped / (total - dividerWidth)) : rightSplitRatioVertical, rightSplitRatioVertical);
+    $rightSplit.style.gridTemplateRows = "1fr";
+    $rightSplit.style.gridTemplateColumns = `${Math.round(clamped)}px ${dividerWidth}px 1fr`;
+    scheduleSaveLayoutPrefs({ layoutSplitRatioVertical: rightSplitRatioVertical });
+  }
 }
 
 function initRightPaneResizer() {
@@ -1412,11 +1503,13 @@ function initRightPaneResizer() {
   $splitDivider.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     $splitDivider.setPointerCapture(e.pointerId);
-    const startLeft = $editorPane.getBoundingClientRect().width;
-    const startX = e.clientX;
+    const startRect = $editorPane.getBoundingClientRect();
+    const startSize = (rightSplitOrientation === "horizontal") ? startRect.height : startRect.width;
+    const startPos = (rightSplitOrientation === "horizontal") ? e.clientY : e.clientX;
 
     const onMove = (ev) => {
-      setRightPaneSizes(startLeft + (ev.clientX - startX));
+      const delta = (rightSplitOrientation === "horizontal") ? (ev.clientY - startPos) : (ev.clientX - startPos);
+      setRightPaneSizes(startSize + delta);
     };
 
     const onUp = (ev) => {
@@ -1425,29 +1518,33 @@ function initRightPaneResizer() {
       $splitDivider.removeEventListener("pointerup", onUp);
       $splitDivider.removeEventListener("pointercancel", onUp);
       document.body.classList.remove("resizing-cols");
+      document.body.classList.remove("resizing-rows");
     };
 
-    document.body.classList.add("resizing-cols");
+    if (rightSplitOrientation === "horizontal") document.body.classList.add("resizing-rows");
+    else document.body.classList.add("resizing-cols");
     $splitDivider.addEventListener("pointermove", onMove);
     $splitDivider.addEventListener("pointerup", onUp);
     $splitDivider.addEventListener("pointercancel", onUp);
   });
 
   window.addEventListener("resize", () => {
-    if (rawMode) {
-      if ($rightSplit) $rightSplit.style.gridTemplateColumns = "1fr";
-      return;
-    }
-    setRightPaneSizes(lastEditorWidth || MIN_RIGHT_PANE_WIDTH);
+    applyRightSplitSizesFromRatio();
   });
 }
 
 function resetRightPaneSplit() {
   if (!$rightSplit) return;
-  const total = $rightSplit.clientWidth;
-  const dividerWidth = $splitDivider ? ($splitDivider.offsetWidth || 6) : 6;
-  const leftWidth = Math.max(MIN_RIGHT_PANE_WIDTH, Math.floor((total - dividerWidth) / 2));
-  setRightPaneSizes(leftWidth);
+  if ($splitDivider) {
+    if (rightSplitOrientation === "horizontal") {
+      rightSplitRatioHorizontal = 0.5;
+      scheduleSaveLayoutPrefs({ layoutSplitRatioHorizontal: rightSplitRatioHorizontal });
+    } else {
+      rightSplitRatioVertical = 0.5;
+      scheduleSaveLayoutPrefs({ layoutSplitRatioVertical: rightSplitRatioVertical });
+    }
+  }
+  applyRightSplitSizesFromRatio();
 }
 
 let lastErrorHeight = 180;
@@ -2836,7 +2933,8 @@ function scheduleStartupLayoutReset() {
     if (startupLayoutResetDone) return;
     startupLayoutResetDone = true;
     try {
-      resetLayout();
+      // On startup, respect persisted zoom and split preferences.
+      applyRightSplitSizesFromRatio();
     } catch {}
     requestAnimationFrame(() => {
       try { centerRenderPaneOnCurrentAnchor(); } catch {}
@@ -2898,13 +2996,7 @@ function setRawModeUI(enabled) {
   if (rawMode && focusModeEnabled) setFocusModeEnabled(false);
   document.body.classList.toggle("raw-mode", rawMode);
   if ($btnToggleRaw) $btnToggleRaw.classList.toggle("toggle-active", rawMode);
-  if ($rightSplit) {
-    if (rawMode) {
-      $rightSplit.style.gridTemplateColumns = "1fr";
-    } else {
-      setRightPaneSizes(lastEditorWidth || MIN_RIGHT_PANE_WIDTH);
-    }
-  }
+  applyRightSplitSizesFromRatio();
   const disablePlayback = rawMode;
   if ($btnPlayPause) $btnPlayPause.disabled = disablePlayback;
   if ($btnStop) $btnStop.disabled = disablePlayback;
@@ -10625,7 +10717,7 @@ function wireMenuActions() {
       const busy = isPlaybackBusy();
       if (busy) {
         // During Play/Pause, ignore menu actions (except Play/Pause itself, Reset Layout, and Quit).
-        const allowed = new Set(["playToggle", "resetLayout", "quit", "playGotoMeasure", "toggleFocusMode"]);
+        const allowed = new Set(["playToggle", "resetLayout", "quit", "playGotoMeasure", "toggleFocusMode", "setSplitOrientation"]);
         if (!allowed.has(actionType)) return;
       }
       if (rawMode) {
@@ -10705,6 +10797,10 @@ function wireMenuActions() {
       else if (actionType === "setList") openSetList();
       else if (actionType === "toggleLibrary") toggleLibrary();
       else if (actionType === "toggleFocusMode") toggleFocusMode();
+      else if (actionType === "setSplitOrientation") {
+        const value = action && action.value ? String(action.value) : "";
+        setSplitOrientation(value, { persist: true, userAction: true });
+      }
       else if (actionType === "renumberXInFile") await renumberXInActiveFile();
       else if (actionType === "navTunePrev") await navigateTuneByDelta(-1);
       else if (actionType === "navTuneNext") await navigateTuneByDelta(1);
@@ -10813,17 +10909,18 @@ if (window.api && typeof window.api.onAppRequestQuit === "function") {
 settingsController = initSettings(window.api);
 if (window.api && typeof window.api.getSettings === "function") {
   window.api.getSettings().then((settings) => {
-    if (settings) {
-      latestSettingsSnapshot = settings;
-      setGlobalHeaderFromSettings(settings);
-      setAbc2svgFontsFromSettings(settings);
-      setSoundfontFromSettings(settings);
-      setDrumVelocityFromSettings(settings);
-      setFollowFromSettings(settings);
-      setLoopFromSettings(settings);
-      setPlaybackAutoScrollFromSettings(settings);
-      applyLibraryPrefsFromSettings(settings);
-      updateGlobalHeaderToggle();
+	      if (settings) {
+	      latestSettingsSnapshot = settings;
+	      setGlobalHeaderFromSettings(settings);
+	      setAbc2svgFontsFromSettings(settings);
+	      setSoundfontFromSettings(settings);
+	      setDrumVelocityFromSettings(settings);
+        setLayoutFromSettings(settings);
+	      setFollowFromSettings(settings);
+	      setLoopFromSettings(settings);
+	      setPlaybackAutoScrollFromSettings(settings);
+	      applyLibraryPrefsFromSettings(settings);
+	      updateGlobalHeaderToggle();
       updateErrorsFeatureUI();
       refreshHeaderLayers().catch(() => {});
       showDisclaimerIfNeeded(settings);
@@ -10847,13 +10944,14 @@ if (window.api && typeof window.api.onSettingsChanged === "function") {
     const prevSoundfont = soundfontName;
     setGlobalHeaderFromSettings(settings);
     setAbc2svgFontsFromSettings(settings);
-    setSoundfontFromSettings(settings);
-    setDrumVelocityFromSettings(settings);
-    setFollowFromSettings(settings);
-    setLoopFromSettings(settings);
-    setPlaybackAutoScrollFromSettings(settings);
-    applyLibraryPrefsFromSettings(settings);
-    updateGlobalHeaderToggle();
+	    setSoundfontFromSettings(settings);
+	    setDrumVelocityFromSettings(settings);
+      setLayoutFromSettings(settings);
+	    setFollowFromSettings(settings);
+	    setLoopFromSettings(settings);
+	    setPlaybackAutoScrollFromSettings(settings);
+	    applyLibraryPrefsFromSettings(settings);
+	    updateGlobalHeaderToggle();
     updateErrorsFeatureUI();
     refreshHeaderLayers().catch(() => {});
     showDisclaimerIfNeeded(settings);
@@ -12390,13 +12488,15 @@ function schedulePlaybackUiUpdate(istart) {
       setSvgPlayheadFromElements(chosen, nearestBar);
       highlightSvgFollowMeasureForNote(chosen, nearestBar);
       const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-      if (now - lastPlaybackUiScrollAt > 90) {
-        maybeScrollRenderToNote(chosen);
-        lastPlaybackUiScrollAt = now;
-      }
-      highlightSourceAt(editorIdx, true);
-      return;
-    }
+	      if (now - lastPlaybackUiScrollAt > 90) {
+          if (!suppressFollowScrollUntilMs || now >= suppressFollowScrollUntilMs) {
+	          maybeScrollRenderToNote(chosen);
+	          lastPlaybackUiScrollAt = now;
+          }
+	      }
+	      highlightSourceAt(editorIdx, true);
+	      return;
+	    }
 
     clearSvgPlayhead();
     clearSvgFollowMeasureHighlight();
@@ -13368,6 +13468,32 @@ function setFollowFromSettings(settings) {
   if (settings.followPlayback === undefined) return;
   followPlayback = settings.followPlayback !== false;
   updateFollowToggle();
+}
+
+function setLayoutFromSettings(settings) {
+  if (!settings || typeof settings !== "object") return;
+  const orientation = (settings.layoutSplitOrientation === "horizontal") ? "horizontal" : "vertical";
+  rightSplitRatioVertical = clampRatio(settings.layoutSplitRatioVertical, rightSplitRatioVertical);
+  rightSplitRatioHorizontal = clampRatio(settings.layoutSplitRatioHorizontal, rightSplitRatioHorizontal);
+  applyRightSplitOrientation(orientation);
+  applyRightSplitSizesFromRatio();
+}
+
+function setSplitOrientation(nextOrientation, { persist = true, userAction = false } = {}) {
+  const next = (nextOrientation === "horizontal") ? "horizontal" : "vertical";
+  if (userAction && !isNormalModeForSplitToggle()) {
+    showToast("Exit Focus/Raw mode to change split orientation.", 2400);
+    return false;
+  }
+  if (rightSplitOrientation === next) return true;
+  applyRightSplitOrientation(next);
+  applyRightSplitSizesFromRatio();
+  // Avoid follow-scroll fighting layout reflow right after a toggle.
+  const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+  suppressFollowScrollUntilMs = now + 250;
+  if (persist) scheduleSaveLayoutPrefs({ layoutSplitOrientation: next });
+  showToast(next === "horizontal" ? "Split: Horizontal" : "Split: Vertical", 1500);
+  return true;
 }
 
 function setPlaybackAutoScrollFromSettings(settings) {

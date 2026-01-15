@@ -133,6 +133,13 @@ function buildMenuTemplate(appState, sendMenuAction) {
       { label: "Toggle Library", accelerator: "CmdOrCtrl+L", click: () => sendMenuAction("toggleLibrary") },
       { label: "Toggle File Header", accelerator: "CmdOrCtrl+Alt+H", click: () => sendMenuAction("toggleFileHeader") },
       { label: "Playback Focus Mode", accelerator: "F7", click: () => sendMenuAction("toggleFocusMode") },
+      {
+        label: "Split Orientation",
+        submenu: [
+          { label: "Vertical", click: () => sendMenuAction({ type: "setSplitOrientation", value: "vertical" }) },
+          { label: "Horizontal", click: () => sendMenuAction({ type: "setSplitOrientation", value: "horizontal" }) },
+        ],
+      },
       { type: "separator" },
       { label: "Zoom In", accelerator: "CmdOrCtrl+=", click: () => sendMenuAction("zoomIn") },
       { label: "Zoom Out", accelerator: "CmdOrCtrl+-", click: () => sendMenuAction("zoomOut") },

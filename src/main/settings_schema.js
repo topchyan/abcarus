@@ -8,6 +8,10 @@ function getPlatformDefaults() {
 function getSettingsSchema() {
   const platformDefaults = getPlatformDefaults();
   return [
+    // UI layout (renderer-managed). These keys are persisted and exportable, but intentionally have no Settings UI controls.
+    { key: "layoutSplitOrientation", type: "string", default: "vertical" },
+    { key: "layoutSplitRatioVertical", type: "number", default: 0.5 },
+    { key: "layoutSplitRatioHorizontal", type: "number", default: 0.5 },
     {
       key: "renderZoom",
       type: "number",
