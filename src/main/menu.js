@@ -233,6 +233,8 @@ function buildMenuTemplate(appState, sendMenuAction) {
       { label: "ABC Notation Homepage", click: () => sendMenuAction({ type: "helpLink", url: "https://abcnotation.com/" }) },
       { label: "ABCusers (Groups.io)", click: () => sendMenuAction({ type: "helpLink", url: "https://groups.io/g/abcusers/topics" }) },
       { label: "ABCNotation User Group (Facebook)", click: () => sendMenuAction({ type: "helpLink", url: "https://www.facebook.com/groups/498671610282070" }) },
+      { type: "separator" },
+      { label: "Report an Issue…", click: () => sendMenuAction({ type: "helpLink", url: "https://github.com/topchyan/abcarus/issues/new/choose" }) },
       ...(isMac ? [] : [{ type: "separator" }, { label: "About", click: () => sendMenuAction("about") }]),
     ],
   };
