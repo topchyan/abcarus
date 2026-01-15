@@ -64,6 +64,7 @@ Packaging scripts are available:
 - `docs/architecture.md`: Main/renderer responsibilities, IPC, and data flow.
 - `docs/REQUIREMENTS.md`: Consolidated product + engineering requirements/invariants.
 - `docs/METHODOLOGY.md`: How we develop (chat-driven) without losing context.
+- `docs/abc2svg-upgrade-playbook.md`: Repeatable pipeline for upgrading `third_party/abc2svg/`.
 - `docs/abc-syntax-policy.md`: ABCarus rules for ABC syntax, linting, and safe transforms.
 - `docs/abc-standards.md`: ABC 2.1/2.2 references used for lint/transforms.
 - `docs/soundfonts.md`: Soundfont selection and local setup.

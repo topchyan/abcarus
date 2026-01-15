@@ -97,6 +97,8 @@ npm run test:truth-scale
 ```
 
 Details + checklist live in `docs/third-party-review.md`.
+For a repeatable end-to-end “pipeline” (including required manual smoke tests and patch policy), use:
+- `docs/abc2svg-upgrade-playbook.md`
 
 ## Verify release via `gh` (no browser)
 
