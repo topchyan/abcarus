@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [0.20.5] - 2026-01-15
 ### Added
 - Layout: horizontal split option for score/editor with persisted split ratios.
 - Toolbar: `Split` toggle button and `Ctrl/Cmd+Alt+\\` shortcut.
@@ -14,8 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Layout (horizontal): score is on top, editor below.
 - Toolbar: transport + Focus controls are centered.
-
-
 
 ## [0.20.4] - 2026-01-15
 ### Fixed
