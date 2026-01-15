@@ -78,7 +78,8 @@ const $practiceLoopTo = document.getElementById("practiceLoopTo");
 const $btnRestart = document.getElementById("btnRestart");
 	const $btnPrevMeasure = document.getElementById("btnPrevMeasure");
 	const $btnNextMeasure = document.getElementById("btnNextMeasure");
-	const $btnResetLayout = document.getElementById("btnResetLayout");
+const $btnResetLayout = document.getElementById("btnResetLayout");
+const $btnToggleSplit = document.getElementById("btnToggleSplit");
 	const $btnFocusMode = document.getElementById("btnFocusMode");
 	const $btnFonts = document.getElementById("btnFonts");
 	const $btnToggleFollow = document.getElementById("btnToggleFollow");
@@ -1398,6 +1399,8 @@ let rightSplitOrientation = "vertical"; // "vertical" | "horizontal"
 let rightSplitRatioVertical = 0.5;
 let rightSplitRatioHorizontal = 0.5;
 let suppressFollowScrollUntilMs = 0;
+let splitPrevRenderZoom = null;
+let splitZoomActive = false;
 
 let layoutPrefsSaveTimer = null;
 let pendingLayoutPrefsPatch = null;
@@ -1433,6 +1436,13 @@ function applyRightSplitOrientation(next) {
   document.body.classList.toggle("right-split-horizontal", normalized === "horizontal");
   if ($splitDivider) {
     $splitDivider.setAttribute("aria-orientation", normalized === "horizontal" ? "horizontal" : "vertical");
+  }
+  if ($btnToggleSplit) {
+    $btnToggleSplit.classList.toggle("toggle-active", normalized === "horizontal");
+    $btnToggleSplit.setAttribute("aria-pressed", normalized === "horizontal" ? "true" : "false");
+    $btnToggleSplit.title = normalized === "horizontal"
+      ? "Toggle split orientation (Ctrl+Alt+\\) — Horizontal"
+      : "Toggle split orientation (Ctrl+Alt+\\) — Vertical";
   }
 }
 
@@ -1503,7 +1513,9 @@ function initRightPaneResizer() {
   $splitDivider.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     $splitDivider.setPointerCapture(e.pointerId);
-    const startRect = $editorPane.getBoundingClientRect();
+    const startRect = (rightSplitOrientation === "horizontal")
+      ? $renderPane.getBoundingClientRect()
+      : $editorPane.getBoundingClientRect();
     const startSize = (rightSplitOrientation === "horizontal") ? startRect.height : startRect.width;
     const startPos = (rightSplitOrientation === "horizontal") ? e.clientY : e.clientX;
 
@@ -10717,7 +10729,7 @@ function wireMenuActions() {
       const busy = isPlaybackBusy();
       if (busy) {
         // During Play/Pause, ignore menu actions (except Play/Pause itself, Reset Layout, and Quit).
-        const allowed = new Set(["playToggle", "resetLayout", "quit", "playGotoMeasure", "toggleFocusMode", "setSplitOrientation"]);
+        const allowed = new Set(["playToggle", "resetLayout", "quit", "playGotoMeasure", "toggleFocusMode", "setSplitOrientation", "toggleSplitOrientation"]);
         if (!allowed.has(actionType)) return;
       }
       if (rawMode) {
@@ -10797,6 +10809,9 @@ function wireMenuActions() {
       else if (actionType === "setList") openSetList();
       else if (actionType === "toggleLibrary") toggleLibrary();
       else if (actionType === "toggleFocusMode") toggleFocusMode();
+      else if (actionType === "toggleSplitOrientation") {
+        toggleSplitOrientation({ userAction: true });
+      }
       else if (actionType === "setSplitOrientation") {
         const value = action && action.value ? String(action.value) : "";
         setSplitOrientation(value, { persist: true, userAction: true });
@@ -13477,6 +13492,17 @@ function setLayoutFromSettings(settings) {
   rightSplitRatioHorizontal = clampRatio(settings.layoutSplitRatioHorizontal, rightSplitRatioHorizontal);
   applyRightSplitOrientation(orientation);
   applyRightSplitSizesFromRatio();
+  if (orientation === "horizontal" && !splitZoomActive) {
+    splitPrevRenderZoom = readRenderZoomCss();
+    splitZoomActive = true;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!splitZoomActive || rightSplitOrientation !== "horizontal") return;
+        const fit = computeFocusFitZoom();
+        if (fit != null) setRenderZoomCss(fit);
+      });
+    });
+  }
 }
 
 function setSplitOrientation(nextOrientation, { persist = true, userAction = false } = {}) {
@@ -13486,14 +13512,36 @@ function setSplitOrientation(nextOrientation, { persist = true, userAction = fal
     return false;
   }
   if (rightSplitOrientation === next) return true;
+  if (next === "horizontal") {
+    splitPrevRenderZoom = readRenderZoomCss();
+    splitZoomActive = true;
+  }
   applyRightSplitOrientation(next);
   applyRightSplitSizesFromRatio();
   // Avoid follow-scroll fighting layout reflow right after a toggle.
   const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
   suppressFollowScrollUntilMs = now + 250;
+  if (next === "horizontal") {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!splitZoomActive || rightSplitOrientation !== "horizontal") return;
+        const fit = computeFocusFitZoom();
+        if (fit != null) setRenderZoomCss(fit);
+      });
+    });
+  } else if (splitPrevRenderZoom != null) {
+    splitZoomActive = false;
+    setRenderZoomCss(splitPrevRenderZoom);
+    splitPrevRenderZoom = null;
+  }
   if (persist) scheduleSaveLayoutPrefs({ layoutSplitOrientation: next });
   showToast(next === "horizontal" ? "Split: Horizontal" : "Split: Vertical", 1500);
   return true;
+}
+
+function toggleSplitOrientation({ userAction = false } = {}) {
+  const next = rightSplitOrientation === "horizontal" ? "vertical" : "horizontal";
+  return setSplitOrientation(next, { persist: true, userAction });
 }
 
 function setPlaybackAutoScrollFromSettings(settings) {
@@ -15839,6 +15887,12 @@ if ($practiceLoopTo) {
 if ($btnFocusMode) {
   $btnFocusMode.addEventListener("click", () => {
     toggleFocusMode();
+  });
+}
+
+if ($btnToggleSplit) {
+  $btnToggleSplit.addEventListener("click", () => {
+    toggleSplitOrientation({ userAction: true });
   });
 }
 

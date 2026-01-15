@@ -928,6 +928,21 @@ body.right-split-horizontal .right-split {
   grid-template-rows: 1fr 6px 1fr;
 }
 
+body.right-split-horizontal .render-pane {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+body.right-split-horizontal .split-divider {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+body.right-split-horizontal .editor-pane {
+  grid-column: 1;
+  grid-row: 3;
+}
+
 .render-pane {
   flex: 1;
   overflow: scroll;

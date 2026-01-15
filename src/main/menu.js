@@ -133,6 +133,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
       { label: "Toggle Library", accelerator: "CmdOrCtrl+L", click: () => sendMenuAction("toggleLibrary") },
       { label: "Toggle File Header", accelerator: "CmdOrCtrl+Alt+H", click: () => sendMenuAction("toggleFileHeader") },
       { label: "Playback Focus Mode", accelerator: "F7", click: () => sendMenuAction("toggleFocusMode") },
+      { label: "Toggle Split Orientation", accelerator: "CmdOrCtrl+Alt+\\", click: () => sendMenuAction("toggleSplitOrientation") },
       {
         label: "Split Orientation",
         submenu: [
