@@ -12314,16 +12314,27 @@ function schedulePlaybackUiUpdate(istart) {
     const fromInjected = editorLen && editorIdx >= editorLen;
     if (fromInjected) return;
 
-    if (followVoiceId != null || followVoiceIndex != null) {
-      const symbol = findSymbolAtOrBefore(i);
-      if (symbol && symbol.p_v) {
-        const wantId = followVoiceId != null ? String(followVoiceId) : null;
-        const wantIndex = followVoiceIndex != null ? Number(followVoiceIndex) : null;
-        const symId = symbol.p_v.id != null ? String(symbol.p_v.id) : "";
-        const symIndex = Number.isFinite(symbol.p_v.v) ? Number(symbol.p_v.v) : null;
-        const sameId = wantId && symId && symId === wantId;
-        const sameIndex = wantIndex != null && symIndex != null && symIndex === wantIndex;
-        if (!sameId && !sameIndex) return;
+    // Voice filter (Follow): ensure the current playback event belongs to the chosen "primary" voice.
+    // Multi-voice timelines can have multiple symbols with the same `istart`; use a range lookup.
+    if ((followVoiceId != null || followVoiceIndex != null) && playbackState && Array.isArray(playbackState.symbolIstarts)) {
+      const wantId = followVoiceId != null ? String(followVoiceId) : null;
+      const wantIndex = followVoiceIndex != null ? Number(followVoiceIndex) : null;
+      const list = playbackState.symbolIstarts;
+      const start = lowerBoundIstart(list, i);
+      const end = upperBoundIstart(list, i);
+      if (end > start) {
+        let matched = false;
+        for (let k = start; k < end; k += 1) {
+          const item = playbackState.symbols[k];
+          const sym = item ? item.symbol : null;
+          const pv = sym && sym.p_v ? sym.p_v : null;
+          const symId = pv && pv.id != null ? String(pv.id) : "";
+          const symIndex = pv && Number.isFinite(pv.v) ? Number(pv.v) : null;
+          const sameId = wantId && symId && symId === wantId;
+          const sameIndex = wantIndex != null && symIndex != null && symIndex === wantIndex;
+          if (sameId || sameIndex) { matched = true; break; }
+        }
+        if (!matched) return;
       }
     }
 
@@ -12783,6 +12794,10 @@ function buildPlaybackState(firstSymbol) {
     return out;
   };
 
+  // IMPORTANT:
+  // Keep `*_Istarts` aligned 1:1 with their corresponding `symbols/measures` arrays.
+  // Some timelines contain multiple symbols with the same `istart` (multi-voice / decorations / non-playable markers).
+  // If we de-duplicate istarts here, binary-search indices no longer match array indices and Follow/voice selection breaks.
   const symbolIstarts = symbols.map((item) => item.istart);
   const measureIstarts = measures.map((item) => item.istart);
   const timeline = symbols.map((item) => {
@@ -12809,8 +12824,8 @@ function buildPlaybackState(firstSymbol) {
     preferredVoiceIndex,
     symbols,
     measures,
-    symbolIstarts: uniqSorted(symbolIstarts),
-    measureIstarts: uniqSorted(measureIstarts),
+    symbolIstarts,
+    measureIstarts,
     barIstarts: uniqSorted(barIstarts),
     timeline,
   };
@@ -12831,22 +12846,36 @@ function setFollowVoiceFromPlayback() {
   if (Number.isFinite(voice.v)) followVoiceIndex = voice.v;
 }
 
+function lowerBoundIstart(list, value) {
+  if (!Array.isArray(list) || !list.length) return 0;
+  let lo = 0;
+  let hi = list.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (list[mid] < value) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function upperBoundIstart(list, value) {
+  if (!Array.isArray(list) || !list.length) return 0;
+  let lo = 0;
+  let hi = list.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (list[mid] <= value) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
 function findSymbolAtOrBefore(idx) {
   if (!playbackState || !playbackState.symbols.length) return null;
   const list = playbackState.symbolIstarts || [];
-  let lo = 0;
-  let hi = list.length - 1;
-  let best = 0;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    const v = list[mid];
-    if (v <= idx) {
-      best = mid;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
-  }
+  if (!list.length) return null;
+  const pos = upperBoundIstart(list, idx) - 1;
+  const best = Math.max(0, Math.min(playbackState.symbols.length - 1, pos));
   const item = playbackState.symbols[best];
   return item ? item.symbol : null;
 }
@@ -12855,19 +12884,8 @@ function findSymbolAtOrAfter(idx) {
   if (!playbackState || !playbackState.symbols.length) return null;
   const list = playbackState.symbolIstarts || [];
   if (!list.length) return null;
-  let lo = 0;
-  let hi = list.length - 1;
-  let best = list.length - 1;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    const v = list[mid];
-    if (v >= idx) {
-      best = mid;
-      hi = mid - 1;
-    } else {
-      lo = mid + 1;
-    }
-  }
+  const pos = lowerBoundIstart(list, idx);
+  const best = Math.max(0, Math.min(playbackState.symbols.length - 1, pos));
   const item = playbackState.symbols[best];
   return item ? item.symbol : null;
 }
@@ -12875,20 +12893,9 @@ function findSymbolAtOrAfter(idx) {
 function findMeasureIndex(idx) {
   if (!playbackState || !playbackState.measures.length) return 0;
   const list = playbackState.measureIstarts || [];
-  let lo = 0;
-  let hi = list.length - 1;
-  let best = 0;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    const v = list[mid];
-    if (v <= idx) {
-      best = mid;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
-  }
-  return best;
+  if (!list.length) return 0;
+  const pos = upperBoundIstart(list, idx) - 1;
+  return Math.max(0, Math.min(playbackState.measures.length - 1, pos));
 }
 
 function stopPlaybackForRestart() {
