@@ -41,6 +41,20 @@ git push
 git push origin vX.Y.Z
 ```
 
+### One-command publish (guarded)
+
+If you want a single command that prepares a release and pushes `master` + the tag, use:
+
+```bash
+npm run publish:patch
+```
+
+Guards:
+- Refuses to run unless you are on `master`.
+- Requires a clean working tree.
+- Requires `master` to match `origin/master` before preparing the release.
+- Requires `CHANGELOG.md` `## [Unreleased]` to be non-empty.
+
 Example (patch):
 ```bash
 npm run release:patch

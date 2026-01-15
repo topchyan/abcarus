@@ -31,7 +31,10 @@
     "abc2svg:upgrade": "node scripts/upgrade_abc2svg_from_source_zip.mjs",
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
-    "release:major": "node scripts/release.mjs major"
+    "release:major": "node scripts/release.mjs major",
+    "publish:patch": "node scripts/publish.mjs patch",
+    "publish:minor": "node scripts/publish.mjs minor",
+    "publish:major": "node scripts/publish.mjs major"
   },
   "devDependencies": {
     "electron": "^28.0.0",
