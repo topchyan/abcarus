@@ -14513,6 +14513,8 @@ function normalizeKeyFieldToBeLastBeforeBodyForPlayback(text) {
 }
 
 function stripLyricsForPlayback(text) {
+  // Important: keep the output string length identical to the input.
+  // Follow/highlighting depends on stable character offsets between playback text and rendered SVG.
   const lines = String(text || "").split(/\r\n|\n|\r/);
   const out = [];
   let inTextBlock = false;
@@ -14524,8 +14526,12 @@ function stripLyricsForPlayback(text) {
       out.push(line);
       continue;
     }
-    if (/^\s*w:/.test(line)) continue;
-    if (/^\s*W:/.test(line)) continue;
+    if (/^\s*w:/.test(line) || /^\s*W:/.test(line)) {
+      const len = String(line || "").length;
+      if (len <= 0) out.push("%");
+      else out.push(`%${" ".repeat(Math.max(0, len - 1))}`);
+      continue;
+    }
     out.push(line);
   }
   return out.join("\n");
@@ -14534,6 +14540,7 @@ function stripLyricsForPlayback(text) {
 function normalizeBarsForPlayback(text) {
   // abc2svg is strict about barline consistency across voices. Some sources mix `||` and `|` at the same moment,
   // which other players may ignore. For playback-only stability, normalize multi-bars to a single bar.
+  // Keep string length stable for Follow mapping: replace `||` with `| ` (bar + space).
   const lines = String(text || "").split(/\r\n|\n|\r/);
   const out = [];
   let inTextBlock = false;
@@ -14550,7 +14557,7 @@ function normalizeBarsForPlayback(text) {
       out.push(rawLine);
       continue;
     }
-    out.push(rawLine.replace(/\|\|/g, "|"));
+    out.push(rawLine.replace(/\|\|/g, "| "));
   }
   return out.join("\n");
 }
@@ -14570,8 +14577,8 @@ function stripChordSymbolsForPlayback(text) {
       continue;
     }
     // Remove chord symbols / annotations in quotes. Playback stability > chord display here.
-    // Keep the rest of the line intact.
-    out.push(rawLine.replace(/\"[^\"]*\"/g, ""));
+    // Keep the rest of the line intact and preserve line length for Follow mapping.
+    out.push(rawLine.replace(/\"[^\"]*\"/g, (m) => " ".repeat(String(m || "").length)));
   }
   return out.join("\n");
 }
