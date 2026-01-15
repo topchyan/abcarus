@@ -8639,6 +8639,16 @@ async function buildDebugDumpSnapshot({ reason = "" } = {}) {
       followPlayback: Boolean(followPlayback),
       followVoiceId,
       followVoiceIndex,
+      preferredVoiceId: playbackState ? (playbackState.preferredVoiceId || null) : null,
+      preferredVoiceIndex: playbackState && Number.isFinite(playbackState.preferredVoiceIndex) ? playbackState.preferredVoiceIndex : null,
+      voiceTimelineKeys: (playbackState && playbackState.voiceTimeline) ? {
+        byId: (playbackState.voiceTimeline.byId && typeof playbackState.voiceTimeline.byId === "object")
+          ? Object.keys(playbackState.voiceTimeline.byId).slice(0, 50)
+          : [],
+        byIndex: (playbackState.voiceTimeline.byIndex && typeof playbackState.voiceTimeline.byIndex === "object")
+          ? Object.keys(playbackState.voiceTimeline.byIndex).slice(0, 50)
+          : [],
+      } : null,
       practiceTempoMultiplier: Number.isFinite(Number(practiceTempoMultiplier)) ? Number(practiceTempoMultiplier) : null,
       playbackLoop: {
         enabled: Boolean(playbackLoopEnabled),
@@ -12309,34 +12319,36 @@ function schedulePlaybackUiUpdate(istart) {
 	    if (!$out) return;
 	    if (!Number.isFinite(i)) return;
 
-    const editorIdx = Math.max(0, i - playbackIndexOffset);
+    let targetIstart = i;
+    // When playback events come from a different voice (common in multi-voice scores),
+    // Follow should still track the configured "primary" voice rather than freezing.
+    if ((followVoiceId != null || followVoiceIndex != null) && playbackState && playbackState.voiceTimeline) {
+      const wantId = followVoiceId != null ? String(followVoiceId) : null;
+      const wantIndex = followVoiceIndex != null ? String(followVoiceIndex) : null;
+      const byId = playbackState.voiceTimeline && playbackState.voiceTimeline.byId ? playbackState.voiceTimeline.byId : null;
+      const byIndex = playbackState.voiceTimeline && playbackState.voiceTimeline.byIndex ? playbackState.voiceTimeline.byIndex : null;
+      const tl = (wantId && byId && byId[wantId]) ? byId[wantId]
+        : (wantIndex && byIndex && byIndex[wantIndex]) ? byIndex[wantIndex]
+        : null;
+
+      const sym = findSymbolAtOrBefore(i);
+      const currentTime = sym && Number.isFinite(sym.time) ? sym.time : null;
+      if (tl && currentTime != null) {
+        const times = Array.isArray(tl.times) ? tl.times : null;
+        const istarts = Array.isArray(tl.istarts) ? tl.istarts : null;
+        if (times && istarts && times.length && times.length === istarts.length) {
+          const pos = upperBoundTime(times, currentTime) - 1;
+          const idx = Math.max(0, Math.min(istarts.length - 1, pos));
+          const mapped = istarts[idx];
+          if (Number.isFinite(mapped)) targetIstart = mapped;
+        }
+      }
+    }
+
+    const editorIdx = Math.max(0, targetIstart - playbackIndexOffset);
     const editorLen = editorView ? editorView.state.doc.length : 0;
     const fromInjected = editorLen && editorIdx >= editorLen;
     if (fromInjected) return;
-
-    // Voice filter (Follow): ensure the current playback event belongs to the chosen "primary" voice.
-    // Multi-voice timelines can have multiple symbols with the same `istart`; use a range lookup.
-    if ((followVoiceId != null || followVoiceIndex != null) && playbackState && Array.isArray(playbackState.symbolIstarts)) {
-      const wantId = followVoiceId != null ? String(followVoiceId) : null;
-      const wantIndex = followVoiceIndex != null ? Number(followVoiceIndex) : null;
-      const list = playbackState.symbolIstarts;
-      const start = lowerBoundIstart(list, i);
-      const end = upperBoundIstart(list, i);
-      if (end > start) {
-        let matched = false;
-        for (let k = start; k < end; k += 1) {
-          const item = playbackState.symbols[k];
-          const sym = item ? item.symbol : null;
-          const pv = sym && sym.p_v ? sym.p_v : null;
-          const symId = pv && pv.id != null ? String(pv.id) : "";
-          const symIndex = pv && Number.isFinite(pv.v) ? Number(pv.v) : null;
-          const sameId = wantId && symId && symId === wantId;
-          const sameIndex = wantIndex != null && symIndex != null && symIndex === wantIndex;
-          if (sameId || sameIndex) { matched = true; break; }
-        }
-        if (!matched) return;
-      }
-    }
 
     const renderOffset = (lastRenderPayload && Number.isFinite(lastRenderPayload.offset))
       ? lastRenderPayload.offset
@@ -12712,6 +12724,8 @@ function buildPlaybackState(firstSymbol) {
   const symbols = [];
   const measures = [];
   const barIstarts = [];
+  const voiceEventsById = new Map(); // voiceId -> [{time, istart}]
+  const voiceEventsByIndex = new Map(); // voiceIndex -> [{time, istart}]
   const pushUnique = (arr, symbol) => {
     if (!symbol || !Number.isFinite(symbol.istart)) return;
     if (arr.length && arr[arr.length - 1].istart === symbol.istart) return;
@@ -12724,6 +12738,7 @@ function buildPlaybackState(firstSymbol) {
   let guard = 0;
   let preferredVoiceId = null;
   let preferredVoiceIndex = null;
+  let lockedPrimaryVoice = false;
   const editorLen = editorView ? editorView.state.doc.length : 0;
   const editorMaxIstart = (Number.isFinite(playbackIndexOffset) ? playbackIndexOffset : 0) + (Number.isFinite(editorLen) ? editorLen : 0);
   const isInjectedSymbol = (symbol) => {
@@ -12736,6 +12751,15 @@ function buildPlaybackState(firstSymbol) {
     const id = symbol.p_v.id ? String(symbol.p_v.id) : null;
     if (id && id.toUpperCase() === "DRUM") return;
     const v = Number.isFinite(symbol.p_v.v) ? symbol.p_v.v : null;
+    // Convention: if V:1 exists, Follow should use it as the primary voice.
+    // Some abc2svg timelines assign voice indices that do not correspond to V: numbering.
+    if (!lockedPrimaryVoice && id === "1") {
+      preferredVoiceId = id;
+      preferredVoiceIndex = v;
+      lockedPrimaryVoice = true;
+      return;
+    }
+    if (lockedPrimaryVoice) return;
     if (preferredVoiceIndex == null) {
       preferredVoiceIndex = v;
       preferredVoiceId = id;
@@ -12750,6 +12774,25 @@ function buildPlaybackState(firstSymbol) {
       preferredVoiceIndex = v;
       preferredVoiceId = id;
     }
+  };
+
+  const pushVoiceEvent = (symbol) => {
+    if (!symbol || !symbol.p_v) return;
+    if (!isPlayableSymbol(symbol)) return;
+    if (!Number.isFinite(symbol.time) || !Number.isFinite(symbol.istart)) return;
+    const pv = symbol.p_v;
+    const id = pv.id != null ? String(pv.id) : null;
+    const v = Number.isFinite(pv.v) ? String(pv.v) : null;
+    const evt = { time: symbol.time, istart: symbol.istart };
+    const push = (map, key) => {
+      if (!key) return;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(evt);
+    };
+    // Keep both maps available; Follow will prefer id but can fall back to index.
+    // IMPORTANT: keep these separate to avoid key collisions (e.g. voiceId "1" vs voiceIndex "1").
+    if (id && id.toUpperCase() !== "DRUM") push(voiceEventsById, id);
+    if (v != null) push(voiceEventsByIndex, v);
   };
 
   if (s && !isInjectedSymbol(s)) pushUnique(symbols, s);
@@ -12772,7 +12815,10 @@ function buildPlaybackState(firstSymbol) {
         }
         barIstarts.push(s.istart);
       }
-      if (isPlayableSymbol(s)) considerVoice(s);
+      if (isPlayableSymbol(s)) {
+        considerVoice(s);
+        pushVoiceEvent(s);
+      }
     }
     s = s.ts_next;
     guard += 1;
@@ -12810,6 +12856,34 @@ function buildPlaybackState(firstSymbol) {
     };
   });
 
+  const buildTimelineObject = (eventsMap) => {
+    const out = {};
+    for (const [key, list] of eventsMap.entries()) {
+      if (!key || !Array.isArray(list) || !list.length) continue;
+      const sorted = list.slice().sort((a, b) => (a.time - b.time) || (a.istart - b.istart));
+      const times = [];
+      const istarts = [];
+      let lastTime = null;
+      let lastIstart = null;
+      for (const e of sorted) {
+        if (!e || !Number.isFinite(e.time) || !Number.isFinite(e.istart)) continue;
+        // Keep duplicates (chords), but drop exact duplicates to reduce noise.
+        if (lastTime === e.time && lastIstart === e.istart) continue;
+        times.push(e.time);
+        istarts.push(e.istart);
+        lastTime = e.time;
+        lastIstart = e.istart;
+      }
+      if (times.length) out[key] = { times, istarts };
+    }
+    return out;
+  };
+
+  const voiceTimeline = {
+    byId: buildTimelineObject(voiceEventsById),
+    byIndex: buildTimelineObject(voiceEventsByIndex),
+  };
+
   let startSymbol = firstSymbol;
   if (!startSymbol || !Number.isFinite(startSymbol.istart)) {
     startSymbol = symbols.length ? symbols[0].symbol : firstSymbol;
@@ -12828,6 +12902,7 @@ function buildPlaybackState(firstSymbol) {
     measureIstarts,
     barIstarts: uniqSorted(barIstarts),
     timeline,
+    voiceTimeline,
   };
 }
 
@@ -12859,6 +12934,18 @@ function lowerBoundIstart(list, value) {
 }
 
 function upperBoundIstart(list, value) {
+  if (!Array.isArray(list) || !list.length) return 0;
+  let lo = 0;
+  let hi = list.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (list[mid] <= value) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function upperBoundTime(list, value) {
   if (!Array.isArray(list) || !list.length) return 0;
   let lo = 0;
   let hi = list.length;
@@ -15063,6 +15150,20 @@ async function preparePlayback() {
       symbols: playbackState ? playbackState.symbols.length : 0,
       bars: playbackState && playbackState.barIstarts ? playbackState.barIstarts.length : 0,
       tunes: lastPlaybackTuneInfo,
+      symbolsHead: playbackState
+        ? playbackState.symbols.slice(0, 30).map((item) => {
+          const sym = item && item.symbol ? item.symbol : null;
+          const pv = sym && sym.p_v ? sym.p_v : null;
+          return {
+            istart: sym && Number.isFinite(sym.istart) ? sym.istart : null,
+            time: sym && Number.isFinite(sym.time) ? sym.time : null,
+            dur: sym && Number.isFinite(sym.dur) ? sym.dur : null,
+            type: sym && Number.isFinite(sym.type) ? sym.type : null,
+            voiceId: pv && pv.id != null ? String(pv.id) : null,
+            voiceIndex: pv && Number.isFinite(pv.v) ? pv.v : null,
+          };
+        })
+        : [],
     }),
     getDiagnostics: () => ({
       parseErrors: Array.isArray(playbackParseErrors) ? playbackParseErrors.slice() : [],

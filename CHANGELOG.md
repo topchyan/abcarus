@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Playback (Follow): in multi-voice tunes, Follow now consistently tracks `V:1` when present and avoids voice timeline collisions.
 
 
 ## [0.20.3] - 2026-01-14
