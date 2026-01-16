@@ -13325,37 +13325,40 @@ function setFocusModeEnabled(nextEnabled) {
     showToast("Exit Raw mode to use Focus.", 2200);
     return;
   }
-	  focusModeEnabled = next;
-	  if (focusModeEnabled) {
-	    focusPrevRenderZoom = readRenderZoomCss();
-	    focusPrevLibraryVisible = isLibraryVisible;
-	    if (isLibraryVisible) {
-	      setLibraryVisible(false, { persist: false });
-	      requestAnimationFrame(() => {
-	        try { resetRightPaneSplit(); } catch {}
-	      });
-	    }
-	    // Wait for layout to settle (library hide + split reset) before computing fit.
-	    // A single rAF can still measure old widths when the DOM is busy; double rAF avoids that.
-	    requestAnimationFrame(() => {
-	      requestAnimationFrame(() => {
-	        if (!focusModeEnabled) return;
-	        const fit = computeFocusFitZoom();
-	        // Focus is a "stage" mode: it chooses the zoom independently to reduce unused margins
-	        // and keep the score readable during playback (restored on exit).
-	        if (fit != null) setRenderZoomCss(fit);
-	        if (window.__abcarusDebugFocus) {
-	          try {
-	            const cssZoom = getComputedStyle(document.documentElement).getPropertyValue("--render-zoom");
-	            console.log("[abcarus][focus] apply " + JSON.stringify({
-	              fit,
-	              cssZoom: String(cssZoom || "").trim(),
-	            }));
-	          } catch {}
-	        }
-	      });
-	    });
-	  } else if (focusPrevRenderZoom != null) {
+  focusModeEnabled = next;
+  // Apply the focus-mode class immediately so layout-dependent measurements (fit zoom)
+  // are based on the Focus layout, not the pre-toggle layout.
+  updateFocusModeUi();
+  if (focusModeEnabled) {
+    focusPrevRenderZoom = readRenderZoomCss();
+    focusPrevLibraryVisible = isLibraryVisible;
+    if (isLibraryVisible) {
+      setLibraryVisible(false, { persist: false });
+      requestAnimationFrame(() => {
+        try { resetRightPaneSplit(); } catch {}
+      });
+    }
+    // Wait for layout to settle (library hide + split reset) before computing fit.
+    // A single rAF can still measure old widths when the DOM is busy; double rAF avoids that.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!focusModeEnabled) return;
+        const fit = computeFocusFitZoom();
+        // Focus is a "stage" mode: it chooses the zoom independently to reduce unused margins
+        // and keep the score readable during playback (restored on exit).
+        if (fit != null) setRenderZoomCss(fit);
+        if (window.__abcarusDebugFocus) {
+          try {
+            const cssZoom = getComputedStyle(document.documentElement).getPropertyValue("--render-zoom");
+            console.log("[abcarus][focus] apply " + JSON.stringify({
+              fit,
+              cssZoom: String(cssZoom || "").trim(),
+            }));
+          } catch {}
+        }
+      });
+    });
+  } else if (focusPrevRenderZoom != null) {
     setRenderZoomCss(focusPrevRenderZoom);
     focusPrevRenderZoom = null;
     if (focusPrevLibraryVisible) {
@@ -13369,7 +13372,6 @@ function setFocusModeEnabled(nextEnabled) {
   if (focusModeEnabled) {
     maybeResetFocusLoopForTune(activeTuneId, { updateUi: false });
   }
-  updateFocusModeUi();
 }
 
 function toggleFocusMode() {
