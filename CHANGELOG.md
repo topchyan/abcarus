@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Editor: `Ctrl+F1` GM instrument picker for `%%MIDI program`, `%%MIDI chordprog`, and `%%MIDI bassprog` (searchable; inserts number and `% Instrument Name` comment).
+- Editor: `Ctrl+F2` decoration picker with search, details, and SVG preview; supports range decorations (wrap selection) and favorites.
+- Editor: decoration picker window can be moved (drag header) and resized.
+- Devtools: scripts to build an abc2svg decorations catalog and scan decoration usage in `.abc` files.
+
+### Changed
+- Layout/Zoom: score zoom is remembered per split orientation (vertical vs horizontal) and restored on startup.
+- Zoom: `Ctrl/Cmd+Wheel` zooms the pane under the pointer; `Ctrl/Cmd+-/+` zooms the focused pane.
+- Focus: fit-to-width uses its own baseline zoom (does not depend on the previous mode/zoom).
+- Docs/Repo: move large offline reference snapshots out of tracked `docs/` into local-only `kitchen/` (keeps the repo leaner).
+
+### Fixed
+- Startup: stop resetting score zoom on launch.
+
 
 
 ## [0.20.5] - 2026-01-15
