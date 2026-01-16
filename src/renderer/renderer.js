@@ -1293,6 +1293,32 @@ function buildAbcDecorations(state) {
   let inTextBlock = false;
   let lastNonEmptyKind = "";
 
+  const findFirstUnescapedPercent = (text) => {
+    for (let i = 0; i < text.length; i += 1) {
+      if (text[i] === "%" && text[i - 1] !== "\\") return i;
+    }
+    return -1;
+  };
+
+  const collectChordQuoteRanges = (text) => {
+    const ranges = [];
+    let inQuote = false;
+    let start = 0;
+    for (let i = 0; i < text.length; i += 1) {
+      if (text[i] !== "\"") continue;
+      if (text[i - 1] === "\\") continue;
+      if (!inQuote) {
+        inQuote = true;
+        start = i;
+        continue;
+      }
+      inQuote = false;
+      ranges.push({ start, end: i + 1 });
+    }
+    if (inQuote) ranges.push({ start, end: text.length });
+    return ranges;
+  };
+
   for (let lineNo = 1; lineNo <= state.doc.lines; lineNo += 1) {
     const line = state.doc.line(lineNo);
     const text = line.text;
@@ -1360,6 +1386,15 @@ function buildAbcDecorations(state) {
     if (text.trim().length) {
       builder.add(line.from, line.to, Decoration.mark({ class: "cm-abc-notes" }));
       if (trimmed) lastNonEmptyKind = "notes";
+
+      const commentIdx = findFirstUnescapedPercent(text);
+      const contentText = commentIdx >= 0 ? text.slice(0, commentIdx) : text;
+      const chordRanges = collectChordQuoteRanges(contentText);
+      for (const r of chordRanges) {
+        const from = line.from + r.start;
+        const to = line.from + r.end;
+        if (to > from) builder.add(from, to, Decoration.mark({ class: "cm-abc-chord" }));
+      }
     }
   }
 

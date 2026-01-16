@@ -1081,6 +1081,11 @@ body.resizing-cols * {
   font-weight: var(--editor-notes-weight);
 }
 
+.cm-abc-chord {
+  color: #5a2d82;
+  font-weight: 600;
+}
+
 .cm-scroller {
   overflow: scroll;
 }
