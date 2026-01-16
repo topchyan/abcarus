@@ -4250,19 +4250,20 @@ function initEditor() {
 		          pop.id = "abcarusAbcInsertPopover";
 		          pop.setAttribute("role", "dialog");
 		          pop.setAttribute("aria-label", "ABC insert");
-		          pop.style.position = "fixed";
-		          pop.style.zIndex = "9999";
-		          pop.style.width = "980px";
-		          pop.style.maxWidth = "1180px";
-		          pop.style.maxHeight = "calc(100vh - 20px)";
-		          pop.style.overflow = "auto";
-		          pop.style.resize = "both";
-		          pop.style.minWidth = "720px";
-		          pop.style.minHeight = "260px";
-		          pop.style.padding = "8px 10px";
-		          pop.style.borderRadius = "8px";
-		          pop.style.border = "1px solid rgba(0,0,0,0.18)";
-		          pop.style.background = "rgba(255,255,255,0.98)";
+			          pop.style.position = "fixed";
+			          pop.style.zIndex = "9999";
+			          pop.style.width = "min(1040px, calc(100vw - 20px))";
+			          pop.style.maxWidth = "calc(100vw - 20px)";
+			          pop.style.maxHeight = "calc(100vh - 20px)";
+			          pop.style.overflow = "auto";
+			          pop.style.resize = "both";
+			          pop.style.minWidth = "760px";
+			          pop.style.minHeight = "260px";
+			          pop.style.padding = "8px 10px";
+			          pop.style.boxSizing = "border-box";
+			          pop.style.borderRadius = "8px";
+			          pop.style.border = "1px solid rgba(0,0,0,0.18)";
+			          pop.style.background = "rgba(255,255,255,0.98)";
 		          pop.style.boxShadow = "0 8px 24px rgba(0,0,0,0.18)";
 		          pop.style.fontSize = "13px";
 		          pop.style.lineHeight = "1.35";
@@ -4284,7 +4285,8 @@ function initEditor() {
 			          const hint = document.createElement("div");
 			          hint.textContent = "Drag to move · Resize corner · Enter=insert · Shift+Enter=!name! · (Select text for range) · Esc=close";
 			          hint.style.opacity = "0.65";
-			          hint.style.fontSize = "12px";
+			          hint.style.fontSize = "11px";
+			          hint.style.whiteSpace = "nowrap";
 			          head.appendChild(hint);
 
 		          pop.appendChild(head);
@@ -4304,32 +4306,33 @@ function initEditor() {
 		          input.style.border = "1px solid rgba(0,0,0,0.2)";
 		          body.appendChild(input);
 
-		          const contentRow = document.createElement("div");
-		          contentRow.style.marginTop = "6px";
-		          contentRow.style.display = "flex";
-		          contentRow.style.gap = "10px";
-		          body.appendChild(contentRow);
+			          const contentRow = document.createElement("div");
+			          contentRow.style.marginTop = "6px";
+			          contentRow.style.display = "flex";
+			          contentRow.style.gap = "10px";
+			          contentRow.style.flexWrap = "wrap";
+			          body.appendChild(contentRow);
 
-		          const listWrap = document.createElement("div");
-		          listWrap.style.flex = "0 0 520px";
-		          listWrap.style.minWidth = "320px";
-		          contentRow.appendChild(listWrap);
+			          const listWrap = document.createElement("div");
+			          listWrap.style.flex = "1 1 520px";
+			          listWrap.style.minWidth = "360px";
+			          contentRow.appendChild(listWrap);
 
-		          const list = document.createElement("div");
-		          list.style.maxHeight = "300px";
-		          list.style.overflow = "auto";
-		          list.style.border = "1px solid rgba(0,0,0,0.12)";
-		          list.style.borderRadius = "6px";
-		          listWrap.appendChild(list);
+			          const list = document.createElement("div");
+			          list.style.maxHeight = "300px";
+			          list.style.overflowY = "auto";
+			          list.style.overflowX = "hidden";
+			          list.style.border = "1px solid rgba(0,0,0,0.12)";
+			          list.style.borderRadius = "6px";
+			          listWrap.appendChild(list);
 
-		          const details = document.createElement("div");
-		          details.style.flex = "1 1 auto";
-		          details.style.minWidth = "360px";
-		          details.style.maxWidth = "620px";
-		          details.style.display = "flex";
-		          details.style.flexDirection = "column";
-		          details.style.gap = "8px";
-		          contentRow.appendChild(details);
+			          const details = document.createElement("div");
+			          details.style.flex = "1 1 440px";
+			          details.style.minWidth = "360px";
+			          details.style.display = "flex";
+			          details.style.flexDirection = "column";
+			          details.style.gap = "8px";
+			          contentRow.appendChild(details);
 
 		          const detailsTitle = document.createElement("div");
 		          detailsTitle.style.fontWeight = "600";
@@ -4350,14 +4353,17 @@ function initEditor() {
 		          detailsExample.textContent = "";
 		          details.appendChild(detailsExample);
 
-		          const previewWrap = document.createElement("div");
-		          previewWrap.style.border = "1px solid rgba(0,0,0,0.12)";
-		          previewWrap.style.borderRadius = "6px";
-		          previewWrap.style.padding = "6px";
-		          previewWrap.style.background = "rgba(250,250,250,0.9)";
-		          previewWrap.style.maxHeight = "340px";
-		          previewWrap.style.overflow = "auto";
-		          details.appendChild(previewWrap);
+			          const previewWrap = document.createElement("div");
+			          previewWrap.style.border = "1px solid rgba(0,0,0,0.12)";
+			          previewWrap.style.borderRadius = "6px";
+			          previewWrap.style.padding = "6px";
+			          previewWrap.style.background = "rgba(250,250,250,0.9)";
+			          previewWrap.style.maxHeight = "340px";
+			          previewWrap.style.overflow = "auto";
+			          previewWrap.style.display = "flex";
+			          previewWrap.style.alignItems = "center";
+			          previewWrap.style.justifyContent = "center";
+			          details.appendChild(previewWrap);
 
 		          const preview = document.createElement("div");
 		          preview.textContent = "";
@@ -4411,13 +4417,13 @@ function initEditor() {
 		                return;
 		              }
 
-		              preview.textContent = "Rendering preview…";
-		              try {
-		                // Use a slightly larger scale so the preview is readable without requiring UI zoom.
-		                const abcText = `X:1\nT:Preview\n%%pagewidth 18cm\n%%scale 1.6\nM:4/4\nL:1/4\nK:C\n${example}\n`;
-		                const res = await renderAbcToSvgMarkup(abcText, { suppressGlobalErrors: true, stopOnFirstError: true });
-		                if (seq !== previewSeq) return;
-		                if (!res || !res.ok || !res.svg) {
+			              preview.textContent = "Rendering preview…";
+			              try {
+			                // Use a slightly larger scale so the preview is readable without requiring UI zoom.
+			                const abcText = `X:1\n%%pagewidth 18cm\n%%scale 1.6\n%%topspace 0\n%%botspace 0\n%%leftmargin 0.6cm\n%%rightmargin 0.6cm\nM:4/4\nL:1/4\nK:C\n${example}\n`;
+			                const res = await renderAbcToSvgMarkup(abcText, { suppressGlobalErrors: true, stopOnFirstError: true });
+			                if (seq !== previewSeq) return;
+			                if (!res || !res.ok || !res.svg) {
 		                  preview.textContent = "Preview unavailable.";
 		                  return;
 		                }
@@ -4546,12 +4552,12 @@ function initEditor() {
 		            for (let i = 0; i < items.length; i += 1) {
 		              const dec = items[i];
 		              const { description } = getDecorationDetails(dec);
-		              const row = document.createElement("div");
-		              row.style.display = "grid";
-		              row.style.gridTemplateColumns = "3.2em 1fr 14em";
-		              row.style.gap = "10px";
-		              row.style.padding = "6px 8px";
-		              row.style.cursor = "pointer";
+			              const row = document.createElement("div");
+			              row.style.display = "grid";
+			              row.style.gridTemplateColumns = "3.2em 1fr 10em";
+			              row.style.gap = "10px";
+			              row.style.padding = "6px 8px";
+			              row.style.cursor = "pointer";
 		              row.style.borderTop = i === 0 ? "none" : "1px solid rgba(0,0,0,0.06)";
 		              if (dec.isInternal) row.style.opacity = "0.9";
 		              if (i === activeIdx) {
@@ -4591,12 +4597,15 @@ function initEditor() {
 		              }
 		              nmWrap.appendChild(ds);
 
-		              const ab = document.createElement("div");
-		              ab.textContent = dec.abc;
-		              ab.style.textAlign = "right";
-		              ab.style.opacity = "0.75";
-		              ab.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace";
-		              row.appendChild(ab);
+			              const ab = document.createElement("div");
+			              ab.textContent = dec.abc;
+			              ab.style.textAlign = "right";
+			              ab.style.opacity = "0.75";
+			              ab.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace";
+			              ab.style.whiteSpace = "nowrap";
+			              ab.style.overflow = "hidden";
+			              ab.style.textOverflow = "ellipsis";
+			              row.appendChild(ab);
 
 		              row.addEventListener("mouseenter", () => {
 		                activeIdx = i;
