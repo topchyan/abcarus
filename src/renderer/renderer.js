@@ -4737,7 +4737,7 @@ function initEditor() {
 			                toggleFavorite(dec.name);
 			                activeName = dec.name;
 			                try { render(); } catch {}
-			              }, true);
+			              });
 			              nameRow.appendChild(star);
 
 			              const nm = document.createElement("div");
@@ -4776,10 +4776,15 @@ function initEditor() {
 			                updateDetails(dec);
 			              });
 			              row.addEventListener("click", (ev) => {
+			                try {
+			                  if (ev && typeof ev.target?.closest === "function") {
+			                    if (ev.target.closest("button")) return;
+			                  }
+			                } catch {}
 			                try { ev.preventDefault(); ev.stopPropagation(); } catch {}
 			                const ok = insertDecoration(dec, false);
-		                if (ok) closePopover();
-		              }, true);
+			                if (ok) closePopover();
+			              });
 
 			              list.appendChild(row);
 			            }
