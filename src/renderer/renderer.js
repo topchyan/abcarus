@@ -4295,16 +4295,45 @@ function initEditor() {
 		          body.style.marginTop = "6px";
 		          pop.appendChild(body);
 
-		          const input = document.createElement("input");
-		          input.type = "text";
-		          input.placeholder = "Search… (e.g. trill, segno, fermata)";
-		          input.autocomplete = "off";
-		          input.spellcheck = false;
-		          input.style.width = "100%";
-		          input.style.padding = "6px 8px";
-		          input.style.borderRadius = "6px";
-		          input.style.border = "1px solid rgba(0,0,0,0.2)";
-		          body.appendChild(input);
+			          const input = document.createElement("input");
+			          input.type = "text";
+			          input.placeholder = "Search… (e.g. trill, segno, fermata)";
+			          input.autocomplete = "off";
+			          input.spellcheck = false;
+			          input.style.width = "100%";
+			          input.style.padding = "6px 8px";
+			          input.style.borderRadius = "6px";
+			          input.style.border = "1px solid rgba(0,0,0,0.2)";
+			          body.appendChild(input);
+
+			          const controls = document.createElement("div");
+			          controls.style.marginTop = "6px";
+			          controls.style.display = "flex";
+			          controls.style.alignItems = "center";
+			          controls.style.gap = "14px";
+			          controls.style.fontSize = "12px";
+			          controls.style.opacity = "0.9";
+			          body.appendChild(controls);
+
+			          const mkCheckbox = (labelText) => {
+			            const label = document.createElement("label");
+			            label.style.display = "flex";
+			            label.style.alignItems = "center";
+			            label.style.gap = "6px";
+			            label.style.cursor = "pointer";
+			            const cb = document.createElement("input");
+			            cb.type = "checkbox";
+			            label.appendChild(cb);
+			            const t = document.createElement("span");
+			            t.textContent = labelText;
+			            label.appendChild(t);
+			            return { label, cb };
+			          };
+
+			          const favoritesFirstCtl = mkCheckbox("Favorites first");
+			          const hideNoPreviewCtl = mkCheckbox("Hide no-preview");
+			          controls.appendChild(favoritesFirstCtl.label);
+			          controls.appendChild(hideNoPreviewCtl.label);
 
 			          const contentRow = document.createElement("div");
 			          contentRow.style.marginTop = "6px";
@@ -4383,6 +4412,71 @@ function initEditor() {
 			          let enrichment = null;
 			          let previewSeq = 0;
 			          let previewTimer = null;
+			          let previewStatus = new Map(); // name -> "ok" | "none"
+			          let favoriteNames = new Set();
+			          let favoritesFirst = true;
+			          let hideNoPreview = false;
+			          let activeName = "";
+
+			          const loadJsonLocalStorage = (key, fallbackValue) => {
+			            try {
+			              const raw = window && window.localStorage ? window.localStorage.getItem(key) : null;
+			              if (!raw) return fallbackValue;
+			              const parsed = JSON.parse(raw);
+			              return parsed == null ? fallbackValue : parsed;
+			            } catch {
+			              return fallbackValue;
+			            }
+			          };
+			          const saveJsonLocalStorage = (key, value) => {
+			            try {
+			              if (!window || !window.localStorage) return;
+			              window.localStorage.setItem(key, JSON.stringify(value));
+			            } catch {}
+			          };
+
+			          const FAVORITES_KEY = "abcarus.decorationPicker.favorites";
+			          const FAVORITES_FIRST_KEY = "abcarus.decorationPicker.favoritesFirst";
+			          const HIDE_NO_PREVIEW_KEY = "abcarus.decorationPicker.hideNoPreview";
+
+			          const loadFavorites = () => {
+			            const arr = loadJsonLocalStorage(FAVORITES_KEY, []);
+			            if (!Array.isArray(arr)) return new Set();
+			            const set = new Set();
+			            for (const v of arr) {
+			              const s = String(v || "").trim();
+			              if (s) set.add(s);
+			            }
+			            return set;
+			          };
+			          const saveFavorites = () => {
+			            const arr = Array.from(favoriteNames.values()).slice(0, 80);
+			            saveJsonLocalStorage(FAVORITES_KEY, arr);
+			          };
+			          const toggleFavorite = (name) => {
+			            const n = String(name || "");
+			            if (!n) return;
+			            if (favoriteNames.has(n)) favoriteNames.delete(n);
+			            else favoriteNames.add(n);
+			            saveFavorites();
+			          };
+
+			          favoriteNames = loadFavorites();
+			          favoritesFirst = Boolean(loadJsonLocalStorage(FAVORITES_FIRST_KEY, true));
+			          hideNoPreview = Boolean(loadJsonLocalStorage(HIDE_NO_PREVIEW_KEY, false));
+			          favoritesFirstCtl.cb.checked = favoritesFirst;
+			          hideNoPreviewCtl.cb.checked = hideNoPreview;
+
+			          favoritesFirstCtl.cb.addEventListener("change", () => {
+			            favoritesFirst = Boolean(favoritesFirstCtl.cb.checked);
+			            saveJsonLocalStorage(FAVORITES_FIRST_KEY, favoritesFirst);
+			            try { render(); } catch {}
+			          });
+			          hideNoPreviewCtl.cb.addEventListener("change", () => {
+			            hideNoPreview = Boolean(hideNoPreviewCtl.cb.checked);
+			            saveJsonLocalStorage(HIDE_NO_PREVIEW_KEY, hideNoPreview);
+			            try { render(); } catch {}
+			          });
 
 			          const parsePx = (v) => {
 			            const n = Number.parseFloat(String(v || ""));
@@ -4396,26 +4490,28 @@ function initEditor() {
 			            return "";
 			          };
 
-		          const getDecorationDetails = (dec) => {
-		            const name = dec && dec.name ? String(dec.name) : "";
-		            const fromEnrichment = enrichment && name ? enrichment.get(name) : null;
-		            const description = fromEnrichment && fromEnrichment.description ? String(fromEnrichment.description) : "";
-		            const example = fromEnrichment && fromEnrichment.example
-		              ? String(fromEnrichment.example)
-		              : buildDecorationExample(name, dec && dec.char ? String(dec.char) : "");
-		            return { description, example };
-		          };
+			          const getDecorationDetails = (dec) => {
+			            const name = dec && dec.name ? String(dec.name) : "";
+			            const fromEnrichment = enrichment && name ? enrichment.get(name) : null;
+			            const description = fromEnrichment && fromEnrichment.description ? String(fromEnrichment.description) : "";
+			            const example = fromEnrichment && fromEnrichment.example
+			              ? String(fromEnrichment.example)
+			              : buildDecorationExample(name, dec && dec.char ? String(dec.char) : "");
+			            return { description, example };
+			          };
 
-		          const renderPreview = (exampleAbc) => {
-		            const seq = (previewSeq += 1);
-		            if (previewTimer) clearTimeout(previewTimer);
-		            previewTimer = setTimeout(async () => {
-		              if (seq !== previewSeq) return;
-		              const example = String(exampleAbc || "").trim();
-		              if (!example) {
-		                preview.textContent = "";
-		                return;
-		              }
+			          const renderPreview = (name, exampleAbc) => {
+			            const seq = (previewSeq += 1);
+			            if (previewTimer) clearTimeout(previewTimer);
+			            previewTimer = setTimeout(async () => {
+			              if (seq !== previewSeq) return;
+			              const decName = String(name || "");
+			              const prevStatus = decName ? previewStatus.get(decName) : null;
+			              const example = String(exampleAbc || "").trim();
+			              if (!example) {
+			                preview.textContent = "";
+			                return;
+			              }
 
 			              preview.textContent = "Rendering preview…";
 			              try {
@@ -4424,34 +4520,46 @@ function initEditor() {
 			                const res = await renderAbcToSvgMarkup(abcText, { suppressGlobalErrors: true, stopOnFirstError: true });
 			                if (seq !== previewSeq) return;
 			                if (!res || !res.ok || !res.svg) {
-		                  preview.textContent = "Preview unavailable.";
-		                  return;
-		                }
-		                preview.innerHTML = res.svg;
-		                try {
-		                  const svgs = Array.from(preview.querySelectorAll("svg"));
-		                  for (const svg of svgs) {
-		                    svg.style.maxWidth = "100%";
-		                    svg.style.height = "auto";
+			                  if (decName) previewStatus.set(decName, "none");
+			                  preview.textContent = "Preview unavailable.";
+			                  if (decName && prevStatus !== "none") {
+			                    try { render(); } catch {}
+			                  }
+			                  return;
+			                }
+			                if (decName) previewStatus.set(decName, "ok");
+			                preview.innerHTML = res.svg;
+			                if (decName && prevStatus !== "ok") {
+			                  try { render(); } catch {}
+			                }
+			                try {
+			                  const svgs = Array.from(preview.querySelectorAll("svg"));
+			                  for (const svg of svgs) {
+			                    svg.style.maxWidth = "100%";
+			                    svg.style.height = "auto";
 		                    svg.style.display = "block";
 		                  }
-		                } catch {}
-		              } catch {
-		                if (seq !== previewSeq) return;
-		                preview.textContent = "Preview unavailable.";
-		              }
-		            }, 80);
-		          };
+			                } catch {}
+			              } catch {
+			                if (seq !== previewSeq) return;
+			                if (decName) previewStatus.set(decName, "none");
+			                preview.textContent = "Preview unavailable.";
+			                if (decName && prevStatus !== "none") {
+			                  try { render(); } catch {}
+			                }
+			              }
+			            }, 80);
+			          };
 
-		          const updateDetails = (dec) => {
-		            const name = dec && dec.name ? String(dec.name) : "";
-		            const abc = dec && dec.abc ? String(dec.abc) : "";
-		            const { description, example } = getDecorationDetails(dec);
-		            detailsTitle.textContent = name ? `Details: ${name}` : "Details";
-		            detailsDesc.textContent = description || "";
-		            detailsExample.textContent = example ? `Example: ${example}` : (abc ? `Example: ${abc}c` : "");
-		            renderPreview(example);
-		          };
+			          const updateDetails = (dec) => {
+			            const name = dec && dec.name ? String(dec.name) : "";
+			            const abc = dec && dec.abc ? String(dec.abc) : "";
+			            const { description, example } = getDecorationDetails(dec);
+			            detailsTitle.textContent = name ? `Details: ${name}` : "Details";
+			            detailsDesc.textContent = description || "";
+			            detailsExample.textContent = example ? `Example: ${example}` : (abc ? `Example: ${abc}c` : "");
+			            renderPreview(name, example);
+			          };
 
 		          const insertDecoration = (dec, fullForm) => {
 		            try {
@@ -4503,12 +4611,12 @@ function initEditor() {
 		            return false;
 		          };
 
-		          let items = [];
-		          let activeIdx = 0;
+			          let items = [];
+			          let activeIdx = 0;
 
-		          const render = () => {
-		            list.textContent = "";
-		            const q = String(input.value || "").trim().toLowerCase();
+			          const render = () => {
+			            list.textContent = "";
+			            const q = String(input.value || "").trim().toLowerCase();
 		            const allRaw = ABC2SVG_DECORATIONS.map((d) => ({
 		              char: String(d.char || ""),
 		              abc: String(d.abc || ""),
@@ -4534,36 +4642,63 @@ function initEditor() {
 		                  continue;
 		                }
 		              }
-		              all.push({ ...d, displayName: d.name });
-		            }
-		            items = q
-		              ? all.filter((d) => {
-		                const extra = (() => {
-		                  const fromEnrichment = enrichment && d.name ? enrichment.get(d.name) : null;
-		                  return fromEnrichment && fromEnrichment.description ? String(fromEnrichment.description) : "";
-		                })();
-		                const hay = `${d.char} ${d.displayName || d.name} ${d.name} ${d.abc} ${d.pairEndAbc || ""} ${extra}`.toLowerCase();
-		                return hay.includes(q);
-		              })
-		              : all;
-		            if (activeIdx >= items.length) activeIdx = 0;
+			              all.push({ ...d, displayName: d.name });
+			            }
+			            const filtered = q
+			              ? all.filter((d) => {
+			                const extra = (() => {
+			                  const fromEnrichment = enrichment && d.name ? enrichment.get(d.name) : null;
+			                  return fromEnrichment && fromEnrichment.description ? String(fromEnrichment.description) : "";
+			                })();
+			                const hay = `${d.char} ${d.displayName || d.name} ${d.name} ${d.abc} ${d.pairEndAbc || ""} ${extra}`.toLowerCase();
+			                return hay.includes(q);
+			              })
+			              : all;
 
-		            let activeRow = null;
-		            for (let i = 0; i < items.length; i += 1) {
-		              const dec = items[i];
-		              const { description } = getDecorationDetails(dec);
+			            let ordered = filtered;
+			            if (favoritesFirst && favoriteNames.size) {
+			              const fav = [];
+			              const rest = [];
+			              for (const d of filtered) {
+			                if (favoriteNames.has(d.name)) fav.push(d);
+			                else rest.push(d);
+			              }
+			              ordered = fav.concat(rest);
+			            }
+
+			            items = hideNoPreview
+			              ? ordered.filter((d) => previewStatus.get(d.name) !== "none")
+			              : ordered;
+
+			            if (activeName) {
+			              const idx = items.findIndex((d) => d && d.name === activeName);
+			              if (idx >= 0) activeIdx = idx;
+			            }
+			            if (activeIdx >= items.length) activeIdx = 0;
+
+			            let activeRow = null;
+			            for (let i = 0; i < items.length; i += 1) {
+			              const dec = items[i];
+			              const { description } = getDecorationDetails(dec);
+			              const fav = favoriteNames.has(dec.name);
+			              const noPrev = previewStatus.get(dec.name) === "none";
 			              const row = document.createElement("div");
 			              row.style.display = "grid";
 			              row.style.gridTemplateColumns = "3.2em 1fr 10em";
 			              row.style.gap = "10px";
 			              row.style.padding = "6px 8px";
 			              row.style.cursor = "pointer";
-		              row.style.borderTop = i === 0 ? "none" : "1px solid rgba(0,0,0,0.06)";
-		              if (dec.isInternal) row.style.opacity = "0.9";
-		              if (i === activeIdx) {
-		                row.style.background = "rgba(30,144,255,0.12)";
-		                activeRow = row;
-		              }
+			              row.style.borderTop = i === 0 ? "none" : "1px solid rgba(0,0,0,0.06)";
+			              {
+			                let rowOpacity = 1;
+			                if (dec.isInternal) rowOpacity = 0.9;
+			                if (noPrev) rowOpacity = Math.min(rowOpacity, 0.55);
+			                row.style.opacity = String(rowOpacity);
+			              }
+			              if (i === activeIdx) {
+			                row.style.background = "rgba(30,144,255,0.12)";
+			                activeRow = row;
+			              }
 
 		              const ch = document.createElement("div");
 		              ch.textContent = dec.char || "";
@@ -4572,30 +4707,58 @@ function initEditor() {
 		              ch.style.opacity = dec.char ? "1" : "0.25";
 		              row.appendChild(ch);
 
-		              const nmWrap = document.createElement("div");
-		              nmWrap.style.display = "flex";
-		              nmWrap.style.flexDirection = "column";
-		              nmWrap.style.gap = "2px";
-		              row.appendChild(nmWrap);
+			              const nmWrap = document.createElement("div");
+			              nmWrap.style.display = "flex";
+			              nmWrap.style.flexDirection = "column";
+			              nmWrap.style.gap = "2px";
+			              row.appendChild(nmWrap);
 
-		              const nm = document.createElement("div");
-		              nm.textContent = dec.displayName || dec.name;
-		              if (dec.pairEndAbc) {
-		                nm.style.fontWeight = "600";
-		              }
-		              nmWrap.appendChild(nm);
+			              const nameRow = document.createElement("div");
+			              nameRow.style.display = "flex";
+			              nameRow.style.alignItems = "center";
+			              nameRow.style.gap = "8px";
+			              nmWrap.appendChild(nameRow);
 
-		              const ds = document.createElement("div");
-		              ds.textContent = description || "";
-		              ds.style.fontSize = "12px";
-		              ds.style.opacity = "0.65";
-		              ds.style.overflow = "hidden";
-		              ds.style.whiteSpace = "nowrap";
-		              ds.style.textOverflow = "ellipsis";
-		              if (dec.pairEndAbc && !ds.textContent) {
-		                ds.textContent = "Range decoration (wrap selection)";
-		              }
-		              nmWrap.appendChild(ds);
+			              const star = document.createElement("button");
+			              star.type = "button";
+			              star.textContent = fav ? "★" : "☆";
+			              star.setAttribute("aria-label", fav ? "Unfavorite" : "Favorite");
+			              star.title = fav ? "Unfavorite" : "Favorite";
+			              star.style.border = "none";
+			              star.style.background = "transparent";
+			              star.style.padding = "0";
+			              star.style.margin = "0";
+			              star.style.cursor = "pointer";
+			              star.style.fontSize = "14px";
+			              star.style.lineHeight = "1";
+			              star.style.opacity = fav ? "1" : "0.55";
+			              star.addEventListener("click", (ev) => {
+			                try { ev.preventDefault(); ev.stopPropagation(); } catch {}
+			                toggleFavorite(dec.name);
+			                activeName = dec.name;
+			                try { render(); } catch {}
+			              }, true);
+			              nameRow.appendChild(star);
+
+			              const nm = document.createElement("div");
+			              nm.textContent = dec.displayName || dec.name;
+			              if (dec.pairEndAbc) nm.style.fontWeight = "600";
+			              nameRow.appendChild(nm);
+
+			              const ds = document.createElement("div");
+			              ds.textContent = description || "";
+			              ds.style.fontSize = "12px";
+			              ds.style.opacity = "0.65";
+			              ds.style.overflow = "hidden";
+			              ds.style.whiteSpace = "nowrap";
+			              ds.style.textOverflow = "ellipsis";
+			              if (dec.pairEndAbc && !ds.textContent) {
+			                ds.textContent = "Range decoration (wrap selection)";
+			              }
+			              if (noPrev) {
+			                ds.textContent = ds.textContent ? `${ds.textContent} · no preview` : "No preview (example may be incomplete)";
+			              }
+			              nmWrap.appendChild(ds);
 
 			              const ab = document.createElement("div");
 			              ab.textContent = dec.abc;
@@ -4607,23 +4770,25 @@ function initEditor() {
 			              ab.style.textOverflow = "ellipsis";
 			              row.appendChild(ab);
 
-		              row.addEventListener("mouseenter", () => {
-		                activeIdx = i;
-		                updateDetails(dec);
-		              });
-		              row.addEventListener("click", (ev) => {
-		                try { ev.preventDefault(); ev.stopPropagation(); } catch {}
-		                const ok = insertDecoration(dec, false);
+			              row.addEventListener("mouseenter", () => {
+			                activeIdx = i;
+			                activeName = dec.name;
+			                updateDetails(dec);
+			              });
+			              row.addEventListener("click", (ev) => {
+			                try { ev.preventDefault(); ev.stopPropagation(); } catch {}
+			                const ok = insertDecoration(dec, false);
 		                if (ok) closePopover();
 		              }, true);
 
-		              list.appendChild(row);
-		            }
+			              list.appendChild(row);
+			            }
 
-		            try {
-		              if (activeRow) activeRow.scrollIntoView({ block: "nearest" });
-		            } catch {}
-		          };
+			            try {
+			              if (activeRow) activeRow.scrollIntoView({ block: "nearest" });
+			            } catch {}
+			            activeName = items[activeIdx] && items[activeIdx].name ? String(items[activeIdx].name) : "";
+			          };
 
 		          const onDocKey = (ev) => {
 		            try {
