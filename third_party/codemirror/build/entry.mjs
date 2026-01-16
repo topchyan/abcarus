@@ -35,6 +35,7 @@ import {
   autocompletion,
   completionKeymap,
   completeFromList,
+  acceptCompletion,
   closeBrackets,
   closeBracketsKeymap,
   CompletionContext,
@@ -44,6 +45,7 @@ import { linter, setDiagnostics, lintKeymap } from "@codemirror/lint";
 export {
   Compartment,
   CompletionContext,
+  acceptCompletion,
   Decoration,
   EditorSelection,
   EditorState,
