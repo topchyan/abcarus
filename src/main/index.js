@@ -142,6 +142,17 @@ async function loadSettingsFromAttachedFile() {
     const raw = await fs.promises.readFile(filePath, "utf8");
     const schema = getSettingsSchema();
     const patch = parseSettingsPatchFromProperties(raw, schema);
+    if (patch && typeof patch === "object") {
+      const hasV = Object.prototype.hasOwnProperty.call(patch, "layoutRenderZoomVertical");
+      const hasH = Object.prototype.hasOwnProperty.call(patch, "layoutRenderZoomHorizontal");
+      if (!hasV || !hasH) {
+        const base = Number.isFinite(Number(patch.renderZoom))
+          ? Number(patch.renderZoom)
+          : (appState.settings && Number.isFinite(Number(appState.settings.renderZoom)) ? Number(appState.settings.renderZoom) : 1);
+        if (!hasV) patch.layoutRenderZoomVertical = base;
+        if (!hasH) patch.layoutRenderZoomHorizontal = base;
+      }
+    }
     updateSettingsFromFile(patch || {});
     appState.settingsFile.lastKnownMtimeMs = stat.mtimeMs || 0;
   } catch {
@@ -182,6 +193,13 @@ async function loadState() {
         }
         // Errors feature is intentionally session-only and defaults to off.
         merged.errorsEnabled = false;
+        // Per-split zoom migration: keep old single zoom for both orientations.
+        if (!Object.prototype.hasOwnProperty.call(data.settings, "layoutRenderZoomVertical")) {
+          merged.layoutRenderZoomVertical = merged.renderZoom;
+        }
+        if (!Object.prototype.hasOwnProperty.call(data.settings, "layoutRenderZoomHorizontal")) {
+          merged.layoutRenderZoomHorizontal = merged.renderZoom;
+        }
         appState.settings = merged;
       } else {
         appState.settings = getDefaultSettings();
@@ -902,6 +920,8 @@ function applySettingsPatch(patch, { persistToSettingsFile = true } = {}) {
   }
   next.renderZoom = clampZoom(Number(next.renderZoom));
   next.editorZoom = clampZoom(Number(next.editorZoom));
+  next.layoutRenderZoomVertical = clampZoom(Number(next.layoutRenderZoomVertical));
+  next.layoutRenderZoomHorizontal = clampZoom(Number(next.layoutRenderZoomHorizontal));
   next.editorFontSize = Math.min(32, Math.max(8, Number(next.editorFontSize) || 13));
   next.editorNotesBold = Boolean(next.editorNotesBold);
   next.editorLyricsBold = Boolean(next.editorLyricsBold);
