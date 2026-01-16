@@ -13340,6 +13340,9 @@ function setFocusModeEnabled(nextEnabled) {
   if (focusModeEnabled) {
     focusPrevRenderZoom = readRenderZoomCss();
     focusPrevLibraryVisible = isLibraryVisible;
+    // Start from a neutral zoom so Focus computes fit independently of the previous layout/zoom.
+    // (Fit will be applied after layout settles.)
+    setRenderZoomCss(1);
     if (isLibraryVisible) {
       setLibraryVisible(false, { persist: false });
       requestAnimationFrame(() => {
