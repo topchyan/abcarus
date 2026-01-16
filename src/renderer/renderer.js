@@ -3,6 +3,7 @@ import {
   EditorState,
   EditorSelection,
   basicSetup,
+  Compartment,
   keymap,
   Decoration,
   RangeSetBuilder,
@@ -118,6 +119,38 @@ const $setListHeader = document.getElementById("setListHeader");
 const $setListClear = document.getElementById("setListClear");
 const $setListSaveAbc = document.getElementById("setListSaveAbc");
 const $setListExportPdf = document.getElementById("setListExportPdf");
+
+const abcHighlightCompartment = new Compartment();
+const abcDiagnosticsCompartment = new Compartment();
+const abcTuningModeCompartment = new Compartment();
+
+function reconfigureAbcExtensions({
+  highlightEnabled = true,
+  diagnosticsEnabled = true,
+  tuningModeExtensions = [],
+} = {}) {
+  if (!editorView) return;
+
+  const effects = [];
+  effects.push(
+    abcHighlightCompartment.reconfigure(highlightEnabled ? [abcHighlight] : [])
+  );
+  effects.push(
+    abcDiagnosticsCompartment.reconfigure(
+      diagnosticsEnabled
+        ? [measureErrorPlugin, errorActivationHighlightPlugin, practiceBarHighlightPlugin]
+        : []
+    )
+  );
+  effects.push(
+    abcTuningModeCompartment.reconfigure(Array.isArray(tuningModeExtensions) ? tuningModeExtensions : [])
+  );
+
+  editorView.dispatch({
+    effects,
+    scrollIntoView: false,
+  });
+}
 const $setListPrint = document.getElementById("setListPrint");
 const $setListPageBreaks = document.getElementById("setListPageBreaks");
 const $setListCompact = document.getElementById("setListCompact");
@@ -3397,10 +3430,13 @@ function initEditor() {
     doc: DEFAULT_ABC,
     extensions: [
       basicSetup,
-      abcHighlight,
-      measureErrorPlugin,
-      errorActivationHighlightPlugin,
-      practiceBarHighlightPlugin,
+      abcHighlightCompartment.of([abcHighlight]),
+      abcDiagnosticsCompartment.of([
+        measureErrorPlugin,
+        errorActivationHighlightPlugin,
+        practiceBarHighlightPlugin,
+      ]),
+      abcTuningModeCompartment.of([]),
       updateListener,
       customKeys,
       foldService.of(foldBeginTextBlocks),
