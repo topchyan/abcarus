@@ -15195,17 +15195,6 @@ function setLayoutFromSettings(settings) {
   rightSplitRatioHorizontal = clampRatio(settings.layoutSplitRatioHorizontal, rightSplitRatioHorizontal);
   applyRightSplitOrientation(orientation);
   applyRightSplitSizesFromRatio();
-  if (orientation === "horizontal" && !splitZoomActive) {
-    splitPrevRenderZoom = readRenderZoomCss();
-    splitZoomActive = true;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (!splitZoomActive || rightSplitOrientation !== "horizontal") return;
-        const fit = computeFocusFitZoom();
-        if (fit != null) setRenderZoomCss(fit);
-      });
-    });
-  }
 }
 
 function setSplitOrientation(nextOrientation, { persist = true, userAction = false } = {}) {
@@ -15215,28 +15204,11 @@ function setSplitOrientation(nextOrientation, { persist = true, userAction = fal
     return false;
   }
   if (rightSplitOrientation === next) return true;
-  if (next === "horizontal") {
-    splitPrevRenderZoom = readRenderZoomCss();
-    splitZoomActive = true;
-  }
   applyRightSplitOrientation(next);
   applyRightSplitSizesFromRatio();
   // Avoid follow-scroll fighting layout reflow right after a toggle.
   const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
   suppressFollowScrollUntilMs = now + 250;
-  if (next === "horizontal") {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (!splitZoomActive || rightSplitOrientation !== "horizontal") return;
-        const fit = computeFocusFitZoom();
-        if (fit != null) setRenderZoomCss(fit);
-      });
-    });
-  } else if (splitPrevRenderZoom != null) {
-    splitZoomActive = false;
-    setRenderZoomCss(splitPrevRenderZoom);
-    splitPrevRenderZoom = null;
-  }
   if (persist) scheduleSaveLayoutPrefs({ layoutSplitOrientation: next });
   showToast(next === "horizontal" ? "Split: Horizontal" : "Split: Vertical", 1500);
   return true;
