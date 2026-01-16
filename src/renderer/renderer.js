@@ -12738,34 +12738,38 @@ function centerRenderPaneOnCurrentAnchor() {
   $renderPane.scrollLeft = Math.max(0, centerLeft);
 }
 
-// Prevent Chromium page-zoom shortcuts fighting the app's render/editor zoom.
-document.addEventListener("keydown", (e) => {
-  if (!settingsController) return;
-  const mod = e.ctrlKey || e.metaKey;
-  if (!mod || e.altKey) return;
-  const key = String(e.key || "");
-  const target = e.target;
-  const tag = target && target.tagName ? String(target.tagName).toLowerCase() : "";
-  if (tag === "input" || tag === "textarea") return;
+	// Prevent Chromium page-zoom shortcuts fighting the app's render/editor zoom.
+	document.addEventListener("keydown", (e) => {
+	  if (!settingsController) return;
+	  const mod = e.ctrlKey || e.metaKey;
+	  if (!mod || e.altKey) return;
+	  const key = String(e.key || "");
+	  const target = e.target;
+	  const tag = target && target.tagName ? String(target.tagName).toLowerCase() : "";
+	  if (tag === "input" || tag === "textarea") return;
 
-  const isZoomIn = key === "+" || (key === "=" && e.shiftKey);
-  const isZoomOut = key === "-" || key === "_";
-  const isZoomReset = key === "0";
-  if (!isZoomIn && !isZoomOut && !isZoomReset) return;
+	  const isZoomIn = key === "+" || (key === "=" && e.shiftKey);
+	  const isZoomOut = key === "-" || key === "_";
+	  const isZoomReset = key === "0";
+	  if (!isZoomIn && !isZoomOut && !isZoomReset) return;
 
-  e.preventDefault();
-  e.stopPropagation();
-  markZoomShortcut();
+	  e.preventDefault();
+	  e.stopPropagation();
+	  markZoomShortcut();
 
-  // Keyboard zoom is primarily intended for the notation pane.
-  settingsController.setActivePane("render");
-  if (isZoomIn) settingsController.zoomIn();
-  else if (isZoomOut) settingsController.zoomOut();
-  else {
-    settingsController.zoomReset();
-    requestAnimationFrame(() => centerRenderPaneOnCurrentAnchor());
-  }
-}, true);
+	  try {
+	    // Prefer zooming the pane that has focus (or is under the event target).
+	    const t = target || document.activeElement;
+	    if ($renderPane && t && $renderPane.contains(t)) settingsController.setActivePane("render");
+	    else if (editorView && editorView.dom && t && editorView.dom.contains(t)) settingsController.setActivePane("editor");
+	  } catch {}
+	  if (isZoomIn) settingsController.zoomIn();
+	  else if (isZoomOut) settingsController.zoomOut();
+	  else {
+	    settingsController.zoomReset();
+	    requestAnimationFrame(() => centerRenderPaneOnCurrentAnchor());
+	  }
+	}, true);
 
 document.addEventListener("wheel", (e) => {
   if (!settingsController) return;
