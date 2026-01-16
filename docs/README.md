@@ -11,6 +11,11 @@ This documentation is based on the current codebase and does not assume features
 - User-facing overview: `README.md` (repo root)
 - User guide (how to use the app): `docs/USER_GUIDE.md`
 
+## Local-only "kitchen"
+
+Some reference material (standards snapshots, manuals, chat exports, scratch notes) is intentionally kept **out of git**.
+Use `kitchen/` at the repo root for this kind of content (it is ignored by `.gitignore`).
+
 ## What ABCarus is
 - A text-first ABC editor with a split view for notation rendering.
 - A library browser that scans folders for `.abc` files and indexes tunes.

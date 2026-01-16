@@ -3,6 +3,7 @@ import {
   EditorState,
   EditorSelection,
   basicSetup,
+  Compartment,
   keymap,
   Decoration,
   RangeSetBuilder,
@@ -13,7 +14,12 @@ import {
   foldService,
   foldGutter,
   lineNumbers,
+  autocompletion,
+  CompletionContext,
+  hoverTooltip,
+  acceptCompletion,
 } from "../../third_party/codemirror/cm.js";
+import { ABC2SVG_DECORATIONS } from "./abc_decorations_abc2svg.js";
 import { initSettings } from "./settings.js";
 import { transformTranspose } from "./transpose.mjs";
 import { normalizeMeasuresLineBreaks, transformMeasuresPerLine } from "./measures.mjs";
@@ -118,6 +124,276 @@ const $setListHeader = document.getElementById("setListHeader");
 const $setListClear = document.getElementById("setListClear");
 const $setListSaveAbc = document.getElementById("setListSaveAbc");
 const $setListExportPdf = document.getElementById("setListExportPdf");
+
+const abcHighlightCompartment = new Compartment();
+const abcDiagnosticsCompartment = new Compartment();
+const abcCompletionCompartment = new Compartment();
+const abcHoverCompartment = new Compartment();
+const abcTuningModeCompartment = new Compartment();
+
+function buildAbcCompletionSource() {
+  const keyOptions = [
+    "C",
+    "G",
+    "D",
+    "A",
+    "E",
+    "B",
+    "F#",
+    "C#",
+    "F",
+    "Bb",
+    "Eb",
+    "Ab",
+    "Db",
+    "Gb",
+    "Cb",
+    "Am",
+    "Em",
+    "Bm",
+    "F#m",
+    "C#m",
+    "G#m",
+    "D#m",
+    "A#m",
+    "Dm",
+    "Gm",
+    "Cm",
+    "Fm",
+    "Bbm",
+    "Ebm",
+    "Abm",
+  ].map((label) => ({ label, type: "keyword" }));
+
+  const meterOptions = [
+    "4/4",
+    "3/4",
+    "2/4",
+    "6/8",
+    "12/8",
+    "2/2",
+    "5/4",
+    "7/8",
+    "9/8",
+    "C",
+    "C|",
+    "none",
+  ].map((label) => ({ label, type: "keyword" }));
+
+  const unitOptions = [
+    "1/8",
+    "1/16",
+    "1/4",
+    "1/2",
+  ].map((label) => ({ label, type: "keyword" }));
+
+  const tempoOptions = [
+    "1/4=60",
+    "1/4=80",
+    "1/4=100",
+    "1/4=120",
+    "1/4=144",
+    "1/8=120",
+    "1/8=180",
+  ].map((label) => ({ label, type: "keyword" }));
+
+  const voiceOptions = ["1", "2", "3", "4"].map((label) => ({ label, type: "keyword" }));
+
+  const edoOptions = ["12", "19", "24", "31", "41", "53"].map((label) => ({ label, type: "keyword" }));
+
+  const midiDirectives = [
+    { label: "%%MIDI program ", type: "keyword", info: "Select instrument program (0–127)" },
+    { label: "%%MIDI instrument ", type: "keyword", info: "Alias of program (engine-defined)" },
+    { label: "%%MIDI temperamentequal ", type: "keyword", info: "Enable EDO-N (e.g. 53)" },
+    { label: "%%MIDI drum ", type: "keyword" },
+    { label: "%%MIDI drumoff", type: "keyword" },
+    { label: "%%MIDI drumon", type: "keyword" },
+  ];
+
+  /** @param {CompletionContext} context */
+  return (context) => {
+    const pos = context.pos;
+    const line = context.state.doc.lineAt(pos);
+    const lineText = line.text;
+    const before = lineText.slice(0, pos - line.from);
+    const beforeTrim = before.trimStart();
+
+    // Offer `%%MIDI ...` directives at start of line (or after indentation).
+    if (beforeTrim.startsWith("%%") || /^(\s*)$/.test(before)) {
+      const m = context.matchBefore(/^\s*%%[A-Za-z]*$/);
+      if (m) {
+        return { from: line.from + m.from, options: midiDirectives, validFor: /^\s*%%[A-Za-z]*$/ };
+      }
+      const m2 = context.matchBefore(/^\s*%%MIDI\s+[A-Za-z]*$/);
+      if (m2) {
+        return { from: line.from + m2.from, options: midiDirectives, validFor: /^\s*%%MIDI\s+[A-Za-z]*$/ };
+      }
+    }
+
+    // %%MIDI temperamentequal <N>
+    if (/^\s*%%\s*MIDI\s+temperamentequal\b/i.test(lineText)) {
+      const m = context.matchBefore(/\d*$/);
+      if (m) return { from: line.from + m.from, options: edoOptions };
+    }
+
+    // Header field values.
+    if (/^\s*K:/.test(lineText)) {
+      const m = context.matchBefore(/[A-Za-z#bm]*$/);
+      if (m) return { from: line.from + m.from, options: keyOptions };
+    }
+    if (/^\s*M:/.test(lineText)) {
+      const m = context.matchBefore(/[0-9C|/nobe]*$/i);
+      if (m) return { from: line.from + m.from, options: meterOptions };
+    }
+    if (/^\s*L:/.test(lineText)) {
+      const m = context.matchBefore(/[0-9/]*$/);
+      if (m) return { from: line.from + m.from, options: unitOptions };
+    }
+    if (/^\s*Q:/.test(lineText)) {
+      const m = context.matchBefore(/[0-9=/]*$/);
+      if (m) return { from: line.from + m.from, options: tempoOptions };
+    }
+    if (/^\s*V:/.test(lineText)) {
+      const m = context.matchBefore(/[A-Za-z0-9_-]*$/);
+      if (m) return { from: line.from + m.from, options: voiceOptions };
+    }
+
+    return null;
+  };
+}
+
+function buildAbcHoverTooltip() {
+  const helpByHeaderKey = new Map([
+    ["K", "Key signature (e.g. K:Dm, K:G, K:C#m). abc2svg treats K: as the header/body boundary."],
+    ["M", "Meter/time signature (e.g. M:4/4, M:6/8, M:C, M:C|)."],
+    ["L", "Default note length unit (e.g. L:1/8)."],
+  ]);
+
+  const helpByMidiCommand = new Map([
+    ["program", "Select instrument program (0–127)."],
+    ["instrument", "Instrument selection (engine-defined; often an alias of program)."],
+    ["temperamentequal", "Enable EDO-N tuning (e.g. %%MIDI temperamentequal 53)."],
+    ["drum", "Enable/define drums (engine-defined)."],
+    ["drumon", "Enable drums (engine-defined)."],
+    ["drumoff", "Disable drums (engine-defined)."],
+  ]);
+
+  const buildDom = (title, body) => {
+    const dom = document.createElement("div");
+    dom.style.maxWidth = "320px";
+    dom.style.padding = "3px 6px";
+    dom.style.fontSize = "12px";
+    dom.style.lineHeight = "1.3";
+
+    const line = document.createElement("div");
+    line.textContent = `${title} — ${body}`;
+    dom.appendChild(line);
+
+    return dom;
+  };
+
+  const getHelpAtLine = (text) => {
+    if (!text) return null;
+
+    const headerMatch = /^\s*([KML]):/.exec(text);
+    if (headerMatch) {
+      const key = headerMatch[1];
+      const help = helpByHeaderKey.get(key) || null;
+      if (!help) return null;
+      return { title: `${key}:`, help };
+    }
+
+    const midiMatch = /^\s*(%{1,2})\s*MIDI\s+([A-Za-z]+)/i.exec(text);
+    if (midiMatch) {
+      const cmd = String(midiMatch[2] || "").toLowerCase();
+      const help = helpByMidiCommand.get(cmd) || null;
+      if (!help) return null;
+      return { title: `%%MIDI ${cmd}`, help };
+    }
+
+    return null;
+  };
+
+  return hoverTooltip((view, pos) => {
+    if (!view) return null;
+    const line = view.state.doc.lineAt(pos);
+    const text = line.text;
+    const leadingSpaces = /^\s*/.exec(text)?.[0]?.length || 0;
+
+    const help = getHelpAtLine(text);
+    if (help && /^\s*([KML]):/.test(text)) {
+      const from = line.from + leadingSpaces;
+      const to = Math.min(line.to, from + 2);
+      return {
+        pos: from,
+        end: to,
+        above: false,
+        create() {
+          return { dom: buildDom(help.title, help.help) };
+        },
+      };
+    }
+
+    if (help && /^\s*%{1,2}\s*MIDI\b/i.test(text)) {
+      const from = line.from + leadingSpaces;
+      const to = Math.min(line.to, line.from + text.trim().length);
+      return {
+        pos: from,
+        end: to,
+        above: false,
+        create() {
+          return { dom: buildDom(help.title, help.help) };
+        },
+      };
+    }
+
+    return null;
+  }, { hoverTime: 900 });
+}
+
+function reconfigureAbcExtensions({
+  highlightEnabled = true,
+  diagnosticsEnabled = true,
+  completionEnabled = true,
+  hoverEnabled = false,
+  tuningModeExtensions = [],
+} = {}) {
+  if (!editorView) return;
+
+  const effects = [];
+  effects.push(
+    abcHighlightCompartment.reconfigure(highlightEnabled ? [abcHighlight] : [])
+  );
+  effects.push(
+    abcDiagnosticsCompartment.reconfigure(
+      diagnosticsEnabled
+        ? [measureErrorPlugin, errorActivationHighlightPlugin, practiceBarHighlightPlugin]
+        : []
+    )
+  );
+  effects.push(
+    abcCompletionCompartment.reconfigure(
+      completionEnabled
+        ? [autocompletion({ override: [buildAbcCompletionSource()], activateOnTyping: false })]
+        : []
+    )
+  );
+  effects.push(
+    abcHoverCompartment.reconfigure(
+      hoverEnabled
+        ? [buildAbcHoverTooltip()]
+        : []
+    )
+  );
+  effects.push(
+    abcTuningModeCompartment.reconfigure(Array.isArray(tuningModeExtensions) ? tuningModeExtensions : [])
+  );
+
+  editorView.dispatch({
+    effects,
+    scrollIntoView: false,
+  });
+}
 const $setListPrint = document.getElementById("setListPrint");
 const $setListPageBreaks = document.getElementById("setListPageBreaks");
 const $setListCompact = document.getElementById("setListCompact");
@@ -1164,7 +1440,7 @@ function computeSuggestedDebugDumpDir() {
         const rendererDir = window.api.pathDirname(p);
         const srcDir = window.api.pathDirname(rendererDir);
         const rootDir = window.api.pathDirname(srcDir);
-        return window.api.pathJoin(rootDir, "scripts", "local", "debug_dumps");
+        return window.api.pathJoin(rootDir, "kitchen", "debug_dumps");
       }
     }
   } catch {}
@@ -1255,10 +1531,98 @@ const LIBRARY_SEARCH_DEBOUNCE_MS = 180;
 let settingsController = null;
 let disclaimerShown = false;
 
+let decorationCatalogEnrichment = null;
+let decorationCatalogEnrichmentTried = false;
+
+async function loadDecorationCatalogEnrichment() {
+  if (decorationCatalogEnrichmentTried) return decorationCatalogEnrichment;
+  decorationCatalogEnrichmentTried = true;
+
+  try {
+    if (!window.api || typeof window.api.pathJoin !== "function" || typeof window.api.pathDirname !== "function") return null;
+    const href = String(window.location && window.location.href ? window.location.href : "");
+    if (!href.startsWith("file://")) return null;
+    const p = decodeURIComponent(new URL(href).pathname || "");
+    if (!p.includes("/src/renderer/")) return null;
+    const rendererDir = window.api.pathDirname(p);
+    const srcDir = window.api.pathDirname(rendererDir);
+    const rootDir = window.api.pathDirname(srcDir);
+    const jsonPath = window.api.pathJoin(rootDir, "kitchen", "derived", "abc2svg-decorations-catalog.json");
+
+    const res = await readFile(jsonPath);
+    if (!res || !res.ok || !res.data) return null;
+    const parsed = JSON.parse(String(res.data || ""));
+    const list = Array.isArray(parsed && parsed.decorations) ? parsed.decorations : [];
+    const map = new Map();
+    for (const d of list) {
+      const name = d && d.name ? String(d.name) : "";
+      if (!name) continue;
+      map.set(name, {
+        description: d && d.description ? String(d.description) : "",
+        example: d && d.example ? String(d.example) : "",
+        sources: Array.isArray(d && d.sources) ? d.sources.map(String) : [],
+      });
+    }
+    decorationCatalogEnrichment = map;
+    return map;
+  } catch {
+    return null;
+  }
+}
+
+function buildDecorationExample(name, shorthandChar) {
+  if (!name) return "";
+  const abc = `!${name}!`;
+  if (name.endsWith("(")) {
+    const base = name.slice(0, -1);
+    return `${abc}c2 d2 !${base})! e2`;
+  }
+  if (name.endsWith(")")) {
+    return `!${name.slice(0, -1)}(! c2 d2 ${abc} e2`;
+  }
+  if (name === "trill") return `!trill!A4`;
+  if (["p", "pp", "ppp", "pppp", "mp", "mf", "f", "ff", "fff", "ffff", "sfz"].includes(name)) return `${abc} c2 d2 e2`;
+  if (name === ">") return `!>!c`;
+  if (name === "+") return `!+!c`;
+  if (name === "^") return `!^!c`;
+  if (name === "dot") return `.c`;
+  if (name === "gmark") return `!gmark!c`;
+  if (["/", "//", "///"].includes(name)) return `${abc}c`;
+  if (["-(", "-)", "~(", "~)"].includes(name)) return `${abc}c`;
+  if (shorthandChar) return `${shorthandChar}c`;
+  return `${abc}c`;
+}
+
 function buildAbcDecorations(state) {
   const builder = new RangeSetBuilder();
   let inTextBlock = false;
   let lastNonEmptyKind = "";
+
+  const findFirstUnescapedPercent = (text) => {
+    for (let i = 0; i < text.length; i += 1) {
+      if (text[i] === "%" && text[i - 1] !== "\\") return i;
+    }
+    return -1;
+  };
+
+  const collectChordQuoteRanges = (text) => {
+    const ranges = [];
+    let inQuote = false;
+    let start = 0;
+    for (let i = 0; i < text.length; i += 1) {
+      if (text[i] !== "\"") continue;
+      if (text[i - 1] === "\\") continue;
+      if (!inQuote) {
+        inQuote = true;
+        start = i;
+        continue;
+      }
+      inQuote = false;
+      ranges.push({ start, end: i + 1 });
+    }
+    if (inQuote) ranges.push({ start, end: text.length });
+    return ranges;
+  };
 
   for (let lineNo = 1; lineNo <= state.doc.lines; lineNo += 1) {
     const line = state.doc.line(lineNo);
@@ -1327,6 +1691,15 @@ function buildAbcDecorations(state) {
     if (text.trim().length) {
       builder.add(line.from, line.to, Decoration.mark({ class: "cm-abc-notes" }));
       if (trimmed) lastNonEmptyKind = "notes";
+
+      const commentIdx = findFirstUnescapedPercent(text);
+      const contentText = commentIdx >= 0 ? text.slice(0, commentIdx) : text;
+      const chordRanges = collectChordQuoteRanges(contentText);
+      for (const r of chordRanges) {
+        const from = line.from + r.start;
+        const to = line.from + r.end;
+        if (to > from) builder.add(from, to, Decoration.mark({ class: "cm-abc-chord" }));
+      }
     }
   }
 
@@ -1399,8 +1772,6 @@ let rightSplitOrientation = "vertical"; // "vertical" | "horizontal"
 let rightSplitRatioVertical = 0.5;
 let rightSplitRatioHorizontal = 0.5;
 let suppressFollowScrollUntilMs = 0;
-let splitPrevRenderZoom = null;
-let splitZoomActive = false;
 
 let layoutPrefsSaveTimer = null;
 let pendingLayoutPrefsPatch = null;
@@ -2914,6 +3285,16 @@ function foldBeginTextBlocks(state, lineStart, lineEnd) {
   return null;
 }
 
+function isInBeginTextBlockAtLine(state, lineNumber) {
+  const n = Math.max(1, Math.min(state.doc.lines, Number(lineNumber) || 1));
+  for (let i = n; i >= 1; i -= 1) {
+    const text = String(state.doc.line(i).text || "");
+    if (/^%%\s*endtext\b/i.test(text)) return false;
+    if (/^%%\s*begintext\b/i.test(text)) return true;
+  }
+  return false;
+}
+
 function moveLineSelection(view, delta) {
   const { state } = view;
   const ranges = [];
@@ -3320,6 +3701,11 @@ function getFocusedEditorView() {
 
 function initEditor() {
   if (editorView || !$editorHost) return;
+  const completionTooltipOpen = (view) => {
+    if (!view || !view.hasFocus) return false;
+    const el = document.querySelector(".cm-tooltip-autocomplete");
+    return Boolean(el);
+  };
   const customKeys = keymap.of([
     { key: "Ctrl-s", run: () => { fileSave(); return true; } },
     { key: "Mod-s", run: () => { fileSave(); return true; } },
@@ -3335,8 +3721,1291 @@ function initEditor() {
     { key: "Mod-F7", run: (view) => moveLineSelection(view, 1) },
 		    { key: "Ctrl-F5", run: (view) => moveLineSelection(view, -1) },
 		    { key: "Mod-F5", run: (view) => moveLineSelection(view, -1) },
-		    { key: "Tab", run: indentSelectionMore },
-		    { key: "Shift-Tab", run: indentSelectionLess },
+		    {
+		      key: "Ctrl-F1",
+		      run: (view) => {
+		        try {
+		          // NOTE: Be careful with RegExp escaping inside template strings.
+		          // A past bottleneck (across multiple chat threads) was caused by accidentally over-escaping
+		          // `\\s`/`\\d` in `new RegExp(...)`, which made the pattern never match and made the GM picker
+		          // appear to "do nothing" (it always showed "Can't apply...").
+		          // Toggle a lightweight help popover without interfering with the app's main F1 (ABC manual).
+		          const existing = document.getElementById("abcarusAbcHelpPopover");
+		          if (existing) {
+		            try {
+		              const close = existing.__abcarusClose;
+		              if (typeof close === "function") close();
+		              else existing.remove();
+		            } catch {}
+		            return true;
+		          }
+
+		          const GM_PROGRAMS = [
+		            "Acoustic Grand Piano",
+		            "Bright Acoustic Piano",
+		            "Electric Grand Piano",
+		            "Honky-tonk Piano",
+		            "Electric Piano 1",
+		            "Electric Piano 2",
+		            "Harpsichord",
+		            "Clavinet",
+		            "Celesta",
+		            "Glockenspiel",
+		            "Music Box",
+		            "Vibraphone",
+		            "Marimba",
+		            "Xylophone",
+		            "Tubular Bells",
+		            "Dulcimer",
+		            "Drawbar Organ",
+		            "Percussive Organ",
+		            "Rock Organ",
+		            "Church Organ",
+		            "Reed Organ",
+		            "Accordion",
+		            "Harmonica",
+		            "Tango Accordion",
+		            "Acoustic Guitar (nylon)",
+		            "Acoustic Guitar (steel)",
+		            "Electric Guitar (jazz)",
+		            "Electric Guitar (clean)",
+		            "Electric Guitar (muted)",
+		            "Overdriven Guitar",
+		            "Distortion Guitar",
+		            "Guitar Harmonics",
+		            "Acoustic Bass",
+		            "Electric Bass (finger)",
+		            "Electric Bass (pick)",
+		            "Fretless Bass",
+		            "Slap Bass 1",
+		            "Slap Bass 2",
+		            "Synth Bass 1",
+		            "Synth Bass 2",
+		            "Violin",
+		            "Viola",
+		            "Cello",
+		            "Contrabass",
+		            "Tremolo Strings",
+		            "Pizzicato Strings",
+		            "Orchestral Harp",
+		            "Timpani",
+		            "String Ensemble 1",
+		            "String Ensemble 2",
+		            "SynthStrings 1",
+		            "SynthStrings 2",
+		            "Choir Aahs",
+		            "Voice Oohs",
+		            "Synth Voice",
+		            "Orchestra Hit",
+		            "Trumpet",
+		            "Trombone",
+		            "Tuba",
+		            "Muted Trumpet",
+		            "French Horn",
+		            "Brass Section",
+		            "SynthBrass 1",
+		            "SynthBrass 2",
+		            "Soprano Sax",
+		            "Alto Sax",
+		            "Tenor Sax",
+		            "Baritone Sax",
+		            "Oboe",
+		            "English Horn",
+		            "Bassoon",
+		            "Clarinet",
+		            "Piccolo",
+		            "Flute",
+		            "Recorder",
+		            "Pan Flute",
+		            "Blown Bottle",
+		            "Shakuhachi",
+		            "Whistle",
+		            "Ocarina",
+		            "Lead 1 (square)",
+		            "Lead 2 (sawtooth)",
+		            "Lead 3 (calliope)",
+		            "Lead 4 (chiff)",
+		            "Lead 5 (charang)",
+		            "Lead 6 (voice)",
+		            "Lead 7 (fifths)",
+		            "Lead 8 (bass + lead)",
+		            "Pad 1 (new age)",
+		            "Pad 2 (warm)",
+		            "Pad 3 (polysynth)",
+		            "Pad 4 (choir)",
+		            "Pad 5 (bowed)",
+		            "Pad 6 (metallic)",
+		            "Pad 7 (halo)",
+		            "Pad 8 (sweep)",
+		            "FX 1 (rain)",
+		            "FX 2 (soundtrack)",
+		            "FX 3 (crystal)",
+		            "FX 4 (atmosphere)",
+		            "FX 5 (brightness)",
+		            "FX 6 (goblins)",
+		            "FX 7 (echoes)",
+		            "FX 8 (sci-fi)",
+		            "Sitar",
+		            "Banjo",
+		            "Shamisen",
+		            "Koto",
+		            "Kalimba",
+		            "Bag pipe",
+		            "Fiddle",
+		            "Shanai",
+		            "Tinkle Bell",
+		            "Agogo",
+		            "Steel Drums",
+		            "Woodblock",
+		            "Taiko Drum",
+		            "Melodic Tom",
+		            "Synth Drum",
+		            "Reverse Cymbal",
+		            "Guitar Fret Noise",
+		            "Breath Noise",
+		            "Seashore",
+		            "Bird Tweet",
+		            "Telephone Ring",
+		            "Helicopter",
+		            "Applause",
+		            "Gunshot",
+		          ];
+
+		          const pos = view.state.selection.main.head;
+		          const anchorPos = pos;
+		          const line = view.state.doc.lineAt(pos);
+		          const anchorLineFrom = line.from;
+		          const anchorText = line.text || "";
+		          const text = anchorText;
+		          const m = /^\s*([KML]):/.exec(text);
+		          const midi = /^\s*(%{1,2})\s*MIDI\s*([A-Za-z]+)/i.exec(text);
+		          const midiProg = /^\s*(%{1,2})\s*MIDI\s*(program|chordprog|bassprog)\b/i.exec(text);
+		          let msg = "";
+		          if (m) {
+		            if (m[1] === "K") msg = "K: — Key signature (e.g. K:Dm, K:G, K:C#m).";
+		            if (m[1] === "M") msg = "M: — Meter/time signature (e.g. M:4/4, M:6/8, M:C, M:C|).";
+		            if (m[1] === "L") msg = "L: — Default note length unit (e.g. L:1/8).";
+		          } else if (midi) {
+		            const cmd = String(midi[2] || "").toLowerCase();
+		            if (cmd === "program") msg = "%%MIDI program — Select instrument program (0–127).";
+		            else if (cmd === "instrument") msg = "%%MIDI instrument — Instrument selection (engine-defined).";
+		            else if (cmd === "temperamentequal") msg = "%%MIDI temperamentequal — Enable EDO-N (e.g. 53).";
+		            else if (cmd === "drum") msg = "%%MIDI drum — Enable/define drums (engine-defined).";
+		            else if (cmd === "drumon") msg = "%%MIDI drumon — Enable drums (engine-defined).";
+		            else if (cmd === "drumoff") msg = "%%MIDI drumoff — Disable drums (engine-defined).";
+		          }
+
+		          const pop = document.createElement("div");
+		          pop.id = "abcarusAbcHelpPopover";
+		          pop.setAttribute("role", "dialog");
+		          pop.setAttribute("aria-label", "ABC help");
+		          pop.style.position = "fixed";
+		          pop.style.zIndex = "9999";
+		          pop.style.maxWidth = "520px";
+		          pop.style.padding = "8px 10px";
+		          pop.style.borderRadius = "8px";
+		          pop.style.border = "1px solid rgba(0,0,0,0.18)";
+		          pop.style.background = "rgba(255,255,255,0.98)";
+		          pop.style.boxShadow = "0 8px 24px rgba(0,0,0,0.18)";
+		          pop.style.fontSize = "13px";
+		          pop.style.lineHeight = "1.35";
+
+		          const head = document.createElement("div");
+		          head.style.display = "flex";
+		          head.style.alignItems = "center";
+		          head.style.justifyContent = "space-between";
+		          head.style.gap = "12px";
+
+		          const title = document.createElement("div");
+		          title.textContent = "ABC help";
+		          title.style.fontWeight = "600";
+		          head.appendChild(title);
+
+		          const hint = document.createElement("div");
+		          hint.textContent = "Ctrl+F1 to close";
+		          hint.style.opacity = "0.65";
+		          hint.style.fontSize = "12px";
+		          head.appendChild(hint);
+
+		          pop.appendChild(head);
+
+		          const body = document.createElement("div");
+		          body.style.marginTop = "6px";
+		          pop.appendChild(body);
+
+		          let closePopover = () => {
+		            try { pop.remove(); } catch {}
+		          };
+
+		          const setBodyText = (textValue) => {
+		            body.textContent = textValue || "";
+		          };
+
+		          const setBodyProgramPicker = () => {
+		            body.textContent = "";
+
+		            const applyMidiProgramNumber = (programNumber, programName) => {
+		              try {
+		                const cmd = String(midiProg && midiProg[2] ? midiProg[2] : "program");
+		                const lineNow = view.state.doc.lineAt(anchorPos);
+		                const textNow = lineNow.text;
+		                const replaceRe = new RegExp(`^(\\s*%{1,2}\\s*MIDI\\s*${cmd}\\b\\s*)(\\d+)?`, "i");
+		                let mm = replaceRe.exec(textNow);
+		                let baseFrom = lineNow.from;
+		                if (!mm) {
+		                  // Fallback to the snapshot taken when the popover was opened. This avoids
+		                  // edge-cases where focus/selection move and the "current line" changes.
+		                  mm = replaceRe.exec(anchorText);
+		                  baseFrom = anchorLineFrom;
+		                }
+		                if (!mm) {
+		                  try { showToast("Can't apply GM program here.", 1800); } catch {}
+		                  return false;
+		                }
+		                const prefix = mm[1] || "";
+		                const existingNum = mm[2] || "";
+		                const insertAt = baseFrom + (mm.index || 0) + prefix.length;
+		                const from = insertAt;
+		                const to = existingNum ? insertAt + existingNum.length : insertAt;
+		                const needSpace = !/\s$/.test(prefix);
+		                const insert = (needSpace && !existingNum) ? ` ${programNumber}` : String(programNumber);
+		                const cursorPos = from + insert.length;
+		                view.dispatch({
+		                  changes: { from, to, insert },
+		                  selection: EditorSelection.cursor(cursorPos),
+		                  userEvent: "input",
+		                });
+
+		                // Add/update a helpful comment with the GM program name, if possible.
+		                try {
+		                  const name = String(programName || "").trim();
+		                  if (name) {
+		                    const lineAfter = view.state.doc.lineAt(anchorPos);
+		                    const textAfter = lineAfter.text || "";
+		                    const afterRe = new RegExp(`^(\\s*%{1,2}\\s*MIDI\\s*${cmd}\\b\\s*)(\\d+)`, "i");
+		                    const mm2 = afterRe.exec(textAfter);
+		                    if (mm2) {
+		                      const prefix2 = mm2[1] || "";
+		                      const num2 = mm2[2] || "";
+		                      const numEndLocal = (mm2.index || 0) + prefix2.length + num2.length;
+		                      let commentIdx = -1;
+		                      for (let i = numEndLocal; i < textAfter.length; i += 1) {
+		                        if (textAfter[i] === "%" && textAfter[i - 1] !== "\\") { commentIdx = i; break; }
+		                      }
+
+		                      const commentText = ` % ${name}`;
+		                      const trailingWs = /\s*$/.exec(textAfter);
+		                      const endNoWs = trailingWs ? (textAfter.length - trailingWs[0].length) : textAfter.length;
+
+		                      if (commentIdx === -1) {
+		                        view.dispatch({
+		                          changes: { from: lineAfter.from + endNoWs, to: lineAfter.from + endNoWs, insert: commentText },
+		                          userEvent: "input",
+		                        });
+		                      } else {
+		                        const existingComment = textAfter.slice(commentIdx);
+		                        const existing = String(existingComment || "");
+		                        const replaceable =
+		                          /^\s*%\s*(gm|program)\s*:/i.test(existing) ||
+		                          GM_PROGRAMS.some((n) => new RegExp(`^\\s*%\\s*${escapeRegExp(n)}\\s*$`, "i").test(existing));
+		                        if (replaceable) {
+		                          view.dispatch({
+		                            changes: { from: lineAfter.from + commentIdx, to: lineAfter.to, insert: commentText },
+		                            userEvent: "input",
+		                          });
+		                        }
+		                      }
+		                    }
+		                  }
+		                } catch {}
+		                try { view.focus(); } catch {}
+		                return true;
+		              } catch (err) {
+		                try {
+		                  const msg = err && err.message ? String(err.message) : String(err || "unknown error");
+		                  showToast(`Failed to apply GM program: ${msg}`, 2400);
+		                } catch {}
+		                return false;
+		              }
+		            };
+
+		            const label = document.createElement("div");
+		            label.textContent = "GM program (0–127):";
+		            label.style.marginBottom = "6px";
+		            label.style.fontWeight = "600";
+		            body.appendChild(label);
+
+		            const input = document.createElement("input");
+		            input.type = "text";
+		            input.placeholder = "Search instrument… (e.g. flute, violin, organ)";
+		            input.autocomplete = "off";
+		            input.spellcheck = false;
+		            input.style.width = "100%";
+		            input.style.padding = "6px 8px";
+		            input.style.borderRadius = "6px";
+		            input.style.border = "1px solid rgba(0,0,0,0.2)";
+		            body.appendChild(input);
+
+		            const list = document.createElement("div");
+		            list.style.marginTop = "6px";
+		            list.style.maxHeight = "240px";
+		            list.style.overflow = "auto";
+		            list.style.border = "1px solid rgba(0,0,0,0.12)";
+		            list.style.borderRadius = "6px";
+		            body.appendChild(list);
+
+		            let items = [];
+		            let activeIdx = 0;
+
+		            const render = () => {
+		              list.textContent = "";
+		              const q = String(input.value || "").trim().toLowerCase();
+		              const all = GM_PROGRAMS.map((name, idx) => ({ idx, name }));
+		              const filtered = q
+		                ? all.filter((x) => x.name.toLowerCase().includes(q) || String(x.idx).includes(q))
+		                : all;
+		              items = filtered;
+		              if (activeIdx >= items.length) activeIdx = 0;
+
+		              let activeRow = null;
+		              for (let i = 0; i < items.length; i += 1) {
+		                const it = items[i];
+		                const row = document.createElement("div");
+		                row.style.display = "flex";
+		                row.style.gap = "10px";
+		                row.style.padding = "6px 8px";
+		                row.style.cursor = "pointer";
+		                row.style.borderTop = i === 0 ? "none" : "1px solid rgba(0,0,0,0.06)";
+		                if (i === activeIdx) {
+		                  row.style.background = "rgba(30,144,255,0.12)";
+		                  activeRow = row;
+		                }
+
+		                const num = document.createElement("div");
+		                num.textContent = String(it.idx);
+		                num.style.minWidth = "2.5em";
+		                num.style.opacity = "0.75";
+		                row.appendChild(num);
+
+		                const nm = document.createElement("div");
+		                nm.textContent = it.name;
+		                row.appendChild(nm);
+
+		                const apply = () => {
+		                  const ok = applyMidiProgramNumber(it.idx, it.name);
+		                  if (ok) closePopover();
+		                };
+
+		                row.addEventListener("click", (ev) => {
+		                  try { ev.preventDefault(); ev.stopPropagation(); } catch {}
+		                  apply();
+		                }, true);
+		                list.appendChild(row);
+		              }
+
+		              try {
+		                if (activeRow) activeRow.scrollIntoView({ block: "nearest" });
+		              } catch {}
+		            };
+
+		            input.addEventListener("input", () => {
+		              activeIdx = 0;
+		              render();
+		            });
+
+		            input.addEventListener("keydown", (ev) => {
+		              try {
+		                if (!ev) return;
+		                const k = String(ev.key || "");
+		                if (k === "ArrowDown") {
+		                  if (items.length) activeIdx = Math.min(items.length - 1, activeIdx + 1);
+		                  render();
+		                  ev.preventDefault();
+		                  ev.stopPropagation();
+		                  return;
+		                }
+		                if (k === "ArrowUp") {
+		                  if (items.length) activeIdx = Math.max(0, activeIdx - 1);
+		                  render();
+		                  ev.preventDefault();
+		                  ev.stopPropagation();
+		                  return;
+		                }
+		                if (k === "Enter") {
+		                  const it = items[activeIdx];
+		                  if (it) {
+		                    // Simulate click.
+		                    input.blur();
+		                    const ok = applyMidiProgramNumber(it.idx, it.name);
+		                    if (ok) closePopover();
+		                  }
+		                  ev.preventDefault();
+		                  ev.stopPropagation();
+		                  return;
+		                }
+		                if (k === "Escape") {
+		                  closePopover();
+		                  ev.preventDefault();
+		                  ev.stopPropagation();
+		                }
+		              } catch {}
+		            });
+
+		            render();
+		            setTimeout(() => { try { input.focus(); input.select(); } catch {} }, 0);
+		          };
+
+		          if (midiProg) {
+		            setBodyProgramPicker();
+		          } else if (msg) {
+		            setBodyText(msg);
+		          } else {
+		            // Nothing useful for this line yet.
+		            closePopover();
+		            return true;
+		          }
+
+		          const coords = view.coordsAtPos(pos);
+		          const margin = 10;
+		          const vw = window.innerWidth || 0;
+		          const vh = window.innerHeight || 0;
+
+		          let left = margin;
+		          let top = margin;
+		          if (coords) {
+		            left = Math.round(coords.left);
+		            top = Math.round(coords.bottom + 8);
+		          }
+		          document.body.appendChild(pop);
+
+		          // Clamp after layout so the popover stays on-screen.
+		          const r = pop.getBoundingClientRect();
+		          if (left + r.width + margin > vw) left = Math.max(margin, vw - r.width - margin);
+		          if (top + r.height + margin > vh) top = Math.max(margin, (coords ? (coords.top - r.height - 8) : (vh - r.height - margin)));
+		          pop.style.left = `${left}px`;
+		          pop.style.top = `${top}px`;
+
+		          const onDocKey = (ev) => {
+		            try {
+		              if (!ev) return;
+		              if (ev.key === "Escape") {
+		                closePopover();
+		              }
+		            } catch {}
+		          };
+		          const onDocDown = (ev) => {
+		            try {
+		              if (!ev) return;
+		              if (pop.contains(ev.target)) return;
+		              closePopover();
+		            } catch {}
+		          };
+		          const cleanup = () => {
+		            document.removeEventListener("keydown", onDocKey, true);
+		            document.removeEventListener("mousedown", onDocDown, true);
+		          };
+
+		          closePopover = () => {
+		            try { cleanup(); } catch {}
+		            try { pop.remove(); } catch {}
+		          };
+		          pop.__abcarusClose = closePopover;
+		          document.addEventListener("keydown", onDocKey, true);
+		          document.addEventListener("mousedown", onDocDown, true);
+		        } catch {}
+		        return true;
+		      },
+		    },
+		    {
+		      key: "Ctrl-F2",
+		      run: (view) => {
+		        try {
+		          const pos = view.state.selection.main.head;
+		          const lineInfo = view.state.doc.lineAt(pos);
+		          const lineText = String(lineInfo.text || "");
+		          if (isInBeginTextBlockAtLine(view.state, lineInfo.number)) {
+		            try { showToast("Decoration picker: not available in %%begintext blocks.", 2200); } catch {}
+		            return true;
+		          }
+		          if (/^\s*[A-Za-z]:/.test(lineText) || /^\s*[Ww]:/.test(lineText) || /^\s*%%\s*(begintext|endtext)\b/i.test(lineText)) {
+		            try { showToast("Decoration picker: place cursor on a music line.", 2200); } catch {}
+		            return true;
+		          }
+
+		          const existing = document.getElementById("abcarusAbcInsertPopover");
+		          if (existing) {
+		            try {
+		              const close = existing.__abcarusClose;
+		              if (typeof close === "function") close();
+		              else existing.remove();
+		            } catch {}
+		            return true;
+		          }
+
+		          const coords = view.coordsAtPos(pos);
+
+		          const pop = document.createElement("div");
+		          pop.id = "abcarusAbcInsertPopover";
+		          pop.setAttribute("role", "dialog");
+		          pop.setAttribute("aria-label", "ABC insert");
+			          pop.style.position = "fixed";
+			          pop.style.zIndex = "9999";
+			          pop.style.width = "min(1040px, calc(100vw - 20px))";
+			          pop.style.maxWidth = "calc(100vw - 20px)";
+			          pop.style.maxHeight = "calc(100vh - 20px)";
+			          pop.style.overflow = "auto";
+			          pop.style.resize = "both";
+			          pop.style.minWidth = "760px";
+			          pop.style.minHeight = "260px";
+			          pop.style.padding = "8px 10px";
+			          pop.style.boxSizing = "border-box";
+			          pop.style.borderRadius = "8px";
+			          pop.style.border = "1px solid rgba(0,0,0,0.18)";
+			          pop.style.background = "rgba(255,255,255,0.98)";
+		          pop.style.boxShadow = "0 8px 24px rgba(0,0,0,0.18)";
+		          pop.style.fontSize = "13px";
+		          pop.style.lineHeight = "1.35";
+
+			          const head = document.createElement("div");
+			          head.style.display = "flex";
+			          head.style.alignItems = "center";
+			          head.style.justifyContent = "space-between";
+			          head.style.gap = "12px";
+			          head.style.cursor = "move";
+			          head.style.userSelect = "none";
+			          head.style.touchAction = "none";
+
+			          const title = document.createElement("div");
+			          title.textContent = "Insert decoration";
+			          title.style.fontWeight = "600";
+			          head.appendChild(title);
+
+			          const hint = document.createElement("div");
+			          hint.textContent = "Drag to move · Resize corner · Enter=insert · Shift+Enter=!name! · (Select text for range) · Esc=close";
+			          hint.style.opacity = "0.65";
+			          hint.style.fontSize = "11px";
+			          hint.style.whiteSpace = "nowrap";
+			          head.appendChild(hint);
+
+		          pop.appendChild(head);
+
+		          const body = document.createElement("div");
+		          body.style.marginTop = "6px";
+		          pop.appendChild(body);
+
+			          const input = document.createElement("input");
+			          input.type = "text";
+			          input.placeholder = "Search… (e.g. trill, segno, fermata)";
+			          input.autocomplete = "off";
+			          input.spellcheck = false;
+			          input.style.width = "100%";
+			          input.style.padding = "6px 8px";
+			          input.style.borderRadius = "6px";
+			          input.style.border = "1px solid rgba(0,0,0,0.2)";
+			          body.appendChild(input);
+
+			          const controls = document.createElement("div");
+			          controls.style.marginTop = "6px";
+			          controls.style.display = "flex";
+			          controls.style.alignItems = "center";
+			          controls.style.gap = "14px";
+			          controls.style.fontSize = "12px";
+			          controls.style.opacity = "0.9";
+			          body.appendChild(controls);
+
+			          const mkCheckbox = (labelText) => {
+			            const label = document.createElement("label");
+			            label.style.display = "flex";
+			            label.style.alignItems = "center";
+			            label.style.gap = "6px";
+			            label.style.cursor = "pointer";
+			            const cb = document.createElement("input");
+			            cb.type = "checkbox";
+			            label.appendChild(cb);
+			            const t = document.createElement("span");
+			            t.textContent = labelText;
+			            label.appendChild(t);
+			            return { label, cb };
+			          };
+
+			          const favoritesFirstCtl = mkCheckbox("Favorites first");
+			          const hideNoPreviewCtl = mkCheckbox("Hide no-preview");
+			          controls.appendChild(favoritesFirstCtl.label);
+			          controls.appendChild(hideNoPreviewCtl.label);
+
+			          const contentRow = document.createElement("div");
+			          contentRow.style.marginTop = "6px";
+			          contentRow.style.display = "flex";
+			          contentRow.style.gap = "10px";
+			          contentRow.style.flexWrap = "wrap";
+			          body.appendChild(contentRow);
+
+			          const listWrap = document.createElement("div");
+			          listWrap.style.flex = "1 1 520px";
+			          listWrap.style.minWidth = "360px";
+			          contentRow.appendChild(listWrap);
+
+			          const list = document.createElement("div");
+			          list.style.maxHeight = "300px";
+			          list.style.overflowY = "auto";
+			          list.style.overflowX = "hidden";
+			          list.style.border = "1px solid rgba(0,0,0,0.12)";
+			          list.style.borderRadius = "6px";
+			          listWrap.appendChild(list);
+
+			          const details = document.createElement("div");
+			          details.style.flex = "1 1 440px";
+			          details.style.minWidth = "360px";
+			          details.style.display = "flex";
+			          details.style.flexDirection = "column";
+			          details.style.gap = "8px";
+			          contentRow.appendChild(details);
+
+		          const detailsTitle = document.createElement("div");
+		          detailsTitle.style.fontWeight = "600";
+		          detailsTitle.textContent = "Details";
+		          details.appendChild(detailsTitle);
+
+		          const detailsDesc = document.createElement("div");
+		          detailsDesc.style.opacity = "0.9";
+		          detailsDesc.style.fontSize = "12px";
+		          detailsDesc.style.lineHeight = "1.35";
+		          detailsDesc.textContent = "";
+		          details.appendChild(detailsDesc);
+
+		          const detailsExample = document.createElement("div");
+		          detailsExample.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace";
+		          detailsExample.style.fontSize = "12px";
+		          detailsExample.style.opacity = "0.8";
+		          detailsExample.textContent = "";
+		          details.appendChild(detailsExample);
+
+			          const previewWrap = document.createElement("div");
+			          previewWrap.style.border = "1px solid rgba(0,0,0,0.12)";
+			          previewWrap.style.borderRadius = "6px";
+			          previewWrap.style.padding = "6px";
+			          previewWrap.style.background = "rgba(250,250,250,0.9)";
+			          previewWrap.style.maxHeight = "340px";
+			          previewWrap.style.overflow = "auto";
+			          previewWrap.style.display = "flex";
+			          previewWrap.style.alignItems = "center";
+			          previewWrap.style.justifyContent = "center";
+			          details.appendChild(previewWrap);
+
+		          const preview = document.createElement("div");
+		          preview.textContent = "";
+		          previewWrap.appendChild(preview);
+
+			          let closePopover = () => { try { pop.remove(); } catch {} };
+			          let reposition = () => {};
+			          let dragging = false;
+			          let dragPointerId = null;
+			          let dragStartX = 0;
+			          let dragStartY = 0;
+			          let dragOriginLeft = 0;
+			          let dragOriginTop = 0;
+			          let dragWidth = 0;
+			          let dragHeight = 0;
+
+			          let enrichment = null;
+			          let previewSeq = 0;
+			          let previewTimer = null;
+			          let previewStatus = new Map(); // name -> "ok" | "none"
+			          let favoriteNames = new Set();
+			          let favoritesFirst = true;
+			          let hideNoPreview = false;
+			          let activeName = "";
+
+			          const loadJsonLocalStorage = (key, fallbackValue) => {
+			            try {
+			              const raw = window && window.localStorage ? window.localStorage.getItem(key) : null;
+			              if (!raw) return fallbackValue;
+			              const parsed = JSON.parse(raw);
+			              return parsed == null ? fallbackValue : parsed;
+			            } catch {
+			              return fallbackValue;
+			            }
+			          };
+			          const saveJsonLocalStorage = (key, value) => {
+			            try {
+			              if (!window || !window.localStorage) return;
+			              window.localStorage.setItem(key, JSON.stringify(value));
+			            } catch {}
+			          };
+
+			          const FAVORITES_KEY = "abcarus.decorationPicker.favorites";
+			          const FAVORITES_FIRST_KEY = "abcarus.decorationPicker.favoritesFirst";
+			          const HIDE_NO_PREVIEW_KEY = "abcarus.decorationPicker.hideNoPreview";
+
+			          const loadFavorites = () => {
+			            const arr = loadJsonLocalStorage(FAVORITES_KEY, []);
+			            if (!Array.isArray(arr)) return new Set();
+			            const set = new Set();
+			            for (const v of arr) {
+			              const s = String(v || "").trim();
+			              if (s) set.add(s);
+			            }
+			            return set;
+			          };
+			          const saveFavorites = () => {
+			            const arr = Array.from(favoriteNames.values()).slice(0, 80);
+			            saveJsonLocalStorage(FAVORITES_KEY, arr);
+			          };
+			          const toggleFavorite = (name) => {
+			            const n = String(name || "");
+			            if (!n) return;
+			            if (favoriteNames.has(n)) favoriteNames.delete(n);
+			            else favoriteNames.add(n);
+			            saveFavorites();
+			          };
+
+			          favoriteNames = loadFavorites();
+			          favoritesFirst = Boolean(loadJsonLocalStorage(FAVORITES_FIRST_KEY, true));
+			          hideNoPreview = Boolean(loadJsonLocalStorage(HIDE_NO_PREVIEW_KEY, false));
+			          favoritesFirstCtl.cb.checked = favoritesFirst;
+			          hideNoPreviewCtl.cb.checked = hideNoPreview;
+
+			          favoritesFirstCtl.cb.addEventListener("change", () => {
+			            favoritesFirst = Boolean(favoritesFirstCtl.cb.checked);
+			            saveJsonLocalStorage(FAVORITES_FIRST_KEY, favoritesFirst);
+			            try { render(); } catch {}
+			          });
+			          hideNoPreviewCtl.cb.addEventListener("change", () => {
+			            hideNoPreview = Boolean(hideNoPreviewCtl.cb.checked);
+			            saveJsonLocalStorage(HIDE_NO_PREVIEW_KEY, hideNoPreview);
+			            try { render(); } catch {}
+			          });
+
+			          const parsePx = (v) => {
+			            const n = Number.parseFloat(String(v || ""));
+			            return Number.isFinite(n) ? n : null;
+			          };
+
+			          const asRangeDecorationBase = (name) => {
+			            const n = String(name || "");
+			            if (n.endsWith("(")) return n.slice(0, -1);
+			            if (n.endsWith(")")) return n.slice(0, -1);
+			            return "";
+			          };
+
+			          const getDecorationDetails = (dec) => {
+			            const name = dec && dec.name ? String(dec.name) : "";
+			            const fromEnrichment = enrichment && name ? enrichment.get(name) : null;
+			            const description = fromEnrichment && fromEnrichment.description ? String(fromEnrichment.description) : "";
+			            const example = fromEnrichment && fromEnrichment.example
+			              ? String(fromEnrichment.example)
+			              : buildDecorationExample(name, dec && dec.char ? String(dec.char) : "");
+			            return { description, example };
+			          };
+
+			          const renderPreview = (name, exampleAbc) => {
+			            const seq = (previewSeq += 1);
+			            if (previewTimer) clearTimeout(previewTimer);
+			            previewTimer = setTimeout(async () => {
+			              if (seq !== previewSeq) return;
+			              const decName = String(name || "");
+			              const prevStatus = decName ? previewStatus.get(decName) : null;
+			              const example = String(exampleAbc || "").trim();
+			              if (!example) {
+			                preview.textContent = "";
+			                return;
+			              }
+
+			              preview.textContent = "Rendering preview…";
+			              try {
+			                // Use a slightly larger scale so the preview is readable without requiring UI zoom.
+			                const abcText = `X:1\n%%pagewidth 18cm\n%%scale 1.6\n%%topspace 0\n%%botspace 0\n%%leftmargin 0.6cm\n%%rightmargin 0.6cm\nM:4/4\nL:1/4\nK:C\n${example}\n`;
+			                const res = await renderAbcToSvgMarkup(abcText, { suppressGlobalErrors: true, stopOnFirstError: true });
+			                if (seq !== previewSeq) return;
+			                if (!res || !res.ok || !res.svg) {
+			                  if (decName) previewStatus.set(decName, "none");
+			                  preview.textContent = "Preview unavailable.";
+			                  if (decName && prevStatus !== "none") {
+			                    try { render(); } catch {}
+			                  }
+			                  return;
+			                }
+			                if (decName) previewStatus.set(decName, "ok");
+			                preview.innerHTML = res.svg;
+			                if (decName && prevStatus !== "ok") {
+			                  try { render(); } catch {}
+			                }
+			                try {
+			                  const svgs = Array.from(preview.querySelectorAll("svg"));
+			                  for (const svg of svgs) {
+			                    svg.style.maxWidth = "100%";
+			                    svg.style.height = "auto";
+		                    svg.style.display = "block";
+		                  }
+			                } catch {}
+			              } catch {
+			                if (seq !== previewSeq) return;
+			                if (decName) previewStatus.set(decName, "none");
+			                preview.textContent = "Preview unavailable.";
+			                if (decName && prevStatus !== "none") {
+			                  try { render(); } catch {}
+			                }
+			              }
+			            }, 80);
+			          };
+
+			          const updateDetails = (dec) => {
+			            const name = dec && dec.name ? String(dec.name) : "";
+			            const abc = dec && dec.abc ? String(dec.abc) : "";
+			            const { description, example } = getDecorationDetails(dec);
+			            detailsTitle.textContent = name ? `Details: ${name}` : "Details";
+			            detailsDesc.textContent = description || "";
+			            detailsExample.textContent = example ? `Example: ${example}` : (abc ? `Example: ${abc}c` : "");
+			            renderPreview(name, example);
+			          };
+
+		          const insertDecoration = (dec, fullForm) => {
+		            try {
+		              if (!dec) return false;
+		              if (view.state.readOnly) return false;
+
+		              const name = dec && dec.name ? String(dec.name) : "";
+		              const base = asRangeDecorationBase(name);
+
+		              const sel = view.state.selection.main;
+		              const selectedText = sel.empty ? "" : view.state.doc.sliceString(sel.from, sel.to);
+
+		              if (base) {
+		                const startTag = `!${base}(!`;
+		                const endTag = `!${base})!`;
+		                if (sel.empty) {
+		                  view.dispatch({
+		                    changes: { from: sel.from, to: sel.to, insert: `${startTag}${endTag}` },
+		                    selection: EditorSelection.cursor(sel.from + startTag.length),
+		                    userEvent: "input",
+		                  });
+		                } else {
+		                  // Insert end first to keep offsets stable.
+		                  view.dispatch({
+		                    changes: [
+		                      { from: sel.to, to: sel.to, insert: endTag },
+		                      { from: sel.from, to: sel.from, insert: startTag },
+		                    ],
+		                    selection: EditorSelection.range(sel.from + startTag.length, sel.to + startTag.length),
+		                    userEvent: "input",
+		                  });
+		                }
+		              } else {
+		                const hasChar = Boolean(dec.char);
+		                const insertText = fullForm ? String(dec.abc || "") : (hasChar ? String(dec.char || "") : String(dec.abc || ""));
+		                if (!insertText) return false;
+		                const insert = selectedText ? `${insertText}${selectedText}` : insertText;
+		                const cursorPos = sel.from + insert.length;
+		                view.dispatch({
+		                  changes: { from: sel.from, to: sel.to, insert },
+		                  selection: EditorSelection.cursor(cursorPos),
+		                  userEvent: "input",
+		                });
+		              }
+
+		              try { view.focus(); } catch {}
+		              return true;
+		            } catch {}
+		            return false;
+		          };
+
+			          let items = [];
+			          let activeIdx = 0;
+
+			          const render = () => {
+			            list.textContent = "";
+			            const q = String(input.value || "").trim().toLowerCase();
+		            const allRaw = ABC2SVG_DECORATIONS.map((d) => ({
+		              char: String(d.char || ""),
+		              abc: String(d.abc || ""),
+		              name: String(d.name || ""),
+		              isInternal: Boolean(d.isInternal),
+		            }));
+
+		            // Collapse paired decorations (foo( + foo)) into a single list item keyed by the opening element.
+		            // This makes the UI clearer and matches insertion semantics (wrap selection with start/end).
+		            const endSet = new Set(allRaw.filter((d) => d.name.endsWith(")")).map((d) => d.name));
+		            const all = [];
+		            for (const d of allRaw) {
+		              if (d.name.endsWith(")")) continue; // hide closing part
+		              if (d.name.endsWith("(")) {
+		                const base = d.name.slice(0, -1);
+		                const endName = `${base})`;
+		                if (endSet.has(endName)) {
+		                  all.push({
+		                    ...d,
+		                    displayName: `${base}(${String("\u2026")}${base})`,
+		                    pairEndAbc: `!${endName}!`,
+		                  });
+		                  continue;
+		                }
+		              }
+			              all.push({ ...d, displayName: d.name });
+			            }
+			            const filtered = q
+			              ? all.filter((d) => {
+			                const extra = (() => {
+			                  const fromEnrichment = enrichment && d.name ? enrichment.get(d.name) : null;
+			                  return fromEnrichment && fromEnrichment.description ? String(fromEnrichment.description) : "";
+			                })();
+			                const hay = `${d.char} ${d.displayName || d.name} ${d.name} ${d.abc} ${d.pairEndAbc || ""} ${extra}`.toLowerCase();
+			                return hay.includes(q);
+			              })
+			              : all;
+
+			            let ordered = filtered;
+			            if (favoritesFirst && favoriteNames.size) {
+			              const fav = [];
+			              const rest = [];
+			              for (const d of filtered) {
+			                if (favoriteNames.has(d.name)) fav.push(d);
+			                else rest.push(d);
+			              }
+			              ordered = fav.concat(rest);
+			            }
+
+			            items = hideNoPreview
+			              ? ordered.filter((d) => previewStatus.get(d.name) !== "none")
+			              : ordered;
+
+			            if (activeName) {
+			              const idx = items.findIndex((d) => d && d.name === activeName);
+			              if (idx >= 0) activeIdx = idx;
+			            }
+			            if (activeIdx >= items.length) activeIdx = 0;
+
+			            let activeRow = null;
+			            for (let i = 0; i < items.length; i += 1) {
+			              const dec = items[i];
+			              const { description } = getDecorationDetails(dec);
+			              const fav = favoriteNames.has(dec.name);
+			              const noPrev = previewStatus.get(dec.name) === "none";
+			              const row = document.createElement("div");
+			              row.style.display = "grid";
+			              row.style.gridTemplateColumns = "3.2em 1fr 10em";
+			              row.style.gap = "10px";
+			              row.style.padding = "6px 8px";
+			              row.style.cursor = "pointer";
+			              row.style.borderTop = i === 0 ? "none" : "1px solid rgba(0,0,0,0.06)";
+			              {
+			                let rowOpacity = 1;
+			                if (dec.isInternal) rowOpacity = 0.9;
+			                if (noPrev) rowOpacity = Math.min(rowOpacity, 0.55);
+			                row.style.opacity = String(rowOpacity);
+			              }
+			              if (i === activeIdx) {
+			                row.style.background = "rgba(30,144,255,0.12)";
+			                activeRow = row;
+			              }
+
+		              const ch = document.createElement("div");
+		              ch.textContent = dec.char || "";
+		              ch.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace";
+		              ch.style.fontWeight = "600";
+		              ch.style.opacity = dec.char ? "1" : "0.25";
+		              row.appendChild(ch);
+
+			              const nmWrap = document.createElement("div");
+			              nmWrap.style.display = "flex";
+			              nmWrap.style.flexDirection = "column";
+			              nmWrap.style.gap = "2px";
+			              row.appendChild(nmWrap);
+
+			              const nameRow = document.createElement("div");
+			              nameRow.style.display = "flex";
+			              nameRow.style.alignItems = "center";
+			              nameRow.style.gap = "8px";
+			              nmWrap.appendChild(nameRow);
+
+			              const star = document.createElement("button");
+			              star.type = "button";
+			              star.textContent = fav ? "★" : "☆";
+			              star.setAttribute("aria-label", fav ? "Unfavorite" : "Favorite");
+			              star.title = fav ? "Unfavorite" : "Favorite";
+			              star.style.border = "none";
+			              star.style.background = "transparent";
+			              star.style.padding = "0";
+			              star.style.margin = "0";
+			              star.style.cursor = "pointer";
+			              star.style.fontSize = "18px";
+			              star.style.lineHeight = "1";
+			              star.style.width = "18px";
+			              star.style.height = "18px";
+			              star.style.display = "inline-flex";
+			              star.style.alignItems = "center";
+			              star.style.justifyContent = "center";
+			              star.style.opacity = fav ? "1" : "0.55";
+			              star.addEventListener("click", (ev) => {
+			                try { ev.preventDefault(); ev.stopPropagation(); } catch {}
+			                toggleFavorite(dec.name);
+			                activeName = dec.name;
+			                try { render(); } catch {}
+			              });
+			              nameRow.appendChild(star);
+
+			              const nm = document.createElement("div");
+			              nm.textContent = dec.displayName || dec.name;
+			              if (dec.pairEndAbc) nm.style.fontWeight = "600";
+			              nameRow.appendChild(nm);
+
+			              const ds = document.createElement("div");
+			              ds.textContent = description || "";
+			              ds.style.fontSize = "12px";
+			              ds.style.opacity = "0.65";
+			              ds.style.overflow = "hidden";
+			              ds.style.whiteSpace = "nowrap";
+			              ds.style.textOverflow = "ellipsis";
+			              if (dec.pairEndAbc && !ds.textContent) {
+			                ds.textContent = "Range decoration (wrap selection)";
+			              }
+			              if (noPrev) {
+			                ds.textContent = ds.textContent ? `${ds.textContent} · no preview` : "No preview (example may be incomplete)";
+			              }
+			              nmWrap.appendChild(ds);
+
+			              const ab = document.createElement("div");
+			              ab.textContent = dec.abc;
+			              ab.style.textAlign = "right";
+			              ab.style.opacity = "0.75";
+			              ab.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace";
+			              ab.style.whiteSpace = "nowrap";
+			              ab.style.overflow = "hidden";
+			              ab.style.textOverflow = "ellipsis";
+			              row.appendChild(ab);
+
+			              row.addEventListener("mouseenter", () => {
+			                activeIdx = i;
+			                activeName = dec.name;
+			                updateDetails(dec);
+			              });
+			              row.addEventListener("click", (ev) => {
+			                try {
+			                  if (ev && typeof ev.target?.closest === "function") {
+			                    if (ev.target.closest("button")) return;
+			                  }
+			                } catch {}
+			                try { ev.preventDefault(); ev.stopPropagation(); } catch {}
+			                const ok = insertDecoration(dec, false);
+			                if (ok) closePopover();
+			              });
+
+			              list.appendChild(row);
+			            }
+
+			            try {
+			              if (activeRow) activeRow.scrollIntoView({ block: "nearest" });
+			            } catch {}
+			            activeName = items[activeIdx] && items[activeIdx].name ? String(items[activeIdx].name) : "";
+			          };
+
+		          const onDocKey = (ev) => {
+		            try {
+		              if (!ev) return;
+		              if (ev.key === "Escape") {
+		                closePopover();
+		                return;
+		              }
+		            } catch {}
+		          };
+			          const onDocDown = (ev) => {
+			            try {
+			              if (!ev) return;
+			              if (pop.contains(ev.target)) return;
+			              closePopover();
+			            } catch {}
+			          };
+			          const onDocPointerUp = (ev) => {
+			            try {
+			              if (!ev) return;
+			              if (dragging) return;
+			              if (!pop.isConnected) return;
+			              if (!pop.contains(ev.target)) return;
+			              reposition();
+			            } catch {}
+			          };
+			          const cleanup = () => {
+			            document.removeEventListener("keydown", onDocKey, true);
+			            document.removeEventListener("mousedown", onDocDown, true);
+			            document.removeEventListener("pointerup", onDocPointerUp, true);
+			            window.removeEventListener("resize", reposition);
+			          };
+			          closePopover = () => {
+			            try { cleanup(); } catch {}
+			            try { pop.remove(); } catch {}
+		          };
+		          pop.__abcarusClose = closePopover;
+
+		          input.addEventListener("keydown", (ev) => {
+		            try {
+		              if (!ev) return;
+		              const key = String(ev.key || "");
+		              if (key === "ArrowDown") {
+		                if (items.length) activeIdx = Math.min(items.length - 1, activeIdx + 1);
+		                render();
+		                if (items[activeIdx]) updateDetails(items[activeIdx]);
+		                ev.preventDefault();
+		                ev.stopPropagation();
+		                return;
+		              }
+		              if (key === "ArrowUp") {
+		                if (items.length) activeIdx = Math.max(0, activeIdx - 1);
+		                render();
+		                if (items[activeIdx]) updateDetails(items[activeIdx]);
+		                ev.preventDefault();
+		                ev.stopPropagation();
+		                return;
+		              }
+		              if (key === "Enter") {
+		                const dec = items[activeIdx];
+		                if (dec) {
+		                  const ok = insertDecoration(dec, Boolean(ev.shiftKey));
+		                  if (ok) closePopover();
+		                }
+		                ev.preventDefault();
+		                ev.stopPropagation();
+		                return;
+		              }
+		              if (key === "Escape") {
+		                closePopover();
+		                ev.preventDefault();
+		                ev.stopPropagation();
+		              }
+		            } catch {}
+		          }, true);
+
+		          input.addEventListener("input", () => {
+		            activeIdx = 0;
+		            render();
+		          });
+
+		          const margin = 10;
+		          const vw = window.innerWidth || 0;
+		          const vh = window.innerHeight || 0;
+		          let left = margin;
+		          let top = margin;
+		          if (coords) {
+		            left = Math.round(coords.left);
+		            top = Math.round(coords.bottom + 8);
+		          }
+
+			          document.body.appendChild(pop);
+			          reposition = () => {
+			            try {
+			              const w = window.innerWidth || 0;
+			              const h = window.innerHeight || 0;
+			              const r = pop.getBoundingClientRect();
+			              let x = parsePx(pop.style.left);
+			              let y = parsePx(pop.style.top);
+			              if (x == null) x = r.left;
+			              if (y == null) y = r.top;
+			              if (x + r.width + margin > w) x = Math.max(margin, w - r.width - margin);
+			              // Clamp instead of "flipping" above/below; avoids jitter when content height changes (preview render).
+			              if (y + r.height + margin > h) y = Math.max(margin, h - r.height - margin);
+			              if (y < margin) y = margin;
+			              if (x < margin) x = margin;
+			              pop.style.left = `${Math.round(x)}px`;
+			              pop.style.top = `${Math.round(y)}px`;
+			            } catch {}
+			          };
+			          try {
+			            const r0 = pop.getBoundingClientRect();
+			            const w0 = window.innerWidth || 0;
+			            const h0 = window.innerHeight || 0;
+			            let x0 = left;
+			            let y0 = top;
+			            if (x0 + r0.width + margin > w0) x0 = Math.max(margin, w0 - r0.width - margin);
+			            if (y0 + r0.height + margin > h0) y0 = Math.max(margin, h0 - r0.height - margin);
+			            if (y0 < margin) y0 = margin;
+			            if (x0 < margin) x0 = margin;
+			            pop.style.left = `${Math.round(x0)}px`;
+			            pop.style.top = `${Math.round(y0)}px`;
+			          } catch {}
+			          reposition();
+
+			          head.addEventListener("pointerdown", (ev) => {
+			            try {
+			              if (!ev) return;
+			              if (ev.button !== 0) return;
+			              dragging = true;
+			              dragPointerId = ev.pointerId;
+			              dragStartX = ev.clientX;
+			              dragStartY = ev.clientY;
+			              const r = pop.getBoundingClientRect();
+			              dragOriginLeft = parsePx(pop.style.left);
+			              dragOriginTop = parsePx(pop.style.top);
+			              if (dragOriginLeft == null) dragOriginLeft = r.left;
+			              if (dragOriginTop == null) dragOriginTop = r.top;
+			              dragWidth = r.width;
+			              dragHeight = r.height;
+			              try { head.setPointerCapture(dragPointerId); } catch {}
+			              ev.preventDefault();
+			              ev.stopPropagation();
+			            } catch {}
+			          }, true);
+			          head.addEventListener("pointermove", (ev) => {
+			            try {
+			              if (!dragging) return;
+			              if (dragPointerId != null && ev.pointerId !== dragPointerId) return;
+			              const w = window.innerWidth || 0;
+			              const h = window.innerHeight || 0;
+			              let x = dragOriginLeft + (ev.clientX - dragStartX);
+			              let y = dragOriginTop + (ev.clientY - dragStartY);
+			              const maxX = Math.max(margin, w - dragWidth - margin);
+			              const maxY = Math.max(margin, h - dragHeight - margin);
+			              if (x < margin) x = margin;
+			              if (y < margin) y = margin;
+			              if (x > maxX) x = maxX;
+			              if (y > maxY) y = maxY;
+			              pop.style.left = `${Math.round(x)}px`;
+			              pop.style.top = `${Math.round(y)}px`;
+			              ev.preventDefault();
+			              ev.stopPropagation();
+			            } catch {}
+			          }, true);
+			          const stopDragging = (ev) => {
+			            try {
+			              if (!dragging) return;
+			              if (dragPointerId != null && ev && ev.pointerId !== dragPointerId) return;
+			              try { if (dragPointerId != null) head.releasePointerCapture(dragPointerId); } catch {}
+			              dragging = false;
+			              dragPointerId = null;
+			              reposition();
+			            } catch {}
+			          };
+			          head.addEventListener("pointerup", stopDragging, true);
+			          head.addEventListener("pointercancel", stopDragging, true);
+
+			          document.addEventListener("keydown", onDocKey, true);
+			          document.addEventListener("mousedown", onDocDown, true);
+			          document.addEventListener("pointerup", onDocPointerUp, true);
+			          window.addEventListener("resize", reposition, { passive: true });
+
+		          render();
+		          if (items[activeIdx]) updateDetails(items[activeIdx]);
+		          setTimeout(() => { try { reposition(); } catch {} }, 0);
+		          setTimeout(() => { try { input.focus(); input.select(); } catch {} }, 0);
+
+		          loadDecorationCatalogEnrichment().then((m) => {
+		            if (m) enrichment = m;
+		            try { render(); } catch {}
+		            try { if (items[activeIdx]) updateDetails(items[activeIdx]); } catch {}
+		          }).catch(() => {});
+		        } catch {}
+		        return true;
+		      },
+		    },
+		    {
+		      key: "Enter",
+		      run: (view) => (completionTooltipOpen(view) ? acceptCompletion(view) : false),
+		    },
+		    {
+		      key: "Tab",
+		      run: (view) => (completionTooltipOpen(view) ? acceptCompletion(view) : indentSelectionMore(view)),
+		    },
+		    {
+		      key: "Shift-Tab",
+		      run: (view) => (completionTooltipOpen(view) ? false : indentSelectionLess(view)),
+		    },
 		    { key: "Mod-/", run: toggleLineComments },
 		    { key: "F5", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to play.", 2200); return true; } togglePlayPauseEffective().catch(() => {}); return true; } },
 		    { key: "F6", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to navigate errors.", 2200); return true; } activateErrorByNav(-1); return true; } },
@@ -3397,10 +5066,17 @@ function initEditor() {
     doc: DEFAULT_ABC,
     extensions: [
       basicSetup,
-      abcHighlight,
-      measureErrorPlugin,
-      errorActivationHighlightPlugin,
-      practiceBarHighlightPlugin,
+      abcHighlightCompartment.of([abcHighlight]),
+      abcDiagnosticsCompartment.of([
+        measureErrorPlugin,
+        errorActivationHighlightPlugin,
+        practiceBarHighlightPlugin,
+      ]),
+      abcCompletionCompartment.of([
+        autocompletion({ override: [buildAbcCompletionSource()], activateOnTyping: false }),
+      ]),
+      abcHoverCompartment.of([]),
+      abcTuningModeCompartment.of([]),
       updateListener,
       customKeys,
       foldService.of(foldBeginTextBlocks),
@@ -3412,6 +5088,31 @@ function initEditor() {
     state,
     parent: $editorHost,
   });
+
+  // Completion acceptance should be reliable even when other keymaps also bind Enter/Tab.
+  // Use a capturing document handler so it works consistently and for whichever editor is focused.
+  try {
+    if (!window.__abcarusCompletionKeyHandlerInstalled) {
+      window.__abcarusCompletionKeyHandlerInstalled = true;
+      document.addEventListener("keydown", (e) => {
+        try {
+          if (!e || e.defaultPrevented) return;
+          if (e.ctrlKey || e.metaKey || e.altKey) return;
+          if (e.shiftKey) return;
+          const key = String(e.key || "");
+          if (key !== "Enter" && key !== "Tab") return;
+          const tooltip = document.querySelector(".cm-tooltip-autocomplete");
+          if (!tooltip) return;
+          const view = getFocusedEditorView();
+          if (!view) return;
+          const accepted = acceptCompletion(view);
+          if (!accepted) return;
+          e.preventDefault();
+          e.stopPropagation();
+        } catch {}
+      }, true);
+    }
+  } catch {}
 
   // Clear the active error highlight only on an explicit user click outside the highlight range.
   // This avoids accidental clearing from programmatic selection changes (follow playback, jump, etc.).
@@ -11037,39 +12738,49 @@ function centerRenderPaneOnCurrentAnchor() {
   $renderPane.scrollLeft = Math.max(0, centerLeft);
 }
 
-// Prevent Chromium page-zoom shortcuts fighting the app's render/editor zoom.
-document.addEventListener("keydown", (e) => {
-  if (!settingsController) return;
-  const mod = e.ctrlKey || e.metaKey;
-  if (!mod || e.altKey) return;
-  const key = String(e.key || "");
-  const target = e.target;
-  const tag = target && target.tagName ? String(target.tagName).toLowerCase() : "";
-  if (tag === "input" || tag === "textarea") return;
+	// Prevent Chromium page-zoom shortcuts fighting the app's render/editor zoom.
+	document.addEventListener("keydown", (e) => {
+	  if (!settingsController) return;
+	  const mod = e.ctrlKey || e.metaKey;
+	  if (!mod || e.altKey) return;
+	  const key = String(e.key || "");
+	  const target = e.target;
+	  const tag = target && target.tagName ? String(target.tagName).toLowerCase() : "";
+	  if (tag === "input" || tag === "textarea") return;
 
-  const isZoomIn = key === "+" || (key === "=" && e.shiftKey);
-  const isZoomOut = key === "-" || key === "_";
-  const isZoomReset = key === "0";
-  if (!isZoomIn && !isZoomOut && !isZoomReset) return;
+	  const isZoomIn = key === "+" || (key === "=" && e.shiftKey);
+	  const isZoomOut = key === "-" || key === "_";
+	  const isZoomReset = key === "0";
+	  if (!isZoomIn && !isZoomOut && !isZoomReset) return;
 
-  e.preventDefault();
-  e.stopPropagation();
-  markZoomShortcut();
+	  e.preventDefault();
+	  e.stopPropagation();
+	  markZoomShortcut();
 
-  // Keyboard zoom is primarily intended for the notation pane.
-  settingsController.setActivePane("render");
-  if (isZoomIn) settingsController.zoomIn();
-  else if (isZoomOut) settingsController.zoomOut();
-  else {
-    settingsController.zoomReset();
-    requestAnimationFrame(() => centerRenderPaneOnCurrentAnchor());
-  }
-}, true);
+	  try {
+	    // Prefer zooming the pane that has focus (or is under the event target).
+	    const t = target || document.activeElement;
+	    if ($renderPane && t && $renderPane.contains(t)) settingsController.setActivePane("render");
+	    else if (editorView && editorView.dom && t && editorView.dom.contains(t)) settingsController.setActivePane("editor");
+	  } catch {}
+	  if (isZoomIn) settingsController.zoomIn();
+	  else if (isZoomOut) settingsController.zoomOut();
+	  else {
+	    settingsController.zoomReset();
+	    requestAnimationFrame(() => centerRenderPaneOnCurrentAnchor());
+	  }
+	}, true);
 
 document.addEventListener("wheel", (e) => {
   if (!settingsController) return;
   if (!e.ctrlKey && !e.metaKey) return;
   e.preventDefault();
+  try {
+    // Zoom the pane under the pointer rather than the last "active" pane.
+    const t = e.target;
+    if ($renderPane && t && $renderPane.contains(t)) settingsController.setActivePane("render");
+    else if (editorView && editorView.dom && t && editorView.dom.contains(t)) settingsController.setActivePane("editor");
+  } catch {}
   const direction = e.deltaY > 0 ? -1 : 1;
   if (direction > 0) settingsController.zoomIn();
   else settingsController.zoomOut();
@@ -11101,7 +12812,9 @@ document.addEventListener("keydown", (e) => {
 initContextMenu();
 
 requestAnimationFrame(() => {
-  resetLayout();
+  // Do not reset zoom on startup. Persisted zoom is applied via settings.
+  // We only need an initial split size application until settings load.
+  try { applyRightSplitSizesFromRatio(); } catch {}
 });
 
 loadLastRecentEntry();
@@ -11582,17 +13295,25 @@ function readRenderZoomCss() {
 
 function computeFocusFitZoom() {
   if (!$renderPane || !$out) return null;
-  const svg = $out.querySelector("svg");
-  if (!svg) return null;
+  const svgs = Array.from($out.querySelectorAll("svg"));
+  if (!svgs.length) return null;
   const currentZoom = getRenderZoomFactor();
   if (!Number.isFinite(currentZoom) || currentZoom <= 0) return null;
-  const svgRect = svg.getBoundingClientRect();
   const paneWidth = $renderPane.clientWidth || 0;
-  if (!(svgRect && svgRect.width > 10) || paneWidth < 50) return null;
-  const intrinsicWidth = svgRect.width / currentZoom;
-  if (!Number.isFinite(intrinsicWidth) || intrinsicWidth <= 10) return null;
+  if (paneWidth < 50) return null;
+  // Use the widest SVG (not just the first one) to avoid overshooting zoom when the first
+  // page/system is unusually narrow.
+  let maxIntrinsicWidth = 0;
+  const limit = Math.min(8, svgs.length);
+  for (let i = 0; i < limit; i += 1) {
+    const r = svgs[i] ? svgs[i].getBoundingClientRect() : null;
+    if (!(r && r.width > 10)) continue;
+    const w = r.width / currentZoom;
+    if (Number.isFinite(w) && w > maxIntrinsicWidth) maxIntrinsicWidth = w;
+  }
+  if (!Number.isFinite(maxIntrinsicWidth) || maxIntrinsicWidth <= 10) return null;
   const target = Math.max(100, paneWidth - 24);
-  const next = target / intrinsicWidth;
+  const next = target / maxIntrinsicWidth;
   return clampNumber(next, 0.5, 8, currentZoom);
 }
 
@@ -11613,29 +13334,40 @@ function setFocusModeEnabled(nextEnabled) {
     return;
   }
   focusModeEnabled = next;
+  // Apply the focus-mode class immediately so layout-dependent measurements (fit zoom)
+  // are based on the Focus layout, not the pre-toggle layout.
+  updateFocusModeUi();
   if (focusModeEnabled) {
     focusPrevRenderZoom = readRenderZoomCss();
     focusPrevLibraryVisible = isLibraryVisible;
+    // Start from a neutral zoom so Focus computes fit independently of the previous layout/zoom.
+    // (Fit will be applied after layout settles.)
+    setRenderZoomCss(1);
     if (isLibraryVisible) {
       setLibraryVisible(false, { persist: false });
       requestAnimationFrame(() => {
         try { resetRightPaneSplit(); } catch {}
       });
     }
+    // Wait for layout to settle (library hide + split reset) before computing fit.
+    // A single rAF can still measure old widths when the DOM is busy; double rAF avoids that.
     requestAnimationFrame(() => {
-      const fit = computeFocusFitZoom();
-      // Focus is a "stage" mode: it chooses the zoom independently to reduce unused margins
-      // and keep the score readable during playback (restored on exit).
-      if (fit != null) setRenderZoomCss(fit);
-      if (window.__abcarusDebugFocus) {
-        try {
-          const cssZoom = getComputedStyle(document.documentElement).getPropertyValue("--render-zoom");
-          console.log("[abcarus][focus] apply " + JSON.stringify({
-            fit,
-            cssZoom: String(cssZoom || "").trim(),
-          }));
-        } catch {}
-      }
+      requestAnimationFrame(() => {
+        if (!focusModeEnabled) return;
+        const fit = computeFocusFitZoom();
+        // Focus is a "stage" mode: it chooses the zoom independently to reduce unused margins
+        // and keep the score readable during playback (restored on exit).
+        if (fit != null) setRenderZoomCss(fit);
+        if (window.__abcarusDebugFocus) {
+          try {
+            const cssZoom = getComputedStyle(document.documentElement).getPropertyValue("--render-zoom");
+            console.log("[abcarus][focus] apply " + JSON.stringify({
+              fit,
+              cssZoom: String(cssZoom || "").trim(),
+            }));
+          } catch {}
+        }
+      });
     });
   } else if (focusPrevRenderZoom != null) {
     setRenderZoomCss(focusPrevRenderZoom);
@@ -11651,7 +13383,6 @@ function setFocusModeEnabled(nextEnabled) {
   if (focusModeEnabled) {
     maybeResetFocusLoopForTune(activeTuneId, { updateUi: false });
   }
-  updateFocusModeUi();
 }
 
 function toggleFocusMode() {
@@ -13492,17 +15223,6 @@ function setLayoutFromSettings(settings) {
   rightSplitRatioHorizontal = clampRatio(settings.layoutSplitRatioHorizontal, rightSplitRatioHorizontal);
   applyRightSplitOrientation(orientation);
   applyRightSplitSizesFromRatio();
-  if (orientation === "horizontal" && !splitZoomActive) {
-    splitPrevRenderZoom = readRenderZoomCss();
-    splitZoomActive = true;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (!splitZoomActive || rightSplitOrientation !== "horizontal") return;
-        const fit = computeFocusFitZoom();
-        if (fit != null) setRenderZoomCss(fit);
-      });
-    });
-  }
 }
 
 function setSplitOrientation(nextOrientation, { persist = true, userAction = false } = {}) {
@@ -13512,28 +15232,36 @@ function setSplitOrientation(nextOrientation, { persist = true, userAction = fal
     return false;
   }
   if (rightSplitOrientation === next) return true;
-  if (next === "horizontal") {
-    splitPrevRenderZoom = readRenderZoomCss();
-    splitZoomActive = true;
-  }
+  // Persist the current zoom under the current split orientation before switching.
+  try {
+    const currentZoom = readRenderZoomCss();
+    if (Number.isFinite(currentZoom) && currentZoom > 0) {
+      const key = (rightSplitOrientation === "horizontal") ? "layoutRenderZoomHorizontal" : "layoutRenderZoomVertical";
+      const prev = latestSettingsSnapshot && latestSettingsSnapshot[key] != null ? Number(latestSettingsSnapshot[key]) : null;
+      if (!Number.isFinite(prev) || Math.abs(prev - currentZoom) > 0.0001) {
+        scheduleSaveLayoutPrefs({ [key]: currentZoom });
+      }
+    }
+  } catch {}
   applyRightSplitOrientation(next);
   applyRightSplitSizesFromRatio();
   // Avoid follow-scroll fighting layout reflow right after a toggle.
   const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
   suppressFollowScrollUntilMs = now + 250;
-  if (next === "horizontal") {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (!splitZoomActive || rightSplitOrientation !== "horizontal") return;
-        const fit = computeFocusFitZoom();
-        if (fit != null) setRenderZoomCss(fit);
-      });
-    });
-  } else if (splitPrevRenderZoom != null) {
-    splitZoomActive = false;
-    setRenderZoomCss(splitPrevRenderZoom);
-    splitPrevRenderZoom = null;
-  }
+  // Restore the preferred zoom for the target split orientation (persisted across restarts).
+  try {
+    const targetKey = (next === "horizontal") ? "layoutRenderZoomHorizontal" : "layoutRenderZoomVertical";
+    const desired = latestSettingsSnapshot && latestSettingsSnapshot[targetKey] != null ? Number(latestSettingsSnapshot[targetKey]) : null;
+    if (Number.isFinite(desired) && desired > 0) {
+      setRenderZoomCss(desired);
+      if (window.api && typeof window.api.updateSettings === "function") {
+        const current = latestSettingsSnapshot && latestSettingsSnapshot.renderZoom != null ? Number(latestSettingsSnapshot.renderZoom) : null;
+        if (!Number.isFinite(current) || Math.abs(current - desired) > 0.0001) {
+          window.api.updateSettings({ renderZoom: desired }).catch(() => {});
+        }
+      }
+    }
+  } catch {}
   if (persist) scheduleSaveLayoutPrefs({ layoutSplitOrientation: next });
   showToast(next === "horizontal" ? "Split: Horizontal" : "Split: Vertical", 1500);
   return true;

@@ -5,8 +5,8 @@ import path from "node:path";
 function usage(exitCode = 1) {
   const msg = [
     "Usage:",
-    "  node scripts/chat-log.mjs [scripts/local/DEVLOG.md] -m \"message\" [--notes \"optional notes\"]",
-    "  node scripts/chat-log.mjs --file scripts/local/DEVLOG.md -m \"message\" [--notes \"optional notes\"]",
+    "  node scripts/chat-log.mjs [kitchen/notes/DEVLOG.md] -m \"message\" [--notes \"optional notes\"]",
+    "  node scripts/chat-log.mjs --file kitchen/notes/DEVLOG.md -m \"message\" [--notes \"optional notes\"]",
     "",
     "Notes:",
     "  - If -m/--message is omitted and stdin is a TTY, the script will prompt.",
@@ -31,8 +31,8 @@ function parseArgs(argv) {
   }
   out.message = out.message.trim();
   out.notes = out.notes.trim();
-  out.file = (out.file || "scripts/local/DEVLOG.md").trim();
-  if (!out.file) out.file = "scripts/local/DEVLOG.md";
+  out.file = (out.file || "kitchen/notes/DEVLOG.md").trim();
+  if (!out.file) out.file = "kitchen/notes/DEVLOG.md";
   if (!out.message) {
     if (process.stdin.isTTY) {
       process.stderr.write("Message: ");

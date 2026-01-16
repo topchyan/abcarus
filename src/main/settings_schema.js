@@ -12,6 +12,8 @@ function getSettingsSchema() {
     { key: "layoutSplitOrientation", type: "string", default: "vertical" },
     { key: "layoutSplitRatioVertical", type: "number", default: 0.5 },
     { key: "layoutSplitRatioHorizontal", type: "number", default: 0.5 },
+    { key: "layoutRenderZoomVertical", type: "number", default: 1 },
+    { key: "layoutRenderZoomHorizontal", type: "number", default: 1 },
     {
       key: "renderZoom",
       type: "number",

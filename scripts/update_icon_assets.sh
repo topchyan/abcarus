@@ -4,9 +4,9 @@ set -euo pipefail
 APPDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="$APPDIR/assets/icons"
 
-APP_SRC_DEFAULT="$APPDIR/scripts/local/_kitchen/brand/brand/_drafts/abcarus-icon-clef-with-wings.png"
-MASK_SRC_DEFAULT="$APPDIR/scripts/local/_kitchen/brand/brand/_drafts/abcarus-icon-clef-with-wings_bw.png"
-NEW_ICON_SRC_DEFAULT="$APPDIR/scripts/local/_kitchen/brand/brand/_drafts/abcarus-icon-new.png"
+APP_SRC_DEFAULT="$APPDIR/kitchen/_kitchen/brand/brand/_drafts/abcarus-icon-clef-with-wings.png"
+MASK_SRC_DEFAULT="$APPDIR/kitchen/_kitchen/brand/brand/_drafts/abcarus-icon-clef-with-wings_bw.png"
+NEW_ICON_SRC_DEFAULT="$APPDIR/kitchen/_kitchen/brand/brand/_drafts/abcarus-icon-new.png"
 
 APP_SRC="${APP_SRC_DEFAULT}"
 MASK_SRC="${MASK_SRC_DEFAULT}"

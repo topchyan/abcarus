@@ -18,6 +18,14 @@ If `ELECTRON_RUN_AS_NODE=1` leaks into your environment, Electron starts in "Nod
 
 For local dev runs, `scripts/local/run.sh` defensively unsets it.
 
+### Gotcha: Backslash escaping (`\`) in hotkeys/regex
+
+This comes up often (UI titles, GitHub issues, and JS RegExp):
+
+- In Markdown/GitHub comments, wrap hotkeys in inline code: `` `Ctrl/Cmd+Alt+\` `` (no extra escaping needed).
+- In JavaScript strings, use `\\` to display a single `\` to the user.
+- In `new RegExp("...")` / template strings, don’t over-escape `\s`, `\d`, etc. (`\\s` inside the *RegExp string* matches a literal `\s`, not whitespace).
+
 ## Branch Status
 
 - `feat/playback-autoscroll` — experimental / archived (kept for history; do not base new work on it).
