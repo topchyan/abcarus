@@ -12771,6 +12771,12 @@ document.addEventListener("wheel", (e) => {
   if (!settingsController) return;
   if (!e.ctrlKey && !e.metaKey) return;
   e.preventDefault();
+  try {
+    // Zoom the pane under the pointer rather than the last "active" pane.
+    const t = e.target;
+    if ($renderPane && t && $renderPane.contains(t)) settingsController.setActivePane("render");
+    else if (editorView && editorView.dom && t && editorView.dom.contains(t)) settingsController.setActivePane("editor");
+  } catch {}
   const direction = e.deltaY > 0 ? -1 : 1;
   if (direction > 0) settingsController.zoomIn();
   else settingsController.zoomOut();
