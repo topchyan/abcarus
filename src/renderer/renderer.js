@@ -3651,9 +3651,16 @@ function initEditor() {
 		    { key: "Ctrl-F5", run: (view) => moveLineSelection(view, -1) },
 		    { key: "Mod-F5", run: (view) => moveLineSelection(view, -1) },
 		    {
-		      key: "F1",
+		      key: "Ctrl-F1",
 		      run: (view) => {
 		        try {
+		          // Toggle a lightweight help popover without interfering with the app's main F1 (ABC manual).
+		          const existing = document.getElementById("abcarusAbcHelpPopover");
+		          if (existing) {
+		            try { existing.remove(); } catch {}
+		            return true;
+		          }
+
 		          const pos = view.state.selection.main.head;
 		          const line = view.state.doc.lineAt(pos);
 		          const text = line.text || "";
@@ -3673,10 +3680,96 @@ function initEditor() {
 		            else if (cmd === "drumon") msg = "%%MIDI drumon — Enable drums (engine-defined).";
 		            else if (cmd === "drumoff") msg = "%%MIDI drumoff — Disable drums (engine-defined).";
 		          }
-		          if ($hoverStatus) {
-		            $hoverStatus.textContent = msg ? msg : "";
-		            if (msg) setTimeout(() => { try { if ($hoverStatus.textContent === msg) $hoverStatus.textContent = ""; } catch {} }, 2500);
+
+		          if (!msg) return true;
+
+		          const pop = document.createElement("div");
+		          pop.id = "abcarusAbcHelpPopover";
+		          pop.setAttribute("role", "dialog");
+		          pop.setAttribute("aria-label", "ABC help");
+		          pop.style.position = "fixed";
+		          pop.style.zIndex = "9999";
+		          pop.style.maxWidth = "520px";
+		          pop.style.padding = "8px 10px";
+		          pop.style.borderRadius = "8px";
+		          pop.style.border = "1px solid rgba(0,0,0,0.18)";
+		          pop.style.background = "rgba(255,255,255,0.98)";
+		          pop.style.boxShadow = "0 8px 24px rgba(0,0,0,0.18)";
+		          pop.style.fontSize = "13px";
+		          pop.style.lineHeight = "1.35";
+
+		          const head = document.createElement("div");
+		          head.style.display = "flex";
+		          head.style.alignItems = "center";
+		          head.style.justifyContent = "space-between";
+		          head.style.gap = "12px";
+
+		          const title = document.createElement("div");
+		          title.textContent = "ABC help";
+		          title.style.fontWeight = "600";
+		          head.appendChild(title);
+
+		          const hint = document.createElement("div");
+		          hint.textContent = "Ctrl+F1 to close";
+		          hint.style.opacity = "0.65";
+		          hint.style.fontSize = "12px";
+		          head.appendChild(hint);
+
+		          const body = document.createElement("div");
+		          body.textContent = msg;
+		          body.style.marginTop = "6px";
+
+		          pop.appendChild(head);
+		          pop.appendChild(body);
+
+		          const coords = view.coordsAtPos(pos);
+		          const margin = 10;
+		          const vw = window.innerWidth || 0;
+		          const vh = window.innerHeight || 0;
+
+		          let left = margin;
+		          let top = margin;
+		          if (coords) {
+		            left = Math.round(coords.left);
+		            top = Math.round(coords.bottom + 8);
 		          }
+		          document.body.appendChild(pop);
+
+		          // Clamp after layout so the popover stays on-screen.
+		          const r = pop.getBoundingClientRect();
+		          if (left + r.width + margin > vw) left = Math.max(margin, vw - r.width - margin);
+		          if (top + r.height + margin > vh) top = Math.max(margin, (coords ? (coords.top - r.height - 8) : (vh - r.height - margin)));
+		          pop.style.left = `${left}px`;
+		          pop.style.top = `${top}px`;
+
+		          const onDocKey = (ev) => {
+		            try {
+		              if (!ev) return;
+		              if (ev.key === "Escape") {
+		                try { pop.remove(); } catch {}
+		              }
+		            } catch {}
+		          };
+		          const onDocDown = (ev) => {
+		            try {
+		              if (!ev) return;
+		              if (pop.contains(ev.target)) return;
+		              try { pop.remove(); } catch {}
+		            } catch {}
+		          };
+		          const cleanup = () => {
+		            document.removeEventListener("keydown", onDocKey, true);
+		            document.removeEventListener("mousedown", onDocDown, true);
+		          };
+		          const mo = new MutationObserver(() => {
+		            if (!document.body.contains(pop)) {
+		              try { cleanup(); } catch {}
+		              try { mo.disconnect(); } catch {}
+		            }
+		          });
+		          try { mo.observe(document.body, { childList: true, subtree: true }); } catch {}
+		          document.addEventListener("keydown", onDocKey, true);
+		          document.addEventListener("mousedown", onDocDown, true);
 		        } catch {}
 		        return true;
 		      },
