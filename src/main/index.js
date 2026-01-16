@@ -922,6 +922,12 @@ function applySettingsPatch(patch, { persistToSettingsFile = true } = {}) {
   next.editorZoom = clampZoom(Number(next.editorZoom));
   next.layoutRenderZoomVertical = clampZoom(Number(next.layoutRenderZoomVertical));
   next.layoutRenderZoomHorizontal = clampZoom(Number(next.layoutRenderZoomHorizontal));
+  // Keep per-split render zoom in sync with the active orientation whenever `renderZoom` changes.
+  // This ensures split zoom restores correctly across restarts even if the user never toggles away.
+  if (patch && typeof patch === "object" && Object.prototype.hasOwnProperty.call(patch, "renderZoom")) {
+    if (next.layoutSplitOrientation === "horizontal") next.layoutRenderZoomHorizontal = next.renderZoom;
+    else next.layoutRenderZoomVertical = next.renderZoom;
+  }
   next.editorFontSize = Math.min(32, Math.max(8, Number(next.editorFontSize) || 13));
   next.editorNotesBold = Boolean(next.editorNotesBold);
   next.editorLyricsBold = Boolean(next.editorLyricsBold);

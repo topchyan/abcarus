@@ -1772,8 +1772,6 @@ let rightSplitOrientation = "vertical"; // "vertical" | "horizontal"
 let rightSplitRatioVertical = 0.5;
 let rightSplitRatioHorizontal = 0.5;
 let suppressFollowScrollUntilMs = 0;
-let splitRenderZoomVertical = null;
-let splitRenderZoomHorizontal = null;
 
 let layoutPrefsSaveTimer = null;
 let pendingLayoutPrefsPatch = null;
@@ -15193,22 +15191,8 @@ function setLayoutFromSettings(settings) {
   const orientation = (settings.layoutSplitOrientation === "horizontal") ? "horizontal" : "vertical";
   rightSplitRatioVertical = clampRatio(settings.layoutSplitRatioVertical, rightSplitRatioVertical);
   rightSplitRatioHorizontal = clampRatio(settings.layoutSplitRatioHorizontal, rightSplitRatioHorizontal);
-  splitRenderZoomVertical = Number(settings.layoutRenderZoomVertical);
-  splitRenderZoomHorizontal = Number(settings.layoutRenderZoomHorizontal);
   applyRightSplitOrientation(orientation);
   applyRightSplitSizesFromRatio();
-  // Keep per-split zoom snapshots in sync with the current user-facing score zoom.
-  // This supports switching split orientation while preserving preferred zoom per layout.
-  try {
-    const baseZoom = Number(settings.renderZoom);
-    if (Number.isFinite(baseZoom) && baseZoom > 0) {
-      const key = (orientation === "horizontal") ? "layoutRenderZoomHorizontal" : "layoutRenderZoomVertical";
-      const currentStored = Number(settings[key]);
-      if (!Number.isFinite(currentStored) || Math.abs(currentStored - baseZoom) > 0.0001) {
-        scheduleSaveLayoutPrefs({ [key]: baseZoom });
-      }
-    }
-  } catch {}
 }
 
 function setSplitOrientation(nextOrientation, { persist = true, userAction = false } = {}) {
