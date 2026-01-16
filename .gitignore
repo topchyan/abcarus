@@ -6,6 +6,8 @@ dist/
 
 # Local-only helpers and artifacts
 scripts/local/
+kitchen/**
+!kitchen/README.md
 debug_dumps/
 assets/brand/
 docs/qa/
