@@ -1531,6 +1531,68 @@ const LIBRARY_SEARCH_DEBOUNCE_MS = 180;
 let settingsController = null;
 let disclaimerShown = false;
 
+let decorationCatalogEnrichment = null;
+let decorationCatalogEnrichmentTried = false;
+
+async function loadDecorationCatalogEnrichment() {
+  if (decorationCatalogEnrichmentTried) return decorationCatalogEnrichment;
+  decorationCatalogEnrichmentTried = true;
+
+  try {
+    if (!window.api || typeof window.api.pathJoin !== "function" || typeof window.api.pathDirname !== "function") return null;
+    const href = String(window.location && window.location.href ? window.location.href : "");
+    if (!href.startsWith("file://")) return null;
+    const p = decodeURIComponent(new URL(href).pathname || "");
+    if (!p.includes("/src/renderer/")) return null;
+    const rendererDir = window.api.pathDirname(p);
+    const srcDir = window.api.pathDirname(rendererDir);
+    const rootDir = window.api.pathDirname(srcDir);
+    const jsonPath = window.api.pathJoin(rootDir, "kitchen", "derived", "abc2svg-decorations-catalog.json");
+
+    const res = await readFile(jsonPath);
+    if (!res || !res.ok || !res.data) return null;
+    const parsed = JSON.parse(String(res.data || ""));
+    const list = Array.isArray(parsed && parsed.decorations) ? parsed.decorations : [];
+    const map = new Map();
+    for (const d of list) {
+      const name = d && d.name ? String(d.name) : "";
+      if (!name) continue;
+      map.set(name, {
+        description: d && d.description ? String(d.description) : "",
+        example: d && d.example ? String(d.example) : "",
+        sources: Array.isArray(d && d.sources) ? d.sources.map(String) : [],
+      });
+    }
+    decorationCatalogEnrichment = map;
+    return map;
+  } catch {
+    return null;
+  }
+}
+
+function buildDecorationExample(name, shorthandChar) {
+  if (!name) return "";
+  const abc = `!${name}!`;
+  if (name.endsWith("(")) {
+    const base = name.slice(0, -1);
+    return `${abc}c2 d2 !${base})! e2`;
+  }
+  if (name.endsWith(")")) {
+    return `!${name.slice(0, -1)}(! c2 d2 ${abc} e2`;
+  }
+  if (name === "trill") return `!trill!A4`;
+  if (["p", "pp", "ppp", "pppp", "mp", "mf", "f", "ff", "fff", "ffff", "sfz"].includes(name)) return `${abc} c2 d2 e2`;
+  if (name === ">") return `!>!c`;
+  if (name === "+") return `!+!c`;
+  if (name === "^") return `!^!c`;
+  if (name === "dot") return `.c`;
+  if (name === "gmark") return `!gmark!c`;
+  if (["/", "//", "///"].includes(name)) return `${abc}c`;
+  if (["-(", "-)", "~(", "~)"].includes(name)) return `${abc}c`;
+  if (shorthandChar) return `${shorthandChar}c`;
+  return `${abc}c`;
+}
+
 function buildAbcDecorations(state) {
   const builder = new RangeSetBuilder();
   let inTextBlock = false;
@@ -4190,7 +4252,7 @@ function initEditor() {
 		          pop.setAttribute("aria-label", "ABC insert");
 		          pop.style.position = "fixed";
 		          pop.style.zIndex = "9999";
-		          pop.style.maxWidth = "640px";
+		          pop.style.maxWidth = "980px";
 		          pop.style.padding = "8px 10px";
 		          pop.style.borderRadius = "8px";
 		          pop.style.border = "1px solid rgba(0,0,0,0.18)";
@@ -4211,7 +4273,7 @@ function initEditor() {
 		          head.appendChild(title);
 
 		          const hint = document.createElement("div");
-		          hint.textContent = "Enter=shorthand  Shift+Enter=!name!  Esc=close";
+		          hint.textContent = "Enter=insert  Shift+Enter=!name!  Esc=close";
 		          hint.style.opacity = "0.65";
 		          hint.style.fontSize = "12px";
 		          head.appendChild(hint);
@@ -4233,16 +4295,129 @@ function initEditor() {
 		          input.style.border = "1px solid rgba(0,0,0,0.2)";
 		          body.appendChild(input);
 
+		          const contentRow = document.createElement("div");
+		          contentRow.style.marginTop = "6px";
+		          contentRow.style.display = "flex";
+		          contentRow.style.gap = "10px";
+		          body.appendChild(contentRow);
+
+		          const listWrap = document.createElement("div");
+		          listWrap.style.flex = "0 0 460px";
+		          listWrap.style.minWidth = "320px";
+		          contentRow.appendChild(listWrap);
+
 		          const list = document.createElement("div");
-		          list.style.marginTop = "6px";
-		          list.style.maxHeight = "260px";
+		          list.style.maxHeight = "300px";
 		          list.style.overflow = "auto";
 		          list.style.border = "1px solid rgba(0,0,0,0.12)";
 		          list.style.borderRadius = "6px";
-		          body.appendChild(list);
+		          listWrap.appendChild(list);
+
+		          const details = document.createElement("div");
+		          details.style.flex = "1 1 auto";
+		          details.style.minWidth = "360px";
+		          details.style.maxWidth = "480px";
+		          details.style.display = "flex";
+		          details.style.flexDirection = "column";
+		          details.style.gap = "8px";
+		          contentRow.appendChild(details);
+
+		          const detailsTitle = document.createElement("div");
+		          detailsTitle.style.fontWeight = "600";
+		          detailsTitle.textContent = "Details";
+		          details.appendChild(detailsTitle);
+
+		          const detailsDesc = document.createElement("div");
+		          detailsDesc.style.opacity = "0.9";
+		          detailsDesc.style.fontSize = "12px";
+		          detailsDesc.style.lineHeight = "1.35";
+		          detailsDesc.textContent = "";
+		          details.appendChild(detailsDesc);
+
+		          const detailsExample = document.createElement("div");
+		          detailsExample.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace";
+		          detailsExample.style.fontSize = "12px";
+		          detailsExample.style.opacity = "0.8";
+		          detailsExample.textContent = "";
+		          details.appendChild(detailsExample);
+
+		          const previewWrap = document.createElement("div");
+		          previewWrap.style.border = "1px solid rgba(0,0,0,0.12)";
+		          previewWrap.style.borderRadius = "6px";
+		          previewWrap.style.padding = "6px";
+		          previewWrap.style.background = "rgba(250,250,250,0.9)";
+		          previewWrap.style.maxHeight = "220px";
+		          previewWrap.style.overflow = "auto";
+		          details.appendChild(previewWrap);
+
+		          const preview = document.createElement("div");
+		          preview.textContent = "";
+		          previewWrap.appendChild(preview);
 
 		          let closePopover = () => { try { pop.remove(); } catch {} };
 		          let reposition = () => {};
+
+		          let enrichment = null;
+		          let previewSeq = 0;
+		          let previewTimer = null;
+
+		          const getDecorationDetails = (dec) => {
+		            const name = dec && dec.name ? String(dec.name) : "";
+		            const fromEnrichment = enrichment && name ? enrichment.get(name) : null;
+		            const description = fromEnrichment && fromEnrichment.description ? String(fromEnrichment.description) : "";
+		            const example = fromEnrichment && fromEnrichment.example
+		              ? String(fromEnrichment.example)
+		              : buildDecorationExample(name, dec && dec.char ? String(dec.char) : "");
+		            return { description, example };
+		          };
+
+		          const renderPreview = (exampleAbc) => {
+		            const seq = (previewSeq += 1);
+		            if (previewTimer) clearTimeout(previewTimer);
+		            previewTimer = setTimeout(async () => {
+		              if (seq !== previewSeq) return;
+		              const example = String(exampleAbc || "").trim();
+		              if (!example) {
+		                preview.textContent = "";
+		                return;
+		              }
+
+		              preview.textContent = "Rendering preview…";
+		              try {
+		                const abcText = `X:1\nT:Preview\nM:4/4\nL:1/4\nK:C\n${example}\n`;
+		                const res = await renderAbcToSvgMarkup(abcText, { suppressGlobalErrors: true, stopOnFirstError: true });
+		                if (seq !== previewSeq) return;
+		                if (!res || !res.ok || !res.svg) {
+		                  preview.textContent = "Preview unavailable.";
+		                  return;
+		                }
+		                preview.innerHTML = res.svg;
+		                try {
+		                  const svgs = Array.from(preview.querySelectorAll("svg"));
+		                  for (const svg of svgs) {
+		                    svg.style.maxWidth = "100%";
+		                    svg.style.height = "auto";
+		                    svg.style.display = "block";
+		                  }
+		                } catch {}
+		              } catch {
+		                if (seq !== previewSeq) return;
+		                preview.textContent = "Preview unavailable.";
+		              } finally {
+		                try { reposition(); } catch {}
+		              }
+		            }, 80);
+		          };
+
+		          const updateDetails = (dec) => {
+		            const name = dec && dec.name ? String(dec.name) : "";
+		            const abc = dec && dec.abc ? String(dec.abc) : "";
+		            const { description, example } = getDecorationDetails(dec);
+		            detailsTitle.textContent = name ? `Details: ${name}` : "Details";
+		            detailsDesc.textContent = description || "";
+		            detailsExample.textContent = example ? `Example: ${example}` : (abc ? `Example: ${abc}c` : "");
+		            renderPreview(example);
+		          };
 
 		          const insertDecoration = (dec, fullForm) => {
 		            try {
@@ -4269,17 +4444,22 @@ function initEditor() {
 		          let items = [];
 		          let activeIdx = 0;
 
-		            const render = () => {
-		              list.textContent = "";
-		              const q = String(input.value || "").trim().toLowerCase();
-		              const all = ABC2SVG_DECORATIONS.map((d) => ({
-		                char: String(d.char || ""),
-		                abc: String(d.abc || ""),
-		                name: String(d.name || ""),
-		              }));
+		          const render = () => {
+		            list.textContent = "";
+		            const q = String(input.value || "").trim().toLowerCase();
+		            const all = ABC2SVG_DECORATIONS.map((d) => ({
+		              char: String(d.char || ""),
+		              abc: String(d.abc || ""),
+		              name: String(d.name || ""),
+		              isInternal: Boolean(d.isInternal),
+		            }));
 		            items = q
 		              ? all.filter((d) => {
-		                const hay = `${d.char} ${d.name} ${d.abc}`.toLowerCase();
+		                const extra = (() => {
+		                  const fromEnrichment = enrichment && d.name ? enrichment.get(d.name) : null;
+		                  return fromEnrichment && fromEnrichment.description ? String(fromEnrichment.description) : "";
+		                })();
+		                const hay = `${d.char} ${d.name} ${d.abc} ${extra}`.toLowerCase();
 		                return hay.includes(q);
 		              })
 		              : all;
@@ -4288,27 +4468,45 @@ function initEditor() {
 		            let activeRow = null;
 		            for (let i = 0; i < items.length; i += 1) {
 		              const dec = items[i];
+		              const { description } = getDecorationDetails(dec);
 		              const row = document.createElement("div");
 		              row.style.display = "grid";
-		              row.style.gridTemplateColumns = "3.2em 1fr 8.5em";
+		              row.style.gridTemplateColumns = "3.2em 1fr 12em";
 		              row.style.gap = "10px";
 		              row.style.padding = "6px 8px";
 		              row.style.cursor = "pointer";
 		              row.style.borderTop = i === 0 ? "none" : "1px solid rgba(0,0,0,0.06)";
+		              if (dec.isInternal) row.style.opacity = "0.9";
 		              if (i === activeIdx) {
 		                row.style.background = "rgba(30,144,255,0.12)";
 		                activeRow = row;
 		              }
 
 		              const ch = document.createElement("div");
-		              ch.textContent = dec.char;
+		              ch.textContent = dec.char || "";
 		              ch.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace";
 		              ch.style.fontWeight = "600";
+		              ch.style.opacity = dec.char ? "1" : "0.25";
 		              row.appendChild(ch);
+
+		              const nmWrap = document.createElement("div");
+		              nmWrap.style.display = "flex";
+		              nmWrap.style.flexDirection = "column";
+		              nmWrap.style.gap = "2px";
+		              row.appendChild(nmWrap);
 
 		              const nm = document.createElement("div");
 		              nm.textContent = dec.name;
-		              row.appendChild(nm);
+		              nmWrap.appendChild(nm);
+
+		              const ds = document.createElement("div");
+		              ds.textContent = description || "";
+		              ds.style.fontSize = "12px";
+		              ds.style.opacity = "0.65";
+		              ds.style.overflow = "hidden";
+		              ds.style.whiteSpace = "nowrap";
+		              ds.style.textOverflow = "ellipsis";
+		              nmWrap.appendChild(ds);
 
 		              const ab = document.createElement("div");
 		              ab.textContent = dec.abc;
@@ -4317,6 +4515,10 @@ function initEditor() {
 		              ab.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace";
 		              row.appendChild(ab);
 
+		              row.addEventListener("mouseenter", () => {
+		                activeIdx = i;
+		                updateDetails(dec);
+		              });
 		              row.addEventListener("click", (ev) => {
 		                try { ev.preventDefault(); ev.stopPropagation(); } catch {}
 		                const ok = insertDecoration(dec, false);
@@ -4366,6 +4568,7 @@ function initEditor() {
 		              if (key === "ArrowDown") {
 		                if (items.length) activeIdx = Math.min(items.length - 1, activeIdx + 1);
 		                render();
+		                if (items[activeIdx]) updateDetails(items[activeIdx]);
 		                ev.preventDefault();
 		                ev.stopPropagation();
 		                return;
@@ -4373,6 +4576,7 @@ function initEditor() {
 		              if (key === "ArrowUp") {
 		                if (items.length) activeIdx = Math.max(0, activeIdx - 1);
 		                render();
+		                if (items[activeIdx]) updateDetails(items[activeIdx]);
 		                ev.preventDefault();
 		                ev.stopPropagation();
 		                return;
@@ -4438,8 +4642,15 @@ function initEditor() {
 		          window.addEventListener("resize", reposition, { passive: true });
 
 		          render();
+		          if (items[activeIdx]) updateDetails(items[activeIdx]);
 		          setTimeout(() => { try { reposition(); } catch {} }, 0);
 		          setTimeout(() => { try { input.focus(); input.select(); } catch {} }, 0);
+
+		          loadDecorationCatalogEnrichment().then((m) => {
+		            if (m) enrichment = m;
+		            try { render(); } catch {}
+		            try { if (items[activeIdx]) updateDetails(items[activeIdx]); } catch {}
+		          }).catch(() => {});
 		        } catch {}
 		        return true;
 		      },
