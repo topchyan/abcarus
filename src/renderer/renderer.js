@@ -19,7 +19,7 @@ import {
   hoverTooltip,
   acceptCompletion,
 } from "../../third_party/codemirror/cm.js";
-import { ABC2SVG_CHAR_DECORATION_SHORTHANDS } from "./abc_decorations_abc2svg.js";
+import { ABC2SVG_DECORATIONS } from "./abc_decorations_abc2svg.js";
 import { initSettings } from "./settings.js";
 import { transformTranspose } from "./transpose.mjs";
 import { normalizeMeasuresLineBreaks, transformMeasuresPerLine } from "./measures.mjs";
@@ -4247,7 +4247,8 @@ function initEditor() {
 		          const insertDecoration = (dec, fullForm) => {
 		            try {
 		              if (!dec) return false;
-		              const insertText = fullForm ? String(dec.abc || "") : String(dec.char || "");
+		              const hasChar = Boolean(dec.char);
+		              const insertText = fullForm ? String(dec.abc || "") : (hasChar ? String(dec.char || "") : String(dec.abc || ""));
 		              if (!insertText) return false;
 		              if (view.state.readOnly) return false;
 		              const sel = view.state.selection.main;
@@ -4268,15 +4269,14 @@ function initEditor() {
 		          let items = [];
 		          let activeIdx = 0;
 
-		          const render = () => {
-		            list.textContent = "";
-		            const q = String(input.value || "").trim().toLowerCase();
-		            const all = ABC2SVG_CHAR_DECORATION_SHORTHANDS.map((d) => ({
-		              ...d,
-		              char: String(d.char || ""),
-		              abc: String(d.abc || ""),
-		              name: String(d.name || ""),
-		            }));
+		            const render = () => {
+		              list.textContent = "";
+		              const q = String(input.value || "").trim().toLowerCase();
+		              const all = ABC2SVG_DECORATIONS.map((d) => ({
+		                char: String(d.char || ""),
+		                abc: String(d.abc || ""),
+		                name: String(d.name || ""),
+		              }));
 		            items = q
 		              ? all.filter((d) => {
 		                const hay = `${d.char} ${d.name} ${d.abc}`.toLowerCase();
