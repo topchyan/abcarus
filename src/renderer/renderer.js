@@ -14,6 +14,8 @@ import {
   foldService,
   foldGutter,
   lineNumbers,
+  autocompletion,
+  CompletionContext,
 } from "../../third_party/codemirror/cm.js";
 import { initSettings } from "./settings.js";
 import { transformTranspose } from "./transpose.mjs";
@@ -122,11 +124,116 @@ const $setListExportPdf = document.getElementById("setListExportPdf");
 
 const abcHighlightCompartment = new Compartment();
 const abcDiagnosticsCompartment = new Compartment();
+const abcCompletionCompartment = new Compartment();
 const abcTuningModeCompartment = new Compartment();
+
+function buildAbcCompletionSource() {
+  const keyOptions = [
+    "C",
+    "G",
+    "D",
+    "A",
+    "E",
+    "B",
+    "F#",
+    "C#",
+    "F",
+    "Bb",
+    "Eb",
+    "Ab",
+    "Db",
+    "Gb",
+    "Cb",
+    "Am",
+    "Em",
+    "Bm",
+    "F#m",
+    "C#m",
+    "G#m",
+    "D#m",
+    "A#m",
+    "Dm",
+    "Gm",
+    "Cm",
+    "Fm",
+    "Bbm",
+    "Ebm",
+    "Abm",
+  ].map((label) => ({ label, type: "keyword" }));
+
+  const meterOptions = [
+    "4/4",
+    "3/4",
+    "2/4",
+    "6/8",
+    "12/8",
+    "2/2",
+    "5/4",
+    "7/8",
+    "9/8",
+    "C",
+    "C|",
+    "none",
+  ].map((label) => ({ label, type: "keyword" }));
+
+  const unitOptions = [
+    "1/8",
+    "1/16",
+    "1/4",
+    "1/2",
+  ].map((label) => ({ label, type: "keyword" }));
+
+  const midiDirectives = [
+    { label: "%%MIDI program ", type: "keyword", info: "Select instrument program (0–127)" },
+    { label: "%%MIDI instrument ", type: "keyword", info: "Alias of program (engine-defined)" },
+    { label: "%%MIDI temperamentequal ", type: "keyword", info: "Enable EDO-N (e.g. 53)" },
+    { label: "%%MIDI drum ", type: "keyword" },
+    { label: "%%MIDI drumoff", type: "keyword" },
+    { label: "%%MIDI drumon", type: "keyword" },
+  ];
+
+  /** @param {CompletionContext} context */
+  return (context) => {
+    const pos = context.pos;
+    const line = context.state.doc.lineAt(pos);
+    const lineText = line.text;
+    const before = lineText.slice(0, pos - line.from);
+    const beforeTrim = before.trimStart();
+
+    // Offer `%%MIDI ...` directives at start of line (or after indentation).
+    if (beforeTrim.startsWith("%%") || /^(\s*)$/.test(before)) {
+      const m = context.matchBefore(/^\s*%%[A-Za-z]*$/);
+      if (m) {
+        return { from: line.from + m.from, options: midiDirectives, validFor: /^\s*%%[A-Za-z]*$/ };
+      }
+      const m2 = context.matchBefore(/^\s*%%MIDI\s+[A-Za-z]*$/);
+      if (m2) {
+        return { from: line.from + m2.from, options: midiDirectives, validFor: /^\s*%%MIDI\s+[A-Za-z]*$/ };
+      }
+    }
+
+    // Header field values.
+    if (/^\s*K:/.test(lineText)) {
+      const m = context.matchBefore(/[A-Za-z#bm]*$/);
+      if (m) return { from: line.from + m.from, options: keyOptions };
+    }
+    if (/^\s*M:/.test(lineText)) {
+      const m = context.matchBefore(/[0-9C|/nobe]*$/i);
+      if (m) return { from: line.from + m.from, options: meterOptions };
+    }
+    if (/^\s*L:/.test(lineText)) {
+      const m = context.matchBefore(/[0-9/]*$/);
+      if (m) return { from: line.from + m.from, options: unitOptions };
+    }
+
+    return null;
+  };
+}
 
 function reconfigureAbcExtensions({
   highlightEnabled = true,
   diagnosticsEnabled = true,
+  completionEnabled = true,
   tuningModeExtensions = [],
 } = {}) {
   if (!editorView) return;
@@ -139,6 +246,13 @@ function reconfigureAbcExtensions({
     abcDiagnosticsCompartment.reconfigure(
       diagnosticsEnabled
         ? [measureErrorPlugin, errorActivationHighlightPlugin, practiceBarHighlightPlugin]
+        : []
+    )
+  );
+  effects.push(
+    abcCompletionCompartment.reconfigure(
+      completionEnabled
+        ? [autocompletion({ override: [buildAbcCompletionSource()], activateOnTyping: false })]
         : []
     )
   );
@@ -3470,6 +3584,9 @@ function initEditor() {
         measureErrorPlugin,
         errorActivationHighlightPlugin,
         practiceBarHighlightPlugin,
+      ]),
+      abcCompletionCompartment.of([
+        autocompletion({ override: [buildAbcCompletionSource()], activateOnTyping: false }),
       ]),
       abcTuningModeCompartment.of([]),
       updateListener,
