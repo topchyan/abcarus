@@ -19,6 +19,7 @@ import {
   hoverTooltip,
   acceptCompletion,
 } from "../../third_party/codemirror/cm.js";
+import { ABC2SVG_CHAR_DECORATION_SHORTHANDS } from "./abc_decorations_abc2svg.js";
 import { initSettings } from "./settings.js";
 import { transformTranspose } from "./transpose.mjs";
 import { normalizeMeasuresLineBreaks, transformMeasuresPerLine } from "./measures.mjs";
@@ -3224,6 +3225,16 @@ function foldBeginTextBlocks(state, lineStart, lineEnd) {
   return null;
 }
 
+function isInBeginTextBlockAtLine(state, lineNumber) {
+  const n = Math.max(1, Math.min(state.doc.lines, Number(lineNumber) || 1));
+  for (let i = n; i >= 1; i -= 1) {
+    const text = String(state.doc.line(i).text || "");
+    if (/^%%\s*endtext\b/i.test(text)) return false;
+    if (/^%%\s*begintext\b/i.test(text)) return true;
+  }
+  return false;
+}
+
 function moveLineSelection(view, delta) {
   const { state } = view;
   const ranges = [];
@@ -3654,18 +3665,161 @@ function initEditor() {
 		      key: "Ctrl-F1",
 		      run: (view) => {
 		        try {
+		          // NOTE: Be careful with RegExp escaping inside template strings.
+		          // A past bottleneck (across multiple chat threads) was caused by accidentally over-escaping
+		          // `\\s`/`\\d` in `new RegExp(...)`, which made the pattern never match and made the GM picker
+		          // appear to "do nothing" (it always showed "Can't apply...").
 		          // Toggle a lightweight help popover without interfering with the app's main F1 (ABC manual).
 		          const existing = document.getElementById("abcarusAbcHelpPopover");
 		          if (existing) {
-		            try { existing.remove(); } catch {}
+		            try {
+		              const close = existing.__abcarusClose;
+		              if (typeof close === "function") close();
+		              else existing.remove();
+		            } catch {}
 		            return true;
 		          }
 
+		          const GM_PROGRAMS = [
+		            "Acoustic Grand Piano",
+		            "Bright Acoustic Piano",
+		            "Electric Grand Piano",
+		            "Honky-tonk Piano",
+		            "Electric Piano 1",
+		            "Electric Piano 2",
+		            "Harpsichord",
+		            "Clavinet",
+		            "Celesta",
+		            "Glockenspiel",
+		            "Music Box",
+		            "Vibraphone",
+		            "Marimba",
+		            "Xylophone",
+		            "Tubular Bells",
+		            "Dulcimer",
+		            "Drawbar Organ",
+		            "Percussive Organ",
+		            "Rock Organ",
+		            "Church Organ",
+		            "Reed Organ",
+		            "Accordion",
+		            "Harmonica",
+		            "Tango Accordion",
+		            "Acoustic Guitar (nylon)",
+		            "Acoustic Guitar (steel)",
+		            "Electric Guitar (jazz)",
+		            "Electric Guitar (clean)",
+		            "Electric Guitar (muted)",
+		            "Overdriven Guitar",
+		            "Distortion Guitar",
+		            "Guitar Harmonics",
+		            "Acoustic Bass",
+		            "Electric Bass (finger)",
+		            "Electric Bass (pick)",
+		            "Fretless Bass",
+		            "Slap Bass 1",
+		            "Slap Bass 2",
+		            "Synth Bass 1",
+		            "Synth Bass 2",
+		            "Violin",
+		            "Viola",
+		            "Cello",
+		            "Contrabass",
+		            "Tremolo Strings",
+		            "Pizzicato Strings",
+		            "Orchestral Harp",
+		            "Timpani",
+		            "String Ensemble 1",
+		            "String Ensemble 2",
+		            "SynthStrings 1",
+		            "SynthStrings 2",
+		            "Choir Aahs",
+		            "Voice Oohs",
+		            "Synth Voice",
+		            "Orchestra Hit",
+		            "Trumpet",
+		            "Trombone",
+		            "Tuba",
+		            "Muted Trumpet",
+		            "French Horn",
+		            "Brass Section",
+		            "SynthBrass 1",
+		            "SynthBrass 2",
+		            "Soprano Sax",
+		            "Alto Sax",
+		            "Tenor Sax",
+		            "Baritone Sax",
+		            "Oboe",
+		            "English Horn",
+		            "Bassoon",
+		            "Clarinet",
+		            "Piccolo",
+		            "Flute",
+		            "Recorder",
+		            "Pan Flute",
+		            "Blown Bottle",
+		            "Shakuhachi",
+		            "Whistle",
+		            "Ocarina",
+		            "Lead 1 (square)",
+		            "Lead 2 (sawtooth)",
+		            "Lead 3 (calliope)",
+		            "Lead 4 (chiff)",
+		            "Lead 5 (charang)",
+		            "Lead 6 (voice)",
+		            "Lead 7 (fifths)",
+		            "Lead 8 (bass + lead)",
+		            "Pad 1 (new age)",
+		            "Pad 2 (warm)",
+		            "Pad 3 (polysynth)",
+		            "Pad 4 (choir)",
+		            "Pad 5 (bowed)",
+		            "Pad 6 (metallic)",
+		            "Pad 7 (halo)",
+		            "Pad 8 (sweep)",
+		            "FX 1 (rain)",
+		            "FX 2 (soundtrack)",
+		            "FX 3 (crystal)",
+		            "FX 4 (atmosphere)",
+		            "FX 5 (brightness)",
+		            "FX 6 (goblins)",
+		            "FX 7 (echoes)",
+		            "FX 8 (sci-fi)",
+		            "Sitar",
+		            "Banjo",
+		            "Shamisen",
+		            "Koto",
+		            "Kalimba",
+		            "Bag pipe",
+		            "Fiddle",
+		            "Shanai",
+		            "Tinkle Bell",
+		            "Agogo",
+		            "Steel Drums",
+		            "Woodblock",
+		            "Taiko Drum",
+		            "Melodic Tom",
+		            "Synth Drum",
+		            "Reverse Cymbal",
+		            "Guitar Fret Noise",
+		            "Breath Noise",
+		            "Seashore",
+		            "Bird Tweet",
+		            "Telephone Ring",
+		            "Helicopter",
+		            "Applause",
+		            "Gunshot",
+		          ];
+
 		          const pos = view.state.selection.main.head;
+		          const anchorPos = pos;
 		          const line = view.state.doc.lineAt(pos);
-		          const text = line.text || "";
+		          const anchorLineFrom = line.from;
+		          const anchorText = line.text || "";
+		          const text = anchorText;
 		          const m = /^\s*([KML]):/.exec(text);
-		          const midi = /^\s*(%{1,2})\s*MIDI\s+([A-Za-z]+)/i.exec(text);
+		          const midi = /^\s*(%{1,2})\s*MIDI\s*([A-Za-z]+)/i.exec(text);
+		          const midiProg = /^\s*(%{1,2})\s*MIDI\s*(program|chordprog|bassprog)\b/i.exec(text);
 		          let msg = "";
 		          if (m) {
 		            if (m[1] === "K") msg = "K: — Key signature (e.g. K:Dm, K:G, K:C#m).";
@@ -3680,8 +3834,6 @@ function initEditor() {
 		            else if (cmd === "drumon") msg = "%%MIDI drumon — Enable drums (engine-defined).";
 		            else if (cmd === "drumoff") msg = "%%MIDI drumoff — Disable drums (engine-defined).";
 		          }
-
-		          if (!msg) return true;
 
 		          const pop = document.createElement("div");
 		          pop.id = "abcarusAbcHelpPopover";
@@ -3715,12 +3867,243 @@ function initEditor() {
 		          hint.style.fontSize = "12px";
 		          head.appendChild(hint);
 
-		          const body = document.createElement("div");
-		          body.textContent = msg;
-		          body.style.marginTop = "6px";
-
 		          pop.appendChild(head);
+
+		          const body = document.createElement("div");
+		          body.style.marginTop = "6px";
 		          pop.appendChild(body);
+
+		          let closePopover = () => {
+		            try { pop.remove(); } catch {}
+		          };
+
+		          const setBodyText = (textValue) => {
+		            body.textContent = textValue || "";
+		          };
+
+		          const setBodyProgramPicker = () => {
+		            body.textContent = "";
+
+		            const applyMidiProgramNumber = (programNumber, programName) => {
+		              try {
+		                const cmd = String(midiProg && midiProg[2] ? midiProg[2] : "program");
+		                const lineNow = view.state.doc.lineAt(anchorPos);
+		                const textNow = lineNow.text;
+		                const replaceRe = new RegExp(`^(\\s*%{1,2}\\s*MIDI\\s*${cmd}\\b\\s*)(\\d+)?`, "i");
+		                let mm = replaceRe.exec(textNow);
+		                let baseFrom = lineNow.from;
+		                if (!mm) {
+		                  // Fallback to the snapshot taken when the popover was opened. This avoids
+		                  // edge-cases where focus/selection move and the "current line" changes.
+		                  mm = replaceRe.exec(anchorText);
+		                  baseFrom = anchorLineFrom;
+		                }
+		                if (!mm) {
+		                  try { showToast("Can't apply GM program here.", 1800); } catch {}
+		                  return false;
+		                }
+		                const prefix = mm[1] || "";
+		                const existingNum = mm[2] || "";
+		                const insertAt = baseFrom + (mm.index || 0) + prefix.length;
+		                const from = insertAt;
+		                const to = existingNum ? insertAt + existingNum.length : insertAt;
+		                const needSpace = !/\s$/.test(prefix);
+		                const insert = (needSpace && !existingNum) ? ` ${programNumber}` : String(programNumber);
+		                const cursorPos = from + insert.length;
+		                view.dispatch({
+		                  changes: { from, to, insert },
+		                  selection: EditorSelection.cursor(cursorPos),
+		                  userEvent: "input",
+		                });
+
+		                // Add/update a helpful comment with the GM program name, if possible.
+		                try {
+		                  const name = String(programName || "").trim();
+		                  if (name) {
+		                    const lineAfter = view.state.doc.lineAt(anchorPos);
+		                    const textAfter = lineAfter.text || "";
+		                    const afterRe = new RegExp(`^(\\s*%{1,2}\\s*MIDI\\s*${cmd}\\b\\s*)(\\d+)`, "i");
+		                    const mm2 = afterRe.exec(textAfter);
+		                    if (mm2) {
+		                      const prefix2 = mm2[1] || "";
+		                      const num2 = mm2[2] || "";
+		                      const numEndLocal = (mm2.index || 0) + prefix2.length + num2.length;
+		                      let commentIdx = -1;
+		                      for (let i = numEndLocal; i < textAfter.length; i += 1) {
+		                        if (textAfter[i] === "%" && textAfter[i - 1] !== "\\") { commentIdx = i; break; }
+		                      }
+
+		                      const commentText = ` % ${name}`;
+		                      const trailingWs = /\s*$/.exec(textAfter);
+		                      const endNoWs = trailingWs ? (textAfter.length - trailingWs[0].length) : textAfter.length;
+
+		                      if (commentIdx === -1) {
+		                        view.dispatch({
+		                          changes: { from: lineAfter.from + endNoWs, to: lineAfter.from + endNoWs, insert: commentText },
+		                          userEvent: "input",
+		                        });
+		                      } else {
+		                        const existingComment = textAfter.slice(commentIdx);
+		                        const existing = String(existingComment || "");
+		                        const replaceable =
+		                          /^\s*%\s*(gm|program)\s*:/i.test(existing) ||
+		                          GM_PROGRAMS.some((n) => new RegExp(`^\\s*%\\s*${escapeRegExp(n)}\\s*$`, "i").test(existing));
+		                        if (replaceable) {
+		                          view.dispatch({
+		                            changes: { from: lineAfter.from + commentIdx, to: lineAfter.to, insert: commentText },
+		                            userEvent: "input",
+		                          });
+		                        }
+		                      }
+		                    }
+		                  }
+		                } catch {}
+		                try { view.focus(); } catch {}
+		                return true;
+		              } catch (err) {
+		                try {
+		                  const msg = err && err.message ? String(err.message) : String(err || "unknown error");
+		                  showToast(`Failed to apply GM program: ${msg}`, 2400);
+		                } catch {}
+		                return false;
+		              }
+		            };
+
+		            const label = document.createElement("div");
+		            label.textContent = "GM program (0–127):";
+		            label.style.marginBottom = "6px";
+		            label.style.fontWeight = "600";
+		            body.appendChild(label);
+
+		            const input = document.createElement("input");
+		            input.type = "text";
+		            input.placeholder = "Search instrument… (e.g. flute, violin, organ)";
+		            input.autocomplete = "off";
+		            input.spellcheck = false;
+		            input.style.width = "100%";
+		            input.style.padding = "6px 8px";
+		            input.style.borderRadius = "6px";
+		            input.style.border = "1px solid rgba(0,0,0,0.2)";
+		            body.appendChild(input);
+
+		            const list = document.createElement("div");
+		            list.style.marginTop = "6px";
+		            list.style.maxHeight = "240px";
+		            list.style.overflow = "auto";
+		            list.style.border = "1px solid rgba(0,0,0,0.12)";
+		            list.style.borderRadius = "6px";
+		            body.appendChild(list);
+
+		            let items = [];
+		            let activeIdx = 0;
+
+		            const render = () => {
+		              list.textContent = "";
+		              const q = String(input.value || "").trim().toLowerCase();
+		              const all = GM_PROGRAMS.map((name, idx) => ({ idx, name }));
+		              const filtered = q
+		                ? all.filter((x) => x.name.toLowerCase().includes(q) || String(x.idx).includes(q))
+		                : all;
+		              items = filtered;
+		              if (activeIdx >= items.length) activeIdx = 0;
+
+		              let activeRow = null;
+		              for (let i = 0; i < items.length; i += 1) {
+		                const it = items[i];
+		                const row = document.createElement("div");
+		                row.style.display = "flex";
+		                row.style.gap = "10px";
+		                row.style.padding = "6px 8px";
+		                row.style.cursor = "pointer";
+		                row.style.borderTop = i === 0 ? "none" : "1px solid rgba(0,0,0,0.06)";
+		                if (i === activeIdx) {
+		                  row.style.background = "rgba(30,144,255,0.12)";
+		                  activeRow = row;
+		                }
+
+		                const num = document.createElement("div");
+		                num.textContent = String(it.idx);
+		                num.style.minWidth = "2.5em";
+		                num.style.opacity = "0.75";
+		                row.appendChild(num);
+
+		                const nm = document.createElement("div");
+		                nm.textContent = it.name;
+		                row.appendChild(nm);
+
+		                const apply = () => {
+		                  const ok = applyMidiProgramNumber(it.idx, it.name);
+		                  if (ok) closePopover();
+		                };
+
+		                row.addEventListener("click", (ev) => {
+		                  try { ev.preventDefault(); ev.stopPropagation(); } catch {}
+		                  apply();
+		                }, true);
+		                list.appendChild(row);
+		              }
+
+		              try {
+		                if (activeRow) activeRow.scrollIntoView({ block: "nearest" });
+		              } catch {}
+		            };
+
+		            input.addEventListener("input", () => {
+		              activeIdx = 0;
+		              render();
+		            });
+
+		            input.addEventListener("keydown", (ev) => {
+		              try {
+		                if (!ev) return;
+		                const k = String(ev.key || "");
+		                if (k === "ArrowDown") {
+		                  if (items.length) activeIdx = Math.min(items.length - 1, activeIdx + 1);
+		                  render();
+		                  ev.preventDefault();
+		                  ev.stopPropagation();
+		                  return;
+		                }
+		                if (k === "ArrowUp") {
+		                  if (items.length) activeIdx = Math.max(0, activeIdx - 1);
+		                  render();
+		                  ev.preventDefault();
+		                  ev.stopPropagation();
+		                  return;
+		                }
+		                if (k === "Enter") {
+		                  const it = items[activeIdx];
+		                  if (it) {
+		                    // Simulate click.
+		                    input.blur();
+		                    const ok = applyMidiProgramNumber(it.idx, it.name);
+		                    if (ok) closePopover();
+		                  }
+		                  ev.preventDefault();
+		                  ev.stopPropagation();
+		                  return;
+		                }
+		                if (k === "Escape") {
+		                  closePopover();
+		                  ev.preventDefault();
+		                  ev.stopPropagation();
+		                }
+		              } catch {}
+		            });
+
+		            render();
+		            setTimeout(() => { try { input.focus(); input.select(); } catch {} }, 0);
+		          };
+
+		          if (midiProg) {
+		            setBodyProgramPicker();
+		          } else if (msg) {
+		            setBodyText(msg);
+		          } else {
+		            // Nothing useful for this line yet.
+		            closePopover();
+		            return true;
+		          }
 
 		          const coords = view.coordsAtPos(pos);
 		          const margin = 10;
@@ -3746,7 +4129,7 @@ function initEditor() {
 		            try {
 		              if (!ev) return;
 		              if (ev.key === "Escape") {
-		                try { pop.remove(); } catch {}
+		                closePopover();
 		              }
 		            } catch {}
 		          };
@@ -3754,22 +4137,309 @@ function initEditor() {
 		            try {
 		              if (!ev) return;
 		              if (pop.contains(ev.target)) return;
-		              try { pop.remove(); } catch {}
+		              closePopover();
 		            } catch {}
 		          };
 		          const cleanup = () => {
 		            document.removeEventListener("keydown", onDocKey, true);
 		            document.removeEventListener("mousedown", onDocDown, true);
 		          };
-		          const mo = new MutationObserver(() => {
-		            if (!document.body.contains(pop)) {
-		              try { cleanup(); } catch {}
-		              try { mo.disconnect(); } catch {}
-		            }
-		          });
-		          try { mo.observe(document.body, { childList: true, subtree: true }); } catch {}
+
+		          closePopover = () => {
+		            try { cleanup(); } catch {}
+		            try { pop.remove(); } catch {}
+		          };
+		          pop.__abcarusClose = closePopover;
 		          document.addEventListener("keydown", onDocKey, true);
 		          document.addEventListener("mousedown", onDocDown, true);
+		        } catch {}
+		        return true;
+		      },
+		    },
+		    {
+		      key: "Ctrl-F2",
+		      run: (view) => {
+		        try {
+		          const pos = view.state.selection.main.head;
+		          const lineInfo = view.state.doc.lineAt(pos);
+		          const lineText = String(lineInfo.text || "");
+		          if (isInBeginTextBlockAtLine(view.state, lineInfo.number)) {
+		            try { showToast("Decoration picker: not available in %%begintext blocks.", 2200); } catch {}
+		            return true;
+		          }
+		          if (/^\s*[A-Za-z]:/.test(lineText) || /^\s*[Ww]:/.test(lineText) || /^\s*%%\s*(begintext|endtext)\b/i.test(lineText)) {
+		            try { showToast("Decoration picker: place cursor on a music line.", 2200); } catch {}
+		            return true;
+		          }
+
+		          const existing = document.getElementById("abcarusAbcInsertPopover");
+		          if (existing) {
+		            try {
+		              const close = existing.__abcarusClose;
+		              if (typeof close === "function") close();
+		              else existing.remove();
+		            } catch {}
+		            return true;
+		          }
+
+		          const coords = view.coordsAtPos(pos);
+
+		          const pop = document.createElement("div");
+		          pop.id = "abcarusAbcInsertPopover";
+		          pop.setAttribute("role", "dialog");
+		          pop.setAttribute("aria-label", "ABC insert");
+		          pop.style.position = "fixed";
+		          pop.style.zIndex = "9999";
+		          pop.style.maxWidth = "640px";
+		          pop.style.padding = "8px 10px";
+		          pop.style.borderRadius = "8px";
+		          pop.style.border = "1px solid rgba(0,0,0,0.18)";
+		          pop.style.background = "rgba(255,255,255,0.98)";
+		          pop.style.boxShadow = "0 8px 24px rgba(0,0,0,0.18)";
+		          pop.style.fontSize = "13px";
+		          pop.style.lineHeight = "1.35";
+
+		          const head = document.createElement("div");
+		          head.style.display = "flex";
+		          head.style.alignItems = "center";
+		          head.style.justifyContent = "space-between";
+		          head.style.gap = "12px";
+
+		          const title = document.createElement("div");
+		          title.textContent = "Insert decoration";
+		          title.style.fontWeight = "600";
+		          head.appendChild(title);
+
+		          const hint = document.createElement("div");
+		          hint.textContent = "Enter=shorthand  Shift+Enter=!name!  Esc=close";
+		          hint.style.opacity = "0.65";
+		          hint.style.fontSize = "12px";
+		          head.appendChild(hint);
+
+		          pop.appendChild(head);
+
+		          const body = document.createElement("div");
+		          body.style.marginTop = "6px";
+		          pop.appendChild(body);
+
+		          const input = document.createElement("input");
+		          input.type = "text";
+		          input.placeholder = "Search… (e.g. trill, segno, fermata)";
+		          input.autocomplete = "off";
+		          input.spellcheck = false;
+		          input.style.width = "100%";
+		          input.style.padding = "6px 8px";
+		          input.style.borderRadius = "6px";
+		          input.style.border = "1px solid rgba(0,0,0,0.2)";
+		          body.appendChild(input);
+
+		          const list = document.createElement("div");
+		          list.style.marginTop = "6px";
+		          list.style.maxHeight = "260px";
+		          list.style.overflow = "auto";
+		          list.style.border = "1px solid rgba(0,0,0,0.12)";
+		          list.style.borderRadius = "6px";
+		          body.appendChild(list);
+
+		          let closePopover = () => { try { pop.remove(); } catch {} };
+		          let reposition = () => {};
+
+		          const insertDecoration = (dec, fullForm) => {
+		            try {
+		              if (!dec) return false;
+		              const insertText = fullForm ? String(dec.abc || "") : String(dec.char || "");
+		              if (!insertText) return false;
+		              if (view.state.readOnly) return false;
+		              const sel = view.state.selection.main;
+		              const selectedText = sel.empty ? "" : view.state.doc.sliceString(sel.from, sel.to);
+		              const insert = selectedText ? `${insertText}${selectedText}` : insertText;
+		              const cursorPos = sel.from + insert.length;
+		              view.dispatch({
+		                changes: { from: sel.from, to: sel.to, insert },
+		                selection: EditorSelection.cursor(cursorPos),
+		                userEvent: "input",
+		              });
+		              try { view.focus(); } catch {}
+		              return true;
+		            } catch {}
+		            return false;
+		          };
+
+		          let items = [];
+		          let activeIdx = 0;
+
+		          const render = () => {
+		            list.textContent = "";
+		            const q = String(input.value || "").trim().toLowerCase();
+		            const all = ABC2SVG_CHAR_DECORATION_SHORTHANDS.map((d) => ({
+		              ...d,
+		              char: String(d.char || ""),
+		              abc: String(d.abc || ""),
+		              name: String(d.name || ""),
+		            }));
+		            items = q
+		              ? all.filter((d) => {
+		                const hay = `${d.char} ${d.name} ${d.abc}`.toLowerCase();
+		                return hay.includes(q);
+		              })
+		              : all;
+		            if (activeIdx >= items.length) activeIdx = 0;
+
+		            let activeRow = null;
+		            for (let i = 0; i < items.length; i += 1) {
+		              const dec = items[i];
+		              const row = document.createElement("div");
+		              row.style.display = "grid";
+		              row.style.gridTemplateColumns = "3.2em 1fr 8.5em";
+		              row.style.gap = "10px";
+		              row.style.padding = "6px 8px";
+		              row.style.cursor = "pointer";
+		              row.style.borderTop = i === 0 ? "none" : "1px solid rgba(0,0,0,0.06)";
+		              if (i === activeIdx) {
+		                row.style.background = "rgba(30,144,255,0.12)";
+		                activeRow = row;
+		              }
+
+		              const ch = document.createElement("div");
+		              ch.textContent = dec.char;
+		              ch.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace";
+		              ch.style.fontWeight = "600";
+		              row.appendChild(ch);
+
+		              const nm = document.createElement("div");
+		              nm.textContent = dec.name;
+		              row.appendChild(nm);
+
+		              const ab = document.createElement("div");
+		              ab.textContent = dec.abc;
+		              ab.style.textAlign = "right";
+		              ab.style.opacity = "0.75";
+		              ab.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace";
+		              row.appendChild(ab);
+
+		              row.addEventListener("click", (ev) => {
+		                try { ev.preventDefault(); ev.stopPropagation(); } catch {}
+		                const ok = insertDecoration(dec, false);
+		                if (ok) closePopover();
+		              }, true);
+
+		              list.appendChild(row);
+		            }
+
+		            try {
+		              if (activeRow) activeRow.scrollIntoView({ block: "nearest" });
+		            } catch {}
+		            try { reposition(); } catch {}
+		          };
+
+		          const onDocKey = (ev) => {
+		            try {
+		              if (!ev) return;
+		              if (ev.key === "Escape") {
+		                closePopover();
+		                return;
+		              }
+		            } catch {}
+		          };
+		          const onDocDown = (ev) => {
+		            try {
+		              if (!ev) return;
+		              if (pop.contains(ev.target)) return;
+		              closePopover();
+		            } catch {}
+		          };
+		          const cleanup = () => {
+		            document.removeEventListener("keydown", onDocKey, true);
+		            document.removeEventListener("mousedown", onDocDown, true);
+		            window.removeEventListener("resize", reposition);
+		          };
+		          closePopover = () => {
+		            try { cleanup(); } catch {}
+		            try { pop.remove(); } catch {}
+		          };
+		          pop.__abcarusClose = closePopover;
+
+		          input.addEventListener("keydown", (ev) => {
+		            try {
+		              if (!ev) return;
+		              const key = String(ev.key || "");
+		              if (key === "ArrowDown") {
+		                if (items.length) activeIdx = Math.min(items.length - 1, activeIdx + 1);
+		                render();
+		                ev.preventDefault();
+		                ev.stopPropagation();
+		                return;
+		              }
+		              if (key === "ArrowUp") {
+		                if (items.length) activeIdx = Math.max(0, activeIdx - 1);
+		                render();
+		                ev.preventDefault();
+		                ev.stopPropagation();
+		                return;
+		              }
+		              if (key === "Enter") {
+		                const dec = items[activeIdx];
+		                if (dec) {
+		                  const ok = insertDecoration(dec, Boolean(ev.shiftKey));
+		                  if (ok) closePopover();
+		                }
+		                ev.preventDefault();
+		                ev.stopPropagation();
+		                return;
+		              }
+		              if (key === "Escape") {
+		                closePopover();
+		                ev.preventDefault();
+		                ev.stopPropagation();
+		              }
+		            } catch {}
+		          }, true);
+
+		          input.addEventListener("input", () => {
+		            activeIdx = 0;
+		            render();
+		          });
+
+		          const margin = 10;
+		          const vw = window.innerWidth || 0;
+		          const vh = window.innerHeight || 0;
+		          let left = margin;
+		          let top = margin;
+		          if (coords) {
+		            left = Math.round(coords.left);
+		            top = Math.round(coords.bottom + 8);
+		          }
+
+		          document.body.appendChild(pop);
+		          const anchorLeft = left;
+		          const anchorTop = top;
+		          reposition = () => {
+		            try {
+		              const w = window.innerWidth || 0;
+		              const h = window.innerHeight || 0;
+		              const r = pop.getBoundingClientRect();
+		              let x = anchorLeft;
+		              let y = anchorTop;
+		              if (x + r.width + margin > w) x = Math.max(margin, w - r.width - margin);
+		              if (y + r.height + margin > h) {
+		                y = Math.max(
+		                  margin,
+		                  coords ? (coords.top - r.height - 8) : (h - r.height - margin)
+		                );
+		              }
+		              pop.style.left = `${x}px`;
+		              pop.style.top = `${y}px`;
+		            } catch {}
+		          };
+		          reposition();
+
+		          document.addEventListener("keydown", onDocKey, true);
+		          document.addEventListener("mousedown", onDocDown, true);
+		          window.addEventListener("resize", reposition, { passive: true });
+
+		          render();
+		          setTimeout(() => { try { reposition(); } catch {} }, 0);
+		          setTimeout(() => { try { input.focus(); input.select(); } catch {} }, 0);
 		        } catch {}
 		        return true;
 		      },
