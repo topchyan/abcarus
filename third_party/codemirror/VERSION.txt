@@ -1,0 +1,10 @@
+Component: codemirror (vendored build)
+Source: npm packages (codemirror@6.0.2, @codemirror/* as pinned in package.json)
+Upstream repo: https://github.com/codemirror/dev
+Date: 2026-01-16
+Build tool: esbuild (see package.json devDependencies)
+Build tool version: 0.27.2
+
+Notes:
+- `cm.js` is treated as a third-party artifact. Do not hand-edit it.
+- Rebuild using `third_party/codemirror/build/build.mjs`.
