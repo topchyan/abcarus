@@ -4391,7 +4391,8 @@ function initEditor() {
 
 		              preview.textContent = "Rendering preview…";
 		              try {
-		                const abcText = `X:1\nT:Preview\nM:4/4\nL:1/4\nK:C\n${example}\n`;
+		                // Use a slightly larger scale so the preview is readable without requiring UI zoom.
+		                const abcText = `X:1\nT:Preview\n%%pagewidth 18cm\n%%scale 1.6\nM:4/4\nL:1/4\nK:C\n${example}\n`;
 		                const res = await renderAbcToSvgMarkup(abcText, { suppressGlobalErrors: true, stopOnFirstError: true });
 		                if (seq !== previewSeq) return;
 		                if (!res || !res.ok || !res.svg) {
@@ -4482,19 +4483,40 @@ function initEditor() {
 		          const render = () => {
 		            list.textContent = "";
 		            const q = String(input.value || "").trim().toLowerCase();
-		            const all = ABC2SVG_DECORATIONS.map((d) => ({
+		            const allRaw = ABC2SVG_DECORATIONS.map((d) => ({
 		              char: String(d.char || ""),
 		              abc: String(d.abc || ""),
 		              name: String(d.name || ""),
 		              isInternal: Boolean(d.isInternal),
 		            }));
+
+		            // Collapse paired decorations (foo( + foo)) into a single list item keyed by the opening element.
+		            // This makes the UI clearer and matches insertion semantics (wrap selection with start/end).
+		            const endSet = new Set(allRaw.filter((d) => d.name.endsWith(")")).map((d) => d.name));
+		            const all = [];
+		            for (const d of allRaw) {
+		              if (d.name.endsWith(")")) continue; // hide closing part
+		              if (d.name.endsWith("(")) {
+		                const base = d.name.slice(0, -1);
+		                const endName = `${base})`;
+		                if (endSet.has(endName)) {
+		                  all.push({
+		                    ...d,
+		                    displayName: `${base}(${String("\u2026")}${base})`,
+		                    pairEndAbc: `!${endName}!`,
+		                  });
+		                  continue;
+		                }
+		              }
+		              all.push({ ...d, displayName: d.name });
+		            }
 		            items = q
 		              ? all.filter((d) => {
 		                const extra = (() => {
 		                  const fromEnrichment = enrichment && d.name ? enrichment.get(d.name) : null;
 		                  return fromEnrichment && fromEnrichment.description ? String(fromEnrichment.description) : "";
 		                })();
-		                const hay = `${d.char} ${d.name} ${d.abc} ${extra}`.toLowerCase();
+		                const hay = `${d.char} ${d.displayName || d.name} ${d.name} ${d.abc} ${d.pairEndAbc || ""} ${extra}`.toLowerCase();
 		                return hay.includes(q);
 		              })
 		              : all;
@@ -4506,7 +4528,7 @@ function initEditor() {
 		              const { description } = getDecorationDetails(dec);
 		              const row = document.createElement("div");
 		              row.style.display = "grid";
-		              row.style.gridTemplateColumns = "3.2em 1fr 12em";
+		              row.style.gridTemplateColumns = "3.2em 1fr 14em";
 		              row.style.gap = "10px";
 		              row.style.padding = "6px 8px";
 		              row.style.cursor = "pointer";
@@ -4531,7 +4553,7 @@ function initEditor() {
 		              row.appendChild(nmWrap);
 
 		              const nm = document.createElement("div");
-		              nm.textContent = dec.name;
+		              nm.textContent = dec.displayName || dec.name;
 		              nmWrap.appendChild(nm);
 
 		              const ds = document.createElement("div");
