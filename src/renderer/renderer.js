@@ -12802,7 +12802,9 @@ document.addEventListener("keydown", (e) => {
 initContextMenu();
 
 requestAnimationFrame(() => {
-  resetLayout();
+  // Do not reset zoom on startup. Persisted zoom is applied via settings.
+  // We only need an initial split size application until settings load.
+  try { applyRightSplitSizesFromRatio(); } catch {}
 });
 
 loadLastRecentEntry();
