@@ -83,6 +83,7 @@ async function main() {
     "bracketMatching",
     "linter",
     "setDiagnostics",
+    "acceptCompletion",
   ];
 
   // 1) Vendored smoke: can be imported and has the expected surface.
@@ -116,4 +117,3 @@ try {
   if (!process.exitCode) process.exitCode = 1;
   process.stderr.write(`[codemirror_harness] ERROR: ${err && err.message ? err.message : String(err)}\n`);
 }
-
