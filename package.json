@@ -37,8 +37,16 @@
     "publish:major": "node scripts/publish.mjs major"
   },
   "devDependencies": {
+    "@codemirror/autocomplete": "^6.20.0",
+    "@codemirror/language": "^6.12.1",
+    "@codemirror/lint": "^6.9.2",
+    "@codemirror/search": "^6.6.0",
+    "@codemirror/state": "^6.5.4",
+    "@codemirror/view": "^6.39.11",
+    "codemirror": "^6.0.2",
     "electron": "^28.0.0",
     "electron-builder": "^24.13.3",
+    "esbuild": "^0.27.2",
     "semver": "^7.6.3"
   },
   "dependencies": {
