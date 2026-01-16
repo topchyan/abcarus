@@ -4729,8 +4729,13 @@ function initEditor() {
 			              star.style.padding = "0";
 			              star.style.margin = "0";
 			              star.style.cursor = "pointer";
-			              star.style.fontSize = "14px";
+			              star.style.fontSize = "18px";
 			              star.style.lineHeight = "1";
+			              star.style.width = "18px";
+			              star.style.height = "18px";
+			              star.style.display = "inline-flex";
+			              star.style.alignItems = "center";
+			              star.style.justifyContent = "center";
 			              star.style.opacity = fav ? "1" : "0.55";
 			              star.addEventListener("click", (ev) => {
 			                try { ev.preventDefault(); ev.stopPropagation(); } catch {}
