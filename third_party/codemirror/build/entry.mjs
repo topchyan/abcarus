@@ -99,11 +99,11 @@ export const basicSetup = (() => [
   highlightActiveLine(),
   keymap.of([
     ...closeBracketsKeymap,
+    ...completionKeymap,
     ...defaultKeymap,
     ...searchKeymap,
     ...historyKeymap,
     ...foldKeymap,
-    ...completionKeymap,
     ...lintKeymap,
   ]),
 ])();
