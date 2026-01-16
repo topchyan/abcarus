@@ -3744,22 +3744,29 @@ function initEditor() {
   });
 
   // Completion acceptance should be reliable even when other keymaps also bind Enter/Tab.
-  // Use a capturing DOM handler to accept a selected completion when the tooltip is open.
-  editorView.dom.addEventListener("keydown", (e) => {
-    try {
-      if (!e || e.defaultPrevented) return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.shiftKey) return;
-      const key = String(e.key || "");
-      if (key !== "Enter" && key !== "Tab") return;
-      const tooltip = document.querySelector(".cm-tooltip-autocomplete");
-      if (!tooltip) return;
-      const accepted = acceptCompletion(editorView);
-      if (!accepted) return;
-      e.preventDefault();
-      e.stopPropagation();
-    } catch {}
-  }, true);
+  // Use a capturing document handler so it works consistently and for whichever editor is focused.
+  try {
+    if (!window.__abcarusCompletionKeyHandlerInstalled) {
+      window.__abcarusCompletionKeyHandlerInstalled = true;
+      document.addEventListener("keydown", (e) => {
+        try {
+          if (!e || e.defaultPrevented) return;
+          if (e.ctrlKey || e.metaKey || e.altKey) return;
+          if (e.shiftKey) return;
+          const key = String(e.key || "");
+          if (key !== "Enter" && key !== "Tab") return;
+          const tooltip = document.querySelector(".cm-tooltip-autocomplete");
+          if (!tooltip) return;
+          const view = getFocusedEditorView();
+          if (!view) return;
+          const accepted = acceptCompletion(view);
+          if (!accepted) return;
+          e.preventDefault();
+          e.stopPropagation();
+        } catch {}
+      }, true);
+    }
+  } catch {}
 
   // Clear the active error highlight only on an explicit user click outside the highlight range.
   // This avoids accidental clearing from programmatic selection changes (follow playback, jump, etc.).
