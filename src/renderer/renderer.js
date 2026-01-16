@@ -3743,6 +3743,24 @@ function initEditor() {
     parent: $editorHost,
   });
 
+  // Completion acceptance should be reliable even when other keymaps also bind Enter/Tab.
+  // Use a capturing DOM handler to accept a selected completion when the tooltip is open.
+  editorView.dom.addEventListener("keydown", (e) => {
+    try {
+      if (!e || e.defaultPrevented) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.shiftKey) return;
+      const key = String(e.key || "");
+      if (key !== "Enter" && key !== "Tab") return;
+      const tooltip = document.querySelector(".cm-tooltip-autocomplete");
+      if (!tooltip) return;
+      const accepted = acceptCompletion(editorView);
+      if (!accepted) return;
+      e.preventDefault();
+      e.stopPropagation();
+    } catch {}
+  }, true);
+
   // Clear the active error highlight only on an explicit user click outside the highlight range.
   // This avoids accidental clearing from programmatic selection changes (follow playback, jump, etc.).
   editorView.dom.addEventListener("mousedown", (e) => {
