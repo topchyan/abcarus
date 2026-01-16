@@ -4252,9 +4252,13 @@ function initEditor() {
 		          pop.setAttribute("aria-label", "ABC insert");
 		          pop.style.position = "fixed";
 		          pop.style.zIndex = "9999";
+		          pop.style.width = "980px";
 		          pop.style.maxWidth = "1180px";
 		          pop.style.maxHeight = "calc(100vh - 20px)";
 		          pop.style.overflow = "auto";
+		          pop.style.resize = "both";
+		          pop.style.minWidth = "720px";
+		          pop.style.minHeight = "260px";
 		          pop.style.padding = "8px 10px";
 		          pop.style.borderRadius = "8px";
 		          pop.style.border = "1px solid rgba(0,0,0,0.18)";
@@ -4263,22 +4267,25 @@ function initEditor() {
 		          pop.style.fontSize = "13px";
 		          pop.style.lineHeight = "1.35";
 
-		          const head = document.createElement("div");
-		          head.style.display = "flex";
-		          head.style.alignItems = "center";
-		          head.style.justifyContent = "space-between";
-		          head.style.gap = "12px";
+			          const head = document.createElement("div");
+			          head.style.display = "flex";
+			          head.style.alignItems = "center";
+			          head.style.justifyContent = "space-between";
+			          head.style.gap = "12px";
+			          head.style.cursor = "move";
+			          head.style.userSelect = "none";
+			          head.style.touchAction = "none";
 
-		          const title = document.createElement("div");
-		          title.textContent = "Insert decoration";
-		          title.style.fontWeight = "600";
-		          head.appendChild(title);
+			          const title = document.createElement("div");
+			          title.textContent = "Insert decoration";
+			          title.style.fontWeight = "600";
+			          head.appendChild(title);
 
-		          const hint = document.createElement("div");
-		          hint.textContent = "Enter=insert  Shift+Enter=!name!  (Select text for range decorations)  Esc=close";
-		          hint.style.opacity = "0.65";
-		          hint.style.fontSize = "12px";
-		          head.appendChild(hint);
+			          const hint = document.createElement("div");
+			          hint.textContent = "Drag to move · Resize corner · Enter=insert · Shift+Enter=!name! · (Select text for range) · Esc=close";
+			          hint.style.opacity = "0.65";
+			          hint.style.fontSize = "12px";
+			          head.appendChild(hint);
 
 		          pop.appendChild(head);
 
@@ -4356,19 +4363,32 @@ function initEditor() {
 		          preview.textContent = "";
 		          previewWrap.appendChild(preview);
 
-		          let closePopover = () => { try { pop.remove(); } catch {} };
-		          let reposition = () => {};
+			          let closePopover = () => { try { pop.remove(); } catch {} };
+			          let reposition = () => {};
+			          let dragging = false;
+			          let dragPointerId = null;
+			          let dragStartX = 0;
+			          let dragStartY = 0;
+			          let dragOriginLeft = 0;
+			          let dragOriginTop = 0;
+			          let dragWidth = 0;
+			          let dragHeight = 0;
 
-		          let enrichment = null;
-		          let previewSeq = 0;
-		          let previewTimer = null;
+			          let enrichment = null;
+			          let previewSeq = 0;
+			          let previewTimer = null;
 
-		          const asRangeDecorationBase = (name) => {
-		            const n = String(name || "");
-		            if (n.endsWith("(")) return n.slice(0, -1);
-		            if (n.endsWith(")")) return n.slice(0, -1);
-		            return "";
-		          };
+			          const parsePx = (v) => {
+			            const n = Number.parseFloat(String(v || ""));
+			            return Number.isFinite(n) ? n : null;
+			          };
+
+			          const asRangeDecorationBase = (name) => {
+			            const n = String(name || "");
+			            if (n.endsWith("(")) return n.slice(0, -1);
+			            if (n.endsWith(")")) return n.slice(0, -1);
+			            return "";
+			          };
 
 		          const getDecorationDetails = (dec) => {
 		            const name = dec && dec.name ? String(dec.name) : "";
@@ -4605,21 +4625,31 @@ function initEditor() {
 		              }
 		            } catch {}
 		          };
-		          const onDocDown = (ev) => {
-		            try {
-		              if (!ev) return;
-		              if (pop.contains(ev.target)) return;
-		              closePopover();
-		            } catch {}
-		          };
-		          const cleanup = () => {
-		            document.removeEventListener("keydown", onDocKey, true);
-		            document.removeEventListener("mousedown", onDocDown, true);
-		            window.removeEventListener("resize", reposition);
-		          };
-		          closePopover = () => {
-		            try { cleanup(); } catch {}
-		            try { pop.remove(); } catch {}
+			          const onDocDown = (ev) => {
+			            try {
+			              if (!ev) return;
+			              if (pop.contains(ev.target)) return;
+			              closePopover();
+			            } catch {}
+			          };
+			          const onDocPointerUp = (ev) => {
+			            try {
+			              if (!ev) return;
+			              if (dragging) return;
+			              if (!pop.isConnected) return;
+			              if (!pop.contains(ev.target)) return;
+			              reposition();
+			            } catch {}
+			          };
+			          const cleanup = () => {
+			            document.removeEventListener("keydown", onDocKey, true);
+			            document.removeEventListener("mousedown", onDocDown, true);
+			            document.removeEventListener("pointerup", onDocPointerUp, true);
+			            window.removeEventListener("resize", reposition);
+			          };
+			          closePopover = () => {
+			            try { cleanup(); } catch {}
+			            try { pop.remove(); } catch {}
 		          };
 		          pop.__abcarusClose = closePopover;
 
@@ -4676,29 +4706,97 @@ function initEditor() {
 		            top = Math.round(coords.bottom + 8);
 		          }
 
-		          document.body.appendChild(pop);
-		          const anchorLeft = left;
-		          const anchorTop = top;
-		          reposition = () => {
-		            try {
-		              const w = window.innerWidth || 0;
-		              const h = window.innerHeight || 0;
-		              const r = pop.getBoundingClientRect();
-		              let x = anchorLeft;
-		              let y = anchorTop;
-		              if (x + r.width + margin > w) x = Math.max(margin, w - r.width - margin);
-		              // Clamp instead of "flipping" above/below; avoids jitter when content height changes (preview render).
-		              if (y + r.height + margin > h) y = Math.max(margin, h - r.height - margin);
-		              if (y < margin) y = margin;
-		              pop.style.left = `${x}px`;
-		              pop.style.top = `${y}px`;
-		            } catch {}
-		          };
-		          reposition();
+			          document.body.appendChild(pop);
+			          reposition = () => {
+			            try {
+			              const w = window.innerWidth || 0;
+			              const h = window.innerHeight || 0;
+			              const r = pop.getBoundingClientRect();
+			              let x = parsePx(pop.style.left);
+			              let y = parsePx(pop.style.top);
+			              if (x == null) x = r.left;
+			              if (y == null) y = r.top;
+			              if (x + r.width + margin > w) x = Math.max(margin, w - r.width - margin);
+			              // Clamp instead of "flipping" above/below; avoids jitter when content height changes (preview render).
+			              if (y + r.height + margin > h) y = Math.max(margin, h - r.height - margin);
+			              if (y < margin) y = margin;
+			              if (x < margin) x = margin;
+			              pop.style.left = `${Math.round(x)}px`;
+			              pop.style.top = `${Math.round(y)}px`;
+			            } catch {}
+			          };
+			          try {
+			            const r0 = pop.getBoundingClientRect();
+			            const w0 = window.innerWidth || 0;
+			            const h0 = window.innerHeight || 0;
+			            let x0 = left;
+			            let y0 = top;
+			            if (x0 + r0.width + margin > w0) x0 = Math.max(margin, w0 - r0.width - margin);
+			            if (y0 + r0.height + margin > h0) y0 = Math.max(margin, h0 - r0.height - margin);
+			            if (y0 < margin) y0 = margin;
+			            if (x0 < margin) x0 = margin;
+			            pop.style.left = `${Math.round(x0)}px`;
+			            pop.style.top = `${Math.round(y0)}px`;
+			          } catch {}
+			          reposition();
 
-		          document.addEventListener("keydown", onDocKey, true);
-		          document.addEventListener("mousedown", onDocDown, true);
-		          window.addEventListener("resize", reposition, { passive: true });
+			          head.addEventListener("pointerdown", (ev) => {
+			            try {
+			              if (!ev) return;
+			              if (ev.button !== 0) return;
+			              dragging = true;
+			              dragPointerId = ev.pointerId;
+			              dragStartX = ev.clientX;
+			              dragStartY = ev.clientY;
+			              const r = pop.getBoundingClientRect();
+			              dragOriginLeft = parsePx(pop.style.left);
+			              dragOriginTop = parsePx(pop.style.top);
+			              if (dragOriginLeft == null) dragOriginLeft = r.left;
+			              if (dragOriginTop == null) dragOriginTop = r.top;
+			              dragWidth = r.width;
+			              dragHeight = r.height;
+			              try { head.setPointerCapture(dragPointerId); } catch {}
+			              ev.preventDefault();
+			              ev.stopPropagation();
+			            } catch {}
+			          }, true);
+			          head.addEventListener("pointermove", (ev) => {
+			            try {
+			              if (!dragging) return;
+			              if (dragPointerId != null && ev.pointerId !== dragPointerId) return;
+			              const w = window.innerWidth || 0;
+			              const h = window.innerHeight || 0;
+			              let x = dragOriginLeft + (ev.clientX - dragStartX);
+			              let y = dragOriginTop + (ev.clientY - dragStartY);
+			              const maxX = Math.max(margin, w - dragWidth - margin);
+			              const maxY = Math.max(margin, h - dragHeight - margin);
+			              if (x < margin) x = margin;
+			              if (y < margin) y = margin;
+			              if (x > maxX) x = maxX;
+			              if (y > maxY) y = maxY;
+			              pop.style.left = `${Math.round(x)}px`;
+			              pop.style.top = `${Math.round(y)}px`;
+			              ev.preventDefault();
+			              ev.stopPropagation();
+			            } catch {}
+			          }, true);
+			          const stopDragging = (ev) => {
+			            try {
+			              if (!dragging) return;
+			              if (dragPointerId != null && ev && ev.pointerId !== dragPointerId) return;
+			              try { if (dragPointerId != null) head.releasePointerCapture(dragPointerId); } catch {}
+			              dragging = false;
+			              dragPointerId = null;
+			              reposition();
+			            } catch {}
+			          };
+			          head.addEventListener("pointerup", stopDragging, true);
+			          head.addEventListener("pointercancel", stopDragging, true);
+
+			          document.addEventListener("keydown", onDocKey, true);
+			          document.addEventListener("mousedown", onDocDown, true);
+			          document.addEventListener("pointerup", onDocPointerUp, true);
+			          window.addEventListener("resize", reposition, { passive: true });
 
 		          render();
 		          if (items[activeIdx]) updateDetails(items[activeIdx]);
