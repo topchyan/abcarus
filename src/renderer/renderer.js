@@ -279,21 +279,38 @@ function buildAbcHoverTooltip() {
 
   const buildDom = (title, body) => {
     const dom = document.createElement("div");
-    dom.style.maxWidth = "420px";
-    dom.style.padding = "6px 8px";
+    dom.style.maxWidth = "320px";
+    dom.style.padding = "3px 6px";
+    dom.style.fontSize = "12px";
+    dom.style.lineHeight = "1.3";
 
-    const h = document.createElement("div");
-    h.textContent = title;
-    h.style.fontWeight = "600";
-    h.style.marginBottom = "4px";
-    dom.appendChild(h);
-
-    const p = document.createElement("div");
-    p.textContent = body;
-    p.style.opacity = "0.9";
-    dom.appendChild(p);
+    const line = document.createElement("div");
+    line.textContent = `${title} — ${body}`;
+    dom.appendChild(line);
 
     return dom;
+  };
+
+  const getHelpAtLine = (text) => {
+    if (!text) return null;
+
+    const headerMatch = /^\s*([KML]):/.exec(text);
+    if (headerMatch) {
+      const key = headerMatch[1];
+      const help = helpByHeaderKey.get(key) || null;
+      if (!help) return null;
+      return { title: `${key}:`, help };
+    }
+
+    const midiMatch = /^\s*(%{1,2})\s*MIDI\s+([A-Za-z]+)/i.exec(text);
+    if (midiMatch) {
+      const cmd = String(midiMatch[2] || "").toLowerCase();
+      const help = helpByMidiCommand.get(cmd) || null;
+      if (!help) return null;
+      return { title: `%%MIDI ${cmd}`, help };
+    }
+
+    return null;
   };
 
   return hoverTooltip((view, pos) => {
@@ -302,48 +319,35 @@ function buildAbcHoverTooltip() {
     const text = line.text;
     const leadingSpaces = /^\s*/.exec(text)?.[0]?.length || 0;
 
-    // Header fields (K/M/L only for now).
-    const headerMatch = /^\s*([KML]):/.exec(text);
-    if (headerMatch) {
-      const key = headerMatch[1];
-      const help = helpByHeaderKey.get(key) || null;
-      if (!help) return null;
-      const fieldStart = text.indexOf(`${key}:`);
-      const from = line.from + (fieldStart >= 0 ? fieldStart : 0);
+    const help = getHelpAtLine(text);
+    if (help && /^\s*([KML]):/.test(text)) {
+      const from = line.from + leadingSpaces;
       const to = Math.min(line.to, from + 2);
       return {
         pos: from,
         end: to,
-        above: true,
+        above: false,
         create() {
-          return { dom: buildDom(`${key}:`, help) };
+          return { dom: buildDom(help.title, help.help) };
         },
       };
     }
 
-    // MIDI directives: accept both `%%MIDI ...` and `%MIDI ...` (real-world files use both).
-    // Highlight the directive keyword (`%%MIDI <cmd>`) regardless of extra whitespace.
-    const midiMatch = /^\s*(%{1,2})\s*MIDI\s+([A-Za-z]+)/i.exec(text);
-    if (midiMatch) {
-      const cmd = String(midiMatch[2] || "").toLowerCase();
-      const help = helpByMidiCommand.get(cmd) || null;
-      if (!help) return null;
-
+    if (help && /^\s*%{1,2}\s*MIDI\b/i.test(text)) {
       const from = line.from + leadingSpaces;
-      const to = Math.min(line.to, line.from + midiMatch[0].length);
-      const title = `%%MIDI ${cmd}`;
+      const to = Math.min(line.to, line.from + text.trim().length);
       return {
         pos: from,
         end: to,
-        above: true,
+        above: false,
         create() {
-          return { dom: buildDom(title, help) };
+          return { dom: buildDom(help.title, help.help) };
         },
       };
     }
 
     return null;
-  }, { hoverTime: 350 });
+  }, { hoverTime: 900 });
 }
 
 function reconfigureAbcExtensions({
@@ -3646,6 +3650,37 @@ function initEditor() {
     { key: "Mod-F7", run: (view) => moveLineSelection(view, 1) },
 		    { key: "Ctrl-F5", run: (view) => moveLineSelection(view, -1) },
 		    { key: "Mod-F5", run: (view) => moveLineSelection(view, -1) },
+		    {
+		      key: "F1",
+		      run: (view) => {
+		        try {
+		          const pos = view.state.selection.main.head;
+		          const line = view.state.doc.lineAt(pos);
+		          const text = line.text || "";
+		          const m = /^\s*([KML]):/.exec(text);
+		          const midi = /^\s*(%{1,2})\s*MIDI\s+([A-Za-z]+)/i.exec(text);
+		          let msg = "";
+		          if (m) {
+		            if (m[1] === "K") msg = "K: — Key signature (e.g. K:Dm, K:G, K:C#m).";
+		            if (m[1] === "M") msg = "M: — Meter/time signature (e.g. M:4/4, M:6/8, M:C, M:C|).";
+		            if (m[1] === "L") msg = "L: — Default note length unit (e.g. L:1/8).";
+		          } else if (midi) {
+		            const cmd = String(midi[2] || "").toLowerCase();
+		            if (cmd === "program") msg = "%%MIDI program — Select instrument program (0–127).";
+		            else if (cmd === "instrument") msg = "%%MIDI instrument — Instrument selection (engine-defined).";
+		            else if (cmd === "temperamentequal") msg = "%%MIDI temperamentequal — Enable EDO-N (e.g. 53).";
+		            else if (cmd === "drum") msg = "%%MIDI drum — Enable/define drums (engine-defined).";
+		            else if (cmd === "drumon") msg = "%%MIDI drumon — Enable drums (engine-defined).";
+		            else if (cmd === "drumoff") msg = "%%MIDI drumoff — Disable drums (engine-defined).";
+		          }
+		          if ($hoverStatus) {
+		            $hoverStatus.textContent = msg ? msg : "";
+		            if (msg) setTimeout(() => { try { if ($hoverStatus.textContent === msg) $hoverStatus.textContent = ""; } catch {} }, 2500);
+		          }
+		        } catch {}
+		        return true;
+		      },
+		    },
 		    {
 		      key: "Enter",
 		      run: (view) => (completionTooltipOpen(view) ? acceptCompletion(view) : false),
