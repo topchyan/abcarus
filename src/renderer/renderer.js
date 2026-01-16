@@ -16,6 +16,7 @@ import {
   lineNumbers,
   autocompletion,
   CompletionContext,
+  hoverTooltip,
 } from "../../third_party/codemirror/cm.js";
 import { initSettings } from "./settings.js";
 import { transformTranspose } from "./transpose.mjs";
@@ -125,6 +126,7 @@ const $setListExportPdf = document.getElementById("setListExportPdf");
 const abcHighlightCompartment = new Compartment();
 const abcDiagnosticsCompartment = new Compartment();
 const abcCompletionCompartment = new Compartment();
+const abcHoverCompartment = new Compartment();
 const abcTuningModeCompartment = new Compartment();
 
 function buildAbcCompletionSource() {
@@ -230,10 +232,104 @@ function buildAbcCompletionSource() {
   };
 }
 
+function buildAbcHoverTooltip() {
+  const helpByHeaderKey = new Map([
+    ["K", "Key signature (e.g. K:Dm, K:G, K:C#m). abc2svg treats K: as the header/body boundary."],
+    ["M", "Meter/time signature (e.g. M:4/4, M:6/8, M:C, M:C|)."],
+    ["L", "Default note length unit (e.g. L:1/8)."],
+  ]);
+
+  const helpByMidiToken = new Map([
+    ["%%MIDI program", "Select instrument program (0–127)."],
+    ["%%MIDI instrument", "Instrument selection (engine-defined; often an alias of program)."],
+    ["%%MIDI temperamentequal", "Enable EDO-N tuning (e.g. %%MIDI temperamentequal 53)."],
+    ["%%MIDI drum", "Enable/define drums (engine-defined)."],
+    ["%%MIDI drumon", "Enable drums (engine-defined)."],
+    ["%%MIDI drumoff", "Disable drums (engine-defined)."],
+  ]);
+
+  const buildDom = (title, body) => {
+    const dom = document.createElement("div");
+    dom.style.maxWidth = "420px";
+    dom.style.padding = "6px 8px";
+
+    const h = document.createElement("div");
+    h.textContent = title;
+    h.style.fontWeight = "600";
+    h.style.marginBottom = "4px";
+    dom.appendChild(h);
+
+    const p = document.createElement("div");
+    p.textContent = body;
+    p.style.opacity = "0.9";
+    dom.appendChild(p);
+
+    return dom;
+  };
+
+  return hoverTooltip((view, pos) => {
+    if (!view) return null;
+    const line = view.state.doc.lineAt(pos);
+    const text = line.text;
+    const trimmed = text.trim();
+
+    // Header fields (K/M/L only for now).
+    const headerMatch = /^\s*([KML]):/.exec(text);
+    if (headerMatch) {
+      const key = headerMatch[1];
+      const help = helpByHeaderKey.get(key) || null;
+      if (!help) return null;
+      const fieldStart = text.indexOf(`${key}:`);
+      const from = line.from + (fieldStart >= 0 ? fieldStart : 0);
+      const to = Math.min(line.to, from + 2);
+      return {
+        pos: from,
+        end: to,
+        above: true,
+        create() {
+          return { dom: buildDom(`${key}:`, help) };
+        },
+      };
+    }
+
+    // %%MIDI directives (show help for known tokens).
+    if (/^\s*%%/i.test(text)) {
+      const m = /^\s*%%\s*MIDI\s+([A-Za-z]+)/i.exec(text);
+      if (!m) return null;
+      const token = `%%MIDI ${m[1].toLowerCase()}`;
+      // Match case-insensitively with our map keys.
+      let matchedKey = null;
+      for (const k of helpByMidiToken.keys()) {
+        if (k.toLowerCase() === token) {
+          matchedKey = k;
+          break;
+        }
+      }
+      if (!matchedKey) return null;
+      const help = helpByMidiToken.get(matchedKey);
+      if (!help) return null;
+      const idx = trimmed.toLowerCase().indexOf(matchedKey.toLowerCase());
+      const from = line.from + (idx >= 0 ? (text.length - trimmed.length) + idx : 0);
+      const to = Math.min(line.to, from + matchedKey.length);
+      return {
+        pos: from,
+        end: to,
+        above: true,
+        create() {
+          return { dom: buildDom(matchedKey, help) };
+        },
+      };
+    }
+
+    return null;
+  }, { hoverTime: 350 });
+}
+
 function reconfigureAbcExtensions({
   highlightEnabled = true,
   diagnosticsEnabled = true,
   completionEnabled = true,
+  hoverEnabled = true,
   tuningModeExtensions = [],
 } = {}) {
   if (!editorView) return;
@@ -253,6 +349,13 @@ function reconfigureAbcExtensions({
     abcCompletionCompartment.reconfigure(
       completionEnabled
         ? [autocompletion({ override: [buildAbcCompletionSource()], activateOnTyping: false })]
+        : []
+    )
+  );
+  effects.push(
+    abcHoverCompartment.reconfigure(
+      hoverEnabled
+        ? [buildAbcHoverTooltip()]
         : []
     )
   );
@@ -3587,6 +3690,9 @@ function initEditor() {
       ]),
       abcCompletionCompartment.of([
         autocompletion({ override: [buildAbcCompletionSource()], activateOnTyping: false }),
+      ]),
+      abcHoverCompartment.of([
+        buildAbcHoverTooltip(),
       ]),
       abcTuningModeCompartment.of([]),
       updateListener,
