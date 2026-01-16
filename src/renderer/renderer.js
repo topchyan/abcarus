@@ -3625,6 +3625,10 @@ function getFocusedEditorView() {
 
 function initEditor() {
   if (editorView || !$editorHost) return;
+  const completionTooltipOpen = (view) => {
+    if (!view || !view.dom || typeof view.dom.querySelector !== "function") return false;
+    return Boolean(view.dom.querySelector(".cm-tooltip-autocomplete"));
+  };
   const customKeys = keymap.of([
     { key: "Ctrl-s", run: () => { fileSave(); return true; } },
     { key: "Mod-s", run: () => { fileSave(); return true; } },
@@ -3640,8 +3644,8 @@ function initEditor() {
     { key: "Mod-F7", run: (view) => moveLineSelection(view, 1) },
 		    { key: "Ctrl-F5", run: (view) => moveLineSelection(view, -1) },
 		    { key: "Mod-F5", run: (view) => moveLineSelection(view, -1) },
-		    { key: "Tab", run: indentSelectionMore },
-		    { key: "Shift-Tab", run: indentSelectionLess },
+		    { key: "Tab", run: (view) => (completionTooltipOpen(view) ? false : indentSelectionMore(view)) },
+		    { key: "Shift-Tab", run: (view) => (completionTooltipOpen(view) ? false : indentSelectionLess(view)) },
 		    { key: "Mod-/", run: toggleLineComments },
 		    { key: "F5", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to play.", 2200); return true; } togglePlayPauseEffective().catch(() => {}); return true; } },
 		    { key: "F6", run: () => { if (rawMode) { showToast("Raw mode: switch to tune mode to navigate errors.", 2200); return true; } activateErrorByNav(-1); return true; } },
