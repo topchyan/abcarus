@@ -4688,12 +4688,9 @@ function initEditor() {
 		              let x = anchorLeft;
 		              let y = anchorTop;
 		              if (x + r.width + margin > w) x = Math.max(margin, w - r.width - margin);
-		              if (y + r.height + margin > h) {
-		                y = Math.max(
-		                  margin,
-		                  coords ? (coords.top - r.height - 8) : (h - r.height - margin)
-		                );
-		              }
+		              // Clamp instead of "flipping" above/below; avoids jitter when content height changes (preview render).
+		              if (y + r.height + margin > h) y = Math.max(margin, h - r.height - margin);
+		              if (y < margin) y = margin;
 		              pop.style.left = `${x}px`;
 		              pop.style.top = `${y}px`;
 		            } catch {}
