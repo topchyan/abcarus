@@ -47,7 +47,7 @@ To apply a vetted upgrade into `third_party/abc2svg/` (Linux/macOS only; require
 - Dry-run: `node scripts/upgrade_abc2svg_from_source_zip.mjs --zip third_party/_upd/<abc2svg>.zip`
 - Apply: `node scripts/upgrade_abc2svg_from_source_zip.mjs --zip third_party/_upd/<abc2svg>.zip --apply`
 
-Outputs are written to `scripts/local/third-party-reviews/` by default (not committed).
+Outputs are written to `kitchen/third-party-reviews/` by default (not committed).
 
 ### 3) Review checklist (what to look for)
 

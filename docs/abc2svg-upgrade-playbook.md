@@ -42,7 +42,7 @@ Tip: prefer naming archives like `abc2svg-<date>-<artifact>.zip` to keep context
 Run:
 - `npm run thirdparty:review -- --candidate third_party/_upd/<abc2svg>.zip --abc2svg-build`
 
-This produces a report under `scripts/local/third-party-reviews/` (local-only) and helps classify:
+This produces a report under `kitchen/third-party-reviews/` (local-only) and helps classify:
 - SAFE
 - NEEDS PATCH
 - HOLD
@@ -135,4 +135,3 @@ Cut a patch release if:
 - It changes output materially (rendering/printing differences).
 
 Otherwise, you can batch it into the next planned release.
-

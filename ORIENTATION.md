@@ -40,7 +40,7 @@ If something behaves “impossibly” (e.g. Electron commands acting like Node),
 
 - Manual dump: `Ctrl+Shift+D` → saves `abcarus-debug-*.json`.
 - Dumps include file+tune identity near the top (`context.label`, `context.filePath`, `context.xNumber`).
-- Default dump dir when running from source: `scripts/local/debug_dumps/` (not committed).
+- Default dump dir when running from source: `kitchen/debug_dumps/` (not committed).
 
 Auto-dumps are opt-in (dev only):
 - `ABCARUS_DEV_AUTO_DUMP=1 npm start`

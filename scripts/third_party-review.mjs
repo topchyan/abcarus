@@ -569,7 +569,7 @@ async function main() {
     report.candidate = candidateSummary(root, args.candidate, components);
   }
 
-  const defaultOut = path.join(root, "scripts", "local", "third-party-reviews");
+  const defaultOut = path.join(root, "kitchen", "third-party-reviews");
   const outDir = args.outDir ? path.resolve(root, args.outDir) : defaultOut;
   ensureDir(outDir);
 

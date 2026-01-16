@@ -1440,7 +1440,7 @@ function computeSuggestedDebugDumpDir() {
         const rendererDir = window.api.pathDirname(p);
         const srcDir = window.api.pathDirname(rendererDir);
         const rootDir = window.api.pathDirname(srcDir);
-        return window.api.pathJoin(rootDir, "scripts", "local", "debug_dumps");
+        return window.api.pathJoin(rootDir, "kitchen", "debug_dumps");
       }
     }
   } catch {}

@@ -292,7 +292,7 @@ def main():
     parser = argparse.ArgumentParser(description="Extract user prompts from local chat exports.")
     parser.add_argument(
         "--input-dir",
-        default="scripts/local/chat-exports",
+        default="kitchen/chat-exports",
         help="Directory that contains chat exports.",
     )
     parser.add_argument(
@@ -303,7 +303,7 @@ def main():
     )
     parser.add_argument(
         "--output-dir",
-        default="scripts/local/chat-exports/prompts",
+        default="kitchen/chat-exports/prompts",
         help="Directory to write per-prompt files into (grouped by date).",
     )
     args = parser.parse_args()
