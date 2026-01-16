@@ -4554,6 +4554,9 @@ function initEditor() {
 
 		              const nm = document.createElement("div");
 		              nm.textContent = dec.displayName || dec.name;
+		              if (dec.pairEndAbc) {
+		                nm.style.fontWeight = "600";
+		              }
 		              nmWrap.appendChild(nm);
 
 		              const ds = document.createElement("div");
@@ -4563,6 +4566,9 @@ function initEditor() {
 		              ds.style.overflow = "hidden";
 		              ds.style.whiteSpace = "nowrap";
 		              ds.style.textOverflow = "ellipsis";
+		              if (dec.pairEndAbc && !ds.textContent) {
+		                ds.textContent = "Range decoration (wrap selection)";
+		              }
 		              nmWrap.appendChild(ds);
 
 		              const ab = document.createElement("div");
