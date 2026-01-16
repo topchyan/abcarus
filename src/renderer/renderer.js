@@ -4253,6 +4253,8 @@ function initEditor() {
 		          pop.style.position = "fixed";
 		          pop.style.zIndex = "9999";
 		          pop.style.maxWidth = "1180px";
+		          pop.style.maxHeight = "calc(100vh - 20px)";
+		          pop.style.overflow = "auto";
 		          pop.style.padding = "8px 10px";
 		          pop.style.borderRadius = "8px";
 		          pop.style.border = "1px solid rgba(0,0,0,0.18)";
@@ -4411,8 +4413,6 @@ function initEditor() {
 		              } catch {
 		                if (seq !== previewSeq) return;
 		                preview.textContent = "Preview unavailable.";
-		              } finally {
-		                try { reposition(); } catch {}
 		              }
 		            }, 80);
 		          };
@@ -4594,7 +4594,6 @@ function initEditor() {
 		            try {
 		              if (activeRow) activeRow.scrollIntoView({ block: "nearest" });
 		            } catch {}
-		            try { reposition(); } catch {}
 		          };
 
 		          const onDocKey = (ev) => {
