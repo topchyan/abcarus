@@ -13295,17 +13295,25 @@ function readRenderZoomCss() {
 
 function computeFocusFitZoom() {
   if (!$renderPane || !$out) return null;
-  const svg = $out.querySelector("svg");
-  if (!svg) return null;
+  const svgs = Array.from($out.querySelectorAll("svg"));
+  if (!svgs.length) return null;
   const currentZoom = getRenderZoomFactor();
   if (!Number.isFinite(currentZoom) || currentZoom <= 0) return null;
-  const svgRect = svg.getBoundingClientRect();
   const paneWidth = $renderPane.clientWidth || 0;
-  if (!(svgRect && svgRect.width > 10) || paneWidth < 50) return null;
-  const intrinsicWidth = svgRect.width / currentZoom;
-  if (!Number.isFinite(intrinsicWidth) || intrinsicWidth <= 10) return null;
+  if (paneWidth < 50) return null;
+  // Use the widest SVG (not just the first one) to avoid overshooting zoom when the first
+  // page/system is unusually narrow.
+  let maxIntrinsicWidth = 0;
+  const limit = Math.min(8, svgs.length);
+  for (let i = 0; i < limit; i += 1) {
+    const r = svgs[i] ? svgs[i].getBoundingClientRect() : null;
+    if (!(r && r.width > 10)) continue;
+    const w = r.width / currentZoom;
+    if (Number.isFinite(w) && w > maxIntrinsicWidth) maxIntrinsicWidth = w;
+  }
+  if (!Number.isFinite(maxIntrinsicWidth) || maxIntrinsicWidth <= 10) return null;
   const target = Math.max(100, paneWidth - 24);
-  const next = target / intrinsicWidth;
+  const next = target / maxIntrinsicWidth;
   return clampNumber(next, 0.5, 8, currentZoom);
 }
 
