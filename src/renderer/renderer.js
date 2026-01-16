@@ -239,13 +239,13 @@ function buildAbcHoverTooltip() {
     ["L", "Default note length unit (e.g. L:1/8)."],
   ]);
 
-  const helpByMidiToken = new Map([
-    ["%%MIDI program", "Select instrument program (0–127)."],
-    ["%%MIDI instrument", "Instrument selection (engine-defined; often an alias of program)."],
-    ["%%MIDI temperamentequal", "Enable EDO-N tuning (e.g. %%MIDI temperamentequal 53)."],
-    ["%%MIDI drum", "Enable/define drums (engine-defined)."],
-    ["%%MIDI drumon", "Enable drums (engine-defined)."],
-    ["%%MIDI drumoff", "Disable drums (engine-defined)."],
+  const helpByMidiCommand = new Map([
+    ["program", "Select instrument program (0–127)."],
+    ["instrument", "Instrument selection (engine-defined; often an alias of program)."],
+    ["temperamentequal", "Enable EDO-N tuning (e.g. %%MIDI temperamentequal 53)."],
+    ["drum", "Enable/define drums (engine-defined)."],
+    ["drumon", "Enable drums (engine-defined)."],
+    ["drumoff", "Disable drums (engine-defined)."],
   ]);
 
   const buildDom = (title, body) => {
@@ -271,7 +271,7 @@ function buildAbcHoverTooltip() {
     if (!view) return null;
     const line = view.state.doc.lineAt(pos);
     const text = line.text;
-    const trimmed = text.trim();
+    const leadingSpaces = /^\s*/.exec(text)?.[0]?.length || 0;
 
     // Header fields (K/M/L only for now).
     const headerMatch = /^\s*([KML]):/.exec(text);
@@ -292,31 +292,23 @@ function buildAbcHoverTooltip() {
       };
     }
 
-    // %%MIDI directives (show help for known tokens).
-    if (/^\s*%%/i.test(text)) {
-      const m = /^\s*%%\s*MIDI\s+([A-Za-z]+)/i.exec(text);
-      if (!m) return null;
-      const token = `%%MIDI ${m[1].toLowerCase()}`;
-      // Match case-insensitively with our map keys.
-      let matchedKey = null;
-      for (const k of helpByMidiToken.keys()) {
-        if (k.toLowerCase() === token) {
-          matchedKey = k;
-          break;
-        }
-      }
-      if (!matchedKey) return null;
-      const help = helpByMidiToken.get(matchedKey);
+    // MIDI directives: accept both `%%MIDI ...` and `%MIDI ...` (real-world files use both).
+    // Highlight the directive keyword (`%%MIDI <cmd>`) regardless of extra whitespace.
+    const midiMatch = /^\s*(%{1,2})\s*MIDI\s+([A-Za-z]+)/i.exec(text);
+    if (midiMatch) {
+      const cmd = String(midiMatch[2] || "").toLowerCase();
+      const help = helpByMidiCommand.get(cmd) || null;
       if (!help) return null;
-      const idx = trimmed.toLowerCase().indexOf(matchedKey.toLowerCase());
-      const from = line.from + (idx >= 0 ? (text.length - trimmed.length) + idx : 0);
-      const to = Math.min(line.to, from + matchedKey.length);
+
+      const from = line.from + leadingSpaces;
+      const to = Math.min(line.to, line.from + midiMatch[0].length);
+      const title = `%%MIDI ${cmd}`;
       return {
         pos: from,
         end: to,
         above: true,
         create() {
-          return { dom: buildDom(matchedKey, help) };
+          return { dom: buildDom(title, help) };
         },
       };
     }
