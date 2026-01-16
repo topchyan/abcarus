@@ -354,7 +354,7 @@ function reconfigureAbcExtensions({
   highlightEnabled = true,
   diagnosticsEnabled = true,
   completionEnabled = true,
-  hoverEnabled = true,
+  hoverEnabled = false,
   tuningModeExtensions = [],
 } = {}) {
   if (!editorView) return;
@@ -3855,9 +3855,7 @@ function initEditor() {
       abcCompletionCompartment.of([
         autocompletion({ override: [buildAbcCompletionSource()], activateOnTyping: false }),
       ]),
-      abcHoverCompartment.of([
-        buildAbcHoverTooltip(),
-      ]),
+      abcHoverCompartment.of([]),
       abcTuningModeCompartment.of([]),
       updateListener,
       customKeys,
