@@ -4252,7 +4252,7 @@ function initEditor() {
 		          pop.setAttribute("aria-label", "ABC insert");
 		          pop.style.position = "fixed";
 		          pop.style.zIndex = "9999";
-		          pop.style.maxWidth = "980px";
+		          pop.style.maxWidth = "1180px";
 		          pop.style.padding = "8px 10px";
 		          pop.style.borderRadius = "8px";
 		          pop.style.border = "1px solid rgba(0,0,0,0.18)";
@@ -4273,7 +4273,7 @@ function initEditor() {
 		          head.appendChild(title);
 
 		          const hint = document.createElement("div");
-		          hint.textContent = "Enter=insert  Shift+Enter=!name!  Esc=close";
+		          hint.textContent = "Enter=insert  Shift+Enter=!name!  (Select text for range decorations)  Esc=close";
 		          hint.style.opacity = "0.65";
 		          hint.style.fontSize = "12px";
 		          head.appendChild(hint);
@@ -4302,7 +4302,7 @@ function initEditor() {
 		          body.appendChild(contentRow);
 
 		          const listWrap = document.createElement("div");
-		          listWrap.style.flex = "0 0 460px";
+		          listWrap.style.flex = "0 0 520px";
 		          listWrap.style.minWidth = "320px";
 		          contentRow.appendChild(listWrap);
 
@@ -4316,7 +4316,7 @@ function initEditor() {
 		          const details = document.createElement("div");
 		          details.style.flex = "1 1 auto";
 		          details.style.minWidth = "360px";
-		          details.style.maxWidth = "480px";
+		          details.style.maxWidth = "620px";
 		          details.style.display = "flex";
 		          details.style.flexDirection = "column";
 		          details.style.gap = "8px";
@@ -4346,7 +4346,7 @@ function initEditor() {
 		          previewWrap.style.borderRadius = "6px";
 		          previewWrap.style.padding = "6px";
 		          previewWrap.style.background = "rgba(250,250,250,0.9)";
-		          previewWrap.style.maxHeight = "220px";
+		          previewWrap.style.maxHeight = "340px";
 		          previewWrap.style.overflow = "auto";
 		          details.appendChild(previewWrap);
 
@@ -4360,6 +4360,13 @@ function initEditor() {
 		          let enrichment = null;
 		          let previewSeq = 0;
 		          let previewTimer = null;
+
+		          const asRangeDecorationBase = (name) => {
+		            const n = String(name || "");
+		            if (n.endsWith("(")) return n.slice(0, -1);
+		            if (n.endsWith(")")) return n.slice(0, -1);
+		            return "";
+		          };
 
 		          const getDecorationDetails = (dec) => {
 		            const name = dec && dec.name ? String(dec.name) : "";
@@ -4422,19 +4429,47 @@ function initEditor() {
 		          const insertDecoration = (dec, fullForm) => {
 		            try {
 		              if (!dec) return false;
-		              const hasChar = Boolean(dec.char);
-		              const insertText = fullForm ? String(dec.abc || "") : (hasChar ? String(dec.char || "") : String(dec.abc || ""));
-		              if (!insertText) return false;
 		              if (view.state.readOnly) return false;
+
+		              const name = dec && dec.name ? String(dec.name) : "";
+		              const base = asRangeDecorationBase(name);
+
 		              const sel = view.state.selection.main;
 		              const selectedText = sel.empty ? "" : view.state.doc.sliceString(sel.from, sel.to);
-		              const insert = selectedText ? `${insertText}${selectedText}` : insertText;
-		              const cursorPos = sel.from + insert.length;
-		              view.dispatch({
-		                changes: { from: sel.from, to: sel.to, insert },
-		                selection: EditorSelection.cursor(cursorPos),
-		                userEvent: "input",
-		              });
+
+		              if (base) {
+		                const startTag = `!${base}(!`;
+		                const endTag = `!${base})!`;
+		                if (sel.empty) {
+		                  view.dispatch({
+		                    changes: { from: sel.from, to: sel.to, insert: `${startTag}${endTag}` },
+		                    selection: EditorSelection.cursor(sel.from + startTag.length),
+		                    userEvent: "input",
+		                  });
+		                } else {
+		                  // Insert end first to keep offsets stable.
+		                  view.dispatch({
+		                    changes: [
+		                      { from: sel.to, to: sel.to, insert: endTag },
+		                      { from: sel.from, to: sel.from, insert: startTag },
+		                    ],
+		                    selection: EditorSelection.range(sel.from + startTag.length, sel.to + startTag.length),
+		                    userEvent: "input",
+		                  });
+		                }
+		              } else {
+		                const hasChar = Boolean(dec.char);
+		                const insertText = fullForm ? String(dec.abc || "") : (hasChar ? String(dec.char || "") : String(dec.abc || ""));
+		                if (!insertText) return false;
+		                const insert = selectedText ? `${insertText}${selectedText}` : insertText;
+		                const cursorPos = sel.from + insert.length;
+		                view.dispatch({
+		                  changes: { from: sel.from, to: sel.to, insert },
+		                  selection: EditorSelection.cursor(cursorPos),
+		                  userEvent: "input",
+		                });
+		              }
+
 		              try { view.focus(); } catch {}
 		              return true;
 		            } catch {}
