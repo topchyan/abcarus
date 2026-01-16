@@ -22,6 +22,7 @@
     "dist:win": "electron-builder --win --x64",
     "dist:mac": "electron-builder --mac",
     "test:measures": "node devtools/measures_harness/run_tests.js",
+    "test:codemirror": "node devtools/codemirror_harness/run_tests.mjs",
     "test:transpose": "node devtools/transpose_harness/run_tests.js",
     "test:settings": "node devtools/settings_harness/run_tests.js",
     "test:truth-scale": "node devtools/truth_scale_53_harness/run_tests.js",
