@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [0.21.0] - 2026-01-16
 ### Added
 - Editor: `Ctrl+F1` GM instrument picker for `%%MIDI program`, `%%MIDI chordprog`, and `%%MIDI bassprog` (searchable; inserts number and `% Instrument Name` comment).
 - Editor: `Ctrl+F2` decoration picker with search, details, and SVG preview; supports range decorations (wrap selection) and favorites.
@@ -20,8 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Startup: stop resetting score zoom on launch.
-
-
 
 ## [0.20.5] - 2026-01-15
 ### Added
