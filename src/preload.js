@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("dialog:confirm-overwrite", filePath),
   confirmAppendToFile: async (filePath) =>
     ipcRenderer.invoke("dialog:confirm-append", filePath),
+  confirmImportMusicXmlToFile: async (filePath, options) =>
+    ipcRenderer.invoke("dialog:confirm-import-musicxml", filePath, options || {}),
   confirmRemoveSoundfont: async (label) =>
     ipcRenderer.invoke("dialog:confirm-remove-sf2", label),
   confirmDeleteTune: async (label) =>
@@ -78,6 +80,9 @@ contextBridge.exposeInMainWorld("api", {
   },
   onLibraryProgress: (handler) => {
     ipcRenderer.on("library:progress", (_evt, payload) => handler(payload));
+  },
+  onImportMusicXmlProgress: (handler) => {
+    ipcRenderer.on("import:musicxml:progress", (_evt, payload) => handler(payload));
   },
   onSettingsChanged: (handler) => {
     ipcRenderer.on("settings:changed", (_evt, settings) => handler(settings));

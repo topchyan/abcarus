@@ -155,12 +155,13 @@ function registerIpcHandlers(ctx) {
     showOpenDialog,
     showOpenFolderDialog,
     showSaveDialog,
-    confirmUnsavedChanges,
-    confirmOverwrite,
-    confirmAppendToFile,
-    confirmDeleteTune,
-    showSaveError,
-    showOpenError,
+	    confirmUnsavedChanges,
+	    confirmOverwrite,
+	    confirmAppendToFile,
+	    confirmImportMusicXmlToFile,
+	    confirmDeleteTune,
+	    showSaveError,
+	    showOpenError,
     scanLibrary,
     scanLibraryDiscover,
     cancelLibraryScan,
@@ -203,9 +204,12 @@ function registerIpcHandlers(ctx) {
   ipcMain.handle("dialog:confirm-overwrite", async (event, filePath) =>
     confirmOverwrite(filePath, event)
   );
-  ipcMain.handle("dialog:confirm-append", async (_e, filePath) =>
-    confirmAppendToFile(filePath)
-  );
+	  ipcMain.handle("dialog:confirm-append", async (_e, filePath) =>
+	    confirmAppendToFile(filePath)
+	  );
+	  ipcMain.handle("dialog:confirm-import-musicxml", async (_e, filePath, options) =>
+	    confirmImportMusicXmlToFile(filePath, options || {})
+	  );
   ipcMain.handle("dialog:confirm-remove-sf2", async (event, label) => {
     const parent = getParentForDialog(event, "confirm-remove-sf2");
     const response = dialog.showMessageBoxSync(parent || undefined, {
@@ -287,38 +291,55 @@ function registerIpcHandlers(ctx) {
       return null;
     }
   });
-  ipcMain.handle("import:musicxml", async (event) => {
-    const parent = getParentForDialog(event, "import:musicxml");
-    const result = dialog.showOpenDialogSync(parent || undefined, {
-      modal: true,
-      properties: ["openFile", "multiSelections"],
-      filters: [
-        { name: "MusicXML", extensions: ["xml", "musicxml", "mxl"] },
-        { name: "All Files", extensions: ["*"] },
-      ],
-    });
-    if (!result || !result.length) return { ok: false, canceled: true };
-    try {
-      const settings = getSettings ? getSettings() : {};
-      const items = [];
-      for (const filePath of result) {
-        const ext = path.extname(filePath || "").toLowerCase();
-        const kind = ext === ".mxl" ? "mxl" : "musicxml";
-        const converted = await convertFileToAbc({
-          kind,
-          inputPath: filePath,
-          args: settings.xml2abcArgs || "",
-        });
-        items.push({
-          abcText: converted.abcText,
-          warnings: converted.warnings || null,
-          sourcePath: filePath,
-        });
-      }
-      return { ok: true, items };
-    } catch (e) {
-      return {
-        ok: false,
+	  ipcMain.handle("import:musicxml", async (event) => {
+	    const parent = getParentForDialog(event, "import:musicxml");
+	    const result = dialog.showOpenDialogSync(parent || undefined, {
+	      modal: true,
+	      properties: ["openFile", "multiSelections"],
+	      filters: [
+	        { name: "MusicXML", extensions: ["xml", "musicxml", "mxl"] },
+	        { name: "All Files", extensions: ["*"] },
+	      ],
+	    });
+	    if (!result || !result.length) return { ok: false, canceled: true };
+	    try {
+	      const settings = getSettings ? getSettings() : {};
+	      const sorted = Array.from(result).map(String).sort((a, b) =>
+	        a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+	      );
+	      const total = sorted.length;
+	      let lastProgressAt = 0;
+	      const sendProgress = (done, filePath) => {
+	        try {
+	          const now = Date.now();
+	          if (done !== 0 && done !== total && now - lastProgressAt < 150) return;
+	          lastProgressAt = now;
+	          event.sender.send("import:musicxml:progress", { done, total, sourcePath: filePath || "" });
+	        } catch {}
+	      };
+	      sendProgress(0, "");
+	      const items = [];
+	      for (let i = 0; i < sorted.length; i += 1) {
+	        const filePath = sorted[i];
+	        sendProgress(i, filePath);
+	        const ext = path.extname(filePath || "").toLowerCase();
+	        const kind = ext === ".mxl" ? "mxl" : "musicxml";
+	        const converted = await convertFileToAbc({
+	          kind,
+	          inputPath: filePath,
+	          args: settings.xml2abcArgs || "",
+	        });
+	        items.push({
+	          abcText: converted.abcText,
+	          warnings: converted.warnings || null,
+	          sourcePath: filePath,
+	        });
+	      }
+	      sendProgress(total, "");
+	      return { ok: true, items };
+	    } catch (e) {
+	      return {
+	        ok: false,
         error: e && e.message ? e.message : String(e),
         detail: e && e.detail ? e.detail : "",
         code: e && e.code ? e.code : "",

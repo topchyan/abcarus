@@ -10098,6 +10098,11 @@ async function confirmAppendToFile(filePath) {
   return window.api.confirmAppendToFile(filePath);
 }
 
+async function confirmImportMusicXmlToFile(filePath, { suggestReplace = false } = {}) {
+  if (!window.api || typeof window.api.confirmImportMusicXmlToFile !== "function") return "cancel";
+  return window.api.confirmImportMusicXmlToFile(filePath, { suggestReplace: Boolean(suggestReplace) });
+}
+
 async function confirmDeleteTune(label) {
   if (!window.api || typeof window.api.confirmDeleteTune !== "function") return "cancel";
   return window.api.confirmDeleteTune(label);
@@ -12127,14 +12132,84 @@ async function fileOpen() {
 async function importMusicXml() {
   if (!window.api || typeof window.api.importMusicXml !== "function") return;
 
-  const targetPath = (activeTuneMeta && activeTuneMeta.path)
+  let targetPath = (activeTuneMeta && activeTuneMeta.path)
     ? String(activeTuneMeta.path)
     : (activeFilePath ? String(activeFilePath) : "");
+  if (!targetPath && currentDoc && currentDoc.path) targetPath = String(currentDoc.path);
   if (!targetPath) {
-    showToast("Open/select a target .abc file first, then import MusicXML.", 3600);
-    setStatus("Ready");
-    return;
+    if (!currentDoc) {
+      showToast("Open/select a target .abc file first, then import MusicXML.", 3600);
+      setStatus("Ready");
+      return;
+    }
+    showToast("Save the target .abc file first, then import MusicXML.", 3200);
+    const saved = await performSaveAsFlow();
+    if (!saved) {
+      setStatus("Ready");
+      return;
+    }
+    targetPath = currentDoc && currentDoc.path ? String(currentDoc.path) : "";
+    if (!targetPath) {
+      setStatus("Ready");
+      return;
+    }
   }
+
+  const countTunesByX = (text) => {
+    try {
+      const m = String(text || "").match(/^X:\s*\d+\s*$/gm);
+      return m ? m.length : 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  // Decide append vs replace before opening the (potentially slow) import dialog.
+  let importMode = "append"; // "append" | "replace"
+  try {
+    const readRes = await readFile(targetPath);
+    if (readRes && readRes.ok) {
+      const before = String(readRes.data || "");
+      const looksEmpty = !before.trim();
+      const looksLikeNewFile = before.trim() === String(NEW_FILE_MINIMAL_ABC || "").trim();
+      if (looksEmpty || looksLikeNewFile) {
+        const choice = await confirmImportMusicXmlToFile(targetPath, { suggestReplace: true });
+        if (choice === "cancel") {
+          setStatus("Ready");
+          return;
+        }
+        importMode = (choice === "replace") ? "replace" : "append";
+      } else {
+        const confirm = await confirmAppendToFile(targetPath);
+        if (confirm !== "append") {
+          setStatus("Ready");
+          return;
+        }
+        importMode = "append";
+      }
+    }
+  } catch {}
+
+  // Show progress for large imports (main process sends throttled progress updates).
+  let lastProgress = null;
+  let lastProgressUiAt = 0;
+  try {
+    if (window.api && typeof window.api.onImportMusicXmlProgress === "function") {
+      window.api.onImportMusicXmlProgress((p) => {
+        lastProgress = p || null;
+        try {
+          if (!lastProgress || !lastProgress.total) return;
+          const now = Date.now();
+          const done = Number(lastProgress.done) || 0;
+          const total = Number(lastProgress.total) || 0;
+          if (!total) return;
+          if (done !== total && now - lastProgressUiAt < 200) return;
+          lastProgressUiAt = now;
+          setStatus(`Importing… ${Math.min(done, total)}/${total}`);
+        } catch {}
+      });
+    }
+  } catch {}
 
   setStatus("Importing…");
   const res = await window.api.importMusicXml();
@@ -12177,23 +12252,15 @@ async function importMusicXml() {
   }
 
   if (targetPath) {
-    const confirm = await confirmAppendToFile(targetPath);
-    if (confirm !== "append") {
-      setStatus("Ready");
-      return;
-    }
-
-    const ok = await ensureSafeToAbandonCurrentDoc("importing a file");
-    if (!ok) {
-      setStatus("Ready");
-      return;
-    }
-
     try {
       await withFileLock(targetPath, async () => {
         const readRes = await readFile(targetPath);
         if (!readRes || !readRes.ok) throw new Error((readRes && readRes.error) ? readRes.error : "Unable to read target file.");
-        let updated = String(readRes.data || "");
+        const before = String(readRes.data || "");
+        const headerEnd = findHeaderEndOffset(before);
+        const prefix = importMode === "replace" ? before.slice(0, headerEnd) : "";
+        const beforeTuneCount = importMode === "append" ? countTunesByX(before) : 0;
+        let updated = importMode === "replace" ? prefix : before;
         let lastWithX = "";
         for (const item of preparedItems) {
           const nextX = getNextXNumber(updated);
@@ -12206,7 +12273,7 @@ async function importMusicXml() {
 
         const updatedFile = await refreshLibraryFile(targetPath);
         if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
-          const tune = updatedFile.tunes[updatedFile.tunes.length - 1];
+          const tune = updatedFile.tunes[Math.min(beforeTuneCount, updatedFile.tunes.length - 1)];
           activeTuneId = tune.id;
           markActiveTuneButton(activeTuneId);
           const tuneText = updated.slice(tune.startOffset, tune.endOffset);
@@ -12243,7 +12310,7 @@ async function importMusicXml() {
         logErr(`Import warning${p}: ${item.warnings}`);
       }
     }
-    setStatus("OK");
+    setStatus(`OK (imported ${preparedItems.length} file${preparedItems.length === 1 ? "" : "s"})`);
     return;
   }
 
@@ -12395,6 +12462,36 @@ function renumberXInTextKeepingFirst(abcText) {
   };
 }
 
+function renumberXInTextStartingAt1(abcText) {
+  const text = String(abcText || "");
+  const lines = text.split(/\r\n|\n|\r/);
+  let base = null;
+  let tuneIndex = -1;
+  const out = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const match = line.match(/^(\s*X:\s*)(\d+)(\s*)$/);
+    if (!match) {
+      out.push(line);
+      continue;
+    }
+    const prefix = match[1] || "X:";
+    const suffix = match[3] || "";
+    if (base == null) {
+      base = 1;
+      tuneIndex = 0;
+      out.push(`${prefix}${base}${suffix}`);
+      continue;
+    }
+    tuneIndex += 1;
+    out.push(`${prefix}${base + tuneIndex}${suffix}`);
+  }
+
+  if (base == null) return { ok: false, error: "No X: headers found in file." };
+  return { ok: true, abcText: out.join("\n"), base: 1, tuneCount: tuneIndex + 1 };
+}
+
 async function renumberXInActiveFile(explicitFilePath) {
   const filePath = explicitFilePath
     || ((activeTuneMeta && activeTuneMeta.path) ? activeTuneMeta.path : null)
@@ -12414,7 +12511,7 @@ async function renumberXInActiveFile(explicitFilePath) {
       return;
     }
 
-    const renum = renumberXInTextKeepingFirst(readRes.data);
+    const renum = renumberXInTextStartingAt1(readRes.data);
     if (!renum.ok) {
       await showSaveError(renum.error || "Unable to renumber X: headers.");
       return;
