@@ -172,3 +172,18 @@ Add new cases here as tickets land so we keep a stable, repeatable checklist.
 
 **Expected**
 - Tune slicing remains correct even if Library tune offsets drift (working copy segmentation is used when available).
+
+---
+
+## WC-11 — Edits update Working Copy (High)
+
+**Preconditions**
+- Open a multi-tune `.abc` file from Library (so a working copy session is created).
+
+**Steps**
+1. Select a tune and make a small edit.
+2. Switch to another tune (do not Save).
+3. Switch back to the first tune.
+
+**Expected**
+- The edit is preserved (it came from the working copy), even if the file on disk was not changed.

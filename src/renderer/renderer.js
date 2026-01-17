@@ -2048,6 +2048,72 @@ async function refreshWorkingCopySnapshot() {
   return workingCopySnapshot;
 }
 
+let workingCopyTuneSyncTimer = null;
+let workingCopyTuneSyncInFlight = false;
+let workingCopyTuneSyncQueued = false;
+const WORKING_COPY_TUNE_SYNC_DEBOUNCE_MS = 450;
+
+function scheduleWorkingCopyTuneSync() {
+  if (rawMode) return;
+  if (!activeTuneUid) return;
+  if (!activeTuneMeta || !activeTuneMeta.path) return;
+  if (!window.api || typeof window.api.applyWorkingCopyTuneText !== "function") return;
+  if (workingCopyTuneSyncTimer) clearTimeout(workingCopyTuneSyncTimer);
+  workingCopyTuneSyncTimer = setTimeout(() => {
+    workingCopyTuneSyncTimer = null;
+    flushWorkingCopyTuneSync().catch(() => {});
+  }, WORKING_COPY_TUNE_SYNC_DEBOUNCE_MS);
+}
+
+async function flushWorkingCopyTuneSync() {
+  if (workingCopyTuneSyncInFlight) {
+    workingCopyTuneSyncQueued = true;
+    return;
+  }
+  if (rawMode) return;
+  if (!activeTuneUid) return;
+  if (!activeTuneMeta || !activeTuneMeta.path) return;
+  if (!window.api || typeof window.api.applyWorkingCopyTuneText !== "function") return;
+
+  const filePath = String(activeTuneMeta.path || "");
+  if (!filePath) return;
+  if (!workingCopySnapshot || !workingCopySnapshot.path || !pathsEqual(workingCopySnapshot.path, filePath)) return;
+
+  let tuneIndex = Number.isFinite(Number(activeTuneIndex)) ? Number(activeTuneIndex) : null;
+  if (tuneIndex == null && Array.isArray(workingCopySnapshot.tunes)) {
+    const idx = workingCopySnapshot.tunes.findIndex((t) => t && t.tuneUid === activeTuneUid);
+    if (idx >= 0) tuneIndex = idx;
+  }
+  if (tuneIndex == null) return;
+
+  const tuneText = getEditorValue();
+  workingCopyTuneSyncInFlight = true;
+  try {
+    const res = await window.api.applyWorkingCopyTuneText({
+      tuneUid: activeTuneUid,
+      tuneIndex,
+      text: tuneText,
+    });
+    if (!res || !res.ok) return;
+
+    const snapshot = await refreshWorkingCopySnapshot();
+    if (snapshot && snapshot.path && pathsEqual(snapshot.path, filePath)) {
+      setFileContentInCache(filePath, snapshot.text);
+      const t = Array.isArray(snapshot.tunes) ? snapshot.tunes[tuneIndex] : null;
+      if (t && Number.isFinite(Number(t.start)) && Number.isFinite(Number(t.end)) && activeTuneMeta) {
+        activeTuneMeta.startOffset = Number(t.start);
+        activeTuneMeta.endOffset = Number(t.end);
+      }
+    }
+  } finally {
+    workingCopyTuneSyncInFlight = false;
+    if (workingCopyTuneSyncQueued) {
+      workingCopyTuneSyncQueued = false;
+      await flushWorkingCopyTuneSync();
+    }
+  }
+}
+
 function attachTuneUidsToLibraryFile(filePath, snapshot) {
   if (!libraryIndex || !libraryIndex.files || !filePath || !snapshot) return;
   const fileEntry = libraryIndex.files.find((f) => pathsEqual(f.path, filePath));
@@ -2065,6 +2131,7 @@ function attachTuneUidsToLibraryFile(filePath, snapshot) {
 }
 let activeTuneId = null;
 let activeTuneUid = null;
+let activeTuneIndex = null;
 let activeTuneMeta = null;
 let activeFilePath = null;
 let isLibraryVisible = true;
@@ -3543,6 +3610,7 @@ function setActiveTuneInRaw(tuneId) {
   if (!res) return;
   activeTuneId = tuneId;
   activeTuneUid = null;
+  activeTuneIndex = null;
   activeTuneMeta = {
     id: res.tune.id,
     path: res.file.path,
@@ -5064,6 +5132,9 @@ function initEditor() {
         currentDoc.dirty = true;
         setDirtyIndicator(true);
       }
+      if (!suppressDirty && currentDoc && activeTuneUid) {
+        scheduleWorkingCopyTuneSync();
+      }
       if (!rawMode) {
         if (t) clearTimeout(t);
         t = setTimeout(() => scheduleRenderNow(), 400);
@@ -5386,6 +5457,7 @@ function setActiveTuneText(text, metadata, options = {}) {
     activeTuneMeta = null;
     activeTuneId = null;
     activeTuneUid = null;
+    activeTuneIndex = null;
     activeFilePath = null;
     isNewTuneDraft = false;
     refreshHeaderLayers().catch(() => {});
@@ -5818,6 +5890,7 @@ async function selectTune(tuneId, options = {}) {
   const tuneText = content.slice(sliceStart, sliceEnd);
   activeTuneId = selected.id;
   activeTuneUid = selected.tuneUid || null;
+  activeTuneIndex = Number.isFinite(Number(selected.tuneIndex)) ? Number(selected.tuneIndex) : null;
   if ($fileTuneSelect && !$fileTuneSelect.disabled) {
     const nextKey = rawMode ? activeTuneId : (activeTuneUid || activeTuneId);
     try { $fileTuneSelect.value = nextKey; } catch {}
