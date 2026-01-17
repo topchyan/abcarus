@@ -2196,6 +2196,8 @@ let activeTuneUid = null;
 let activeTuneIndex = null;
 let activeTuneMeta = null;
 let activeFilePath = null;
+const MAX_NAV_FILE_HISTORY = 20;
+const navFileHistory = [];
 let isLibraryVisible = true;
 let lastSidebarWidth = 280;
 const collapsedFiles = new Set();
@@ -2254,6 +2256,26 @@ function formatPathTail(filePath, segments = 3) {
   if (!parts.length) return normalized;
   const tail = parts.slice(Math.max(0, parts.length - Math.max(1, segments))).join("/");
   return parts.length > segments ? `…/${tail}` : tail;
+}
+
+function recordNavFilePath(filePath) {
+  const normalized = normalizeLibraryPath(filePath);
+  if (!normalized) return;
+  const last = navFileHistory.length ? navFileHistory[navFileHistory.length - 1] : "";
+  if (last && pathsEqual(last, normalized)) return;
+  const existingIdx = navFileHistory.findIndex((p) => pathsEqual(p, normalized));
+  if (existingIdx >= 0) navFileHistory.splice(existingIdx, 1);
+  navFileHistory.push(normalized);
+  while (navFileHistory.length > MAX_NAV_FILE_HISTORY) navFileHistory.shift();
+}
+
+function getCurrentNavFilePath() {
+  try {
+    if (activeTuneMeta && activeTuneMeta.path) return String(activeTuneMeta.path);
+    if (activeFilePath) return String(activeFilePath);
+    if (currentDoc && currentDoc.path) return String(currentDoc.path);
+  } catch {}
+  return "";
 }
 
 function getLibraryRootKey() {
@@ -6290,6 +6312,7 @@ async function loadLibraryFileIntoEditor(filePath) {
     }
   } catch {}
   activeFilePath = filePath;
+  recordNavFilePath(filePath);
   const resolveFromIndex = async () => {
     if (!libraryIndex || !libraryIndex.files) return { ok: false };
     const fileEntry = libraryIndex.files.find((f) => pathsEqual(f.path, filePath)) || null;
@@ -12910,7 +12933,45 @@ async function requestQuitApplication() {
 }
 
 async function fileClose() {
-  await requestCloseDocument();
+  if (abandonFlowInProgress) return;
+  abandonFlowInProgress = true;
+  const currentPath = getCurrentNavFilePath();
+  try {
+    const ok = await confirmAbandonIfDirty("closing this file");
+    if (!ok) return;
+
+    // Close the working copy session (best-effort).
+    try {
+      if (window.api && typeof window.api.closeWorkingCopy === "function") {
+        await window.api.closeWorkingCopy();
+      }
+    } catch {}
+
+    clearCurrentDocument();
+    setActiveTuneText("", null);
+    setDirtyIndicator(false);
+    activeFilePath = null;
+
+    // Activate previous file in navigation history, if available; otherwise keep empty state.
+    if (!currentPath) return;
+    for (let i = navFileHistory.length - 1; i >= 0; i -= 1) {
+      const candidate = navFileHistory[i];
+      if (!candidate) continue;
+      if (pathsEqual(candidate, currentPath)) continue;
+      try {
+        if (typeof window.api?.fileExists === "function") {
+          const exists = await window.api.fileExists(candidate);
+          if (!exists) continue;
+        }
+      } catch {}
+      try {
+        const res = await loadLibraryFileIntoEditor(candidate);
+        if (res && res.ok) return;
+      } catch {}
+    }
+  } finally {
+    abandonFlowInProgress = false;
+  }
 }
 
 async function exportMusicXml() {

@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld("api", {
   confirmSaveConflict: async (filePath) =>
     ipcRenderer.invoke("dialog:confirm-save-conflict", filePath || ""),
   openWorkingCopy: async (filePath) => ipcRenderer.invoke("workingcopy:open", filePath),
+  closeWorkingCopy: async () => ipcRenderer.invoke("workingcopy:close"),
   getWorkingCopySnapshot: async () => ipcRenderer.invoke("workingcopy:get"),
   getWorkingCopyMeta: async () => ipcRenderer.invoke("workingcopy:get-meta"),
   reloadWorkingCopyFromDisk: async () => ipcRenderer.invoke("workingcopy:reload"),
