@@ -7805,6 +7805,17 @@ function initContextMenu() {
       await requestLoadLibraryFile(menuTarget.filePath);
       return;
     }
+    if (action === "copyFilePath" && menuTarget && menuTarget.type === "file") {
+      hideContextMenu();
+      try {
+        const text = String(menuTarget.filePath || "");
+        if (text && navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          showToast("Copied.");
+        }
+      } catch {}
+      return;
+    }
     if (action === "deleteTune" && menuTarget && menuTarget.type === "tune") {
       await deleteTuneById(menuTarget.tuneId);
       hideContextMenu();
@@ -7947,6 +7958,7 @@ function showContextMenuAt(x, y, target) {
     const hasXIssues = Boolean(fileEntry && fileEntry.xIssues && fileEntry.xIssues.ok === false);
     buildContextMenuItems([
       { label: "Load", action: "loadFile", disabled: !target.filePath },
+      { label: "Copy Path", action: "copyFilePath", disabled: !target.filePath },
       { label: "Paste Tune", action: "pasteTune", disabled: !clipboardTune },
       { label: "Refresh Library", action: "refreshLibrary" },
       { label: "Rename File…", action: "renameFile" },
