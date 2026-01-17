@@ -2672,8 +2672,25 @@ function buildTuneMetaLabel(metadata) {
   return label || "Untitled";
 }
 
+let tuneBadgeText = "";
+let bufferStatusText = "";
+
+function renderBufferStatus() {
+  if (!$bufferStatus) return;
+  if (bufferStatusText) {
+    $bufferStatus.textContent = bufferStatusText;
+    return;
+  }
+  if (!isLibraryVisible && tuneBadgeText) {
+    $bufferStatus.textContent = tuneBadgeText;
+    return;
+  }
+  $bufferStatus.textContent = "";
+}
+
 function setTuneMetaText(text) {
-  setBufferStatus(text || "");
+  tuneBadgeText = String(text || "");
+  renderBufferStatus();
 }
 
 function setDirtyIndicator(isDirty) {
@@ -5547,6 +5564,7 @@ function setActiveTuneText(text, metadata, options = {}) {
 function setLibraryVisible(visible, { persist = true } = {}) {
   isLibraryVisible = visible;
   document.body.classList.toggle("library-hidden", !visible);
+  renderBufferStatus();
   if (visible) {
     setPaneSizes(lastSidebarWidth || MIN_PANE_WIDTH);
   } else if ($main) {
@@ -6666,8 +6684,8 @@ function restoreHoverStatus() {
 }
 
 function setBufferStatus(text) {
-  if (!$bufferStatus) return;
-  $bufferStatus.textContent = text || "";
+  bufferStatusText = String(text || "");
+  renderBufferStatus();
 }
 
 function formatDefaultLenText(defaultLen) {
