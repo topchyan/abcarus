@@ -6787,6 +6787,40 @@ function showToast(message, durationMs = 4000) {
   }, durationMs);
 }
 
+function showToastWithAction(message, actionLabel, actionFn, durationMs = 6000) {
+  if (!$toast) return;
+  const label = String(actionLabel || "").trim();
+  if (!label || typeof actionFn !== "function") {
+    showToast(message, durationMs);
+    return;
+  }
+
+  $toast.textContent = "";
+  const text = document.createElement("span");
+  text.textContent = message || "";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "toast-action";
+  btn.textContent = label;
+  btn.addEventListener("click", (e) => {
+    try { e.preventDefault(); e.stopPropagation(); } catch {}
+    try { actionFn(); } catch {}
+    try { $toast.classList.remove("show"); } catch {}
+    if (toastTimer) {
+      clearTimeout(toastTimer);
+      toastTimer = null;
+    }
+  });
+  $toast.appendChild(text);
+  $toast.appendChild(btn);
+  $toast.classList.add("show");
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    $toast.classList.remove("show");
+    toastTimer = null;
+  }, durationMs);
+}
+
 function normalizeErrors(entries) {
   const out = [];
   const list = Array.isArray(entries) ? entries : [];
@@ -11737,7 +11771,17 @@ async function performSaveFlow() {
                       root
                       && (normalizedDest === root || normalizedDest.startsWith(root.endsWith("/") ? root : `${root}/`))
                     );
-                    showToast(inRoot ? "Saved copy and switched." : "Saved copy and switched (outside current Library).", 3000);
+                    if (inRoot) {
+                      showToast("Saved copy and switched.", 3000);
+                    } else {
+                      const dir = safeDirname(destPath);
+                      showToastWithAction(
+                        "Saved copy and switched (outside current Library).",
+                        "Load folder…",
+                        () => { loadLibraryFromFolder(dir).catch(() => {}); },
+                        8000
+                      );
+                    }
                     return true;
                   }
                 } catch {}
