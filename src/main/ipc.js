@@ -18,6 +18,7 @@ const {
   closeWorkingCopy,
   applyTuneText,
   applyHeaderText,
+  renumberXStartingAt1,
   reloadWorkingCopyFromDisk,
   commitWorkingCopyToDisk,
   writeWorkingCopyToPath,
@@ -322,6 +323,15 @@ function registerIpcHandlers(ctx) {
     try {
       const text = payload && payload.text != null ? String(payload.text) : "";
       applyHeaderText(text);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:renumber-x", async () => {
+    try {
+      renumberXStartingAt1();
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e && e.message ? e.message : String(e) };

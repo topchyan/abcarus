@@ -55,6 +55,9 @@ Add new cases here as tickets land so we keep a stable, repeatable checklist.
 - Only the first `X:` line of each tune is updated.
 - No other formatting/whitespace changes occur elsewhere.
 
+Notes
+- Under ADR-0006, renumbering updates the working copy immediately; disk changes only after Save.
+
 ---
 
 ## WC-04 — Working copy authority: no disk writes without Save (Critical)

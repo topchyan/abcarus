@@ -2189,6 +2189,10 @@ function attachTuneUidsToLibraryFile(filePath, snapshot) {
     if (!tune || !wcTune) continue;
     tune.tuneIndex = i;
     tune.tuneUid = wcTune.tuneUid;
+    try {
+      const xMatch = String(wcTune.xLabel || "").match(/^\s*X:\s*(\d+)/);
+      if (xMatch) tune.xNumber = xMatch[1];
+    } catch {}
   }
 }
 let activeTuneId = null;
@@ -13190,53 +13194,63 @@ async function renumberXInActiveFile(explicitFilePath) {
     return;
   }
 
-  const ok = await ensureSafeToAbandonCurrentDoc("renumbering X numbers");
-  if (!ok) return;
+  if (rawMode) {
+    showToast("Raw mode: switch to tune mode to renumber.", 2400);
+    return;
+  }
 
-  await withFileLock(filePath, async () => {
-    const readRes = await readFile(filePath);
-    if (!readRes || !readRes.ok) {
-      await showOpenError((readRes && readRes.error) ? readRes.error : "Unable to read file.");
-      return;
-    }
-
-    const renum = renumberXInTextStartingAt1(readRes.data);
-    if (!renum.ok) {
-      await showSaveError(renum.error || "Unable to renumber X: headers.");
-      return;
-    }
-
-    if (renum.abcText === readRes.data) {
-      setStatus("OK");
-      showToast("X numbers already sequential.", 2000);
-      return;
-    }
-
-    const writeRes = await writeFile(filePath, renum.abcText);
-    if (!writeRes || !writeRes.ok) {
-      await showSaveError((writeRes && writeRes.error) ? writeRes.error : "Unable to write file.");
-      return;
-    }
-
-    const prevFile = libraryIndex && libraryIndex.files
-      ? libraryIndex.files.find((f) => pathsEqual(f.path, filePath))
-      : null;
-    const prevTuneIndex = prevFile && prevFile.tunes && activeTuneId
-      ? prevFile.tunes.findIndex((t) => t.id === activeTuneId)
-      : -1;
-
-    setFileContentInCache(filePath, renum.abcText);
-    const updatedFile = await refreshLibraryFile(filePath, { force: true });
-    if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
-      const idx = prevTuneIndex >= 0 ? prevTuneIndex : 0;
-      const nextTune = updatedFile.tunes[Math.min(idx, updatedFile.tunes.length - 1)];
-      if (nextTune && nextTune.id) {
-        await selectTune(nextTune.id, { skipConfirm: true });
+  try {
+    if (window.api && typeof window.api.openWorkingCopy === "function") {
+      await window.api.openWorkingCopy(filePath);
+      const snapshot = await refreshWorkingCopySnapshot();
+      if (snapshot && snapshot.path && pathsEqual(snapshot.path, filePath)) {
+        attachTuneUidsToLibraryFile(filePath, snapshot);
       }
     }
+  } catch {}
 
-    setStatus(`Renumbered X (base ${renum.base}, ${renum.tuneCount} tunes).`);
-  });
+  try { await flushWorkingCopyTuneSync(); } catch {}
+
+  if (!window.api || typeof window.api.renumberWorkingCopyXStartingAt1 !== "function") {
+    await showSaveError("Working copy renumber API is unavailable.");
+    return;
+  }
+
+  const prevIndex = Number.isFinite(Number(activeTuneIndex)) ? Number(activeTuneIndex) : null;
+  const prevUid = activeTuneUid;
+  const prevFileEntry = getActiveFileEntry();
+  const prevTuneCount = prevFileEntry && Array.isArray(prevFileEntry.tunes) ? prevFileEntry.tunes.length : 0;
+
+  const res = await window.api.renumberWorkingCopyXStartingAt1();
+  if (!res || !res.ok) {
+    await showSaveError((res && res.error) ? res.error : "Unable to renumber X.");
+    return;
+  }
+
+  const snapshot = await refreshWorkingCopySnapshot();
+  if (!snapshot || !snapshot.path || !pathsEqual(snapshot.path, filePath)) {
+    await showSaveError("Unable to refresh working copy after renumber.");
+    return;
+  }
+
+  setFileContentInCache(filePath, snapshot.text);
+  attachTuneUidsToLibraryFile(filePath, snapshot);
+  scheduleRenderLibraryTree();
+  updateFileContext();
+
+  // Keep the editor aligned with the active tune slice (its X line changed).
+  const nextIndex = prevIndex != null ? prevIndex : null;
+  const countSame = Boolean(prevTuneCount && Array.isArray(snapshot.tunes) && snapshot.tunes.length === prevTuneCount);
+  if (prevUid && countSame) {
+    await selectTune(prevUid, { skipConfirm: true, suppressRecent: true });
+  } else if (nextIndex != null && Array.isArray(snapshot.tunes) && snapshot.tunes[nextIndex]) {
+    const uid = snapshot.tunes[nextIndex].tuneUid;
+    if (uid) await selectTune(uid, { skipConfirm: true, suppressRecent: true });
+  }
+
+  if (currentDoc) currentDoc.dirty = true;
+  setDirtyIndicator(true);
+  setStatus("Renumbered X (working copy).");
 }
 
 async function appQuit() {

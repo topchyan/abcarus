@@ -290,6 +290,35 @@ function applyHeaderText(headerText) {
   }, { kind: "applyHeaderText" });
 }
 
+function renumberXStartingAt1() {
+  if (!state) throw new Error("No working copy open.");
+  return mutateWorkingCopy((draft) => {
+    const text = String(draft.text || "");
+    const lines = text.split(/\r\n|\n|\r/);
+    let foundAny = false;
+    let tuneIndex = -1;
+    const out = [];
+
+    for (const line of lines) {
+      const match = line.match(/^(\s*X:\s*)(\d+)(\s*)$/);
+      if (!match) {
+        out.push(line);
+        continue;
+      }
+      foundAny = true;
+      tuneIndex += 1;
+      const prefix = match[1] || "X:";
+      const suffix = match[3] || "";
+      out.push(`${prefix}${1 + tuneIndex}${suffix}`);
+    }
+
+    if (!foundAny) throw new Error("No X: headers found in file.");
+    const nextText = out.join("\n");
+    draft.text = nextText;
+    return { text: draft.text };
+  }, { kind: "renumberXStartingAt1" });
+}
+
 function applyTuneText({ tuneUid, tuneIndex, text } = {}) {
   const uid = tuneUid != null ? String(tuneUid) : "";
   const idx = Number.isFinite(Number(tuneIndex)) ? Number(tuneIndex) : null;
@@ -330,5 +359,6 @@ module.exports = {
   onWorkingCopyChanged,
   mutateWorkingCopy,
   applyHeaderText,
+  renumberXStartingAt1,
   applyTuneText,
 };
