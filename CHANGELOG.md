@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Import (MusicXML): allow selecting and importing multiple files at once (appends all imported tunes to the active target `.abc` file).
+
 
 
 ## [0.21.0] - 2026-01-16

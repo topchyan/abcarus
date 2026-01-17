@@ -291,7 +291,7 @@ function registerIpcHandlers(ctx) {
     const parent = getParentForDialog(event, "import:musicxml");
     const result = dialog.showOpenDialogSync(parent || undefined, {
       modal: true,
-      properties: ["openFile"],
+      properties: ["openFile", "multiSelections"],
       filters: [
         { name: "MusicXML", extensions: ["xml", "musicxml", "mxl"] },
         { name: "All Files", extensions: ["*"] },
@@ -300,19 +300,22 @@ function registerIpcHandlers(ctx) {
     if (!result || !result.length) return { ok: false, canceled: true };
     try {
       const settings = getSettings ? getSettings() : {};
-      const ext = path.extname(result[0] || "").toLowerCase();
-      const kind = ext === ".mxl" ? "mxl" : "musicxml";
-      const converted = await convertFileToAbc({
-        kind,
-        inputPath: result[0],
-        args: settings.xml2abcArgs || "",
-      });
-      return {
-        ok: true,
-        abcText: converted.abcText,
-        warnings: converted.warnings || null,
-        sourcePath: result[0],
-      };
+      const items = [];
+      for (const filePath of result) {
+        const ext = path.extname(filePath || "").toLowerCase();
+        const kind = ext === ".mxl" ? "mxl" : "musicxml";
+        const converted = await convertFileToAbc({
+          kind,
+          inputPath: filePath,
+          args: settings.xml2abcArgs || "",
+        });
+        items.push({
+          abcText: converted.abcText,
+          warnings: converted.warnings || null,
+          sourcePath: filePath,
+        });
+      }
+      return { ok: true, items };
     } catch (e) {
       return {
         ok: false,

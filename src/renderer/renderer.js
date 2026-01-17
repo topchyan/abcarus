@@ -12150,11 +12150,31 @@ async function importMusicXml() {
     return;
   }
 
-  const fallbackTitle = deriveTitleFromPath(res.sourcePath);
-  let prepared = ensureTitleInAbc(res.abcText || "", fallbackTitle);
-  prepared = normalizeMeasuresLineBreaks(transformMeasuresPerLine(prepared, 4));
-  const aligned = alignBarsInText(prepared);
-  const finalText = aligned || prepared;
+  const items = Array.isArray(res.items)
+    ? res.items
+    : [{
+      abcText: res.abcText,
+      warnings: res.warnings || null,
+      sourcePath: res.sourcePath || "",
+    }];
+  if (!items.length) {
+    setStatus("Ready");
+    return;
+  }
+
+  const preparedItems = [];
+  for (const item of items) {
+    const fallbackTitle = deriveTitleFromPath(item && item.sourcePath ? item.sourcePath : "");
+    let prepared = ensureTitleInAbc((item && item.abcText) ? item.abcText : "", fallbackTitle);
+    prepared = normalizeMeasuresLineBreaks(transformMeasuresPerLine(prepared, 4));
+    const aligned = alignBarsInText(prepared);
+    const finalText = aligned || prepared;
+    preparedItems.push({
+      abcText: finalText,
+      warnings: item && item.warnings ? item.warnings : null,
+      sourcePath: item && item.sourcePath ? item.sourcePath : "",
+    });
+  }
 
   if (targetPath) {
     const confirm = await confirmAppendToFile(targetPath);
@@ -12173,10 +12193,13 @@ async function importMusicXml() {
       await withFileLock(targetPath, async () => {
         const readRes = await readFile(targetPath);
         if (!readRes || !readRes.ok) throw new Error((readRes && readRes.error) ? readRes.error : "Unable to read target file.");
-        const before = String(readRes.data || "");
-        const nextX = getNextXNumber(before);
-        const withX = ensureXNumberInAbc(finalText, nextX);
-        const updated = appendTuneToContent(before, withX);
+        let updated = String(readRes.data || "");
+        let lastWithX = "";
+        for (const item of preparedItems) {
+          const nextX = getNextXNumber(updated);
+          lastWithX = ensureXNumberInAbc(String(item.abcText || ""), nextX);
+          updated = appendTuneToContent(updated, lastWithX);
+        }
         const writeRes = await writeFile(targetPath, updated);
         if (!writeRes || !writeRes.ok) throw new Error((writeRes && writeRes.error) ? writeRes.error : "Unable to append to file.");
         setFileContentInCache(targetPath, updated);
@@ -12202,7 +12225,7 @@ async function importMusicXml() {
           });
         } else {
           // Fallback: open as an unsaved document if the file is not part of the library index.
-          setActiveTuneText(withX, null, { markDirty: false });
+          setActiveTuneText(lastWithX, null, { markDirty: false });
           if (currentDoc) currentDoc.dirty = false;
         }
       });
@@ -12214,7 +12237,12 @@ async function importMusicXml() {
       return;
     }
 
-    if (res.warnings) logErr(`Import warning: ${res.warnings}`);
+    for (const item of preparedItems) {
+      if (item && item.warnings) {
+        const p = item.sourcePath ? ` (${safeBasename(item.sourcePath)})` : "";
+        logErr(`Import warning${p}: ${item.warnings}`);
+      }
+    }
     setStatus("OK");
     return;
   }
@@ -12226,8 +12254,15 @@ async function importMusicXml() {
   }
 
   if (!currentDoc) setCurrentDocument(createBlankDocument());
-  setActiveTuneText(finalText, null, { markDirty: true });
-  if (res.warnings) logErr(`Import warning: ${res.warnings}`);
+  // Without a target file, open the last imported tune as a draft.
+  const last = preparedItems.length ? preparedItems[preparedItems.length - 1] : null;
+  setActiveTuneText(last ? String(last.abcText || "") : "", null, { markDirty: true });
+  for (const item of preparedItems) {
+    if (item && item.warnings) {
+      const p = item.sourcePath ? ` (${safeBasename(item.sourcePath)})` : "";
+      logErr(`Import warning${p}: ${item.warnings}`);
+    }
+  }
   setStatus("OK");
 }
 
