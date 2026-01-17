@@ -140,3 +140,20 @@ Add new cases here as tickets land so we keep a stable, repeatable checklist.
 - Result is either cleanly applied up to documented boundaries or not applied at all.
 - App remains responsive; no corrupted state.
 
+---
+
+## WC-09 — Tune selection remains correct without relying on `X:` (High)
+
+**Preconditions**
+- An `.abc` file with multiple tunes, including duplicate `X:` values (e.g. all `X:1`).
+
+**Steps**
+1. Open the file from Library (so a working copy session is created).
+2. Click several tunes in the Library tree; confirm the editor shows the clicked tune.
+3. Use the tune `<select>` (dropdown) to switch between tunes; confirm the editor follows the dropdown.
+4. Trigger a library re-render (collapse/expand a group, change group/sort mode, or reload the library view).
+
+**Expected**
+- Selecting tunes does not depend on `X:` numbers matching.
+- Active tune highlight stays correct after re-render.
+- Dropdown navigation continues to select the intended tune.

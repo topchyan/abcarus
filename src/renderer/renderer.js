@@ -2037,7 +2037,34 @@ function getFileContentFromCache(filePath) {
 function setFileContentInCache(filePath, content) {
   lruSet(fileContentCache, filePath, content, MAX_FILE_CONTENT_CACHE_ENTRIES);
 }
+
+let workingCopySnapshot = null;
+
+async function refreshWorkingCopySnapshot() {
+  if (!window.api || typeof window.api.getWorkingCopySnapshot !== "function") return null;
+  const res = await window.api.getWorkingCopySnapshot();
+  if (!res || !res.ok || !res.snapshot) return null;
+  workingCopySnapshot = res.snapshot;
+  return workingCopySnapshot;
+}
+
+function attachTuneUidsToLibraryFile(filePath, snapshot) {
+  if (!libraryIndex || !libraryIndex.files || !filePath || !snapshot) return;
+  const fileEntry = libraryIndex.files.find((f) => pathsEqual(f.path, filePath));
+  if (!fileEntry || !Array.isArray(fileEntry.tunes)) return;
+  const wcTunes = Array.isArray(snapshot.tunes) ? snapshot.tunes : [];
+  if (!wcTunes.length) return;
+  if (fileEntry.tunes.length !== wcTunes.length) return;
+  for (let i = 0; i < fileEntry.tunes.length; i += 1) {
+    const tune = fileEntry.tunes[i];
+    const wcTune = wcTunes[i];
+    if (!tune || !wcTune) continue;
+    tune.tuneIndex = i;
+    tune.tuneUid = wcTune.tuneUid;
+  }
+}
 let activeTuneId = null;
+let activeTuneUid = null;
 let activeTuneMeta = null;
 let activeFilePath = null;
 let isLibraryVisible = true;
@@ -2651,14 +2678,16 @@ function buildTuneSelectOptions(fileEntry) {
   }
   for (const tune of tunes) {
     const option = document.createElement("option");
-    option.value = tune.id;
+    option.value = rawMode ? tune.id : (tune.tuneUid || tune.id);
     const title = tune.title || tune.preview || "";
     const label = tune.xNumber ? `X:${tune.xNumber} ${title}`.trim() : title || tune.id;
     option.textContent = label;
     $fileTuneSelect.appendChild(option);
   }
   $fileTuneSelect.disabled = false;
-  if (!isNewTuneDraft && activeTuneId) $fileTuneSelect.value = activeTuneId;
+  if (!isNewTuneDraft && (activeTuneUid || activeTuneId)) {
+    $fileTuneSelect.value = rawMode ? activeTuneId : (activeTuneUid || activeTuneId);
+  }
   if (!isNewTuneDraft && !$fileTuneSelect.value) {
     $fileTuneSelect.selectedIndex = 0;
   }
@@ -2707,10 +2736,15 @@ async function navigateTuneByDelta(delta) {
     : [];
 
   const selectedValue = ($fileTuneSelect && $fileTuneSelect.value != null) ? String($fileTuneSelect.value) : "";
+  const activeKey = rawMode ? activeTuneId : (activeTuneUid || activeTuneId);
   const findCurrentInOrdered = () => {
     if (!orderedTunes.length) return -1;
-    if (activeTuneId) {
-      const idx = orderedTunes.findIndex((t) => t && t.id === activeTuneId);
+    if (activeKey) {
+      const idx = orderedTunes.findIndex((t) => {
+        if (!t) return false;
+        if (!rawMode && t.tuneUid && t.tuneUid === activeKey) return true;
+        return Boolean(t.id && t.id === activeKey);
+      });
       if (idx >= 0) return idx;
     }
     if (activeTuneMeta && Number.isFinite(Number(activeTuneMeta.startOffset))) {
@@ -2719,19 +2753,26 @@ async function navigateTuneByDelta(delta) {
       if (idx >= 0) return idx;
     }
     if (selectedValue) {
-      const idx = orderedTunes.findIndex((t) => t && t.id === selectedValue);
+      const idx = orderedTunes.findIndex((t) => {
+        if (!t) return false;
+        if (!rawMode && t.tuneUid && t.tuneUid === selectedValue) return true;
+        return Boolean(t.id && t.id === selectedValue);
+      });
       if (idx >= 0) return idx;
     }
     return -1;
   };
 
   let nextId = "";
+  let nextTune = null;
   if (orderedTunes.length) {
     const currentIdx = findCurrentInOrdered();
     const startIdx = currentIdx >= 0 ? currentIdx : (delta > 0 ? 0 : orderedTunes.length - 1);
     const nextIdx = Math.max(0, Math.min(orderedTunes.length - 1, startIdx + delta));
-    const nextTune = orderedTunes[nextIdx];
-    nextId = nextTune && nextTune.id ? String(nextTune.id) : "";
+    nextTune = orderedTunes[nextIdx];
+    nextId = nextTune
+      ? String(rawMode ? nextTune.id : (nextTune.tuneUid || nextTune.id) || "")
+      : "";
     if (!nextId) return;
     if (currentIdx === nextIdx) {
       showToast(delta > 0 ? "Already at last tune." : "Already at first tune.", 1400);
@@ -2745,8 +2786,8 @@ async function navigateTuneByDelta(delta) {
       return;
     }
     const selectedIsNavigable = selectedValue && ids.includes(selectedValue);
-    const activeIsNavigable = activeTuneId && ids.includes(activeTuneId);
-    const current = selectedIsNavigable ? selectedValue : (activeIsNavigable ? activeTuneId : "");
+    const activeIsNavigable = activeKey && ids.includes(activeKey);
+    const current = selectedIsNavigable ? selectedValue : (activeIsNavigable ? activeKey : "");
     const currentIdx = current ? ids.indexOf(current) : -1;
     const startIdx = currentIdx >= 0 ? currentIdx : (delta > 0 ? 0 : ids.length - 1);
     const nextIdx = Math.max(0, Math.min(ids.length - 1, startIdx + delta));
@@ -2759,9 +2800,10 @@ async function navigateTuneByDelta(delta) {
   }
 
   if (rawMode) {
-    if ($fileTuneSelect) $fileTuneSelect.value = nextId;
-    setActiveTuneInRaw(nextId);
-    scrollToTuneInRaw(nextId);
+    const rawTuneId = nextTune && nextTune.id ? String(nextTune.id) : String(nextId);
+    if ($fileTuneSelect) $fileTuneSelect.value = rawTuneId;
+    setActiveTuneInRaw(rawTuneId);
+    scrollToTuneInRaw(rawTuneId);
     return;
   }
   await selectTune(nextId);
@@ -3500,6 +3542,7 @@ function setActiveTuneInRaw(tuneId) {
   const res = findTuneById(tuneId);
   if (!res) return;
   activeTuneId = tuneId;
+  activeTuneUid = null;
   activeTuneMeta = {
     id: res.tune.id,
     path: res.file.path,
@@ -5342,6 +5385,7 @@ function setActiveTuneText(text, metadata, options = {}) {
     const markDirty = Boolean(options && options.markDirty);
     activeTuneMeta = null;
     activeTuneId = null;
+    activeTuneUid = null;
     activeFilePath = null;
     isNewTuneDraft = false;
     refreshHeaderLayers().catch(() => {});
@@ -5600,7 +5644,10 @@ function renderLibraryTree(files = null) {
       button.textContent = tuneLabel;
       button.title = tuneLabel;
       button.dataset.tuneId = tune.id;
-      if (tune.id === activeTuneId) button.classList.add("active");
+      if (tune.tuneUid) button.dataset.tuneUid = tune.tuneUid;
+      const isActiveByUid = Boolean(activeTuneUid && tune.tuneUid && tune.tuneUid === activeTuneUid);
+      const isActiveById = Boolean(activeTuneId && tune.id && tune.id === activeTuneId);
+      if (isActiveByUid || isActiveById) button.classList.add("active");
       button.addEventListener("mouseenter", () => showHoverStatus(tuneLabel));
       button.addEventListener("mouseleave", () => restoreHoverStatus());
       button.addEventListener("focus", () => showHoverStatus(tuneLabel));
@@ -5639,6 +5686,7 @@ function renderLibraryTree(files = null) {
           // Use the tolerant open helper that can fall back to xNumber and force a re-parse.
           openTuneFromLibrarySelection({
             filePath: targetPath,
+            tuneUid: tune.tuneUid || null,
             tuneId: tune.id,
             xNumber: tune.xNumber,
           }).then((res) => {
@@ -5665,7 +5713,9 @@ function markActiveTuneButton(tuneId) {
     const buttons = $libraryTree.querySelectorAll(".tree-label");
     for (const btn of buttons) {
       if (btn.dataset && btn.dataset.tuneId) {
-        btn.classList.toggle("active", btn.dataset.tuneId === tuneId);
+        const isActiveByUid = Boolean(activeTuneUid && btn.dataset.tuneUid && btn.dataset.tuneUid === activeTuneUid);
+        const isActiveById = Boolean(activeTuneId && btn.dataset.tuneId && btn.dataset.tuneId === activeTuneId);
+        btn.classList.toggle("active", isActiveByUid || isActiveById);
       }
     }
   }
@@ -5681,7 +5731,7 @@ async function selectTune(tuneId, options = {}) {
   let fileMeta = null;
 
   for (const file of libraryIndex.files) {
-    const found = file.tunes.find((t) => t.id === tuneId);
+    const found = file.tunes.find((t) => (t && t.tuneUid && t.tuneUid === tuneId) || (t && t.id === tuneId));
     if (found) {
       selected = found;
       fileMeta = file;
@@ -5690,6 +5740,19 @@ async function selectTune(tuneId, options = {}) {
   }
 
   if (!selected || !fileMeta) return { ok: false, error: "Tune not found." };
+
+  try {
+    if (window.api && typeof window.api.openWorkingCopy === "function" && fileMeta.path) {
+      if (!workingCopySnapshot || !workingCopySnapshot.path || !pathsEqual(workingCopySnapshot.path, fileMeta.path)) {
+        await window.api.openWorkingCopy(fileMeta.path);
+        const snapshot = await refreshWorkingCopySnapshot();
+        if (snapshot && snapshot.path && pathsEqual(snapshot.path, fileMeta.path)) {
+          attachTuneUidsToLibraryFile(fileMeta.path, snapshot);
+          scheduleRenderLibraryTree();
+        }
+      }
+    }
+  } catch {}
 
   let content = getFileContentFromCache(fileMeta.path);
   if (content == null) {
@@ -5707,17 +5770,13 @@ async function selectTune(tuneId, options = {}) {
     const start = Number(tune.startOffset);
     const probe = String(fullText).slice(start, Math.min(fullText.length, start + 160));
     if (!/^\s*X:/.test(probe)) return false;
-    const expectedX = tune && tune.xNumber != null ? String(tune.xNumber) : "";
-    if (!expectedX.trim()) return true;
-    const match = probe.match(/^\s*X:\s*(\d+)/);
-    return Boolean(match && match[1] === expectedX.trim());
+    return true;
   };
 
   if (!options._reparsed && !isTuneSliceValid(content, selected)) {
     try {
       const updatedFile = await refreshLibraryFile(fileMeta.path, { force: true });
       const tunes = updatedFile && Array.isArray(updatedFile.tunes) ? updatedFile.tunes : [];
-      const expectedX = selected && selected.xNumber != null ? String(selected.xNumber) : "";
       const expectedTitle = selected && selected.title ? String(selected.title).trim().toLowerCase() : "";
       const expectedStart = Number.isFinite(Number(selected.startOffset)) ? Number(selected.startOffset) : null;
       const expectedId = selected && selected.id ? String(selected.id) : "";
@@ -5725,15 +5784,7 @@ async function selectTune(tuneId, options = {}) {
       let replacement = null;
       if (expectedId) replacement = tunes.find((t) => t && t.id && String(t.id) === expectedId) || null;
       if (!replacement && expectedStart != null) replacement = tunes.find((t) => Number(t.startOffset) === expectedStart) || null;
-      if (!replacement && expectedX.trim()) {
-        const matches = tunes.filter((t) => String(t && t.xNumber != null ? t.xNumber : "") === expectedX.trim());
-        if (matches.length === 1) replacement = matches[0];
-        else if (matches.length > 1 && expectedTitle) {
-          replacement = matches.find((t) => String(t.title || "").trim().toLowerCase() === expectedTitle) || matches[0];
-        } else if (matches.length) {
-          replacement = matches[0];
-        }
-      }
+      if (!replacement && expectedTitle) replacement = tunes.find((t) => String(t && (t.title || "")).trim().toLowerCase() === expectedTitle) || null;
       if (replacement && replacement.id) {
         return selectTune(replacement.id, { ...options, skipConfirm: true, _reparsed: true });
       }
@@ -5741,9 +5792,11 @@ async function selectTune(tuneId, options = {}) {
   }
 
   const tuneText = content.slice(selected.startOffset, selected.endOffset);
-  activeTuneId = tuneId;
+  activeTuneId = selected.id;
+  activeTuneUid = selected.tuneUid || null;
   if ($fileTuneSelect && !$fileTuneSelect.disabled) {
-    try { $fileTuneSelect.value = tuneId; } catch {}
+    const nextKey = rawMode ? activeTuneId : (activeTuneUid || activeTuneId);
+    try { $fileTuneSelect.value = nextKey; } catch {}
   }
   markActiveTuneButton(tuneId);
   setActiveTuneText(tuneText, {
@@ -5772,6 +5825,7 @@ async function openTuneFromLibrarySelection(selection) {
 
   const filePath = selection.filePath || selection.path || null;
   const tuneId = selection.tuneId || selection.id || null;
+  const tuneUid = selection.tuneUid || null;
   const tuneNo = selection.tuneNo != null ? String(selection.tuneNo) : null;
   const xNumber = selection.xNumber != null ? String(selection.xNumber) : null;
 
@@ -5780,7 +5834,7 @@ async function openTuneFromLibrarySelection(selection) {
     logErr(msg);
     return { ok: false, error: msg };
   }
-  if (!tuneId && !tuneNo && !xNumber) {
+  if (!tuneUid && !tuneId && !tuneNo && !xNumber) {
     const msg = "Cannot open selection: missing tune id/number.";
     logErr(msg);
     return { ok: false, error: msg };
@@ -5820,7 +5874,8 @@ async function openTuneFromLibrarySelection(selection) {
   }
 
   let tune = null;
-  if (tuneId) tune = (fileEntry.tunes || []).find((t) => t.id === tuneId) || null;
+  if (tuneUid) tune = (fileEntry.tunes || []).find((t) => t && t.tuneUid && t.tuneUid === tuneUid) || null;
+  if (!tune && tuneId) tune = (fileEntry.tunes || []).find((t) => t.id === tuneId) || null;
   if (!tune && tuneNo) {
     tune = (fileEntry.tunes || []).find((t) => String(t.xNumber || "") === tuneNo) || null;
   }
@@ -5833,7 +5888,8 @@ async function openTuneFromLibrarySelection(selection) {
     try {
       const refreshed = await refreshLibraryFile(fileEntry.path, { force: true });
       const tunes = refreshed && Array.isArray(refreshed.tunes) ? refreshed.tunes : (fileEntry.tunes || []);
-      if (tuneId) tune = tunes.find((t) => t && t.id === tuneId) || null;
+      if (tuneUid) tune = tunes.find((t) => t && t.tuneUid && t.tuneUid === tuneUid) || null;
+      if (!tune && tuneId) tune = tunes.find((t) => t && t.id === tuneId) || null;
       if (!tune && tuneNo) tune = tunes.find((t) => String(t && (t.xNumber || "")) === tuneNo) || null;
       if (!tune && xNumber) tune = tunes.find((t) => String(t && (t.xNumber || "")) === xNumber) || null;
     } catch {}
@@ -5844,7 +5900,7 @@ async function openTuneFromLibrarySelection(selection) {
     return { ok: false, error: msg };
   }
 
-  const res = await selectTune(tune.id, { skipConfirm: true });
+  const res = await selectTune(tune.tuneUid || tune.id, { skipConfirm: true });
   if (res && res.ok) return { ok: true };
   if (res && res.cancelled) return { ok: false, cancelled: true };
   return { ok: false, error: (res && res.error) ? res.error : "Unable to open tune." };
@@ -6049,14 +6105,22 @@ async function loadLibraryFileIntoEditor(filePath) {
   try {
     if (window.api && typeof window.api.openWorkingCopy === "function") {
       await window.api.openWorkingCopy(filePath);
+      const snapshot = await refreshWorkingCopySnapshot();
+      if (snapshot && snapshot.path && pathsEqual(snapshot.path, filePath)) {
+        attachTuneUidsToLibraryFile(filePath, snapshot);
+        scheduleRenderLibraryTree();
+      }
     }
   } catch {}
+  activeFilePath = filePath;
   const resolveFromIndex = async () => {
     if (!libraryIndex || !libraryIndex.files) return { ok: false };
     const fileEntry = libraryIndex.files.find((f) => pathsEqual(f.path, filePath)) || null;
     if (!fileEntry) return { ok: false };
     if (fileEntry.tunes && fileEntry.tunes.length) {
-      await selectTune(fileEntry.tunes[0].id);
+      const first = fileEntry.tunes[0];
+      const key = first ? (first.tuneUid || first.id) : "";
+      if (key) await selectTune(key);
       return { ok: true };
     }
     const tuneCount = Number.isFinite(fileEntry.tuneCount) ? fileEntry.tuneCount : null;
@@ -6064,7 +6128,9 @@ async function loadLibraryFileIntoEditor(filePath) {
     if (shouldTryParse) {
       const updated = await refreshLibraryFile(filePath);
       if (updated && updated.tunes && updated.tunes.length) {
-        await selectTune(updated.tunes[0].id);
+        const first = updated.tunes[0];
+        const key = first ? (first.tuneUid || first.id) : "";
+        if (key) await selectTune(key);
         return { ok: true };
       }
     }
