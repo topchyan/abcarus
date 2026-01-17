@@ -11,6 +11,12 @@ const os = require("os");
 const { execFile } = require("child_process");
 const { fileURLToPath } = require("url");
 const { getVersionInfo } = require("../version");
+const {
+  openWorkingCopyFromPath,
+  getWorkingCopySnapshot,
+  getWorkingCopyMetaSnapshot,
+  closeWorkingCopy,
+} = require("./workingCopyStore");
 
 async function readOsRelease(fs) {
   try {
@@ -230,6 +236,46 @@ function registerIpcHandlers(ctx) {
       detail: `Remove "${label}" from the list? This will not delete the file.`,
     });
     return response === 0;
+  });
+
+  ipcMain.handle("workingcopy:open", async (_event, filePath) => {
+    try {
+      const p = String(filePath || "");
+      if (!p) return { ok: false, error: "Missing file path." };
+      await openWorkingCopyFromPath(p);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:get", async () => {
+    try {
+      const snap = getWorkingCopySnapshot();
+      if (!snap) return { ok: false, error: "No working copy open." };
+      return { ok: true, snapshot: snap };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:get-meta", async () => {
+    try {
+      const meta = getWorkingCopyMetaSnapshot();
+      if (!meta) return { ok: false, error: "No working copy open." };
+      return { ok: true, meta };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:close", async () => {
+    try {
+      await closeWorkingCopy();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
   });
   ipcMain.handle("dialog:confirm-delete-tune", async (_e, label) =>
     confirmDeleteTune(label)

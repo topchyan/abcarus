@@ -6046,6 +6046,11 @@ async function loadLibraryFromFolder(folder) {
 
 async function loadLibraryFileIntoEditor(filePath) {
   if (!filePath) return { ok: false, error: "Missing file path." };
+  try {
+    if (window.api && typeof window.api.openWorkingCopy === "function") {
+      await window.api.openWorkingCopy(filePath);
+    }
+  } catch {}
   const resolveFromIndex = async () => {
     if (!libraryIndex || !libraryIndex.files) return { ok: false };
     const fileEntry = libraryIndex.files.find((f) => pathsEqual(f.path, filePath)) || null;

@@ -26,6 +26,9 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("dialog:confirm-remove-sf2", label),
   confirmDeleteTune: async (label) =>
     ipcRenderer.invoke("dialog:confirm-delete-tune", label),
+  openWorkingCopy: async (filePath) => ipcRenderer.invoke("workingcopy:open", filePath),
+  getWorkingCopySnapshot: async () => ipcRenderer.invoke("workingcopy:get"),
+  getWorkingCopyMeta: async () => ipcRenderer.invoke("workingcopy:get-meta"),
   showSaveError: async (message) =>
     ipcRenderer.invoke("dialog:show-save-error", message),
   showOpenError: async (message) =>
