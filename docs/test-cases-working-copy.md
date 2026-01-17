@@ -187,3 +187,19 @@ Add new cases here as tickets land so we keep a stable, repeatable checklist.
 
 **Expected**
 - The edit is preserved (it came from the working copy), even if the file on disk was not changed.
+
+---
+
+## WC-12 — “Don’t Save” discards Working Copy edits (Critical)
+
+**Preconditions**
+- Open a file from Library (working copy exists).
+
+**Steps**
+1. Edit the current tune (make it dirty).
+2. Click another tune.
+3. When prompted about unsaved changes, choose “Don’t Save”.
+4. Switch back to the original tune.
+
+**Expected**
+- The tune text is restored to the last disk-saved state (unsaved edits are discarded).

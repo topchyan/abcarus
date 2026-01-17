@@ -2051,6 +2051,7 @@ async function refreshWorkingCopySnapshot() {
 let workingCopyTuneSyncTimer = null;
 let workingCopyTuneSyncInFlight = false;
 let workingCopyTuneSyncQueued = false;
+let workingCopyTuneSyncEpoch = 0;
 const WORKING_COPY_TUNE_SYNC_DEBOUNCE_MS = 450;
 
 function scheduleWorkingCopyTuneSync() {
@@ -2066,6 +2067,7 @@ function scheduleWorkingCopyTuneSync() {
 }
 
 async function flushWorkingCopyTuneSync() {
+  const epoch = workingCopyTuneSyncEpoch;
   if (workingCopyTuneSyncInFlight) {
     workingCopyTuneSyncQueued = true;
     return;
@@ -2094,9 +2096,11 @@ async function flushWorkingCopyTuneSync() {
       tuneIndex,
       text: tuneText,
     });
+    if (epoch !== workingCopyTuneSyncEpoch) return;
     if (!res || !res.ok) return;
 
     const snapshot = await refreshWorkingCopySnapshot();
+    if (epoch !== workingCopyTuneSyncEpoch) return;
     if (snapshot && snapshot.path && pathsEqual(snapshot.path, filePath)) {
       setFileContentInCache(filePath, snapshot.text);
       const t = Array.isArray(snapshot.tunes) ? snapshot.tunes[tuneIndex] : null;
@@ -2107,10 +2111,39 @@ async function flushWorkingCopyTuneSync() {
     }
   } finally {
     workingCopyTuneSyncInFlight = false;
-    if (workingCopyTuneSyncQueued) {
+    if (epoch === workingCopyTuneSyncEpoch && workingCopyTuneSyncQueued) {
       workingCopyTuneSyncQueued = false;
       await flushWorkingCopyTuneSync();
     }
+  }
+}
+
+async function discardWorkingCopyChangesForActiveFile() {
+  workingCopyTuneSyncEpoch += 1;
+  if (workingCopyTuneSyncTimer) {
+    clearTimeout(workingCopyTuneSyncTimer);
+    workingCopyTuneSyncTimer = null;
+  }
+  workingCopyTuneSyncQueued = false;
+
+  if (rawMode) return false;
+  if (!activeTuneMeta || !activeTuneMeta.path) return false;
+  if (!window.api || typeof window.api.reloadWorkingCopyFromDisk !== "function") return false;
+
+  try {
+    const res = await window.api.reloadWorkingCopyFromDisk();
+    if (!res || !res.ok) return false;
+    const snapshot = await refreshWorkingCopySnapshot();
+    if (snapshot && snapshot.path && pathsEqual(snapshot.path, activeTuneMeta.path)) {
+      setFileContentInCache(snapshot.path, snapshot.text);
+    }
+    if (currentDoc) {
+      currentDoc.dirty = false;
+      setDirtyIndicator(false);
+    }
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -11561,6 +11594,9 @@ async function confirmAbandonIfDirty(contextLabel) {
     if (hdrDirty) {
       showToast("Header changes are unsaved. Save or cancel.", 2600);
       return false;
+    }
+    if (tuneDirty) {
+      await discardWorkingCopyChangesForActiveFile();
     }
     return true;
   }

@@ -101,6 +101,44 @@ async function closeWorkingCopy() {
   return true;
 }
 
+async function reloadWorkingCopyFromDisk() {
+  if (!state || !state.path) throw new Error("No working copy open.");
+  const p = String(state.path || "");
+  const text = await fs.promises.readFile(p, "utf8");
+  const fp = await statFingerprint(p);
+  const seg = segmentTunes(text);
+
+  const prevTunes = state.tunes || [];
+  const nextTunes = [];
+  for (let i = 0; i < seg.tunes.length; i += 1) {
+    const t = seg.tunes[i];
+    const prev = prevTunes[i];
+    const tuneUid = prev && prev.tuneUid ? prev.tuneUid : makeTuneUid();
+    const xLabelRaw = t && t.rawXLine ? String(t.rawXLine).trim() : "";
+    nextTunes.push({
+      tuneIndex: i,
+      tuneUid,
+      start: Number(t.start) || 0,
+      end: Number(t.end) || 0,
+      xLabel: xLabelRaw,
+    });
+  }
+
+  state.text = text;
+  state.version += 1;
+  state.dirty = false;
+  state.diskFingerprintOnOpen = fp;
+  state.preambleSlice = seg.preambleSlice;
+  state.tunes = nextTunes;
+  state.tuneUidToIndex = new Map(nextTunes.map((t) => [t.tuneUid, t.tuneIndex]));
+  try {
+    state.lastMutationMeta = { kind: "reloadFromDisk" };
+  } catch {}
+
+  notifyChanged();
+  return getWorkingCopyMetaSnapshot();
+}
+
 function onWorkingCopyChanged(listener) {
   emitter.on("changed", listener);
   return () => emitter.off("changed", listener);
@@ -197,6 +235,7 @@ function applyTuneText({ tuneUid, tuneIndex, text } = {}) {
 module.exports = {
   openWorkingCopyFromPath,
   closeWorkingCopy,
+  reloadWorkingCopyFromDisk,
   getWorkingCopySnapshot,
   getWorkingCopyMetaSnapshot,
   onWorkingCopyChanged,

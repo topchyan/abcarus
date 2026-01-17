@@ -17,6 +17,7 @@ const {
   getWorkingCopyMetaSnapshot,
   closeWorkingCopy,
   applyTuneText,
+  reloadWorkingCopyFromDisk,
 } = require("./workingCopyStore");
 
 async function readOsRelease(fs) {
@@ -274,6 +275,15 @@ function registerIpcHandlers(ctx) {
     try {
       await closeWorkingCopy();
       return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:reload", async () => {
+    try {
+      const meta = await reloadWorkingCopyFromDisk();
+      return { ok: true, meta };
     } catch (e) {
       return { ok: false, error: e && e.message ? e.message : String(e) };
     }
