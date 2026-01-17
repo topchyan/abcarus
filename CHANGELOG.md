@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Import (MusicXML): allow selecting and importing multiple files at once (appends all imported tunes to the active target `.abc` file; auto-drops the default “Untitled” placeholder tune when importing into a brand-new file).
+- Import (MusicXML): allow selecting and importing multiple files at once (preserves the selection order; appends all imported tunes to the chosen target `.abc` file; auto-drops the default “Untitled” placeholder tune when importing into a brand-new file).
 - Renumber: X renumbering now starts from `X:1`.
 
 

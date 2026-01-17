@@ -542,6 +542,30 @@ function confirmAppendToFile(filePath) {
   return "cancel";
 }
 
+function confirmImportMusicXmlTarget(filePath, senderOrEvent) {
+  const parent = prepareDialogParent(senderOrEvent, "confirm-import-musicxml-target");
+  const hasTarget = Boolean(filePath);
+  const buttons = hasTarget ? ["This file", "New file…", "Cancel"] : ["New file…", "Cancel"];
+  const cancelId = buttons.length - 1;
+  const response = dialog.showMessageBoxSync(parent || undefined, {
+    type: "question",
+    buttons,
+    defaultId: 0,
+    cancelId,
+    message: "Import MusicXML",
+    detail: hasTarget
+      ? `Import into “${path.basename(filePath)}”?`
+      : "Create a new .abc file to import into.",
+  });
+  if (hasTarget) {
+    if (response === 0) return "this_file";
+    if (response === 1) return "new_file";
+    return "cancel";
+  }
+  if (response === 0) return "new_file";
+  return "cancel";
+}
+
 function showSaveError(message) {
   const parent = prepareDialogParent(null, "save-error");
   dialog.showMessageBoxSync(parent || undefined, {
@@ -2037,6 +2061,7 @@ registerIpcHandlers({
   getDialogParent,
   prepareDialogParent,
   confirmAppendToFile,
+  confirmImportMusicXmlTarget,
   confirmDeleteTune,
   addRecentTune,
   addRecentFile,

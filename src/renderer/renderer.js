@@ -10098,6 +10098,13 @@ async function confirmAppendToFile(filePath) {
   return window.api.confirmAppendToFile(filePath);
 }
 
+async function confirmImportMusicXmlTarget(filePath) {
+  if (!window.api || typeof window.api.confirmImportMusicXmlTarget !== "function") {
+    return filePath ? "this_file" : "cancel";
+  }
+  return window.api.confirmImportMusicXmlTarget(filePath || "");
+}
+
 async function confirmDeleteTune(label) {
   if (!window.api || typeof window.api.confirmDeleteTune !== "function") return "cancel";
   return window.api.confirmDeleteTune(label);
@@ -12127,27 +12134,61 @@ async function fileOpen() {
 async function importMusicXml() {
   if (!window.api || typeof window.api.importMusicXml !== "function") return;
 
-  let targetPath = (activeTuneMeta && activeTuneMeta.path)
+  const suggestDir = (() => {
+    try {
+      if (activeTuneMeta && activeTuneMeta.path) return safeDirname(String(activeTuneMeta.path));
+      if (activeFilePath) return safeDirname(String(activeFilePath));
+      if (currentDoc && currentDoc.path) return safeDirname(String(currentDoc.path));
+    } catch {}
+    return "";
+  })();
+
+  let existingTargetPath = (activeTuneMeta && activeTuneMeta.path)
     ? String(activeTuneMeta.path)
     : (activeFilePath ? String(activeFilePath) : "");
-  if (!targetPath && currentDoc && currentDoc.path) targetPath = String(currentDoc.path);
-  if (!targetPath) {
-    if (!currentDoc) {
-      showToast("Open/select a target .abc file first, then import MusicXML.", 3600);
+  if (!existingTargetPath && currentDoc && currentDoc.path) existingTargetPath = String(currentDoc.path);
+
+  const targetChoice = await confirmImportMusicXmlTarget(existingTargetPath || "");
+  if (targetChoice === "cancel") {
+    setStatus("Ready");
+    return;
+  }
+
+  let targetPath = existingTargetPath;
+  if (targetChoice === "new_file") {
+    const ok = await ensureSafeToAbandonCurrentDoc("creating a new file");
+    if (!ok) {
       setStatus("Ready");
       return;
     }
-    showToast("Save the target .abc file first, then import MusicXML.", 3200);
-    const saved = await performSaveAsFlow();
-    if (!saved) {
+    const newPath = await showSaveDialog("import.abc", suggestDir);
+    if (!newPath) {
       setStatus("Ready");
       return;
     }
-    targetPath = currentDoc && currentDoc.path ? String(currentDoc.path) : "";
-    if (!targetPath) {
-      setStatus("Ready");
+    const created = await writeFile(newPath, "");
+    if (!created || !created.ok) {
+      setStatus("Error");
+      await showSaveError((created && created.error) ? created.error : "Unable to create target file.");
       return;
     }
+    targetPath = String(newPath);
+
+    activeTuneId = null;
+    activeTuneMeta = null;
+    activeFilePath = targetPath;
+
+    setTuneMetaText("Untitled");
+    setFileNameMeta(stripFileExtension(safeBasename(targetPath)));
+    setCurrentDocument({ path: targetPath, dirty: false, content: "" });
+    setDirtyIndicator(false);
+    updateFileHeaderPanel();
+    updateHeaderStateUI();
+    clearErrors();
+    scheduleRenderNow({ clearOutput: true });
+  } else if (!targetPath) {
+    setStatus("Ready");
+    return;
   }
 
   const countTunesByX = (text) => {
