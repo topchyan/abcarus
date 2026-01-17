@@ -330,7 +330,7 @@ function registerIpcHandlers(ctx) {
     const base = p ? path.basename(p) : "file";
     const response = dialog.showMessageBoxSync(parent || undefined, {
       type: "warning",
-      buttons: ["Overwrite", "Save Copy As…", "Discard & Reload", "Cancel"],
+      buttons: ["Overwrite", "Save Copy As & Switch…", "Discard & Reload", "Cancel"],
       defaultId: 1,
       cancelId: 3,
       message: "File changed on disk",

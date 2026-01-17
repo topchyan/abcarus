@@ -87,11 +87,11 @@ Add new cases here as tickets land so we keep a stable, repeatable checklist.
 **Expected**
 - ABCarus detects conflict and offers:
   - Overwrite
-  - Save Copy As…
+  - Save Copy As & Switch…
   - Discard & Reload
   - Cancel
 - Overwrite replaces disk content with the working copy.
-- Save Copy As… writes the working copy to a new path and keeps the current file dirty.
+- Save Copy As & Switch… writes the working copy to a new path and switches the editor to that file.
 - Discard & Reload restores the working copy from disk (losing unsaved edits).
 - Cancel leaves everything unchanged.
 

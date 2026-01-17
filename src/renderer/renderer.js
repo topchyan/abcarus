@@ -11721,8 +11721,41 @@ async function performSaveFlow() {
             if (window.api && typeof window.api.writeWorkingCopyToPath === "function") {
               const out = await window.api.writeWorkingCopyToPath(destPath);
               if (out && out.ok) {
-                showToast("Saved copy.", 2200);
-                return false;
+                try {
+                  // The copy is now the safe canonical version; switch to it without prompting.
+                  if (currentDoc) currentDoc.dirty = false;
+                  setDirtyIndicator(false);
+                } catch {}
+
+                try { await refreshLibraryFile(destPath, { force: true }); } catch {}
+                try {
+                  const opened = await loadLibraryFileIntoEditor(destPath);
+                  if (opened && opened.ok) {
+                    const root = libraryIndex && libraryIndex.root ? normalizeLibraryPath(libraryIndex.root) : "";
+                    const normalizedDest = normalizeLibraryPath(destPath);
+                    const inRoot = Boolean(
+                      root
+                      && (normalizedDest === root || normalizedDest.startsWith(root.endsWith("/") ? root : `${root}/`))
+                    );
+                    showToast(inRoot ? "Saved copy and switched." : "Saved copy and switched (outside current Library).", 3000);
+                    return true;
+                  }
+                } catch {}
+
+                // Fallback: at least open a working copy so the user can continue editing.
+                try {
+                  if (window.api && typeof window.api.openWorkingCopy === "function") {
+                    await window.api.openWorkingCopy(destPath);
+                    const snap = await refreshWorkingCopySnapshot();
+                    if (snap && snap.path && pathsEqual(snap.path, destPath)) {
+                      setFileContentInCache(destPath, snap.text);
+                      attachTuneUidsToLibraryFile(destPath, snap);
+                      scheduleRenderLibraryTree();
+                    }
+                  }
+                } catch {}
+                showToast("Saved copy and switched.", 3000);
+                return true;
               }
               await showSaveError((out && out.error) ? out.error : "Unable to save copy.");
               return false;
