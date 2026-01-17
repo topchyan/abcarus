@@ -222,3 +222,21 @@ Add new cases here as tickets land so we keep a stable, repeatable checklist.
 **Expected**
 - Disk file contains the edit (Save commits from working copy).
 - No “stale offsets / expected X:” refusal appears (Save does not depend on `X:` for correctness).
+
+---
+
+## WC-14 — Save As writes full file from Working Copy (Critical)
+
+**Preconditions**
+- Open an existing multi-tune file from Library.
+
+**Steps**
+1. Edit the tune header (Header panel) and a note in the current tune.
+2. Use `Save As…` and save to a new filename.
+3. Open the saved file and verify:
+   - header changes are present,
+   - all tunes are present (not just the active tune),
+   - tune edit is present.
+
+**Expected**
+- Save As produces a complete `.abc` file (header + all tunes) from the working copy, atomically.

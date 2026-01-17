@@ -11874,52 +11874,87 @@ async function performSaveFlow() {
 async function performSaveAsFlow() {
   if (!currentDoc) return false;
 
+  try {
+    await flushWorkingCopyTuneSync();
+  } catch {}
+  if (headerDirty && window.api && typeof window.api.applyWorkingCopyHeaderText === "function") {
+    try {
+      const res = await window.api.applyWorkingCopyHeaderText(getHeaderEditorValue());
+      if (res && res.ok) {
+        headerDirty = false;
+        updateHeaderStateUI();
+      }
+    } catch {}
+  }
+
   const suggestedName = `${getSuggestedBaseName()}.abc`;
   const suggestedDir = getDefaultSaveDir();
   const filePath = await showSaveDialog(suggestedName, suggestedDir);
   if (!filePath) return false;
 
-  const content = serializeDocument(currentDoc);
-  return withFileLock(filePath, async () => {
-    const res = await writeFile(filePath, content);
-    if (res.ok) {
-      currentDoc.path = filePath;
-      currentDoc.dirty = false;
-      activeFilePath = filePath;
-      setFileContentInCache(filePath, content);
-
-      const updatedFile = await refreshLibraryFile(filePath);
-      if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
-        const tune = updatedFile.tunes[0];
-        activeTuneId = tune.id;
-        markActiveTuneButton(activeTuneId);
-        const tuneText = content.slice(tune.startOffset, tune.endOffset);
-        setActiveTuneText(tuneText, {
-          id: tune.id,
-          path: updatedFile.path,
-          basename: updatedFile.basename,
-          xNumber: tune.xNumber,
-          title: tune.title || "",
-          composer: tune.composer || "",
-          key: tune.key || "",
-          startLine: tune.startLine,
-          endLine: tune.endLine,
-          startOffset: tune.startOffset,
-          endOffset: tune.endOffset,
-        });
-      } else {
-        updateUIFromDocument(currentDoc);
-        setFileNameMeta(stripFileExtension(safeBasename(filePath)));
-        setTuneMetaText(safeBasename(filePath));
+  const hasWorkingCopy = Boolean(
+    activeTuneMeta
+    && activeTuneMeta.path
+    && workingCopySnapshot
+    && workingCopySnapshot.path
+    && pathsEqual(workingCopySnapshot.path, activeTuneMeta.path)
+    && window.api
+    && typeof window.api.writeWorkingCopyToPath === "function"
+  );
+  if (!hasWorkingCopy) {
+    // Fallback: legacy behavior.
+    const content = serializeDocument(currentDoc);
+    return withFileLock(filePath, async () => {
+      const res = await writeFile(filePath, content);
+      if (res.ok) {
+        currentDoc.path = filePath;
+        currentDoc.dirty = false;
+        activeFilePath = filePath;
+        setFileContentInCache(filePath, content);
+        try { await refreshLibraryFile(filePath, { force: true }); } catch {}
+        updateFileHeaderPanel();
+        setDirtyIndicator(false);
+        return true;
       }
-      updateFileHeaderPanel();
-      setDirtyIndicator(false);
-      return true;
-    }
+      await showSaveError(res.error || "Unknown error");
+      return false;
+    });
+  }
 
-    await showSaveError(res.error || "Unknown error");
+  // Working Copy path: Save the whole file (header + all tunes), atomically, then switch to it.
+  if (await fileExists(filePath)) {
+    const ok = await confirmOverwrite(filePath);
+    if (!ok) return false;
+  }
+  const out = await window.api.writeWorkingCopyToPath(filePath);
+  if (!out || !out.ok) {
+    await showSaveError((out && out.error) ? out.error : "Unable to save file.");
     return false;
-  });
+  }
+  try {
+    await refreshLibraryFile(filePath, { force: true });
+  } catch {}
+
+  const switched = await loadLibraryFileIntoEditor(filePath);
+  if (switched && switched.ok) {
+    const root = libraryIndex && libraryIndex.root ? normalizeLibraryPath(libraryIndex.root) : "";
+    const normalizedDest = normalizeLibraryPath(filePath);
+    const inRoot = Boolean(
+      root
+      && (normalizedDest === root || normalizedDest.startsWith(root.endsWith("/") ? root : `${root}/`))
+    );
+    if (!inRoot) {
+      const dir = safeDirname(filePath);
+      showToastWithAction(
+        "Saved file outside current Library.",
+        "Load folder…",
+        () => { loadLibraryFromFolder(dir).catch(() => {}); },
+        8000
+      );
+    }
+    return true;
+  }
+  return true;
 }
 
 function appendTuneToContent(existingContent, tuneText) {

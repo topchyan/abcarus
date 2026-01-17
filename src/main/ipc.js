@@ -17,6 +17,7 @@ const {
   getWorkingCopyMetaSnapshot,
   closeWorkingCopy,
   applyTuneText,
+  applyHeaderText,
   reloadWorkingCopyFromDisk,
   commitWorkingCopyToDisk,
   writeWorkingCopyToPath,
@@ -306,6 +307,16 @@ function registerIpcHandlers(ctx) {
       const p = payload && payload.filePath ? String(payload.filePath) : "";
       if (!p) return { ok: false, error: "Missing file path." };
       await writeWorkingCopyToPath(p);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:apply-header-text", async (_event, payload) => {
+    try {
+      const text = payload && payload.text != null ? String(payload.text) : "";
+      applyHeaderText(text);
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e && e.message ? e.message : String(e) };

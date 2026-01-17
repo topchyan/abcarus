@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld("api", {
   reloadWorkingCopyFromDisk: async () => ipcRenderer.invoke("workingcopy:reload"),
   commitWorkingCopyToDisk: async (payload) => ipcRenderer.invoke("workingcopy:commit", payload || {}),
   writeWorkingCopyToPath: async (filePath) => ipcRenderer.invoke("workingcopy:write-to-path", { filePath: filePath || "" }),
+  applyWorkingCopyHeaderText: async (text) => ipcRenderer.invoke("workingcopy:apply-header-text", { text: text == null ? "" : String(text) }),
   applyWorkingCopyTuneText: async (payload) => ipcRenderer.invoke("workingcopy:apply-tune-text", payload),
   showSaveError: async (message) =>
     ipcRenderer.invoke("dialog:show-save-error", message),
