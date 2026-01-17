@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Playback: avoid truncating `K:` when applying offset-stable header reordering (prevents cases like `K:Dm` turning into `K:D` during playback).
+
 
 
 ## [0.21.1] - 2026-01-17
