@@ -12136,6 +12136,22 @@ async function importMusicXml() {
   if (typeof window.api.pickMusicXmlFiles !== "function") return;
   if (typeof window.api.convertMusicXmlFile !== "function") return;
 
+  let cancelRequested = false;
+  const cancelHintToast = () => {
+    try {
+      showToast("Importing… Press Esc to cancel.", 2600);
+    } catch {}
+  };
+  const cancelHandler = (e) => {
+    try {
+      if (!e) return;
+      if (e.key !== "Escape") return;
+      cancelRequested = true;
+      e.preventDefault();
+      e.stopPropagation();
+    } catch {}
+  };
+
   const suggestDir = (() => {
     try {
       if (activeTuneMeta && activeTuneMeta.path) return safeDirname(String(activeTuneMeta.path));
@@ -12157,7 +12173,13 @@ async function importMusicXml() {
   }
 
   let targetPath = existingTargetPath;
-  const allowLivePreview = targetChoice === "new_file";
+  const targetLabel = () => {
+    try {
+      return targetPath ? safeBasename(targetPath) : "target file";
+    } catch {
+      return "target file";
+    }
+  };
   if (targetChoice === "new_file") {
     const ok = await ensureSafeToAbandonCurrentDoc("creating a new file");
     if (!ok) {
@@ -12230,7 +12252,7 @@ async function importMusicXml() {
     }
   } catch {}
 
-  setStatus("Choose MusicXML files…");
+  setStatus(`Choose MusicXML files…`);
   const pickRes = await window.api.pickMusicXmlFiles();
   if (!pickRes || pickRes.canceled) {
     setStatus("Ready");
@@ -12252,71 +12274,81 @@ async function importMusicXml() {
 
   const preparedItems = [];
   const total = pickedPaths.length;
-  let lastPreviewAt = 0;
-  let lastWriteAt = 0;
-  for (let i = 0; i < pickedPaths.length; i += 1) {
-    const sourcePath = pickedPaths[i];
-    setStatus(`Importing… ${i + 1}/${total}`);
-    const converted = await window.api.convertMusicXmlFile(sourcePath);
-    if (!converted || !converted.ok) {
-      const msg = formatConversionError(converted);
-      logErr(msg);
-      setStatus("Error");
-      await showOpenError(msg);
-      return;
+
+  // Allow user to abort long imports without killing the app.
+  window.addEventListener("keydown", cancelHandler, true);
+  cancelHintToast();
+  try {
+    for (let i = 0; i < pickedPaths.length; i += 1) {
+      if (cancelRequested) break;
+      const sourcePath = pickedPaths[i];
+      setStatus(`Importing to “${targetLabel()}”… ${i + 1}/${total}`);
+      const converted = await window.api.convertMusicXmlFile(sourcePath);
+      if (!converted || !converted.ok) {
+        const msg = formatConversionError(converted);
+        logErr(msg);
+        setStatus("Error");
+        await showOpenError(msg);
+        return;
+      }
+
+      const fallbackTitle = deriveTitleFromPath(converted.sourcePath ? converted.sourcePath : sourcePath);
+      let prepared = ensureTitleInAbc(String(converted.abcText || ""), fallbackTitle);
+      prepared = normalizeMeasuresLineBreaks(transformMeasuresPerLine(prepared, 4));
+      const aligned = alignBarsInText(prepared);
+      const finalText = aligned || prepared;
+      preparedItems.push({
+        abcText: finalText,
+        warnings: converted.warnings ? converted.warnings : null,
+        sourcePath: converted.sourcePath ? converted.sourcePath : sourcePath,
+      });
     }
+  } finally {
+    window.removeEventListener("keydown", cancelHandler, true);
+  }
 
-    const fallbackTitle = deriveTitleFromPath(converted.sourcePath ? converted.sourcePath : sourcePath);
-    let prepared = ensureTitleInAbc(String(converted.abcText || ""), fallbackTitle);
-    prepared = normalizeMeasuresLineBreaks(transformMeasuresPerLine(prepared, 4));
-    const aligned = alignBarsInText(prepared);
-    const finalText = aligned || prepared;
-    preparedItems.push({
-      abcText: finalText,
-      warnings: converted.warnings ? converted.warnings : null,
-      sourcePath: converted.sourcePath ? converted.sourcePath : sourcePath,
-    });
-
-    // For the "new file" flow, show incremental progress by growing the document in the editor.
-    if (allowLivePreview && targetPath) {
-      try {
-        const now = Date.now();
-        if (!currentDoc) setCurrentDocument(createBlankDocument());
-        let updated = String(currentDoc && currentDoc.path === targetPath ? currentDoc.content : "");
-        const nextX = getNextXNumber(updated);
-        const withX = ensureXNumberInAbc(finalText, nextX);
-        updated = appendTuneToContent(updated, withX);
-        currentDoc.path = targetPath;
-        currentDoc.content = updated;
-        currentDoc.dirty = false;
-        if (now - lastPreviewAt > 120 || i === pickedPaths.length - 1) {
-          suppressDirty = true;
-          setEditorValue(updated);
-          suppressDirty = false;
-          if (!rawMode) scheduleRenderNow({ clearOutput: true });
-          setDirtyIndicator(false);
-          lastPreviewAt = now;
-        }
-
-        // Keep the on-disk file roughly in sync during long imports (best-effort).
-        if (now - lastWriteAt > 350 || i === pickedPaths.length - 1) {
-          const writeRes = await writeFile(targetPath, updated);
-          if (writeRes && writeRes.ok) setFileContentInCache(targetPath, updated);
-          lastWriteAt = now;
-        }
-      } catch {}
-    }
+  if (cancelRequested && preparedItems.length) {
+    try {
+      showToast(`Import canceled (imported ${preparedItems.length}/${total}).`, 2600);
+    } catch {}
+  } else if (cancelRequested) {
+    setStatus("Ready");
+    return;
   }
 
   if (targetPath) {
     try {
-      // In "new file" mode we may have already written progressive updates.
-      if (targetChoice === "new_file") {
-        const updated = currentDoc && currentDoc.path === targetPath ? String(currentDoc.content || "") : "";
-        if (updated) setFileContentInCache(targetPath, updated);
+      await withFileLock(targetPath, async () => {
+        const readRes = await readFile(targetPath);
+        if (!readRes || !readRes.ok) throw new Error((readRes && readRes.error) ? readRes.error : "Unable to read target file.");
+        const before = String(readRes.data || "");
+
+        // For existing targets, refuse to import if the file changed on disk while the user was importing.
+        if (targetChoice !== "new_file") {
+          const verifyRes = await readFile(targetPath);
+          if (!verifyRes || !verifyRes.ok) throw new Error((verifyRes && verifyRes.error) ? verifyRes.error : "Unable to verify file before importing.");
+          const verifyText = String(verifyRes.data || "");
+          if (verifyText !== before) throw new Error("Refusing to import: target file changed on disk. Refresh/reopen the file and try again.");
+        }
+
+        const beforeTrimmed = before.trim();
+        const isEmpty = !beforeTrimmed;
+        const isPlaceholder = beforeTrimmed === String(NEW_FILE_MINIMAL_ABC || "").trim();
+        const beforeTuneCount = (isEmpty || (dropPlaceholderTune && isPlaceholder)) ? 0 : countTunesByX(before);
+        let updated = (dropPlaceholderTune && isPlaceholder) ? "" : before;
+        let lastWithX = "";
+        for (const item of preparedItems) {
+          const nextX = getNextXNumber(updated);
+          lastWithX = ensureXNumberInAbc(String(item.abcText || ""), nextX);
+          updated = appendTuneToContent(updated, lastWithX);
+        }
+        const writeRes = await writeFile(targetPath, updated);
+        if (!writeRes || !writeRes.ok) throw new Error((writeRes && writeRes.error) ? writeRes.error : "Unable to write imported tunes.");
+        setFileContentInCache(targetPath, updated);
+
         const updatedFile = await refreshLibraryFile(targetPath);
         if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
-          const tune = updatedFile.tunes[updatedFile.tunes.length - 1];
+          const tune = updatedFile.tunes[Math.min(beforeTuneCount, updatedFile.tunes.length - 1)];
           activeTuneId = tune.id;
           markActiveTuneButton(activeTuneId);
           const tuneText = updated.slice(tune.startOffset, tune.endOffset);
@@ -12333,58 +12365,11 @@ async function importMusicXml() {
             startOffset: tune.startOffset,
             endOffset: tune.endOffset,
           });
+        } else {
+          setActiveTuneText(lastWithX, null, { markDirty: false });
+          if (currentDoc) currentDoc.dirty = false;
         }
-      } else {
-        await withFileLock(targetPath, async () => {
-          const readRes = await readFile(targetPath);
-          if (!readRes || !readRes.ok) throw new Error((readRes && readRes.error) ? readRes.error : "Unable to read target file.");
-          const before = String(readRes.data || "");
-          const verifyRes = await readFile(targetPath);
-          if (!verifyRes || !verifyRes.ok) throw new Error((verifyRes && verifyRes.error) ? verifyRes.error : "Unable to verify file before importing.");
-          const verifyText = String(verifyRes.data || "");
-          if (verifyText !== before) throw new Error("Refusing to import: target file changed on disk. Refresh/reopen the file and try again.");
-
-          const beforeTrimmed = before.trim();
-          const isEmpty = !beforeTrimmed;
-          const isPlaceholder = beforeTrimmed === String(NEW_FILE_MINIMAL_ABC || "").trim();
-          const beforeTuneCount = (isEmpty || (dropPlaceholderTune && isPlaceholder)) ? 0 : countTunesByX(before);
-          let updated = (dropPlaceholderTune && isPlaceholder) ? "" : before;
-          let lastWithX = "";
-          for (const item of preparedItems) {
-            const nextX = getNextXNumber(updated);
-            lastWithX = ensureXNumberInAbc(String(item.abcText || ""), nextX);
-            updated = appendTuneToContent(updated, lastWithX);
-          }
-          const writeRes = await writeFile(targetPath, updated);
-          if (!writeRes || !writeRes.ok) throw new Error((writeRes && writeRes.error) ? writeRes.error : "Unable to append to file.");
-          setFileContentInCache(targetPath, updated);
-
-          const updatedFile = await refreshLibraryFile(targetPath);
-          if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
-            const tune = updatedFile.tunes[Math.min(beforeTuneCount, updatedFile.tunes.length - 1)];
-            activeTuneId = tune.id;
-            markActiveTuneButton(activeTuneId);
-            const tuneText = updated.slice(tune.startOffset, tune.endOffset);
-            setActiveTuneText(tuneText, {
-              id: tune.id,
-              path: updatedFile.path,
-              basename: updatedFile.basename,
-              xNumber: tune.xNumber,
-              title: tune.title || "",
-              composer: tune.composer || "",
-              key: tune.key || "",
-              startLine: tune.startLine,
-              endLine: tune.endLine,
-              startOffset: tune.startOffset,
-              endOffset: tune.endOffset,
-            });
-          } else {
-            // Fallback: open as an unsaved document if the file is not part of the library index.
-            setActiveTuneText(lastWithX, null, { markDirty: false });
-            if (currentDoc) currentDoc.dirty = false;
-          }
-        });
-      }
+      });
     } catch (e) {
       const msg = e && e.message ? e.message : String(e);
       logErr(msg);
