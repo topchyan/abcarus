@@ -157,3 +157,18 @@ Add new cases here as tickets land so we keep a stable, repeatable checklist.
 - Selecting tunes does not depend on `X:` numbers matching.
 - Active tune highlight stays correct after re-render.
 - Dropdown navigation continues to select the intended tune.
+
+---
+
+## WC-10 — Tune slicing prefers Working Copy boundaries (Medium)
+
+**Preconditions**
+- A file with multiple tunes, with duplicate or messy `X:` values.
+
+**Steps**
+1. Open the file in the Library so a working copy is created.
+2. Switch between several tunes.
+3. For each tune, confirm the editor starts exactly at that tune’s `X:` line (no “drift” into previous/next tune).
+
+**Expected**
+- Tune slicing remains correct even if Library tune offsets drift (working copy segmentation is used when available).

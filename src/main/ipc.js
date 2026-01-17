@@ -16,6 +16,7 @@ const {
   getWorkingCopySnapshot,
   getWorkingCopyMetaSnapshot,
   closeWorkingCopy,
+  applyTuneText,
 } = require("./workingCopyStore");
 
 async function readOsRelease(fs) {
@@ -272,6 +273,15 @@ function registerIpcHandlers(ctx) {
   ipcMain.handle("workingcopy:close", async () => {
     try {
       await closeWorkingCopy();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:apply-tune-text", async (_event, payload) => {
+    try {
+      applyTuneText(payload || {});
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e && e.message ? e.message : String(e) };

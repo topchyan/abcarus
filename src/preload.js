@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld("api", {
   openWorkingCopy: async (filePath) => ipcRenderer.invoke("workingcopy:open", filePath),
   getWorkingCopySnapshot: async () => ipcRenderer.invoke("workingcopy:get"),
   getWorkingCopyMeta: async () => ipcRenderer.invoke("workingcopy:get-meta"),
+  applyWorkingCopyTuneText: async (payload) => ipcRenderer.invoke("workingcopy:apply-tune-text", payload),
   showSaveError: async (message) =>
     ipcRenderer.invoke("dialog:show-save-error", message),
   showOpenError: async (message) =>

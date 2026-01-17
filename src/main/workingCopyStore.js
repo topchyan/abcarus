@@ -165,6 +165,35 @@ function mutateWorkingCopy(mutatorFn, meta) {
   return getWorkingCopyMetaSnapshot();
 }
 
+function applyTuneText({ tuneUid, tuneIndex, text } = {}) {
+  const uid = tuneUid != null ? String(tuneUid) : "";
+  const idx = Number.isFinite(Number(tuneIndex)) ? Number(tuneIndex) : null;
+  const nextTuneText = (text != null) ? String(text) : "";
+  if (!uid && idx == null) throw new Error("Missing tuneUid/tuneIndex.");
+
+  return mutateWorkingCopy((draft) => {
+    const tunes = state && Array.isArray(state.tunes) ? state.tunes : [];
+    let resolvedIndex = idx;
+    if (resolvedIndex == null) {
+      const found = state && state.tuneUidToIndex && uid ? state.tuneUidToIndex.get(uid) : null;
+      resolvedIndex = Number.isFinite(Number(found)) ? Number(found) : null;
+    }
+    if (resolvedIndex == null || resolvedIndex < 0 || resolvedIndex >= tunes.length) {
+      throw new Error("Tune not found.");
+    }
+    const tune = tunes[resolvedIndex];
+    const start = Number(tune && tune.start);
+    const end = Number(tune && tune.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start) {
+      throw new Error("Tune slice is invalid.");
+    }
+    const fullText = String(draft.text || "");
+    if (end > fullText.length) throw new Error("Tune slice is out of bounds.");
+    draft.text = `${fullText.slice(0, start)}${nextTuneText}${fullText.slice(end)}`;
+    return { text: draft.text };
+  }, { kind: "applyTuneText", tuneUid: uid || null, tuneIndex: idx });
+}
+
 module.exports = {
   openWorkingCopyFromPath,
   closeWorkingCopy,
@@ -172,5 +201,5 @@ module.exports = {
   getWorkingCopyMetaSnapshot,
   onWorkingCopyChanged,
   mutateWorkingCopy,
+  applyTuneText,
 };
-

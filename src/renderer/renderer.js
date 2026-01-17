@@ -5754,15 +5754,39 @@ async function selectTune(tuneId, options = {}) {
     }
   } catch {}
 
-  let content = getFileContentFromCache(fileMeta.path);
-  if (content == null) {
-    const res = await readFile(fileMeta.path);
-    if (!res.ok) {
-      logErr(res.error || "Unable to read file.");
-      return { ok: false, error: res.error || "Unable to read file." };
+  let content = null;
+  let sliceStart = Number(selected.startOffset) || 0;
+  let sliceEnd = Number(selected.endOffset) || 0;
+  const canUseWorkingCopy = Boolean(
+    workingCopySnapshot
+    && workingCopySnapshot.path
+    && pathsEqual(workingCopySnapshot.path, fileMeta.path)
+    && Array.isArray(workingCopySnapshot.tunes)
+    && Number.isFinite(Number(selected.tuneIndex))
+  );
+
+  if (canUseWorkingCopy) {
+    const tuneIndex = Number(selected.tuneIndex);
+    const wcTune = workingCopySnapshot.tunes[tuneIndex] || null;
+    if (wcTune && Number.isFinite(Number(wcTune.start)) && Number.isFinite(Number(wcTune.end))) {
+      content = workingCopySnapshot.text;
+      sliceStart = Number(wcTune.start);
+      sliceEnd = Number(wcTune.end);
+      setFileContentInCache(fileMeta.path, content);
     }
-    content = res.data;
-    setFileContentInCache(fileMeta.path, content);
+  }
+
+  if (content == null) {
+    content = getFileContentFromCache(fileMeta.path);
+    if (content == null) {
+      const res = await readFile(fileMeta.path);
+      if (!res.ok) {
+        logErr(res.error || "Unable to read file.");
+        return { ok: false, error: res.error || "Unable to read file." };
+      }
+      content = res.data;
+      setFileContentInCache(fileMeta.path, content);
+    }
   }
 
   const isTuneSliceValid = (fullText, tune) => {
@@ -5791,7 +5815,7 @@ async function selectTune(tuneId, options = {}) {
     } catch {}
   }
 
-  const tuneText = content.slice(selected.startOffset, selected.endOffset);
+  const tuneText = content.slice(sliceStart, sliceEnd);
   activeTuneId = selected.id;
   activeTuneUid = selected.tuneUid || null;
   if ($fileTuneSelect && !$fileTuneSelect.disabled) {
@@ -5807,8 +5831,8 @@ async function selectTune(tuneId, options = {}) {
     title: selected.title || "",
     startLine: selected.startLine,
     endLine: selected.endLine,
-    startOffset: selected.startOffset,
-    endOffset: selected.endOffset,
+    startOffset: sliceStart,
+    endOffset: sliceEnd,
   }, { suppressRecent: options.suppressRecent || false });
   setDirtyIndicator(false);
   return { ok: true };
