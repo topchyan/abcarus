@@ -18,6 +18,7 @@ const {
   closeWorkingCopy,
   applyTuneText,
   reloadWorkingCopyFromDisk,
+  commitWorkingCopyToDisk,
 } = require("./workingCopyStore");
 
 async function readOsRelease(fs) {
@@ -284,6 +285,16 @@ function registerIpcHandlers(ctx) {
     try {
       const meta = await reloadWorkingCopyFromDisk();
       return { ok: true, meta };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:commit", async (_event, payload) => {
+    try {
+      const force = Boolean(payload && payload.force);
+      const res = await commitWorkingCopyToDisk({ force });
+      return res;
     } catch (e) {
       return { ok: false, error: e && e.message ? e.message : String(e) };
     }

@@ -53,6 +53,33 @@ function getWorkingCopyMetaSnapshot() {
   });
 }
 
+async function atomicWriteFileWithRetry(filePath, data, { attempts = 5 } = {}) {
+  const absPath = String(filePath || "");
+  if (!absPath) throw new Error("Missing file path.");
+  const tmpPath = `${absPath}.${process.pid}.${Date.now()}.tmp`;
+  await fs.promises.writeFile(tmpPath, data, "utf8");
+  let lastErr = null;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      try {
+        await fs.promises.rename(tmpPath, absPath);
+        return;
+      } catch (e) {
+        try { await fs.promises.unlink(absPath); } catch {}
+        await fs.promises.rename(tmpPath, absPath);
+        return;
+      }
+    } catch (e) {
+      lastErr = e;
+      const code = e && e.code ? String(e.code) : "";
+      if (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES") break;
+      await new Promise((r) => setTimeout(r, 50 * (i + 1)));
+    }
+  }
+  try { await fs.promises.unlink(tmpPath); } catch {}
+  throw lastErr || new Error("Unable to write file.");
+}
+
 function notifyChanged() {
   try {
     emitter.emit("changed", getWorkingCopyMetaSnapshot());
@@ -137,6 +164,42 @@ async function reloadWorkingCopyFromDisk() {
 
   notifyChanged();
   return getWorkingCopyMetaSnapshot();
+}
+
+async function commitWorkingCopyToDisk({ force = false } = {}) {
+  if (!state || !state.path) throw new Error("No working copy open.");
+  const p = String(state.path || "");
+  const fpOnOpen = state.diskFingerprintOnOpen || null;
+
+  let fpNow = null;
+  try {
+    fpNow = await statFingerprint(p);
+  } catch {}
+
+  const hasConflict = Boolean(
+    fpOnOpen
+    && fpNow
+    && (Number(fpOnOpen.mtimeMs) !== Number(fpNow.mtimeMs) || Number(fpOnOpen.size) !== Number(fpNow.size))
+  );
+  if (hasConflict && !force) {
+    return {
+      ok: false,
+      conflict: true,
+      diskFingerprintOnOpen: { ...fpOnOpen },
+      diskFingerprintNow: fpNow ? { ...fpNow } : null,
+    };
+  }
+
+  const text = String(state.text || "");
+  await atomicWriteFileWithRetry(p, text);
+  const fpAfter = await statFingerprint(p);
+  state.diskFingerprintOnOpen = fpAfter;
+  state.dirty = false;
+  try {
+    state.lastMutationMeta = { kind: "commitToDisk", forced: Boolean(force) };
+  } catch {}
+  notifyChanged();
+  return { ok: true, diskFingerprint: fpAfter };
 }
 
 function onWorkingCopyChanged(listener) {
@@ -236,6 +299,7 @@ module.exports = {
   openWorkingCopyFromPath,
   closeWorkingCopy,
   reloadWorkingCopyFromDisk,
+  commitWorkingCopyToDisk,
   getWorkingCopySnapshot,
   getWorkingCopyMetaSnapshot,
   onWorkingCopyChanged,

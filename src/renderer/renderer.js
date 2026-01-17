@@ -11631,14 +11631,44 @@ async function performSaveFlow() {
   }
 
   if (activeTuneMeta && activeTuneMeta.path) {
-    const res = await saveActiveTuneToSource();
-    if (res.ok) {
+    try {
+      await flushWorkingCopyTuneSync();
+    } catch {}
+    if (window.api && typeof window.api.commitWorkingCopyToDisk === "function") {
+      const res = await window.api.commitWorkingCopyToDisk({ force: false });
+      if (res && res.ok) {
+        const filePath = activeTuneMeta.path;
+        currentDoc.dirty = false;
+        updateUIFromDocument(currentDoc);
+        setDirtyIndicator(false);
+        try {
+          const snapshot = await refreshWorkingCopySnapshot();
+          if (snapshot && snapshot.path && pathsEqual(snapshot.path, filePath)) {
+            setFileContentInCache(filePath, snapshot.text);
+            attachTuneUidsToLibraryFile(filePath, snapshot);
+          }
+        } catch {}
+        try { await refreshLibraryFile(filePath, { force: true }); } catch {}
+        updateLibraryStatus();
+        scheduleRenderLibraryTree();
+        return true;
+      }
+      if (res && res.conflict) {
+        await showSaveError("Refusing to save: file changed on disk. Reload/reopen the file and try again.");
+        return false;
+      }
+      await showSaveError((res && res.error) ? res.error : "Unable to save file.");
+      return false;
+    }
+    // Fallback to legacy path if the working copy bridge isn't available.
+    const legacy = await saveActiveTuneToSource();
+    if (legacy.ok) {
       currentDoc.dirty = false;
       updateUIFromDocument(currentDoc);
       setDirtyIndicator(false);
       return true;
     }
-    await showSaveError(res.error || "Unknown error");
+    await showSaveError(legacy.error || "Unknown error");
     return false;
   }
 

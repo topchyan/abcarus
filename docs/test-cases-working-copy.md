@@ -203,3 +203,19 @@ Add new cases here as tickets land so we keep a stable, repeatable checklist.
 
 **Expected**
 - The tune text is restored to the last disk-saved state (unsaved edits are discarded).
+
+---
+
+## WC-13 — Save commits Working Copy to disk (Critical)
+
+**Preconditions**
+- Open an existing `.abc` file from Library (working copy exists).
+
+**Steps**
+1. Edit the current tune.
+2. Press Save.
+3. Close the file and re-open it (or restart the app and re-open it).
+
+**Expected**
+- Disk file contains the edit (Save commits from working copy).
+- No “stale offsets / expected X:” refusal appears (Save does not depend on `X:` for correctness).
