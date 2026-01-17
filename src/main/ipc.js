@@ -145,7 +145,7 @@ function classifyFontName(name) {
 }
 
 function registerIpcHandlers(ctx) {
-	  const {
+  const {
     ipcMain,
     app,
     dialog,
@@ -155,13 +155,12 @@ function registerIpcHandlers(ctx) {
     showOpenDialog,
     showOpenFolderDialog,
     showSaveDialog,
-	    confirmUnsavedChanges,
-	    confirmOverwrite,
-	    confirmAppendToFile,
-	    confirmImportMusicXmlToFile,
-	    confirmDeleteTune,
-	    showSaveError,
-	    showOpenError,
+    confirmUnsavedChanges,
+    confirmOverwrite,
+    confirmAppendToFile,
+    confirmDeleteTune,
+    showSaveError,
+    showOpenError,
     scanLibrary,
     scanLibraryDiscover,
     cancelLibraryScan,
@@ -204,12 +203,9 @@ function registerIpcHandlers(ctx) {
   ipcMain.handle("dialog:confirm-overwrite", async (event, filePath) =>
     confirmOverwrite(filePath, event)
   );
-	  ipcMain.handle("dialog:confirm-append", async (_e, filePath) =>
-	    confirmAppendToFile(filePath)
-	  );
-	  ipcMain.handle("dialog:confirm-import-musicxml", async (_e, filePath, options) =>
-	    confirmImportMusicXmlToFile(filePath, options || {})
-	  );
+  ipcMain.handle("dialog:confirm-append", async (_e, filePath) =>
+    confirmAppendToFile(filePath)
+  );
   ipcMain.handle("dialog:confirm-remove-sf2", async (event, label) => {
     const parent = getParentForDialog(event, "confirm-remove-sf2");
     const response = dialog.showMessageBoxSync(parent || undefined, {

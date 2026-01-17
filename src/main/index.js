@@ -542,21 +542,6 @@ function confirmAppendToFile(filePath) {
   return "cancel";
 }
 
-function confirmImportMusicXmlToFile(filePath, { suggestReplace = false } = {}) {
-  const parent = prepareDialogParent(null, "confirm-import-musicxml-to-file");
-  const response = dialog.showMessageBoxSync(parent || undefined, {
-    type: "question",
-    buttons: ["Replace", "Append", "Cancel"],
-    defaultId: suggestReplace ? 0 : 1,
-    cancelId: 2,
-    message: "Import MusicXML",
-    detail: `Import into “${path.basename(filePath)}”?`,
-  });
-  if (response === 0) return "replace";
-  if (response === 1) return "append";
-  return "cancel";
-}
-
 function showSaveError(message) {
   const parent = prepareDialogParent(null, "save-error");
   dialog.showMessageBoxSync(parent || undefined, {
@@ -2052,7 +2037,6 @@ registerIpcHandlers({
   getDialogParent,
   prepareDialogParent,
   confirmAppendToFile,
-  confirmImportMusicXmlToFile,
   confirmDeleteTune,
   addRecentTune,
   addRecentFile,

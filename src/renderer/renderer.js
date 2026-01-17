@@ -10098,11 +10098,6 @@ async function confirmAppendToFile(filePath) {
   return window.api.confirmAppendToFile(filePath);
 }
 
-async function confirmImportMusicXmlToFile(filePath, { suggestReplace = false } = {}) {
-  if (!window.api || typeof window.api.confirmImportMusicXmlToFile !== "function") return "cancel";
-  return window.api.confirmImportMusicXmlToFile(filePath, { suggestReplace: Boolean(suggestReplace) });
-}
-
 async function confirmDeleteTune(label) {
   if (!window.api || typeof window.api.confirmDeleteTune !== "function") return "cancel";
   return window.api.confirmDeleteTune(label);
@@ -12164,28 +12159,21 @@ async function importMusicXml() {
     }
   };
 
-  // Decide append vs replace before opening the (potentially slow) import dialog.
-  let importMode = "append"; // "append" | "replace"
+  // For brand-new default docs, drop the placeholder tune automatically (non-destructive).
+  let dropPlaceholderTune = false;
   try {
     const readRes = await readFile(targetPath);
     if (readRes && readRes.ok) {
       const before = String(readRes.data || "");
       const looksEmpty = !before.trim();
       const looksLikeNewFile = before.trim() === String(NEW_FILE_MINIMAL_ABC || "").trim();
-      if (looksEmpty || looksLikeNewFile) {
-        const choice = await confirmImportMusicXmlToFile(targetPath, { suggestReplace: true });
-        if (choice === "cancel") {
-          setStatus("Ready");
-          return;
-        }
-        importMode = (choice === "replace") ? "replace" : "append";
-      } else {
+      if (looksLikeNewFile) dropPlaceholderTune = true;
+      if (!looksEmpty && !looksLikeNewFile) {
         const confirm = await confirmAppendToFile(targetPath);
         if (confirm !== "append") {
           setStatus("Ready");
           return;
         }
-        importMode = "append";
       }
     }
   } catch {}
@@ -12257,10 +12245,11 @@ async function importMusicXml() {
         const readRes = await readFile(targetPath);
         if (!readRes || !readRes.ok) throw new Error((readRes && readRes.error) ? readRes.error : "Unable to read target file.");
         const before = String(readRes.data || "");
-        const headerEnd = findHeaderEndOffset(before);
-        const prefix = importMode === "replace" ? before.slice(0, headerEnd) : "";
-        const beforeTuneCount = importMode === "append" ? countTunesByX(before) : 0;
-        let updated = importMode === "replace" ? prefix : before;
+        const beforeTrimmed = before.trim();
+        const isEmpty = !beforeTrimmed;
+        const isPlaceholder = beforeTrimmed === String(NEW_FILE_MINIMAL_ABC || "").trim();
+        const beforeTuneCount = (isEmpty || (dropPlaceholderTune && isPlaceholder)) ? 0 : countTunesByX(before);
+        let updated = (dropPlaceholderTune && isPlaceholder) ? "" : before;
         let lastWithX = "";
         for (const item of preparedItems) {
           const nextX = getNextXNumber(updated);

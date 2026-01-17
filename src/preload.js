@@ -20,8 +20,6 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("dialog:confirm-overwrite", filePath),
   confirmAppendToFile: async (filePath) =>
     ipcRenderer.invoke("dialog:confirm-append", filePath),
-  confirmImportMusicXmlToFile: async (filePath, options) =>
-    ipcRenderer.invoke("dialog:confirm-import-musicxml", filePath, options || {}),
   confirmRemoveSoundfont: async (label) =>
     ipcRenderer.invoke("dialog:confirm-remove-sf2", label),
   confirmDeleteTune: async (label) =>
