@@ -16626,6 +16626,7 @@ function detectKeyFieldNotLastBeforeBody(text) {
   const isFieldLine = (line) => /^\s*[A-Za-z]:/.test(line);
   const isContinuationLine = (line) => /^\s*\+:\s*/.test(line);
   const isKeyLine = (line) => /^\s*K:/.test(line);
+  const isPartLine = (line) => /^\s*P:/.test(line);
   const isCommentLine = (line) => /^\s*%/.test(line);
   const isDirectiveLine = (line) => /^\s*%%/.test(line);
   const beginsBlock = (trimmed) => {
@@ -16667,6 +16668,7 @@ function detectKeyFieldNotLastBeforeBody(text) {
       }
       if (!trimmed) continue;
       if (isCommentLine(raw)) continue;
+      if (isPartLine(raw)) { bodyStart = j; break; }
       // Inline field-only lines like `[P:A]` or `[M:...]` are tune-body directives (even if they contain no notes).
       // Treat them as the body start so we don't reorder K: past them (it can break P: parts playback).
       if (isInlineFieldOnlyLine(raw)) { bodyStart = j; break; }
@@ -16728,6 +16730,7 @@ function normalizeKeyFieldToBeLastBeforeBodyForPlayback(text) {
   const isContinuationLine = (line) => /^\s*\+:\s*/.test(line);
   const isKeyLine = (line) => /^\s*K:/.test(line);
   const isVoiceLine = (line) => /^\s*V:/.test(line);
+  const isPartLine = (line) => /^\s*P:/.test(line);
   const isCommentLine = (line) => /^\s*%/.test(line);
   const isDirectiveLine = (line) => /^\s*%%/.test(line);
   const beginsBlock = (trimmed) => {
@@ -16769,6 +16772,9 @@ function normalizeKeyFieldToBeLastBeforeBodyForPlayback(text) {
       }
       if (!trimmed) continue;
       if (isCommentLine(raw)) continue;
+      // Treat P: like tune-body start for playback ordering: K: must be the last *header* field,
+      // but P: is a body marker and often precedes the first music line.
+      if (isPartLine(raw)) { bodyStart = j; break; }
       // Inline field-only lines like `[P:A]` or `[M:...]` are tune-body directives (even if they contain no notes).
       // Treat them as the body start so we don't reorder K: past them (it can break P: parts playback).
       if (isInlineFieldOnlyLine(raw)) { bodyStart = j; break; }
@@ -16809,6 +16815,7 @@ function normalizeKeyFieldToBeLastBeforeBodyForPlayback(text) {
     const kLine = lines[kIdx] || "";
     const dstLen = String(dstRaw).length;
     const kTrimmed = kLine.replace(/[\r\n]+$/, "");
+    if (dstLen < kTrimmed.length) return false;
     const kPadded = (kTrimmed.length >= dstLen)
       ? kTrimmed.slice(0, dstLen)
       : (kTrimmed + " ".repeat(dstLen - kTrimmed.length));
