@@ -70,7 +70,6 @@ function buildMenuTemplate(appState, sendMenuAction) {
       { type: "separator" },
       { label: "Save", accelerator: "CmdOrCtrl+S", click: () => sendMenuAction("save") },
       { label: "Save As…", accelerator: "CmdOrCtrl+Shift+S", click: () => sendMenuAction("saveAs") },
-      { label: "Append to Active File…", click: () => sendMenuAction("appendToActiveFile") },
       { type: "separator" },
       ...(process.platform === "linux"
         ? []

@@ -8084,6 +8084,16 @@ function initContextMenu() {
       }
       return;
     }
+    if (action === "appendToActiveFile" && menuTarget && menuTarget.type === "editor") {
+      hideContextMenu();
+      try {
+        const ok = await performAppendFlow();
+        if (ok) showToast("Appended.", 2000);
+      } catch (e) {
+        showToast(e && e.message ? e.message : String(e), 5000);
+      }
+      return;
+    }
     if (action === "pasteTune" && menuTarget && menuTarget.type === "file") {
       await pasteClipboardToFile(menuTarget.filePath);
       hideContextMenu();
@@ -8206,7 +8216,9 @@ function showContextMenuAt(x, y, target) {
     ]);
   } else if (target.type === "editor") {
     const canAdd = Boolean(activeTuneId) && !rawMode;
+    const canAppend = Boolean(isNewTuneDraft && activeFilePath) && !rawMode;
     buildContextMenuItems([
+      { label: "Append Draft to Active File…", action: "appendToActiveFile", disabled: !canAppend },
       { label: "Add Active Tune to Set List", action: "addToSetList", disabled: !canAdd },
       { label: "Cut", action: "editorCut" },
       { label: "Copy", action: "editorCopy" },
@@ -12429,7 +12441,19 @@ async function performAppendFlow() {
     return false;
   }
 
-  const confirm = await confirmAppendToFile(filePath);
+  const deriveTuneLabel = () => {
+    try {
+      const parsed = parseTuneIdentityFields(currentDoc && currentDoc.content ? currentDoc.content : getEditorValue());
+      const xPart = parsed && parsed.xNumber ? `X:${parsed.xNumber}` : "";
+      const title = parsed && parsed.title ? String(parsed.title) : "";
+      return `${xPart} ${title}`.trim() || "Untitled";
+    } catch {
+      return "Untitled";
+    }
+  };
+  const confirm = (window.api && typeof window.api.confirmAppendToFileDetailed === "function")
+    ? await window.api.confirmAppendToFileDetailed(filePath, deriveTuneLabel())
+    : await confirmAppendToFile(filePath);
   if (confirm !== "append") return false;
 
   return withFileLock(filePath, async () => {
@@ -12592,7 +12616,7 @@ async function fileNewTune() {
     basename: entry.basename || safeBasename(entry.path),
     xNumber: nextX,
   });
-  showToast("New tune draft (use Append to Active File to save into this file).", 2600);
+  showToast("New tune draft (Save will append to the active file).", 2400);
 }
 
 async function fileOpen() {

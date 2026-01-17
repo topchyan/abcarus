@@ -224,9 +224,14 @@ function registerIpcHandlers(ctx) {
   ipcMain.handle("dialog:confirm-overwrite", async (event, filePath) =>
     confirmOverwrite(filePath, event)
   );
-  ipcMain.handle("dialog:confirm-append", async (_e, filePath) =>
-    confirmAppendToFile(filePath)
-  );
+  ipcMain.handle("dialog:confirm-append", async (_e, payload) => {
+    const raw = payload;
+    const filePath = typeof raw === "string"
+      ? String(raw || "")
+      : (raw && raw.filePath ? String(raw.filePath) : "");
+    const tuneLabel = (typeof raw === "object" && raw && raw.tuneLabel) ? String(raw.tuneLabel) : "";
+    return confirmAppendToFile(filePath, tuneLabel);
+  });
   ipcMain.handle("dialog:confirm-import-musicxml-target", async (event, filePath) =>
     confirmImportMusicXmlTarget(filePath, event)
   );
