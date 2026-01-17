@@ -85,12 +85,15 @@ Add new cases here as tickets land so we keep a stable, repeatable checklist.
 3. Attempt Save in ABCarus.
 
 **Expected**
-- ABCarus detects conflict and offers exactly:
-  - Overwrite disk
-  - Save As
+- ABCarus detects conflict and offers:
+  - Overwrite
+  - Save Copy As…
   - Discard & Reload
-- No silent overwrite occurs.
-- Normal path (no external change) shows no conflict dialog.
+  - Cancel
+- Overwrite replaces disk content with the working copy.
+- Save Copy As… writes the working copy to a new path and keeps the current file dirty.
+- Discard & Reload restores the working copy from disk (losing unsaved edits).
+- Cancel leaves everything unchanged.
 
 ---
 

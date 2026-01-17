@@ -202,6 +202,15 @@ async function commitWorkingCopyToDisk({ force = false } = {}) {
   return { ok: true, diskFingerprint: fpAfter };
 }
 
+async function writeWorkingCopyToPath(targetPath) {
+  if (!state) throw new Error("No working copy open.");
+  const p = String(targetPath || "");
+  if (!p) throw new Error("Missing file path.");
+  const text = String(state.text || "");
+  await atomicWriteFileWithRetry(p, text);
+  return true;
+}
+
 function onWorkingCopyChanged(listener) {
   emitter.on("changed", listener);
   return () => emitter.off("changed", listener);
@@ -300,6 +309,7 @@ module.exports = {
   closeWorkingCopy,
   reloadWorkingCopyFromDisk,
   commitWorkingCopyToDisk,
+  writeWorkingCopyToPath,
   getWorkingCopySnapshot,
   getWorkingCopyMetaSnapshot,
   onWorkingCopyChanged,

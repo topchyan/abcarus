@@ -19,6 +19,7 @@ const {
   applyTuneText,
   reloadWorkingCopyFromDisk,
   commitWorkingCopyToDisk,
+  writeWorkingCopyToPath,
 } = require("./workingCopyStore");
 
 async function readOsRelease(fs) {
@@ -178,6 +179,7 @@ function registerIpcHandlers(ctx) {
     confirmAppendToFile,
     confirmImportMusicXmlTarget,
     confirmDeleteTune,
+    confirmUnsavedChanges,
     showSaveError,
     showOpenError,
     scanLibrary,
@@ -300,6 +302,17 @@ function registerIpcHandlers(ctx) {
     }
   });
 
+  ipcMain.handle("workingcopy:write-to-path", async (_event, payload) => {
+    try {
+      const p = payload && payload.filePath ? String(payload.filePath) : "";
+      if (!p) return { ok: false, error: "Missing file path." };
+      await writeWorkingCopyToPath(p);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
   ipcMain.handle("workingcopy:apply-tune-text", async (_event, payload) => {
     try {
       applyTuneText(payload || {});
@@ -311,6 +324,24 @@ function registerIpcHandlers(ctx) {
   ipcMain.handle("dialog:confirm-delete-tune", async (_e, label) =>
     confirmDeleteTune(label)
   );
+
+  ipcMain.handle("dialog:confirm-save-conflict", async (event, filePath) => {
+    const parent = getParentForDialog(event, "confirm-save-conflict");
+    const p = String(filePath || "");
+    const base = p ? path.basename(p) : "file";
+    const response = dialog.showMessageBoxSync(parent || undefined, {
+      type: "warning",
+      buttons: ["Overwrite", "Save Copy As…", "Discard & Reload", "Cancel"],
+      defaultId: 1,
+      cancelId: 3,
+      message: "File changed on disk",
+      detail: `“${base}” was modified outside ABCarus. Choose what to do.`,
+    });
+    if (response === 0) return "overwrite";
+    if (response === 1) return "save_copy_as";
+    if (response === 2) return "discard_reload";
+    return "cancel";
+  });
   ipcMain.handle("dialog:show-save-error", async (_e, message) => {
     showSaveError(message);
   });

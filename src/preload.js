@@ -26,11 +26,14 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("dialog:confirm-remove-sf2", label),
   confirmDeleteTune: async (label) =>
     ipcRenderer.invoke("dialog:confirm-delete-tune", label),
+  confirmSaveConflict: async (filePath) =>
+    ipcRenderer.invoke("dialog:confirm-save-conflict", filePath || ""),
   openWorkingCopy: async (filePath) => ipcRenderer.invoke("workingcopy:open", filePath),
   getWorkingCopySnapshot: async () => ipcRenderer.invoke("workingcopy:get"),
   getWorkingCopyMeta: async () => ipcRenderer.invoke("workingcopy:get-meta"),
   reloadWorkingCopyFromDisk: async () => ipcRenderer.invoke("workingcopy:reload"),
   commitWorkingCopyToDisk: async (payload) => ipcRenderer.invoke("workingcopy:commit", payload || {}),
+  writeWorkingCopyToPath: async (filePath) => ipcRenderer.invoke("workingcopy:write-to-path", { filePath: filePath || "" }),
   applyWorkingCopyTuneText: async (payload) => ipcRenderer.invoke("workingcopy:apply-tune-text", payload),
   showSaveError: async (message) =>
     ipcRenderer.invoke("dialog:show-save-error", message),

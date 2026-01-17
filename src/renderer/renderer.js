@@ -2147,6 +2147,35 @@ async function discardWorkingCopyChangesForActiveFile() {
   }
 }
 
+function reloadActiveTuneTextFromWorkingCopySnapshot() {
+  if (rawMode) return false;
+  if (!workingCopySnapshot || !workingCopySnapshot.path || !workingCopySnapshot.text) return false;
+  if (!activeTuneMeta || !activeTuneMeta.path) return false;
+  if (!pathsEqual(workingCopySnapshot.path, activeTuneMeta.path)) return false;
+
+  const tuneIndex = Number.isFinite(Number(activeTuneIndex)) ? Number(activeTuneIndex) : null;
+  if (tuneIndex == null) return false;
+  const t = Array.isArray(workingCopySnapshot.tunes) ? workingCopySnapshot.tunes[tuneIndex] : null;
+  if (!t || !Number.isFinite(Number(t.start)) || !Number.isFinite(Number(t.end))) return false;
+
+  const from = Number(t.start);
+  const to = Number(t.end);
+  const text = String(workingCopySnapshot.text).slice(from, to);
+  suppressDirty = true;
+  setEditorValue(text);
+  suppressDirty = false;
+  if (currentDoc) {
+    currentDoc.content = text;
+    currentDoc.dirty = false;
+  }
+  if (activeTuneMeta) {
+    activeTuneMeta.startOffset = from;
+    activeTuneMeta.endOffset = to;
+  }
+  setDirtyIndicator(false);
+  return true;
+}
+
 function attachTuneUidsToLibraryFile(filePath, snapshot) {
   if (!libraryIndex || !libraryIndex.files || !filePath || !snapshot) return;
   const fileEntry = libraryIndex.files.find((f) => pathsEqual(f.path, filePath));
@@ -11654,7 +11683,61 @@ async function performSaveFlow() {
         return true;
       }
       if (res && res.conflict) {
-        await showSaveError("Refusing to save: file changed on disk. Reload/reopen the file and try again.");
+        const conflictChoice = (window.api && typeof window.api.confirmSaveConflict === "function")
+          ? await window.api.confirmSaveConflict(activeTuneMeta.path)
+          : "cancel";
+        if (conflictChoice === "overwrite") {
+          const forced = await window.api.commitWorkingCopyToDisk({ force: true });
+          if (forced && forced.ok) {
+            const filePath = activeTuneMeta.path;
+            currentDoc.dirty = false;
+            updateUIFromDocument(currentDoc);
+            setDirtyIndicator(false);
+            try {
+              const snapshot = await refreshWorkingCopySnapshot();
+              if (snapshot && snapshot.path && pathsEqual(snapshot.path, filePath)) {
+                setFileContentInCache(filePath, snapshot.text);
+                attachTuneUidsToLibraryFile(filePath, snapshot);
+              }
+            } catch {}
+            try { await refreshLibraryFile(filePath, { force: true }); } catch {}
+            updateLibraryStatus();
+            scheduleRenderLibraryTree();
+            return true;
+          }
+          await showSaveError((forced && forced.error) ? forced.error : "Unable to save file.");
+          return false;
+        }
+        if (conflictChoice === "save_copy_as") {
+          const suggestedName = safeBasename(activeTuneMeta.path) || "untitled.abc";
+          const suggestedDir = getDefaultSaveDir();
+          const destPath = await showSaveDialog(suggestedName, suggestedDir);
+          if (!destPath) return false;
+          try {
+            if (await fileExists(destPath)) {
+              const ok = await confirmOverwrite(destPath);
+              if (!ok) return false;
+            }
+            if (window.api && typeof window.api.writeWorkingCopyToPath === "function") {
+              const out = await window.api.writeWorkingCopyToPath(destPath);
+              if (out && out.ok) {
+                showToast("Saved copy.", 2200);
+                return false;
+              }
+              await showSaveError((out && out.error) ? out.error : "Unable to save copy.");
+              return false;
+            }
+          } catch {}
+          await showSaveError("Unable to save copy.");
+          return false;
+        }
+        if (conflictChoice === "discard_reload") {
+          await discardWorkingCopyChangesForActiveFile();
+          await refreshWorkingCopySnapshot();
+          reloadActiveTuneTextFromWorkingCopySnapshot();
+          showToast("Reloaded from disk.", 2200);
+          return false;
+        }
         return false;
       }
       await showSaveError((res && res.error) ? res.error : "Unable to save file.");
