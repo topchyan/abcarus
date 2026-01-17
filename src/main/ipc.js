@@ -142,7 +142,16 @@ function classifyFontName(name) {
   const raw = String(name || "");
   if (!raw) return "notation";
   return /text|script/i.test(raw) ? "text" : "notation";
-}
+	}
+
+	function shouldReversePortalMultiSelection(settings) {
+	  try {
+	    if (process.platform !== "linux") return false;
+	    return Boolean(settings && settings.usePortalFileDialogs);
+	  } catch {
+	    return false;
+	  }
+	}
 
 function registerIpcHandlers(ctx) {
   const {
@@ -291,24 +300,25 @@ function registerIpcHandlers(ctx) {
       return null;
     }
   });
-  ipcMain.handle("import:musicxml", async (event) => {
-    const parent = getParentForDialog(event, "import:musicxml");
-    const result = dialog.showOpenDialogSync(parent || undefined, {
-      modal: true,
-      properties: ["openFile", "multiSelections"],
+	  ipcMain.handle("import:musicxml", async (event) => {
+	    const parent = getParentForDialog(event, "import:musicxml");
+	    const result = dialog.showOpenDialogSync(parent || undefined, {
+	      modal: true,
+	      properties: ["openFile", "multiSelections"],
 	      filters: [
 	        { name: "MusicXML", extensions: ["xml", "musicxml", "mxl"] },
 	        { name: "All Files", extensions: ["*"] },
 	      ],
-    });
-    if (!result || !result.length) return { ok: false, canceled: true };
-    try {
-      const settings = getSettings ? getSettings() : {};
-      const selected = Array.from(result).map(String);
-      const total = selected.length;
-      let lastProgressAt = 0;
-      const sendProgress = (done, filePath) => {
-        try {
+	    });
+	    if (!result || !result.length) return { ok: false, canceled: true };
+	    try {
+	      const settings = getSettings ? getSettings() : {};
+	      const selected = Array.from(result).map(String);
+	      if (selected.length > 1 && shouldReversePortalMultiSelection(settings)) selected.reverse();
+	      const total = selected.length;
+	      let lastProgressAt = 0;
+	      const sendProgress = (done, filePath) => {
+	        try {
           const now = Date.now();
           if (done !== 0 && done !== total && now - lastProgressAt < 150) return;
           lastProgressAt = now;
@@ -345,19 +355,22 @@ function registerIpcHandlers(ctx) {
     }
   });
 
-  ipcMain.handle("import:musicxml:pick", async (event) => {
-    const parent = getParentForDialog(event, "import:musicxml:pick");
-    const result = dialog.showOpenDialogSync(parent || undefined, {
-      modal: true,
-      properties: ["openFile", "multiSelections"],
+	  ipcMain.handle("import:musicxml:pick", async (event) => {
+	    const parent = getParentForDialog(event, "import:musicxml:pick");
+	    const result = dialog.showOpenDialogSync(parent || undefined, {
+	      modal: true,
+	      properties: ["openFile", "multiSelections"],
       filters: [
         { name: "MusicXML", extensions: ["xml", "musicxml", "mxl"] },
         { name: "All Files", extensions: ["*"] },
       ],
-    });
-    if (!result || !result.length) return { ok: false, canceled: true };
-    return { ok: true, paths: Array.from(result).map(String) };
-  });
+	    });
+	    if (!result || !result.length) return { ok: false, canceled: true };
+	    const settings = getSettings ? getSettings() : {};
+	    const paths = Array.from(result).map(String);
+	    if (paths.length > 1 && shouldReversePortalMultiSelection(settings)) paths.reverse();
+	    return { ok: true, paths };
+	  });
 
   ipcMain.handle("import:musicxml:convert-one", async (_event, inputPath) => {
     const filePath = String(inputPath || "");
