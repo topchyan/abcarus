@@ -8084,11 +8084,69 @@ function initContextMenu() {
       }
       return;
     }
-    if (action === "appendToActiveFile" && menuTarget && menuTarget.type === "editor") {
+    if (action === "appendTuneToActiveFile" && menuTarget && menuTarget.type === "tune") {
       hideContextMenu();
       try {
-        const ok = await performAppendFlow();
-        if (ok) showToast("Appended.", 2000);
+        const targetPath = (activeTuneMeta && activeTuneMeta.path)
+          ? String(activeTuneMeta.path)
+          : "";
+        if (!targetPath) {
+          showToast("No active file to append to.", 2400);
+          return;
+        }
+        if (rawMode) {
+          showToast("Raw mode: switch to tune mode to append.", 2400);
+          return;
+        }
+        if ((currentDoc && currentDoc.dirty) || headerDirty) {
+          showToast("Save the active file first, then append.", 3200);
+          return;
+        }
+
+        const res = findTuneById(menuTarget.tuneId);
+        if (!res || !res.file || !res.file.path) {
+          showToast("Tune not found.", 2400);
+          return;
+        }
+        if (pathsEqual(res.file.path, targetPath)) {
+          showToast("Tune is already in the active file.", 2600);
+          return;
+        }
+
+        const tuneText = await getTuneText(res.tune, res.file);
+        const label = (() => {
+          const title = res.tune.title || res.tune.preview || "";
+          const x = res.tune.xNumber ? `X:${res.tune.xNumber}` : "";
+          return `${x} ${title}`.trim() || "Untitled";
+        })();
+        const confirm = (window.api && typeof window.api.confirmAppendToFileDetailed === "function")
+          ? await window.api.confirmAppendToFileDetailed(targetPath, label)
+          : await confirmAppendToFile(targetPath);
+        if (confirm !== "append") return;
+
+        await withFileLock(targetPath, async () => {
+          await appendTuneTextToFileUnlocked(targetPath, tuneText);
+        });
+
+        // Reload working copy and library entry for the active file so UI updates immediately.
+        try {
+          if (window.api && typeof window.api.openWorkingCopy === "function") {
+            await window.api.openWorkingCopy(targetPath);
+            const snap = await refreshWorkingCopySnapshot();
+            if (snap && snap.path && pathsEqual(snap.path, targetPath)) {
+              setFileContentInCache(targetPath, snap.text);
+              attachTuneUidsToLibraryFile(targetPath, snap);
+            }
+          }
+        } catch {}
+
+        const updatedFile = await refreshLibraryFile(targetPath, { force: true });
+        activeFilePath = targetPath;
+        if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
+          const last = updatedFile.tunes[updatedFile.tunes.length - 1];
+          if (last && last.id) await selectTune(last.tuneUid || last.id, { skipConfirm: true });
+        }
+        showToast("Appended.", 2000);
       } catch (e) {
         showToast(e && e.message ? e.message : String(e), 5000);
       }
@@ -8186,8 +8244,13 @@ function showContextMenuAt(x, y, target) {
   if (!contextMenu) initContextMenu();
   contextMenuTarget = target;
   if (target.type === "tune") {
+    const targetPath = (activeTuneMeta && activeTuneMeta.path) ? String(activeTuneMeta.path) : "";
+    const sourceRes = target && target.tuneId ? findTuneById(target.tuneId) : null;
+    const sourcePath = sourceRes && sourceRes.file && sourceRes.file.path ? String(sourceRes.file.path) : "";
+    const canAppend = Boolean(targetPath && sourcePath && !pathsEqual(targetPath, sourcePath) && !rawMode);
     buildContextMenuItems([
       { label: "Add to Set List", action: "addToSetList" },
+      { label: "Append to Active File…", action: "appendTuneToActiveFile", disabled: !canAppend },
       { label: "Copy Tune", action: "copyTune" },
       { label: "Duplicate Tune", action: "duplicateTune" },
       { label: "Cut Tune", action: "cutTune" },
@@ -8216,9 +8279,7 @@ function showContextMenuAt(x, y, target) {
     ]);
   } else if (target.type === "editor") {
     const canAdd = Boolean(activeTuneId) && !rawMode;
-    const canAppend = Boolean(isNewTuneDraft && activeFilePath) && !rawMode;
     buildContextMenuItems([
-      { label: "Append Draft to Active File…", action: "appendToActiveFile", disabled: !canAppend },
       { label: "Add Active Tune to Set List", action: "addToSetList", disabled: !canAdd },
       { label: "Cut", action: "editorCut" },
       { label: "Copy", action: "editorCopy" },
@@ -13245,7 +13306,6 @@ function wireMenuActions() {
       else if (actionType === "importMusicXml") await importMusicXml();
       else if (actionType === "save") await fileSave();
       else if (actionType === "saveAs") await fileSaveAs();
-      else if (actionType === "appendToActiveFile") await performAppendFlow();
       else if (actionType === "printPreview") await runPrintAction("preview");
       else if (actionType === "print") await runPrintAction("print");
       else if (actionType === "printAll") await runPrintAllAction("print");
