@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld("api", {
   showOpenError: async (message) =>
     ipcRenderer.invoke("dialog:show-open-error", message),
   importMusicXml: async () => ipcRenderer.invoke("import:musicxml"),
+  pickMusicXmlFiles: async () => ipcRenderer.invoke("import:musicxml:pick"),
+  convertMusicXmlFile: async (filePath) => ipcRenderer.invoke("import:musicxml:convert-one", filePath),
   exportMusicXml: async (abcText, suggestedName) =>
     ipcRenderer.invoke("export:musicxml", abcText, suggestedName),
   checkConversionTools: async () => ipcRenderer.invoke("tools:check"),

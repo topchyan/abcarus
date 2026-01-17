@@ -332,12 +332,54 @@ function registerIpcHandlers(ctx) {
 	          warnings: converted.warnings || null,
 	          sourcePath: filePath,
 	        });
-	      }
-	      sendProgress(total, "");
-	      return { ok: true, items };
-	    } catch (e) {
-	      return {
-	        ok: false,
+      }
+      sendProgress(total, "");
+      return { ok: true, items };
+    } catch (e) {
+      return {
+        ok: false,
+        error: e && e.message ? e.message : String(e),
+        detail: e && e.detail ? e.detail : "",
+        code: e && e.code ? e.code : "",
+      };
+    }
+  });
+
+  ipcMain.handle("import:musicxml:pick", async (event) => {
+    const parent = getParentForDialog(event, "import:musicxml:pick");
+    const result = dialog.showOpenDialogSync(parent || undefined, {
+      modal: true,
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        { name: "MusicXML", extensions: ["xml", "musicxml", "mxl"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+    if (!result || !result.length) return { ok: false, canceled: true };
+    return { ok: true, paths: Array.from(result).map(String) };
+  });
+
+  ipcMain.handle("import:musicxml:convert-one", async (_event, inputPath) => {
+    const filePath = String(inputPath || "");
+    if (!filePath) return { ok: false, error: "No input file path." };
+    try {
+      const settings = getSettings ? getSettings() : {};
+      const ext = path.extname(filePath || "").toLowerCase();
+      const kind = ext === ".mxl" ? "mxl" : "musicxml";
+      const converted = await convertFileToAbc({
+        kind,
+        inputPath: filePath,
+        args: settings.xml2abcArgs || "",
+      });
+      return {
+        ok: true,
+        abcText: converted.abcText,
+        warnings: converted.warnings || null,
+        sourcePath: filePath,
+      };
+    } catch (e) {
+      return {
+        ok: false,
         error: e && e.message ? e.message : String(e),
         detail: e && e.detail ? e.detail : "",
         code: e && e.code ? e.code : "",
