@@ -8247,17 +8247,27 @@ function showContextMenuAt(x, y, target) {
     const targetPath = (activeTuneMeta && activeTuneMeta.path) ? String(activeTuneMeta.path) : "";
     const sourceRes = target && target.tuneId ? findTuneById(target.tuneId) : null;
     const sourcePath = sourceRes && sourceRes.file && sourceRes.file.path ? String(sourceRes.file.path) : "";
-    const canAppend = Boolean(targetPath && sourcePath && !pathsEqual(targetPath, sourcePath) && !rawMode);
-    buildContextMenuItems([
+    const canAppend = Boolean(
+      targetPath
+      && sourcePath
+      && !pathsEqual(targetPath, sourcePath)
+      && !rawMode
+      && !(currentDoc && currentDoc.dirty)
+      && !headerDirty
+    );
+    const items = [
       { label: "Add to Set List", action: "addToSetList" },
-      { label: "Append to Active File…", action: "appendTuneToActiveFile", disabled: !canAppend },
+    ];
+    if (canAppend) items.push({ label: "Append to Active File…", action: "appendTuneToActiveFile" });
+    items.push(
       { label: "Copy Tune", action: "copyTune" },
       { label: "Duplicate Tune", action: "duplicateTune" },
       { label: "Cut Tune", action: "cutTune" },
       { label: "Move to…", action: "moveTune" },
       { label: "Renumber X (File)…", action: "renumberXInFile" },
       { label: "Delete Tune…", action: "deleteTune", danger: true },
-    ]);
+    );
+    buildContextMenuItems(items);
   } else if (target.type === "file") {
     const fileEntry = libraryIndex && Array.isArray(libraryIndex.files) && target.filePath
       ? libraryIndex.files.find((f) => pathsEqual(f.path, target.filePath))
