@@ -345,34 +345,17 @@ main {
   width: 16px;
   height: 16px;
   display: inline-block;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: contain;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   flex: none;
 }
-
-.icon-library { background-image: url("../../assets/icons/ui/library-big.svg"); }
-.icon-file-plus { background-image: url("../../assets/icons/ui/file-plus.svg"); }
-.icon-file-x { background-image: url("../../assets/icons/ui/file-x.svg"); }
-.icon-file-code { background-image: url("../../assets/icons/ui/file-code.svg"); }
-.icon-folder-open { background-image: url("../../assets/icons/ui/folder-open.svg"); }
-.icon-save { background-image: url("../../assets/icons/ui/save.svg"); }
-.icon-play { background-image: url("../../assets/icons/ui/play.svg"); }
-.icon-pause { background-image: url("../../assets/icons/ui/pause.svg"); }
-.icon-stop { background-image: url("../../assets/icons/ui/square.svg"); }
-.icon-reset { background-image: url("../../assets/icons/ui/rotate-ccw.svg"); }
-.icon-type { background-image: url("../../assets/icons/ui/type.svg"); }
-.icon-repeat { background-image: url("../../assets/icons/ui/repeat.svg"); }
-.icon-plus { background-image: url("../../assets/icons/ui/plus.svg"); }
-.icon-minus { background-image: url("../../assets/icons/ui/minus.svg"); }
 
 #btnPlayPause .icon-pause { display: none; }
 #btnPlayPause.is-playing .icon-play { display: none; }
 #btnPlayPause.is-playing .icon-pause { display: inline-block; }
-
-.segmented button.toggle-active .btn-icon {
-  filter: invert(1);
-}
 
 .pane {
   height: 100%;
