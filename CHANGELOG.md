@@ -6,10 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [0.22.2] - 2026-01-18
 ### Fixed
 - New Tune draft: after appending+Save, switching away and back no longer shows a stale pre-save version.
-
-
 
 ## [0.22.1] - 2026-01-18
 ### Added
