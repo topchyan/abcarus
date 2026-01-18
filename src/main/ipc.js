@@ -18,10 +18,14 @@ const {
   closeWorkingCopy,
   applyTuneText,
   applyHeaderText,
+  applyFullText,
+  insertTuneAfter,
   renumberXStartingAt1,
+  deleteTune,
   reloadWorkingCopyFromDisk,
   commitWorkingCopyToDisk,
   writeWorkingCopyToPath,
+  writeWorkingCopyToPathAndSwitch,
 } = require("./workingCopyStore");
 
 async function readOsRelease(fs) {
@@ -319,6 +323,17 @@ function registerIpcHandlers(ctx) {
     }
   });
 
+  ipcMain.handle("workingcopy:write-to-path-and-switch", async (_event, payload) => {
+    try {
+      const p = payload && payload.filePath ? String(payload.filePath) : "";
+      if (!p) return { ok: false, error: "Missing file path." };
+      await writeWorkingCopyToPathAndSwitch(p);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
   ipcMain.handle("workingcopy:apply-header-text", async (_event, payload) => {
     try {
       const text = payload && payload.text != null ? String(payload.text) : "";
@@ -328,10 +343,36 @@ function registerIpcHandlers(ctx) {
       return { ok: false, error: e && e.message ? e.message : String(e) };
     }
   });
+  ipcMain.handle("workingcopy:apply-full-text", async (_event, payload) => {
+    try {
+      const text = payload && payload.text != null ? String(payload.text) : "";
+      applyFullText(text);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+  ipcMain.handle("workingcopy:insert-tune-after", async (_event, payload) => {
+    try {
+      insertTuneAfter(payload || {});
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
 
   ipcMain.handle("workingcopy:renumber-x", async () => {
     try {
       renumberXStartingAt1();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:delete-tune", async (_event, payload) => {
+    try {
+      deleteTune(payload || {});
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e && e.message ? e.message : String(e) };
@@ -366,6 +407,21 @@ function registerIpcHandlers(ctx) {
     if (response === 1) return "save_copy_as";
     if (response === 2) return "discard_reload";
     return "cancel";
+  });
+
+  ipcMain.handle("dialog:confirm-reload-from-disk", async (event, filePath) => {
+    const parent = getParentForDialog(event, "confirm-reload-from-disk");
+    const p = String(filePath || "");
+    const base = p ? path.basename(p) : "file";
+    const response = dialog.showMessageBoxSync(parent || undefined, {
+      type: "warning",
+      buttons: ["Reload from disk", "Cancel"],
+      defaultId: 0,
+      cancelId: 1,
+      message: "Reload from disk?",
+      detail: `Reload “${base}” from disk and discard unsaved changes in ABCarus?`,
+    });
+    return response === 0;
   });
   ipcMain.handle("dialog:show-save-error", async (_e, message) => {
     showSaveError(message);

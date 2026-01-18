@@ -2039,6 +2039,20 @@ function setFileContentInCache(filePath, content) {
 }
 
 let workingCopySnapshot = null;
+const diskConflictPaths = new Set();
+
+function markDiskConflictPath(filePath, hasConflict) {
+  const p = filePath ? normalizeLibraryPath(filePath) : "";
+  if (!p) return;
+  if (hasConflict) diskConflictPaths.add(p);
+  else diskConflictPaths.delete(p);
+}
+
+function hasDiskConflictPath(filePath) {
+  const p = filePath ? normalizeLibraryPath(filePath) : "";
+  if (!p) return false;
+  return diskConflictPaths.has(p);
+}
 
 async function refreshWorkingCopySnapshot() {
   if (!window.api || typeof window.api.getWorkingCopySnapshot !== "function") return null;
@@ -2046,6 +2060,127 @@ async function refreshWorkingCopySnapshot() {
   if (!res || !res.ok || !res.snapshot) return null;
   workingCopySnapshot = res.snapshot;
   return workingCopySnapshot;
+}
+
+async function confirmReloadFromDisk(filePath) {
+  if (!window.api || typeof window.api.confirmReloadFromDisk !== "function") return false;
+  return Boolean(await window.api.confirmReloadFromDisk(filePath));
+}
+
+async function discardAndReloadWorkingCopyFromDisk(filePath, { restoreTuneId = null } = {}) {
+  const p = String(filePath || "");
+  if (!p) return { ok: false, error: "Missing file path." };
+  if (
+    !window.api
+    || typeof window.api.openWorkingCopy !== "function"
+    || typeof window.api.reloadWorkingCopyFromDisk !== "function"
+  ) return { ok: false, error: "Working copy reload is unavailable." };
+
+  await window.api.openWorkingCopy(p);
+  const reloaded = await window.api.reloadWorkingCopyFromDisk();
+  if (!reloaded || !reloaded.ok) return { ok: false, error: "Unable to reload from disk." };
+
+  const snapReloaded = await refreshWorkingCopySnapshot();
+  if (snapReloaded && snapReloaded.path && pathsEqual(snapReloaded.path, p)) {
+    setFileContentInCache(p, snapReloaded.text);
+    attachTuneUidsToLibraryFile(p, snapReloaded);
+  }
+
+  const updatedFile = await refreshLibraryFile(p, { force: true });
+  if (updatedFile && Number.isFinite(updatedFile.headerEndOffset)) {
+    rawModeHeaderEndOffset = Number(updatedFile.headerEndOffset) || 0;
+  }
+  if (rawMode) {
+    const parts = splitFileIntoHeaderAndBody((snapReloaded && snapReloaded.text) ? snapReloaded.text : "");
+    suppressHeaderDirty = true;
+    setHeaderEditorValue(parts.headerText);
+    suppressHeaderDirty = false;
+    suppressDirty = true;
+    setEditorValue(parts.bodyText);
+    suppressDirty = false;
+    headerDirty = false;
+    updateHeaderStateUI();
+    if (currentDoc) {
+      currentDoc.path = p;
+      currentDoc.content = parts.bodyText;
+      currentDoc.dirty = false;
+    }
+    setDirtyIndicator(false);
+  } else if (restoreTuneId) {
+    try { await selectTune(restoreTuneId, { skipConfirm: true, suppressRecent: true }); } catch {}
+  }
+
+  markDiskConflictPath(p, false);
+  return { ok: true, updatedFile };
+}
+
+async function saveWorkingCopyCopyAsAndSwitch(sourcePath, { restoreTuneId = null } = {}) {
+  const fromPath = String(sourcePath || "");
+  if (!fromPath) return { ok: false, error: "Missing file path." };
+  if (
+    !window.api
+    || typeof window.api.showSaveDialog !== "function"
+    || typeof window.api.openWorkingCopy !== "function"
+    || typeof window.api.writeWorkingCopyToPathAndSwitch !== "function"
+  ) return { ok: false, error: "Save Copy As is unavailable." };
+
+  const dir = safeDirname(fromPath);
+  const base = stripFileExtension(safeBasename(fromPath));
+  const suggestedName = `${base || "Untitled"}_Copy.abc`;
+  const targetPath = await window.api.showSaveDialog(suggestedName, dir || undefined);
+  if (!targetPath) return { ok: false, cancelled: true };
+
+  await withFileLock(targetPath, async () => {
+    if (await fileExists(targetPath)) {
+      const confirm = (window.api && typeof window.api.confirmOverwrite === "function")
+        ? await window.api.confirmOverwrite(targetPath)
+        : "cancel";
+      if (confirm !== "replace") throw new Error("Cancelled.");
+    }
+    await window.api.openWorkingCopy(fromPath);
+    const writeRes = await window.api.writeWorkingCopyToPathAndSwitch(targetPath);
+    if (!writeRes || !writeRes.ok) throw new Error((writeRes && writeRes.error) ? writeRes.error : "Unable to save copy.");
+  });
+
+  const snap = await refreshWorkingCopySnapshot();
+  if (snap && snap.path && pathsEqual(snap.path, targetPath)) {
+    setFileContentInCache(targetPath, snap.text);
+    attachTuneUidsToLibraryFile(targetPath, snap);
+  }
+  const updatedFile = await refreshLibraryFile(targetPath, { force: true });
+  if (updatedFile && updatedFile.basename) {
+    setFileNameMeta(stripFileExtension(updatedFile.basename || ""));
+  }
+  if (updatedFile && Number.isFinite(updatedFile.headerEndOffset)) {
+    rawModeHeaderEndOffset = Number(updatedFile.headerEndOffset) || 0;
+  }
+  activeFilePath = targetPath;
+  recordNavFilePath(targetPath);
+
+  if (rawMode) {
+    rawModeFilePath = targetPath;
+    const parts = splitFileIntoHeaderAndBody((snap && snap.text) ? snap.text : "");
+    suppressHeaderDirty = true;
+    setHeaderEditorValue(parts.headerText);
+    suppressHeaderDirty = false;
+    suppressDirty = true;
+    setEditorValue(parts.bodyText);
+    suppressDirty = false;
+    headerDirty = false;
+    updateHeaderStateUI();
+    if (currentDoc) {
+      currentDoc.path = targetPath;
+      currentDoc.content = parts.bodyText;
+      currentDoc.dirty = false;
+    }
+    setDirtyIndicator(false);
+  } else if (restoreTuneId) {
+    try { await selectTune(restoreTuneId, { skipConfirm: true, suppressRecent: true }); } catch {}
+  }
+
+  markDiskConflictPath(fromPath, false);
+  markDiskConflictPath(targetPath, false);
+  return { ok: true, updatedFile, targetPath };
 }
 
 let workingCopyTuneSyncTimer = null;
@@ -2081,19 +2216,11 @@ async function flushWorkingCopyTuneSync() {
   if (!filePath) return;
   if (!workingCopySnapshot || !workingCopySnapshot.path || !pathsEqual(workingCopySnapshot.path, filePath)) return;
 
-  let tuneIndex = Number.isFinite(Number(activeTuneIndex)) ? Number(activeTuneIndex) : null;
-  if (tuneIndex == null && Array.isArray(workingCopySnapshot.tunes)) {
-    const idx = workingCopySnapshot.tunes.findIndex((t) => t && t.tuneUid === activeTuneUid);
-    if (idx >= 0) tuneIndex = idx;
-  }
-  if (tuneIndex == null) return;
-
   const tuneText = getEditorValue();
   workingCopyTuneSyncInFlight = true;
   try {
     const res = await window.api.applyWorkingCopyTuneText({
       tuneUid: activeTuneUid,
-      tuneIndex,
       text: tuneText,
     });
     if (epoch !== workingCopyTuneSyncEpoch) return;
@@ -2194,6 +2321,103 @@ function attachTuneUidsToLibraryFile(filePath, snapshot) {
       if (xMatch) tune.xNumber = xMatch[1];
     } catch {}
   }
+}
+
+function syncLibraryFileFromWorkingCopySnapshot(filePath, snapshot) {
+  if (!libraryIndex || !libraryIndex.files || !filePath || !snapshot) return null;
+  const fileEntry = libraryIndex.files.find((f) => pathsEqual(f.path, filePath));
+  if (!fileEntry) return null;
+
+  const fullText = String(snapshot.text || "");
+  const wcTunes = Array.isArray(snapshot.tunes) ? snapshot.tunes : [];
+  const preambleEnd = snapshot.preambleSlice && Number.isFinite(Number(snapshot.preambleSlice.end))
+    ? Number(snapshot.preambleSlice.end)
+    : 0;
+  fileEntry.headerEndOffset = preambleEnd;
+  fileEntry.headerText = fullText.slice(0, Math.min(fullText.length, Math.max(0, preambleEnd)));
+
+  const prevTunes = Array.isArray(fileEntry.tunes) ? fileEntry.tunes : [];
+  const prevByUid = new Map();
+  for (const t of prevTunes) {
+    if (t && t.tuneUid) prevByUid.set(String(t.tuneUid), t);
+  }
+
+  const lineStarts = [0];
+  for (let i = 0; i < fullText.length; i += 1) {
+    if (fullText[i] === "\n") lineStarts.push(i + 1);
+  }
+  const lineNumberAtOffset = (offset) => {
+    const off = Math.max(0, Math.min(fullText.length, Number(offset) || 0));
+    let lo = 0;
+    let hi = lineStarts.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (lineStarts[mid] <= off) lo = mid + 1;
+      else hi = mid;
+    }
+    return Math.max(1, lo);
+  };
+
+  const nextTunes = [];
+  for (let i = 0; i < wcTunes.length; i += 1) {
+    const wcTune = wcTunes[i];
+    if (!wcTune) continue;
+    const startOffset = Number(wcTune.start) || 0;
+    const endOffset = Number(wcTune.end) || 0;
+    const tuneText = fullText.slice(startOffset, Math.min(fullText.length, Math.max(startOffset, endOffset)));
+    const parsed = (() => {
+      try { return parseTuneIdentityFields(tuneText); } catch { return null; }
+    })();
+    const xMatch = String(wcTune.xLabel || "").match(/^\s*X:\s*(\d+)/);
+    const existing = wcTune.tuneUid ? prevByUid.get(String(wcTune.tuneUid)) : null;
+
+    const title = (existing && existing.title) ? String(existing.title) : (parsed && parsed.title ? String(parsed.title) : "");
+    const composer = (existing && existing.composer) ? String(existing.composer) : (parsed && parsed.composer ? String(parsed.composer) : "");
+    const key = (existing && existing.key) ? String(existing.key) : (parsed && parsed.key ? String(parsed.key) : "");
+
+    let preview = (existing && existing.preview) ? String(existing.preview) : "";
+    if (!preview) {
+      preview = title || (xMatch ? `X:${xMatch[1]}` : "");
+      if (!preview) {
+        const lines = tuneText.split(/\r\n|\n|\r/);
+        for (const line of lines) {
+          const trimmed = String(line || "").trim();
+          if (trimmed) {
+            preview = trimmed;
+            break;
+          }
+        }
+      }
+    }
+
+    const startLine = lineNumberAtOffset(startOffset);
+    const endLine = startLine + countLines(tuneText) - 1;
+    const xNumber = xMatch ? xMatch[1] : (parsed && parsed.xNumber ? String(parsed.xNumber) : "");
+
+    nextTunes.push({
+      ...(existing && typeof existing === "object" ? existing : {}),
+      id: `${filePath}::${startOffset}`,
+      indexInFile: i + 1,
+      tuneIndex: i,
+      tuneUid: wcTune.tuneUid || null,
+      xNumber,
+      title,
+      composer,
+      key,
+      preview,
+      startLine,
+      endLine,
+      startOffset,
+      endOffset,
+    });
+  }
+
+  fileEntry.tunes = nextTunes;
+  libraryViewStore.invalidate();
+  scheduleRenderLibraryTree();
+  updateLibraryStatus();
+  scheduleSaveLibraryUiState();
+  return fileEntry;
 }
 let activeTuneId = null;
 let activeTuneUid = null;
@@ -3635,26 +3859,69 @@ async function performRawSaveFlow() {
   const bodyText = getEditorValue();
   const fullText = buildRawFileText({ headerText, bodyText });
   return withFileLock(filePath, async () => {
-    const cachedBefore = getFileContentFromCache(filePath);
-    if (cachedBefore != null) {
-      const diskRes = await readFile(filePath);
-      if (!diskRes || !diskRes.ok) {
-        await showSaveError((diskRes && diskRes.error) ? diskRes.error : "Unable to read file before saving.");
-        return false;
-      }
-      const diskText = String(diskRes.data || "");
-      if (diskText !== String(cachedBefore || "")) {
-        await showSaveError("Refusing to save: file changed on disk. Refresh/reopen the file and try again.");
-        return false;
-      }
-    }
-
-    const res = await writeFile(filePath, fullText);
-    if (!res || !res.ok) {
-      await showSaveError((res && res.error) ? res.error : "Unable to save file.");
+    if (
+      !window.api
+      || typeof window.api.openWorkingCopy !== "function"
+      || typeof window.api.applyWorkingCopyFullText !== "function"
+      || typeof window.api.commitWorkingCopyToDisk !== "function"
+    ) {
+      await showSaveError("Internal error: working copy raw save is unavailable.");
       return false;
     }
-    setFileContentInCache(filePath, fullText);
+
+    await window.api.openWorkingCopy(filePath);
+    const applyRes = await window.api.applyWorkingCopyFullText(fullText);
+    if (!applyRes || !applyRes.ok) {
+      await showSaveError((applyRes && applyRes.error) ? applyRes.error : "Unable to update working copy for raw save.");
+      return false;
+    }
+
+    const saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
+    if (!saveRes || !saveRes.ok) {
+      if (saveRes && saveRes.conflict) {
+        const conflictChoice = (window.api && typeof window.api.confirmSaveConflict === "function")
+          ? await window.api.confirmSaveConflict(filePath)
+          : "cancel";
+        if (conflictChoice === "overwrite") {
+          const forced = await window.api.commitWorkingCopyToDisk({ force: true });
+          if (!forced || !forced.ok) {
+            await showSaveError((forced && forced.error) ? forced.error : "Unable to save file.");
+            return false;
+          }
+          markDiskConflictPath(filePath, false);
+        } else if (conflictChoice === "save_copy_as") {
+          const savedCopy = await saveWorkingCopyCopyAsAndSwitch(filePath, { restoreTuneId: null });
+          if (!savedCopy || !savedCopy.ok) {
+            if (savedCopy && savedCopy.cancelled) return false;
+            await showSaveError((savedCopy && savedCopy.error) ? savedCopy.error : "Unable to save copy.");
+            return false;
+          }
+          setStatus("Saved copy.");
+          return true;
+        } else if (conflictChoice === "discard_reload") {
+          const reloaded = await discardAndReloadWorkingCopyFromDisk(filePath, { restoreTuneId: null });
+          if (!reloaded || !reloaded.ok) {
+            await showSaveError((reloaded && reloaded.error) ? reloaded.error : "Unable to reload from disk.");
+            return false;
+          }
+          return false;
+        } else {
+          markDiskConflictPath(filePath, true);
+          await showSaveError("Refusing to save: file changed on disk.");
+          return false;
+        }
+      }
+      await showSaveError((saveRes && saveRes.error) ? saveRes.error : "Unable to save file.");
+      return false;
+    }
+
+    const snapshot = await refreshWorkingCopySnapshot();
+    if (snapshot && snapshot.path && pathsEqual(snapshot.path, filePath)) {
+      setFileContentInCache(filePath, snapshot.text);
+      attachTuneUidsToLibraryFile(filePath, snapshot);
+    } else {
+      setFileContentInCache(filePath, fullText);
+    }
     headerDirty = false;
     updateHeaderStateUI();
     if (currentDoc) {
@@ -5919,6 +6186,17 @@ async function selectTune(tuneId, options = {}) {
 
   if (!selected || !fileMeta) return { ok: false, error: "Tune not found." };
 
+  if (fileMeta.path && hasDiskConflictPath(fileMeta.path) && isWorkingCopyOpenForFile(fileMeta.path)) {
+    const shouldReload = await confirmReloadFromDisk(fileMeta.path);
+    if (shouldReload) {
+      const reloadRes = await discardAndReloadWorkingCopyFromDisk(fileMeta.path, { restoreTuneId: null });
+      if (reloadRes && reloadRes.ok) {
+        return selectTune(tuneId, { ...options, skipConfirm: true, _reparsed: true });
+      }
+      return { ok: false, error: (reloadRes && reloadRes.error) ? reloadRes.error : "Unable to reload from disk." };
+    }
+  }
+
   try {
     if (window.api && typeof window.api.openWorkingCopy === "function" && fileMeta.path) {
       if (!workingCopySnapshot || !workingCopySnapshot.path || !pathsEqual(workingCopySnapshot.path, fileMeta.path)) {
@@ -8036,8 +8314,10 @@ function initContextMenu() {
   contextMenu.addEventListener("click", async (e) => {
     const target = e.target && e.target.closest ? e.target.closest(".context-menu-item") : null;
     if (!target || !target.dataset) return;
+    if (target.classList && target.classList.contains("disabled")) return;
     const action = target.dataset.action;
     const menuTarget = contextMenuTarget;
+    if (action === "noop") return;
     if (action === "loadFile" && menuTarget && menuTarget.type === "file") {
       hideContextMenu();
       await requestLoadLibraryFile(menuTarget.filePath);
@@ -8052,6 +8332,25 @@ function initContextMenu() {
           showToast("Copied.");
         }
       } catch {}
+      return;
+    }
+    if (action === "reloadFileFromDisk" && menuTarget && menuTarget.type === "file") {
+      hideContextMenu();
+      const p = String(menuTarget.filePath || "");
+      if (!p) return;
+      if (!isWorkingCopyOpenForFile(p)) {
+        await showSaveError("This file is not open in the editor.");
+        return;
+      }
+      const confirm = await confirmReloadFromDisk(p);
+      if (!confirm) return;
+      const restore = rawMode ? activeTuneId : (activeTuneUid || activeTuneId);
+      const res = await discardAndReloadWorkingCopyFromDisk(p, { restoreTuneId: rawMode ? null : restore });
+      if (!res || !res.ok) {
+        await showSaveError((res && res.error) ? res.error : "Unable to reload from disk.");
+        return;
+      }
+      showToast("Reloaded from disk.", 2000);
       return;
     }
     if (action === "deleteTune" && menuTarget && menuTarget.type === "tune") {
@@ -8129,20 +8428,39 @@ function initContextMenu() {
         if (confirm !== "append") return;
 
         await withFileLock(targetPath, async () => {
-          await appendTuneTextToFileUnlocked(targetPath, tuneText);
-        });
-
-        // Reload working copy and library entry for the active file so UI updates immediately.
-        try {
-          if (window.api && typeof window.api.openWorkingCopy === "function") {
+          if (
+            window.api
+            && typeof window.api.openWorkingCopy === "function"
+            && typeof window.api.insertWorkingCopyTuneAfter === "function"
+            && typeof window.api.commitWorkingCopyToDisk === "function"
+          ) {
             await window.api.openWorkingCopy(targetPath);
             const snap = await refreshWorkingCopySnapshot();
-            if (snap && snap.path && pathsEqual(snap.path, targetPath)) {
-              setFileContentInCache(targetPath, snap.text);
-              attachTuneUidsToLibraryFile(targetPath, snap);
+            if (!snap || !snap.path || !pathsEqual(snap.path, targetPath)) {
+              throw new Error("Unable to open working copy for appending.");
             }
+            const nextX = getNextXNumber(String(snap.text || ""));
+            const prepared = ensureXNumberInAbc(tuneText, nextX);
+            const afterTuneIndex = Array.isArray(snap.tunes) ? (snap.tunes.length - 1) : -1;
+            const ins = await window.api.insertWorkingCopyTuneAfter({ afterTuneIndex, text: prepared });
+            if (!ins || !ins.ok) throw new Error((ins && ins.error) ? ins.error : "Unable to append.");
+            const saved = await window.api.commitWorkingCopyToDisk({ force: false });
+            if (!saved || !saved.ok) {
+              if (saved && saved.conflict) {
+                markDiskConflictPath(targetPath, true);
+                throw new Error("Refusing to append: file changed on disk. Reload/reopen and try again.");
+              }
+              throw new Error((saved && saved.error) ? saved.error : "Unable to save file.");
+            }
+            const snapAfter = await refreshWorkingCopySnapshot();
+            if (snapAfter && snapAfter.path && pathsEqual(snapAfter.path, targetPath)) {
+              setFileContentInCache(targetPath, snapAfter.text);
+              syncLibraryFileFromWorkingCopySnapshot(targetPath, snapAfter);
+            }
+            return;
           }
-        } catch {}
+          await appendTuneTextToFileUnlocked(targetPath, tuneText);
+        });
 
         const updatedFile = await refreshLibraryFile(targetPath, { force: true });
         activeFilePath = targetPath;
@@ -8231,6 +8549,13 @@ function initContextMenu() {
 function buildContextMenuItems(items) {
   contextMenu.textContent = "";
   for (const item of items) {
+    if (item && item.separator) {
+      const sep = document.createElement("div");
+      sep.className = "context-menu-sep";
+      sep.setAttribute("role", "separator");
+      contextMenu.appendChild(sep);
+      continue;
+    }
     const row = document.createElement("div");
     row.className = "context-menu-item";
     row.textContent = item.label;
@@ -8244,6 +8569,55 @@ function buildContextMenuItems(items) {
   }
 }
 
+function hasUnsavedChangesForFile(filePath) {
+  const p = String(filePath || "");
+  if (!p) return false;
+  const activePath = (activeTuneMeta && activeTuneMeta.path)
+    ? String(activeTuneMeta.path)
+    : (activeFilePath ? String(activeFilePath) : "");
+  const activeDirty = Boolean(currentDoc && currentDoc.dirty) || Boolean(headerDirty) || Boolean(isNewTuneDraft);
+  if (activeDirty && activePath && pathsEqual(activePath, p)) return true;
+  if (workingCopySnapshot && workingCopySnapshot.dirty && workingCopySnapshot.path && pathsEqual(workingCopySnapshot.path, p)) return true;
+  return false;
+}
+
+function getActiveEditFilePath() {
+  if (activeTuneMeta && activeTuneMeta.path) return String(activeTuneMeta.path);
+  if (activeFilePath) return String(activeFilePath);
+  return "";
+}
+
+function hasGlobalUnsavedChanges() {
+  return Boolean(currentDoc && currentDoc.dirty) || Boolean(headerDirty) || Boolean(isNewTuneDraft);
+}
+
+async function requireCleanForFileOp(targetPath, actionLabel) {
+  const p = String(targetPath || "");
+  const label = String(actionLabel || "this action");
+  const activePath = getActiveEditFilePath();
+  if (!hasGlobalUnsavedChanges()) return true;
+  if (activePath && p && !pathsEqual(activePath, p)) {
+    await showSaveError(`Please Save/Discard your current changes before ${label}.`);
+    return false;
+  }
+  await showSaveError(`${label} is disabled while the file has unsaved changes. Save/Discard first.`);
+  return false;
+}
+
+function isWorkingCopyOpenForFile(filePath) {
+  const p = String(filePath || "");
+  if (!p) return false;
+  return Boolean(workingCopySnapshot && workingCopySnapshot.path && pathsEqual(workingCopySnapshot.path, p));
+}
+
+function splitFileIntoHeaderAndBody(fullText) {
+  const text = String(fullText || "");
+  const headerEnd = findHeaderEndOffset(text);
+  const header = text.slice(0, headerEnd);
+  const body = text.slice(headerEnd);
+  return { headerText: header, bodyText: body };
+}
+
 function showContextMenuAt(x, y, target) {
   if (!contextMenu) initContextMenu();
   contextMenuTarget = target;
@@ -8251,6 +8625,8 @@ function showContextMenuAt(x, y, target) {
     const targetPath = (activeTuneMeta && activeTuneMeta.path) ? String(activeTuneMeta.path) : "";
     const sourceRes = target && target.tuneId ? findTuneById(target.tuneId) : null;
     const sourcePath = sourceRes && sourceRes.file && sourceRes.file.path ? String(sourceRes.file.path) : "";
+    const globalDirty = Boolean(currentDoc && currentDoc.dirty) || Boolean(headerDirty) || Boolean(isNewTuneDraft);
+    const sourceDirty = Boolean(sourcePath) && (globalDirty || hasUnsavedChangesForFile(sourcePath));
     const canAppend = Boolean(
       targetPath
       && sourcePath
@@ -8258,34 +8634,59 @@ function showContextMenuAt(x, y, target) {
       && !rawMode
       && !(currentDoc && currentDoc.dirty)
       && !headerDirty
+      && !sourceDirty
     );
-    const items = [
-      { label: "Add to Set List", action: "addToSetList" },
-    ];
-    if (canAppend) items.push({ label: "Append to Active File…", action: "appendTuneToActiveFile" });
-    items.push(
-      { label: "Copy Tune", action: "copyTune" },
-      { label: "Duplicate Tune", action: "duplicateTune" },
-      { label: "Cut Tune", action: "cutTune" },
-      { label: "Move to…", action: "moveTune" },
-      { label: "Renumber X (File)…", action: "renumberXInFile" },
-      { label: "Delete Tune…", action: "deleteTune", danger: true },
-    );
+    const items = [{ label: "Add to Set List", action: "addToSetList" }];
+    if (canAppend) items.push({ separator: true }, { label: "Append to Active File…", action: "appendTuneToActiveFile" });
+    if (sourceDirty) {
+      items.push({ separator: true }, { label: "Save/Discard changes to enable file actions", action: "noop", disabled: true });
+    } else {
+      items.push(
+        { separator: true },
+        { label: "Copy Tune", action: "copyTune" },
+        { label: "Cut Tune", action: "cutTune" },
+        { label: "Duplicate Tune", action: "duplicateTune" },
+        { separator: true },
+        { label: "Move to…", action: "moveTune" },
+        { separator: true },
+        { label: "Renumber X (File)…", action: "renumberXInFile" },
+        { separator: true },
+        { label: "Delete Tune…", action: "deleteTune", danger: true },
+      );
+    }
     buildContextMenuItems(items);
   } else if (target.type === "file") {
     const fileEntry = libraryIndex && Array.isArray(libraryIndex.files) && target.filePath
       ? libraryIndex.files.find((f) => pathsEqual(f.path, target.filePath))
       : null;
     const hasXIssues = Boolean(fileEntry && fileEntry.xIssues && fileEntry.xIssues.ok === false);
-    buildContextMenuItems([
+    const globalDirty = Boolean(currentDoc && currentDoc.dirty) || Boolean(headerDirty) || Boolean(isNewTuneDraft);
+    const fileDirty = Boolean(target.filePath) && (globalDirty || hasUnsavedChangesForFile(target.filePath));
+    const items = [
       { label: "Load", action: "loadFile", disabled: !target.filePath },
       { label: "Copy Path", action: "copyFilePath", disabled: !target.filePath },
-      { label: "Paste Tune", action: "pasteTune", disabled: !clipboardTune },
+      { separator: true },
       { label: "Refresh Library", action: "refreshLibrary" },
-      { label: "Rename File…", action: "renameFile" },
-      { label: "X issues…", action: "xIssues", disabled: !hasXIssues },
-      { label: "Renumber X…", action: "renumberXInFile", disabled: !target.filePath },
-    ]);
+    ];
+    if (hasXIssues) items.push({ label: "X issues…", action: "xIssues" });
+    if (
+      target.filePath
+      && isWorkingCopyOpenForFile(target.filePath)
+      && hasDiskConflictPath(target.filePath)
+    ) {
+      items.push({ label: "Reload from disk…", action: "reloadFileFromDisk" });
+    }
+    if (fileDirty) {
+      items.push({ separator: true }, { label: "Save/Discard changes to enable file actions", action: "noop", disabled: true });
+    } else {
+      items.push(
+        { separator: true },
+        { label: "Paste Tune", action: "pasteTune", disabled: !clipboardTune },
+        { label: "Rename File…", action: "renameFile" },
+        { label: "Renumber X…", action: "renumberXInFile", disabled: !target.filePath },
+      );
+    }
+    buildContextMenuItems(items);
   } else if (target.type === "library") {
     buildContextMenuItems([
       { label: "Refresh Library", action: "refreshLibrary" },
@@ -8331,6 +8732,19 @@ function buildRenameTargetPath(oldPath, inputName) {
 
 function beginRenameFile(filePath) {
   if (!filePath) return;
+  const activePath = getActiveEditFilePath();
+  if (hasGlobalUnsavedChanges() && activePath && !pathsEqual(activePath, filePath)) {
+    showToast("Save/Discard your current changes before renaming files.", 2600);
+    return;
+  }
+  if (hasUnsavedChangesForFile(filePath)) {
+    showToast("Save/Discard changes before renaming files.", 2600);
+    return;
+  }
+  if (isWorkingCopyOpenForFile(filePath)) {
+    showToast("Close the file in the editor before renaming it.", 2600);
+    return;
+  }
   renamingFilePath = filePath;
   renderLibraryTree();
   requestAnimationFrame(() => {
@@ -8349,6 +8763,25 @@ async function commitRenameFile(oldPath, inputName) {
   if (!renamingFilePath || renamingFilePath !== oldPath) return;
   renameInFlight = true;
   try {
+    const activePath = getActiveEditFilePath();
+    if (hasGlobalUnsavedChanges() && activePath && !pathsEqual(activePath, oldPath)) {
+      await showSaveError("Refusing to rename: you have unsaved changes in another file. Save/Discard them and try again.");
+      renamingFilePath = null;
+      renderLibraryTree();
+      return;
+    }
+    if (hasUnsavedChangesForFile(oldPath)) {
+      await showSaveError("Refusing to rename: the file has unsaved changes. Save/Discard them and try again.");
+      renamingFilePath = null;
+      renderLibraryTree();
+      return;
+    }
+    if (isWorkingCopyOpenForFile(oldPath)) {
+      await showSaveError("Refusing to rename: the file is open in the editor. Close it and try again.");
+      renamingFilePath = null;
+      renderLibraryTree();
+      return;
+    }
     const newPath = buildRenameTargetPath(oldPath, inputName);
     if (!newPath) {
       renamingFilePath = null;
@@ -10606,110 +11039,7 @@ function countLines(text) {
   return text.split(/\r\n|\n|\r/).length;
 }
 
-function updateLibraryAfterSave(filePath, startOffset, oldEndOffset, newEndOffset, deltaLen, deltaLines, newLineCount, updatedTuneMeta) {
-  if (!libraryIndex) return;
-  const fileEntry = libraryIndex.files.find((f) => pathsEqual(f.path, filePath));
-  if (!fileEntry) return;
-
-  for (const tune of fileEntry.tunes) {
-    if (tune.startOffset === startOffset && tune.endOffset === oldEndOffset) {
-      tune.endOffset = newEndOffset;
-      tune.endLine = tune.startLine + newLineCount - 1;
-      if (updatedTuneMeta && typeof updatedTuneMeta === "object") {
-        if (updatedTuneMeta.xNumber != null) tune.xNumber = updatedTuneMeta.xNumber;
-        if (updatedTuneMeta.title != null) tune.title = updatedTuneMeta.title;
-        if (updatedTuneMeta.composer != null) tune.composer = updatedTuneMeta.composer;
-        if (updatedTuneMeta.key != null) tune.key = updatedTuneMeta.key;
-        if (updatedTuneMeta.preview != null) tune.preview = updatedTuneMeta.preview;
-      }
-    } else if (tune.startOffset >= oldEndOffset) {
-      tune.startOffset += deltaLen;
-      tune.endOffset += deltaLen;
-      tune.startLine += deltaLines;
-      tune.endLine += deltaLines;
-      tune.id = `${filePath}::${tune.startOffset}`;
-    } else if (tune.endOffset > oldEndOffset) {
-      tune.endOffset += deltaLen;
-      tune.endLine += deltaLines;
-    }
-  }
-
-  libraryViewStore.invalidate();
-  scheduleRenderLibraryTree();
-  markActiveTuneButton(activeTuneId);
-  updateLibraryStatus();
-  scheduleSaveLibraryUiState();
-}
-
-async function saveActiveTuneToSource() {
-  if (!activeTuneMeta || !activeTuneMeta.path) {
-    return { ok: false, error: "No active tune to save." };
-  }
-  const filePath = activeTuneMeta.path;
-  return withFileLock(filePath, async () => {
-    let content = getFileContentFromCache(filePath);
-    if (content == null) {
-      const res = await readFile(filePath);
-      if (!res.ok) return res;
-      content = res.data;
-      setFileContentInCache(filePath, content);
-    }
-
-    const startOffset = activeTuneMeta.startOffset;
-    const endOffset = activeTuneMeta.endOffset;
-    let newText = getEditorValue();
-    const oldText = content.slice(startOffset, endOffset);
-    const expectedX = String(activeTuneMeta.xNumber || "");
-    if (expectedX) {
-      const trimmed = oldText.replace(/^\s+/, "");
-      const xMatch = trimmed.match(/^X:\s*(\d+)/);
-      if (!xMatch || xMatch[1] !== expectedX) {
-        return {
-          ok: false,
-          error: `Refusing to save: tune offsets look stale (expected X:${expectedX}). Reload the tune and try again.`,
-        };
-      }
-    } else {
-      const trimmed = oldText.replace(/^\s+/, "");
-      if (!/^X:\s*\d+/.test(trimmed)) {
-        return {
-          ok: false,
-          error: "Refusing to save: tune offsets look stale. Reload the tune and try again.",
-        };
-      }
-    }
-    const oldEndsWithNewline = /\r?\n$/.test(oldText);
-    const newEndsWithNewline = /\r?\n$/.test(newText);
-    if (oldEndsWithNewline && !newEndsWithNewline) {
-      const newline = oldText.endsWith("\r\n") ? "\r\n" : "\n";
-      newText += newline;
-    }
-    const updatedIdentity = parseTuneIdentityFields(newText);
-    const updated = content.slice(0, startOffset) + newText + content.slice(endOffset);
-    const res = await writeFile(filePath, updated);
-    if (!res.ok) return res;
-
-    setFileContentInCache(filePath, updated);
-    const deltaLen = newText.length - (endOffset - startOffset);
-    const oldLineCount = countLines(oldText);
-    const newLineCount = countLines(newText);
-    const deltaLines = newLineCount - oldLineCount;
-    const newEndOffset = startOffset + newText.length;
-
-    updateLibraryAfterSave(filePath, startOffset, endOffset, newEndOffset, deltaLen, deltaLines, newLineCount, updatedIdentity);
-
-    activeTuneMeta.endOffset = newEndOffset;
-    activeTuneMeta.endLine = activeTuneMeta.startLine + newLineCount - 1;
-    if (updatedIdentity && typeof updatedIdentity === "object") {
-      if (updatedIdentity.xNumber != null) activeTuneMeta.xNumber = updatedIdentity.xNumber;
-      if (updatedIdentity.title != null) activeTuneMeta.title = updatedIdentity.title;
-      if (updatedIdentity.composer != null) activeTuneMeta.composer = updatedIdentity.composer;
-      if (updatedIdentity.key != null) activeTuneMeta.key = updatedIdentity.key;
-      setTuneMetaText(buildTuneMetaLabel(activeTuneMeta));
-    }
-    return { ok: true };
-  });
-}
+// Legacy "save tune slice by offsets" logic was removed in favor of the Working Copy model.
 
 async function showSaveError(message) {
   if (!window.api || typeof window.api.showSaveError !== "function") return;
@@ -11948,20 +12278,16 @@ async function performSaveFlow() {
       await showSaveError((res && res.error) ? res.error : "Unable to save file.");
       return false;
     }
-    // Fallback to legacy path if the working copy bridge isn't available.
-    const legacy = await saveActiveTuneToSource();
-    if (legacy.ok) {
-      currentDoc.dirty = false;
-      updateUIFromDocument(currentDoc);
-      setDirtyIndicator(false);
-      return true;
-    }
-    await showSaveError(legacy.error || "Unknown error");
+    await showSaveError("Internal error: working copy save is unavailable.");
     return false;
   }
 
   if (currentDoc.path) {
     const filePath = currentDoc.path;
+    if (isWorkingCopyOpenForFile(filePath)) {
+      await showSaveError("Internal error: the file is open in the editor. Save via the working copy.");
+      return false;
+    }
     const content = serializeDocument(currentDoc);
     return withFileLock(filePath, async () => {
       const res = await writeFile(filePath, content);
@@ -12012,23 +12338,8 @@ async function performSaveAsFlow() {
     && typeof window.api.writeWorkingCopyToPath === "function"
   );
   if (!hasWorkingCopy) {
-    // Fallback: legacy behavior.
-    const content = serializeDocument(currentDoc);
-    return withFileLock(filePath, async () => {
-      const res = await writeFile(filePath, content);
-      if (res.ok) {
-        currentDoc.path = filePath;
-        currentDoc.dirty = false;
-        activeFilePath = filePath;
-        setFileContentInCache(filePath, content);
-        try { await refreshLibraryFile(filePath, { force: true }); } catch {}
-        updateFileHeaderPanel();
-        setDirtyIndicator(false);
-        return true;
-      }
-      await showSaveError(res.error || "Unknown error");
-      return false;
-    });
+    await showSaveError("Internal error: working copy Save As is unavailable.");
+    return false;
   }
 
   // Working Copy path: Save the whole file (header + all tunes), atomically, then switch to it.
@@ -12101,6 +12412,28 @@ function ensureXNumberInAbc(abcText, xNumber) {
   }
   lines.unshift(line);
   return lines.join("\n");
+}
+
+function renumberXLinesConsecutive(fullText) {
+  const text = String(fullText || "");
+  const newline = text.includes("\r\n") ? "\r\n" : "\n";
+  const lines = text.split(/\r\n|\n|\r/);
+  let foundAny = false;
+  let n = 0;
+  const out = [];
+  for (const line of lines) {
+    const match = String(line || "").match(/^(\s*X:\s*)(.*)$/);
+    if (!match) {
+      out.push(line);
+      continue;
+    }
+    foundAny = true;
+    n += 1;
+    const prefix = match[1] || "X:";
+    out.push(`${prefix}${n}`);
+  }
+  if (!foundAny) return { ok: false, error: "No X: headers found in file." };
+  return { ok: true, text: out.join(newline), count: n };
 }
 
 function removeTuneFromContent(content, startOffset, endOffset) {
@@ -12179,33 +12512,63 @@ async function renameLibraryFile(oldPath, newPath) {
 }
 
 async function saveFileHeaderText(filePath, headerText) {
-  return withFileLock(filePath, async () => {
-    const res = await readFile(filePath);
-    if (!res.ok) throw new Error(res.error || "Unable to read file.");
-    const content = res.data || "";
-    const headerEndOffset = findHeaderEndOffset(content);
-    const oldHeaderText = content.slice(0, headerEndOffset);
-    const suffix = content.slice(headerEndOffset);
-    let header = String(headerText || "");
-    if (header && !/[\r\n]$/.test(header) && /^\s*X:/.test(suffix)) {
-      header += "\n";
+  const p = String(filePath || "");
+  if (!p) throw new Error("Missing file path.");
+  if (
+    !window.api
+    || typeof window.api.openWorkingCopy !== "function"
+    || typeof window.api.applyWorkingCopyHeaderText !== "function"
+    || typeof window.api.commitWorkingCopyToDisk !== "function"
+  ) {
+    throw new Error("Working copy header save is unavailable.");
+  }
+
+  return withFileLock(p, async () => {
+    await window.api.openWorkingCopy(p);
+    const applyRes = await window.api.applyWorkingCopyHeaderText(String(headerText || ""));
+    if (!applyRes || !applyRes.ok) throw new Error((applyRes && applyRes.error) ? applyRes.error : "Unable to update header.");
+
+    const saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
+    if (!saveRes || !saveRes.ok) {
+      if (saveRes && saveRes.conflict) {
+        const tuneIdToRestore = rawMode ? activeTuneId : (activeTuneUid || activeTuneId);
+        const conflictChoice = (window.api && typeof window.api.confirmSaveConflict === "function")
+          ? await window.api.confirmSaveConflict(p)
+          : "cancel";
+        if (conflictChoice === "overwrite") {
+          const forced = await window.api.commitWorkingCopyToDisk({ force: true });
+          if (!forced || !forced.ok) throw new Error((forced && forced.error) ? forced.error : "Unable to save header.");
+          markDiskConflictPath(p, false);
+        } else if (conflictChoice === "save_copy_as") {
+          const savedCopy = await saveWorkingCopyCopyAsAndSwitch(p, { restoreTuneId: tuneIdToRestore });
+          if (!savedCopy || !savedCopy.ok) {
+            if (savedCopy && savedCopy.cancelled) return;
+            throw new Error((savedCopy && savedCopy.error) ? savedCopy.error : "Unable to save copy.");
+          }
+          return;
+        } else if (conflictChoice === "discard_reload") {
+          const reloaded = await discardAndReloadWorkingCopyFromDisk(p, { restoreTuneId: tuneIdToRestore });
+          if (!reloaded || !reloaded.ok) throw new Error((reloaded && reloaded.error) ? reloaded.error : "Unable to reload from disk.");
+          return;
+        } else {
+          markDiskConflictPath(p, true);
+          throw new Error("Refusing to save header: file changed on disk.");
+        }
+      } else {
+        throw new Error((saveRes && saveRes.error) ? saveRes.error : "Unable to save header.");
+      }
     }
-    const updated = header ? header + suffix : suffix;
-    const writeRes = await writeFile(filePath, updated);
-    if (!writeRes.ok) throw new Error(writeRes.error || "Unable to write file.");
-    setFileContentInCache(filePath, updated);
-    const updatedFile = await refreshLibraryFile(filePath);
-    if (activeTuneMeta && pathsEqual(activeTuneMeta.path, filePath)) {
-      const deltaLen = header.length - oldHeaderText.length;
-      const deltaLines = countLines(header) - countLines(oldHeaderText);
-      activeTuneMeta.startOffset += deltaLen;
-      activeTuneMeta.endOffset += deltaLen;
-      activeTuneMeta.startLine += deltaLines;
-      activeTuneMeta.endLine += deltaLines;
-      activeTuneId = `${filePath}::${activeTuneMeta.startOffset}`;
-      markActiveTuneButton(activeTuneId);
-      const label = updatedFile ? updatedFile.basename : safeBasename(filePath);
-      setTuneMetaText(buildTuneMetaLabel(activeTuneMeta));
+
+    const snapshot = await refreshWorkingCopySnapshot();
+    if (snapshot && snapshot.path && pathsEqual(snapshot.path, p)) {
+      setFileContentInCache(p, snapshot.text);
+      attachTuneUidsToLibraryFile(p, snapshot);
+    }
+    const updatedFile = await refreshLibraryFile(p, { force: true });
+    if (activeTuneMeta && pathsEqual(activeTuneMeta.path, p)) {
+      const tuneIdToRestore = rawMode ? activeTuneId : (activeTuneUid || activeTuneId);
+      if (tuneIdToRestore) await selectTune(tuneIdToRestore, { skipConfirm: true, suppressRecent: true });
+      const label = updatedFile ? updatedFile.basename : safeBasename(p);
       setFileNameMeta(stripFileExtension(label || ""));
     }
   });
@@ -12252,11 +12615,91 @@ async function copyTuneById(tuneId, mode) {
 async function duplicateTuneById(tuneId) {
   const res = findTuneById(tuneId);
   if (!res) return;
+  if (!(await requireCleanForFileOp(res.file.path, "duplicating a tune"))) return;
   try {
+    if (
+      isWorkingCopyOpenForFile(res.file.path)
+      && window.api
+      && typeof window.api.openWorkingCopy === "function"
+      && typeof window.api.insertWorkingCopyTuneAfter === "function"
+      && typeof window.api.renumberWorkingCopyXStartingAt1 === "function"
+      && typeof window.api.commitWorkingCopyToDisk === "function"
+    ) {
+      await window.api.openWorkingCopy(res.file.path);
+      let snapshot = await refreshWorkingCopySnapshot();
+      if (!snapshot || !snapshot.path || !pathsEqual(snapshot.path, res.file.path) || !Array.isArray(snapshot.tunes)) {
+        throw new Error("Unable to access working copy for duplication.");
+      }
+      attachTuneUidsToLibraryFile(res.file.path, snapshot);
+
+      // Resolve tuneIndex against the working copy snapshot.
+      let tuneIndex = Number.isFinite(Number(res.tune.tuneIndex)) ? Number(res.tune.tuneIndex) : null;
+      if (tuneIndex == null) {
+        const startOff = Number.isFinite(Number(res.tune.startOffset)) ? Number(res.tune.startOffset) : null;
+        if (startOff != null) {
+          const idx = snapshot.tunes.findIndex((t) => t && Number(t.start) === startOff);
+          if (idx >= 0) tuneIndex = idx;
+        }
+      }
+      if (tuneIndex == null || tuneIndex < 0 || tuneIndex >= snapshot.tunes.length) {
+        throw new Error("Unable to duplicate: tune index not found.");
+      }
+
+      const wcTune = snapshot.tunes[tuneIndex];
+      const start = Number(wcTune.start);
+      const end = Number(wcTune.end);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) throw new Error("Unable to duplicate: tune slice is invalid.");
+      const slice = String(snapshot.text || "").slice(start, end);
+      const prepared = ensureCopyTitleInAbc(slice);
+
+      const insertRes = await window.api.insertWorkingCopyTuneAfter({ afterTuneIndex: tuneIndex, text: prepared });
+      if (!insertRes || !insertRes.ok) throw new Error((insertRes && insertRes.error) ? insertRes.error : "Unable to duplicate tune.");
+
+      snapshot = await refreshWorkingCopySnapshot();
+      if (!snapshot || !snapshot.path || !pathsEqual(snapshot.path, res.file.path) || !Array.isArray(snapshot.tunes)) {
+        throw new Error("Unable to refresh working copy after duplication.");
+      }
+      const insertedUid = (snapshot.tunes[tuneIndex + 1] && snapshot.tunes[tuneIndex + 1].tuneUid)
+        ? snapshot.tunes[tuneIndex + 1].tuneUid
+        : null;
+
+      const renRes = await window.api.renumberWorkingCopyXStartingAt1();
+      if (!renRes || !renRes.ok) throw new Error((renRes && renRes.error) ? renRes.error : "Unable to renumber file after duplication.");
+
+      snapshot = await refreshWorkingCopySnapshot();
+      if (!snapshot || !snapshot.path || !pathsEqual(snapshot.path, res.file.path)) {
+        throw new Error("Unable to refresh working copy after renumber.");
+      }
+
+      const saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
+      if (!saveRes || !saveRes.ok) {
+        if (saveRes && saveRes.conflict) {
+          markDiskConflictPath(res.file.path, true);
+          throw new Error("Refusing to duplicate: file changed on disk. Reload/reopen the file and try again.");
+        }
+        throw new Error((saveRes && saveRes.error) ? saveRes.error : "Unable to save file after duplication.");
+      }
+
+      setFileContentInCache(res.file.path, snapshot.text);
+      syncLibraryFileFromWorkingCopySnapshot(res.file.path, snapshot);
+      await refreshLibraryFile(res.file.path, { force: true });
+      activeFilePath = res.file.path;
+      if (insertedUid) {
+        await selectTune(insertedUid, { skipConfirm: true, suppressRecent: true });
+      }
+      setStatus("OK");
+      return;
+    }
+
     const updated = await withFileLock(res.file.path, async () => {
       const readRes = await readFile(res.file.path);
       if (!readRes || !readRes.ok) throw new Error(readRes && readRes.error ? readRes.error : "Unable to read file.");
       const content = String(readRes.data || "");
+      const verifyRes = await readFile(res.file.path);
+      if (!verifyRes || !verifyRes.ok) throw new Error(verifyRes && verifyRes.error ? verifyRes.error : "Unable to verify file.");
+      if (String(verifyRes.data || "") !== content) {
+        throw new Error("Refusing to duplicate: file changed on disk. Refresh/reopen the file and try again.");
+      }
       const startOffset = Number(res.tune.startOffset);
       const endOffset = Number(res.tune.endOffset);
       if (!Number.isFinite(startOffset) || !Number.isFinite(endOffset) || startOffset < 0 || endOffset <= startOffset || endOffset > content.length) {
@@ -12264,30 +12707,43 @@ async function duplicateTuneById(tuneId) {
       }
       const slice = content.slice(startOffset, endOffset);
       const trimmed = slice.replace(/^\s+/, "");
-      const xMatch = trimmed.match(/^X:\s*(\d+)/);
-      if (!xMatch) {
+      if (!/^\s*X:/.test(trimmed)) {
         throw new Error("Refusing to duplicate: tune offsets look stale. Refresh the library and try again.");
       }
-      const expectedX = String(res.tune.xNumber || "");
-      if (expectedX && xMatch[1] !== expectedX) {
-        throw new Error(`Refusing to duplicate: tune offsets look stale (expected X:${expectedX}). Refresh the library and try again.`);
-      }
 
-      const prepared = ensureCopyTitleInAbc(slice);
-      const nextX = getNextXNumber(content);
-      const withX = ensureXNumberInAbc(prepared, nextX);
-      const updatedContent = appendTuneToContent(content, withX);
+      const newline = content.includes("\r\n") ? "\r\n" : "\n";
+      let before = content.slice(0, endOffset);
+      let after = content.slice(endOffset);
+      let prepared = ensureCopyTitleInAbc(slice);
+      if (prepared && !/\r?\n$/.test(prepared)) prepared += newline;
+      if (before && !/\r?\n$/.test(before)) before += newline;
+      if (/^\r?\n/.test(prepared) && /\r?\n$/.test(before)) prepared = prepared.replace(/^\r?\n/, "");
+      if (/^\r?\n/.test(after) && /\r?\n$/.test(prepared)) after = after.replace(/^\r?\n/, "");
+
+      const inserted = `${before}${prepared}${after}`;
+      const renum = renumberXInTextKeepingFirst(inserted);
+      if (!renum || !renum.ok || typeof renum.abcText !== "string") {
+        throw new Error("Unable to renumber file after duplicating a tune.");
+      }
+      const updatedContent = renum.abcText;
       const writeRes = await writeFile(res.file.path, updatedContent);
       if (!writeRes || !writeRes.ok) throw new Error(writeRes && writeRes.error ? writeRes.error : "Unable to duplicate tune.");
       setFileContentInCache(res.file.path, updatedContent);
-      const updatedFile = await refreshLibraryFile(res.file.path);
+      const updatedFile = await refreshLibraryFile(res.file.path, { force: true });
       return { updatedContent, updatedFile };
     });
     const updatedContent = updated ? updated.updatedContent : null;
     const updatedFile = updated ? updated.updatedFile : null;
     activeFilePath = res.file.path;
     if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
-      const tune = updatedFile.tunes[updatedFile.tunes.length - 1];
+      const fallbackOriginalIdx = Number.isFinite(Number(res.tune.indexInFile)) ? Number(res.tune.indexInFile) - 1 : null;
+      const originalIdx = fallbackOriginalIdx != null
+        ? fallbackOriginalIdx
+        : (Array.isArray(res.file.tunes) ? res.file.tunes.findIndex((t) => t && t.id === res.tune.id) : -1);
+      const duplicateIdx = originalIdx >= 0 ? originalIdx + 1 : -1;
+      const tune = (duplicateIdx >= 0 && duplicateIdx < updatedFile.tunes.length)
+        ? updatedFile.tunes[duplicateIdx]
+        : updatedFile.tunes[updatedFile.tunes.length - 1];
       activeTuneId = tune.id;
       markActiveTuneButton(activeTuneId);
       const tuneText = updatedContent ? updatedContent.slice(tune.startOffset, tune.endOffset) : "";
@@ -12312,11 +12768,23 @@ async function duplicateTuneById(tuneId) {
 }
 
 async function appendTuneTextToFileUnlocked(filePath, text) {
+  const activePath = getActiveEditFilePath();
+  if (hasGlobalUnsavedChanges() && activePath && !pathsEqual(activePath, filePath)) {
+    throw new Error("Please Save/Discard your current changes before modifying other files.");
+  }
+  if (isWorkingCopyOpenForFile(filePath)) {
+    throw new Error("Refusing to append: file is open in the editor. Save/close it first.");
+  }
   const res = await readFile(filePath);
   if (!res.ok) throw new Error(res.error || "Unable to read file.");
+  const before = String(res.data || "");
+  const verifyRes = await readFile(filePath);
+  if (!verifyRes || !verifyRes.ok) throw new Error((verifyRes && verifyRes.error) ? verifyRes.error : "Unable to verify file before appending.");
+  const verifyText = String(verifyRes.data || "");
+  if (verifyText !== before) throw new Error("Refusing to append: file changed on disk. Refresh/reopen the file and try again.");
   const nextX = getNextXNumber(res.data || "");
   const prepared = ensureXNumberInAbc(text, nextX);
-  const updated = appendTuneToContent(res.data || "", prepared);
+  const updated = appendTuneToContent(before, prepared);
   const writeRes = await writeFile(filePath, updated);
   if (!writeRes.ok) throw new Error(writeRes.error || "Unable to append to file.");
   setFileContentInCache(filePath, updated);
@@ -12336,9 +12804,31 @@ async function pasteClipboardToFile(targetPath) {
     await showSaveError("Select a target file in the Library panel first.");
     return;
   }
+  if (!(await requireCleanForFileOp(targetPath, clipboardTune && clipboardTune.mode === "move" ? "moving a tune" : "pasting a tune"))) {
+    return;
+  }
   if (clipboardTune.sourcePath && clipboardTune.sourcePath === targetPath) {
     await showSaveError("Target file is the same as source.");
     return;
+  }
+
+  if (clipboardTune.mode === "move") {
+    const sourcePath = clipboardTune.sourcePath ? String(clipboardTune.sourcePath) : "";
+    if (!sourcePath) {
+      await showSaveError("Unable to move: source path missing.");
+      return;
+    }
+    if (sourcePath === targetPath) {
+      await showSaveError("Target file is the same as source.");
+      return;
+    }
+    if (!(await requireCleanForFileOp(sourcePath, "moving a tune"))) return;
+
+    const found = findTuneById(clipboardTune.tuneId);
+    if (!found || !found.file || !found.file.path) {
+      await showSaveError("Unable to move: source tune not found. Refresh the library and try again.");
+      return;
+    }
   }
 
   const confirm = await confirmAppendToFile(targetPath);
@@ -12348,8 +12838,39 @@ async function pasteClipboardToFile(targetPath) {
     const sourceCandidate = clipboardTune && clipboardTune.mode === "move" ? clipboardTune.sourcePath : "";
     await withFileLocks([targetPath, sourceCandidate].filter(Boolean), async () => {
       if (clipboardTune.mode !== "move") {
+        if (
+          isWorkingCopyOpenForFile(targetPath)
+          && window.api
+          && typeof window.api.openWorkingCopy === "function"
+          && typeof window.api.insertWorkingCopyTuneAfter === "function"
+          && typeof window.api.commitWorkingCopyToDisk === "function"
+        ) {
+          await window.api.openWorkingCopy(targetPath);
+          const snap = await refreshWorkingCopySnapshot();
+          if (!snap || !snap.path || !pathsEqual(snap.path, targetPath)) {
+            throw new Error("Unable to open working copy for pasting.");
+          }
+          const nextX = getNextXNumber(String(snap.text || ""));
+          const prepared = ensureXNumberInAbc(String(clipboardTune.text || ""), nextX);
+          const afterTuneIndex = Array.isArray(snap.tunes) ? (snap.tunes.length - 1) : -1;
+          const ins = await window.api.insertWorkingCopyTuneAfter({ afterTuneIndex, text: prepared });
+          if (!ins || !ins.ok) throw new Error((ins && ins.error) ? ins.error : "Unable to paste.");
+          const saved = await window.api.commitWorkingCopyToDisk({ force: false });
+          if (!saved || !saved.ok) {
+            if (saved && saved.conflict) throw new Error("Refusing to paste: file changed on disk. Reload/reopen and try again.");
+            throw new Error((saved && saved.error) ? saved.error : "Unable to save file.");
+          }
+          const snapAfter = await refreshWorkingCopySnapshot();
+          if (snapAfter && snapAfter.path && pathsEqual(snapAfter.path, targetPath)) {
+            setFileContentInCache(targetPath, snapAfter.text);
+            syncLibraryFileFromWorkingCopySnapshot(targetPath, snapAfter);
+          }
+          await refreshLibraryFile(targetPath, { force: true });
+          activeFilePath = targetPath;
+          return;
+        }
         await appendTuneTextToFileUnlocked(targetPath, clipboardTune.text);
-        await refreshLibraryFile(targetPath);
+        await refreshLibraryFile(targetPath, { force: true });
         activeFilePath = targetPath;
         return;
       }
@@ -12360,67 +12881,131 @@ async function pasteClipboardToFile(targetPath) {
       }
       const sourcePath = found.file.path;
       if (!sourcePath) throw new Error("Unable to move: source path missing.");
+      if (sourcePath === targetPath) throw new Error("Target file is the same as source.");
+
+      // Transaction prerequisite: both files must be in a committed/safe state.
+      // (If the active editor is on either file, it must be clean; otherwise the move could silently
+      // commit unrelated pending changes.)
+      const hasUnsavedInActiveFile = Boolean(currentDoc && currentDoc.dirty) || Boolean(headerDirty) || Boolean(isNewTuneDraft);
+      const activePath = activeTuneMeta && activeTuneMeta.path ? String(activeTuneMeta.path) : (activeFilePath ? String(activeFilePath) : "");
+      if (
+        activePath
+        && hasUnsavedInActiveFile
+        && (pathsEqual(activePath, sourcePath) || pathsEqual(activePath, targetPath))
+      ) {
+        throw new Error("Refusing to move: please Save/Discard your unsaved changes in the source/target file first.");
+      }
+      if (
+        workingCopySnapshot
+        && workingCopySnapshot.dirty
+        && workingCopySnapshot.path
+        && (pathsEqual(workingCopySnapshot.path, sourcePath) || pathsEqual(workingCopySnapshot.path, targetPath))
+      ) {
+        throw new Error("Refusing to move: source/target file has unsaved changes. Save/Discard them and try again.");
+      }
 
       const sourceRes = await readFile(sourcePath);
       if (!sourceRes.ok) throw new Error(sourceRes.error || "Unable to read source file.");
       const sourceContent = String(sourceRes.data || "");
+      const verifySourceRes = await readFile(sourcePath);
+      if (!verifySourceRes.ok) throw new Error(verifySourceRes.error || "Unable to verify source file.");
+      if (String(verifySourceRes.data || "") !== sourceContent) {
+        throw new Error("Refusing to move: source file changed on disk. Refresh/reopen and try again.");
+      }
 
       const targetRes = await readFile(targetPath);
       if (!targetRes.ok) throw new Error(targetRes.error || "Unable to read target file.");
       const targetContent = String(targetRes.data || "");
+      const verifyTargetRes = await readFile(targetPath);
+      if (!verifyTargetRes.ok) throw new Error(verifyTargetRes.error || "Unable to verify target file.");
+      if (String(verifyTargetRes.data || "") !== targetContent) {
+        throw new Error("Refusing to move: target file changed on disk. Refresh/reopen and try again.");
+      }
 
-      const sourceSlice = sourceContent.slice(found.tune.startOffset, found.tune.endOffset);
+      const startOffset = Number(found.tune.startOffset);
+      const endOffset = Number(found.tune.endOffset);
+      if (!Number.isFinite(startOffset) || !Number.isFinite(endOffset) || startOffset < 0 || endOffset <= startOffset || endOffset > sourceContent.length) {
+        throw new Error("Refusing to move: tune offsets look stale. Reload/refresh the library and try again.");
+      }
+
+      const sourceSlice = sourceContent.slice(startOffset, endOffset);
       const expectedSlice = String(clipboardTune.text || "");
       if (sourceSlice !== expectedSlice) {
         throw new Error("Refusing to move: tune offsets look stale. Reload/refresh the library and try again.");
       }
       const trimmedSourceSlice = sourceSlice.replace(/^\s+/, "");
-      const xMatch = trimmedSourceSlice.match(/^X:\s*(\d+)/);
-      if (!xMatch) {
+      if (!/^\s*X:/.test(trimmedSourceSlice)) {
         throw new Error("Refusing to move: tune offsets look stale. Reload/refresh the library and try again.");
       }
-      const expectedX = String(found.tune.xNumber || "");
-      if (expectedX && xMatch[1] !== expectedX) {
-        throw new Error(`Refusing to move: tune offsets look stale (expected X:${expectedX}). Reload/refresh the library and try again.`);
-      }
 
-      const updatedSource = removeTuneFromContent(sourceContent, found.tune.startOffset, found.tune.endOffset);
+      // Step 1: append into target and renumber, then save target.
       const nextX = getNextXNumber(targetContent);
       const prepared = ensureXNumberInAbc(expectedSlice, nextX);
       const updatedTarget = appendTuneToContent(targetContent, prepared);
-
-      const autoRenumber = !!(latestSettingsSnapshot && latestSettingsSnapshot.libraryAutoRenumberAfterMove === true);
-      let finalTarget = updatedTarget;
-      let finalSource = updatedSource;
-      if (autoRenumber) {
-        const renumTarget = renumberXInTextKeepingFirst(finalTarget);
-        if (renumTarget && renumTarget.ok && typeof renumTarget.abcText === "string") {
-          finalTarget = renumTarget.abcText;
-        }
-        const renumSource = renumberXInTextKeepingFirst(finalSource);
-        if (renumSource && renumSource.ok && typeof renumSource.abcText === "string") {
-          finalSource = renumSource.abcText;
-        }
+      const renumTarget = renumberXInTextKeepingFirst(updatedTarget);
+      if (!renumTarget || !renumTarget.ok || typeof renumTarget.abcText !== "string") {
+        throw new Error("Unable to renumber target file after move.");
       }
+      const finalTarget = renumTarget.abcText;
 
-      const writeTargetRes = await writeFile(targetPath, finalTarget);
-      if (!writeTargetRes.ok) throw new Error(writeTargetRes.error || "Unable to update target file.");
+      // Step 2: delete from source and renumber, then save source.
+      const updatedSource = removeTuneFromContent(sourceContent, startOffset, endOffset);
+      const renumSource = renumberXInTextKeepingFirst(updatedSource);
+      if (!renumSource || !renumSource.ok || typeof renumSource.abcText !== "string") {
+        throw new Error("Unable to renumber source file after move.");
+      }
+      const finalSource = renumSource.abcText;
 
-      const writeSourceRes = await writeFile(sourcePath, finalSource);
-      if (!writeSourceRes.ok) {
-        const rollback = await writeFile(targetPath, targetContent);
-        if (rollback && rollback.ok) {
-          throw new Error(writeSourceRes.error || "Unable to update source file.");
+      const useWorkingCopyCommit = Boolean(
+        window.api
+        && typeof window.api.openWorkingCopy === "function"
+        && typeof window.api.applyWorkingCopyFullText === "function"
+        && typeof window.api.commitWorkingCopyToDisk === "function"
+        && (isWorkingCopyOpenForFile(sourcePath) || isWorkingCopyOpenForFile(targetPath))
+      );
+
+      if (useWorkingCopyCommit) {
+        const commitViaWorkingCopy = async (filePath, text, { force = false } = {}) => {
+          await window.api.openWorkingCopy(filePath);
+          const applyRes = await window.api.applyWorkingCopyFullText(text);
+          if (!applyRes || !applyRes.ok) throw new Error((applyRes && applyRes.error) ? applyRes.error : "Unable to update working copy.");
+          const saveRes = await window.api.commitWorkingCopyToDisk({ force: Boolean(force) });
+          if (!saveRes || !saveRes.ok) {
+            if (saveRes && saveRes.conflict) {
+              markDiskConflictPath(filePath, true);
+              throw new Error("File changed on disk.");
+            }
+            throw new Error((saveRes && saveRes.error) ? saveRes.error : "Unable to save file.");
+          }
+        };
+
+        await commitViaWorkingCopy(targetPath, finalTarget);
+        try {
+          await commitViaWorkingCopy(sourcePath, finalSource);
+        } catch (e) {
+          try { await commitViaWorkingCopy(targetPath, targetContent, { force: false }); } catch {}
+          throw e;
         }
-        throw new Error((writeSourceRes && writeSourceRes.error)
-          ? `${writeSourceRes.error} (rollback failed; the tune may now be duplicated)`
-          : "Unable to update source file (rollback failed; the tune may now be duplicated)");
+      } else {
+        const writeTargetRes = await writeFile(targetPath, finalTarget);
+        if (!writeTargetRes.ok) throw new Error(writeTargetRes.error || "Unable to update target file.");
+
+        const writeSourceRes = await writeFile(sourcePath, finalSource);
+        if (!writeSourceRes.ok) {
+          const rollback = await writeFile(targetPath, targetContent);
+          if (rollback && rollback.ok) {
+            throw new Error(writeSourceRes.error || "Unable to update source file.");
+          }
+          throw new Error((writeSourceRes && writeSourceRes.error)
+            ? `${writeSourceRes.error} (rollback failed; the tune may now be duplicated)`
+            : "Unable to update source file (rollback failed; the tune may now be duplicated)");
+        }
       }
 
       setFileContentInCache(targetPath, finalTarget);
       setFileContentInCache(sourcePath, finalSource);
-      await refreshLibraryFile(targetPath);
-      await refreshLibraryFile(sourcePath);
+      await refreshLibraryFile(targetPath, { force: true });
+      await refreshLibraryFile(sourcePath, { force: true });
       activeFilePath = targetPath;
 
       if (activeTuneId === clipboardTune.tuneId) {
@@ -12443,70 +13028,111 @@ async function deleteTuneById(tuneId) {
   const ok = await ensureSafeToAbandonCurrentDoc("deleting a tune");
   if (!ok) return;
 
-  let selected = null;
-  let fileMeta = null;
-  for (const file of libraryIndex.files) {
-    const found = file.tunes.find((t) => t.id === tuneId);
-    if (found) {
-      selected = found;
-      fileMeta = file;
-      break;
-    }
-  }
-  if (!selected || !fileMeta) return;
+  const found = findTuneById(tuneId);
+  if (!found || !found.tune || !found.file) return;
+  let selected = found.tune;
+  const fileMeta = found.file;
 
   const label = selected.title || selected.preview || `X:${selected.xNumber || ""}`.trim();
   const confirm = await confirmDeleteTune(label);
   if (confirm !== "delete") return;
 
-  await withFileLock(fileMeta.path, async () => {
-    const res = await readFile(fileMeta.path);
-    if (!res.ok) {
-      await showSaveError(res.error || "Unable to read file.");
+  if (!(await requireCleanForFileOp(fileMeta.path, "deleting a tune"))) return;
+
+  if (
+    window.api
+    && typeof window.api.openWorkingCopy === "function"
+    && typeof window.api.deleteWorkingCopyTune === "function"
+    && typeof window.api.commitWorkingCopyToDisk === "function"
+    && fileMeta.path
+  ) {
+    if (
+      pathsEqual(activeFilePath, fileMeta.path)
+      && (Boolean(currentDoc && currentDoc.dirty) || Boolean(headerDirty) || Boolean(isNewTuneDraft))
+    ) {
+      await showSaveError("Please Save/Discard your unsaved changes in this file before deleting tunes.");
       return;
     }
 
-    const content = String(res.data || "");
-    const startOffset = Number(selected.startOffset);
-    const endOffset = Number(selected.endOffset);
-    if (!Number.isFinite(startOffset) || !Number.isFinite(endOffset) || startOffset < 0 || endOffset <= startOffset || endOffset > content.length) {
-      await showSaveError("Refusing to delete: tune offsets look stale. Refresh the library and try again.");
-      return;
-    }
-    const slice = content.slice(startOffset, endOffset);
-    const trimmed = slice.replace(/^\s+/, "");
-    const xMatch = trimmed.match(/^X:\s*(\d+)/);
-    if (!xMatch) {
-      await showSaveError("Refusing to delete: tune offsets look stale. Reload the tune and try again.");
-      return;
-    }
-    const expectedX = String(selected.xNumber || "");
-    if (expectedX && xMatch[1] !== expectedX) {
-      await showSaveError(`Refusing to delete: tune offsets look stale (expected X:${expectedX}). Refresh the library and try again.`);
-      return;
-    }
+    try {
+      await window.api.openWorkingCopy(fileMeta.path);
+      const snapshotBefore = await refreshWorkingCopySnapshot();
+      if (snapshotBefore && snapshotBefore.path && pathsEqual(snapshotBefore.path, fileMeta.path)) {
+        attachTuneUidsToLibraryFile(fileMeta.path, snapshotBefore);
+        const refreshed = findTuneById(tuneId);
+        if (refreshed && refreshed.tune) selected = refreshed.tune;
+      }
+    } catch {}
 
-    const updated = removeTuneFromContent(content, startOffset, endOffset);
-    const writeRes = await writeFile(fileMeta.path, updated);
-    if (!writeRes.ok) {
-      await showSaveError(writeRes.error || "Unable to delete tune.");
-      return;
-    }
+    try {
+      const payload = { tuneUid: selected.tuneUid || null, tuneIndex: selected.tuneIndex };
+      await window.api.deleteWorkingCopyTune(payload);
 
-    setFileContentInCache(fileMeta.path, updated);
-    const updatedFile = await refreshLibraryFile(fileMeta.path);
-    if (activeTuneId === tuneId) {
-      activeTuneId = null;
-      activeTuneMeta = null;
-      setCurrentDocument(createBlankDocument());
-    }
+      const saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
+      if (!saveRes || !saveRes.ok) {
+        if (saveRes && saveRes.conflict) {
+          await showSaveError("Refusing to delete: file changed on disk. Reload/reopen the file and try again.");
+          try { await discardWorkingCopyChangesForActiveFile(); } catch {}
+          try { await refreshLibraryFile(fileMeta.path, { force: true }); } catch {}
+          return;
+        }
+        await showSaveError((saveRes && saveRes.error) ? saveRes.error : "Unable to delete tune.");
+        return;
+      }
 
-    if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
+      const snapshotAfter = await refreshWorkingCopySnapshot();
+      if (!snapshotAfter || !snapshotAfter.path || !pathsEqual(snapshotAfter.path, fileMeta.path)) return;
+
+      setFileContentInCache(fileMeta.path, snapshotAfter.text);
+      const updatedFile = syncLibraryFileFromWorkingCopySnapshot(fileMeta.path, snapshotAfter);
       activeFilePath = fileMeta.path;
-    } else {
-      activeFilePath = null;
+
+      if (activeTuneId === tuneId) {
+        activeTuneId = null;
+        activeTuneUid = null;
+        activeTuneIndex = null;
+        activeTuneMeta = null;
+      }
+
+      const tunes = updatedFile && Array.isArray(updatedFile.tunes) ? updatedFile.tunes : [];
+      if (tunes.length) {
+        const prevIndex = Number.isFinite(Number(payload.tuneIndex)) ? Number(payload.tuneIndex) : 0;
+        const nextIndex = Math.min(Math.max(0, prevIndex), tunes.length - 1);
+        const nextTune = tunes[nextIndex];
+        const nextKey = rawMode ? nextTune.id : (nextTune.tuneUid || nextTune.id);
+        await selectTune(nextKey, { skipConfirm: true, suppressRecent: true });
+        if (currentDoc) currentDoc.dirty = false;
+        setDirtyIndicator(false);
+      } else {
+        const text = String(snapshotAfter.text || "");
+        const pseudoMeta = {
+          id: `${fileMeta.path}::0`,
+          path: fileMeta.path,
+          basename: fileMeta.basename || safeBasename(fileMeta.path),
+          xNumber: "",
+          title: "",
+          startLine: 1,
+          endLine: countLines(text),
+          startOffset: 0,
+          endOffset: text.length,
+        };
+        setActiveTuneText(text, pseudoMeta, { suppressRecent: true });
+        activeTuneId = pseudoMeta.id;
+        activeTuneUid = null;
+        activeTuneIndex = null;
+        if (currentDoc) currentDoc.dirty = false;
+        setDirtyIndicator(false);
+        markActiveTuneButton(activeTuneId);
+      }
+      try { await refreshLibraryFile(fileMeta.path, { force: true }); } catch {}
+      return;
+    } catch (e) {
+      await showSaveError(e && e.message ? e.message : String(e));
+      return;
     }
-  });
+  }
+
+  await showSaveError("Internal error: working copy delete is unavailable.");
 }
 
 async function performAppendFlow() {
@@ -12531,57 +13157,65 @@ async function performAppendFlow() {
     : await confirmAppendToFile(filePath);
   if (confirm !== "append") return false;
 
+  if (
+    !window.api
+    || typeof window.api.openWorkingCopy !== "function"
+    || typeof window.api.insertWorkingCopyTuneAfter !== "function"
+    || typeof window.api.commitWorkingCopyToDisk !== "function"
+  ) {
+    await showSaveError("Internal error: working copy append is unavailable.");
+    return false;
+  }
+
   return withFileLock(filePath, async () => {
-    const res = await readFile(filePath);
-    if (!res.ok) {
-      await showSaveError(res.error || "Unable to read file.");
+    await window.api.openWorkingCopy(filePath);
+    const snap = await refreshWorkingCopySnapshot();
+    if (!snap || !snap.path || !pathsEqual(snap.path, filePath)) {
+      await showSaveError("Unable to open working copy for appending.");
       return false;
     }
 
-    const before = String(res.data || "");
-    const verifyRes = await readFile(filePath);
-    if (!verifyRes || !verifyRes.ok) {
-      await showSaveError((verifyRes && verifyRes.error) ? verifyRes.error : "Unable to verify file before appending.");
-      return false;
-    }
-    const verifyText = String(verifyRes.data || "");
-    if (verifyText !== before) {
-      await showSaveError("Refusing to append: file changed on disk. Refresh/reopen the file and try again.");
-      return false;
-    }
-
-    const nextX = getNextXNumber(before);
+    const nextX = getNextXNumber(String(snap.text || ""));
     const prepared = ensureXNumberInAbc(serializeDocument(currentDoc), nextX);
-    const updated = appendTuneToContent(before, prepared);
-    const writeRes = await writeFile(filePath, updated);
-    if (!writeRes.ok) {
-      await showSaveError(writeRes.error || "Unable to append to file.");
+    const afterTuneIndex = Array.isArray(snap.tunes) ? (snap.tunes.length - 1) : -1;
+    const insertRes = await window.api.insertWorkingCopyTuneAfter({ afterTuneIndex, text: prepared });
+    if (!insertRes || !insertRes.ok) {
+      await showSaveError((insertRes && insertRes.error) ? insertRes.error : "Unable to append to file.");
       return false;
     }
 
-    setFileContentInCache(filePath, updated);
+    const saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
+    if (!saveRes || !saveRes.ok) {
+      if (saveRes && saveRes.conflict) {
+        markDiskConflictPath(filePath, true);
+        await showSaveError("Refusing to append: file changed on disk. Reload/reopen and try again.");
+        return false;
+      }
+      await showSaveError((saveRes && saveRes.error) ? saveRes.error : "Unable to save file.");
+      return false;
+    }
 
-    const updatedFile = await refreshLibraryFile(filePath);
-    if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
-      const tune = updatedFile.tunes[updatedFile.tunes.length - 1];
-      activeTuneId = tune.id;
-      markActiveTuneButton(activeTuneId);
-      setActiveTuneText(getEditorValue(), {
-        id: tune.id,
-        path: updatedFile.path,
-        basename: updatedFile.basename,
-        xNumber: tune.xNumber,
-        title: tune.title || "",
-        startLine: tune.startLine,
-        endLine: tune.endLine,
-        startOffset: tune.startOffset,
-        endOffset: tune.endOffset,
-      });
-    } else {
+    const snapAfter = await refreshWorkingCopySnapshot();
+    if (snapAfter && snapAfter.path && pathsEqual(snapAfter.path, filePath)) {
+      setFileContentInCache(filePath, snapAfter.text);
+      syncLibraryFileFromWorkingCopySnapshot(filePath, snapAfter);
+    }
+    const updatedFile = await refreshLibraryFile(filePath, { force: true });
+    activeFilePath = filePath;
+    if (updatedFile && Array.isArray(updatedFile.tunes) && updatedFile.tunes.length) {
+      const last = updatedFile.tunes[updatedFile.tunes.length - 1];
+      if (last && last.id) {
+        await selectTune(last.tuneUid || last.id, { skipConfirm: true, suppressRecent: true });
+      }
+    }
+
+    isNewTuneDraft = false;
+    if (currentDoc) {
       currentDoc.path = filePath;
       currentDoc.dirty = false;
-      updateUIFromDocument(currentDoc);
     }
+    headerDirty = false;
+    updateHeaderStateUI();
     setDirtyIndicator(false);
     return true;
   });
@@ -12805,6 +13439,11 @@ async function importMusicXml() {
     return;
   }
 
+  if (!(await requireCleanForFileOp(targetPath, "importing MusicXML"))) {
+    setStatus("Ready");
+    return;
+  }
+
   const countTunesByX = (text) => {
     try {
       const m = String(text || "").match(/^X:\s*\d+\s*$/gm);
@@ -12923,9 +13562,37 @@ async function importMusicXml() {
           lastWithX = ensureXNumberInAbc(String(item.abcText || ""), nextX);
           updated = appendTuneToContent(updated, lastWithX);
         }
-        const writeRes = await writeFile(targetPath, updated);
-        if (!writeRes || !writeRes.ok) throw new Error((writeRes && writeRes.error) ? writeRes.error : "Unable to write imported tunes.");
-        setFileContentInCache(targetPath, updated);
+        const shouldUseWorkingCopyCommit = Boolean(
+          isWorkingCopyOpenForFile(targetPath)
+          && window.api
+          && typeof window.api.openWorkingCopy === "function"
+          && typeof window.api.applyWorkingCopyFullText === "function"
+          && typeof window.api.commitWorkingCopyToDisk === "function"
+        );
+        if (shouldUseWorkingCopyCommit) {
+          await window.api.openWorkingCopy(targetPath);
+          const applyRes = await window.api.applyWorkingCopyFullText(updated);
+          if (!applyRes || !applyRes.ok) throw new Error((applyRes && applyRes.error) ? applyRes.error : "Unable to update working copy.");
+          const saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
+          if (!saveRes || !saveRes.ok) {
+            if (saveRes && saveRes.conflict) {
+              markDiskConflictPath(targetPath, true);
+              throw new Error("Refusing to import: target file changed on disk. Reload/reopen and try again.");
+            }
+            throw new Error((saveRes && saveRes.error) ? saveRes.error : "Unable to save file.");
+          }
+          const snapAfter = await refreshWorkingCopySnapshot();
+          if (snapAfter && snapAfter.path && pathsEqual(snapAfter.path, targetPath)) {
+            setFileContentInCache(targetPath, snapAfter.text);
+            syncLibraryFileFromWorkingCopySnapshot(targetPath, snapAfter);
+          } else {
+            setFileContentInCache(targetPath, updated);
+          }
+        } else {
+          const writeRes = await writeFile(targetPath, updated);
+          if (!writeRes || !writeRes.ok) throw new Error((writeRes && writeRes.error) ? writeRes.error : "Unable to write imported tunes.");
+          setFileContentInCache(targetPath, updated);
+        }
 
         const updatedFile = await refreshLibraryFile(targetPath);
         if (updatedFile && updatedFile.tunes && updatedFile.tunes.length) {
@@ -13199,6 +13866,46 @@ async function renumberXInActiveFile(explicitFilePath) {
     return;
   }
 
+  const activePath = (activeTuneMeta && activeTuneMeta.path)
+    ? String(activeTuneMeta.path)
+    : (activeFilePath ? String(activeFilePath) : "");
+  const globalDirty = Boolean(currentDoc && currentDoc.dirty) || Boolean(headerDirty) || Boolean(isNewTuneDraft);
+  const isTargetActive = Boolean(activePath && pathsEqual(activePath, filePath));
+
+  if (globalDirty && !isTargetActive) {
+    await showSaveError("Please Save/Discard your current changes before renumbering another file.");
+    return;
+  }
+  if (hasUnsavedChangesForFile(filePath)) {
+    await showSaveError("Renumber X is disabled while the file has unsaved changes. Save/Discard first.");
+    return;
+  }
+
+  // Non-open file: do a safe disk-first renumber (read → transform → write).
+  if (!isTargetActive && !isWorkingCopyOpenForFile(filePath)) {
+    try {
+      await withFileLock(filePath, async () => {
+        const readRes = await readFile(filePath);
+        if (!readRes || !readRes.ok) throw new Error((readRes && readRes.error) ? readRes.error : "Unable to read file.");
+        const before = String(readRes.data || "");
+        const verifyRes = await readFile(filePath);
+        if (!verifyRes || !verifyRes.ok) throw new Error((verifyRes && verifyRes.error) ? verifyRes.error : "Unable to verify file.");
+        if (String(verifyRes.data || "") !== before) throw new Error("Refusing to renumber: file changed on disk. Refresh/reopen and try again.");
+        const ren = renumberXLinesConsecutive(before);
+        if (!ren || !ren.ok) throw new Error((ren && ren.error) ? ren.error : "Unable to renumber X.");
+        const writeRes = await writeFile(filePath, ren.text);
+        if (!writeRes || !writeRes.ok) throw new Error((writeRes && writeRes.error) ? writeRes.error : "Unable to write file.");
+        setFileContentInCache(filePath, ren.text);
+      });
+      await refreshLibraryFile(filePath, { force: true });
+      setStatus("Renumbered X.");
+      return;
+    } catch (e) {
+      await showSaveError(e && e.message ? e.message : String(e));
+      return;
+    }
+  }
+
   try {
     if (window.api && typeof window.api.openWorkingCopy === "function") {
       await window.api.openWorkingCopy(filePath);
@@ -13239,13 +13946,35 @@ async function renumberXInActiveFile(explicitFilePath) {
   updateFileContext();
 
   // Keep the editor aligned with the active tune slice (its X line changed).
-  const nextIndex = prevIndex != null ? prevIndex : null;
+  // If we can't reliably restore the exact tune, fall back to best-effort selection.
+  const fileEntry = libraryIndex && Array.isArray(libraryIndex.files)
+    ? libraryIndex.files.find((f) => pathsEqual(f.path, filePath))
+    : null;
+  const tunes = fileEntry && Array.isArray(fileEntry.tunes) ? fileEntry.tunes : [];
   const countSame = Boolean(prevTuneCount && Array.isArray(snapshot.tunes) && snapshot.tunes.length === prevTuneCount);
-  if (prevUid && countSame) {
-    await selectTune(prevUid, { skipConfirm: true, suppressRecent: true });
-  } else if (nextIndex != null && Array.isArray(snapshot.tunes) && snapshot.tunes[nextIndex]) {
-    const uid = snapshot.tunes[nextIndex].tuneUid;
-    if (uid) await selectTune(uid, { skipConfirm: true, suppressRecent: true });
+
+  const candidate = (() => {
+    if (prevUid && countSame) return tunes.find((t) => t && t.tuneUid === prevUid) || null;
+    if (activeTuneMeta && activeTuneMeta.path && pathsEqual(activeTuneMeta.path, filePath)) {
+      const startOff = Number.isFinite(Number(activeTuneMeta.startOffset)) ? Number(activeTuneMeta.startOffset) : null;
+      if (startOff != null) return tunes.find((t) => Number(t.startOffset) === startOff) || null;
+    }
+    if (prevIndex != null) return tunes[Math.max(0, Math.min(tunes.length - 1, prevIndex))] || null;
+    return tunes.length ? tunes[0] : null;
+  })();
+
+  if (candidate) {
+    const key = candidate.tuneUid || candidate.id;
+    if (key) {
+      // Avoid late debounced pushes of stale editor text overwriting the renumber result.
+      try {
+        workingCopyTuneSyncEpoch += 1;
+        if (workingCopyTuneSyncTimer) clearTimeout(workingCopyTuneSyncTimer);
+        workingCopyTuneSyncTimer = null;
+        workingCopyTuneSyncQueued = false;
+      } catch {}
+      await selectTune(key, { skipConfirm: true, suppressRecent: true });
+    }
   }
 
   if (currentDoc) currentDoc.dirty = true;

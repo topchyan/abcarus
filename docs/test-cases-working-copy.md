@@ -39,6 +39,9 @@ Add new cases here as tickets land so we keep a stable, repeatable checklist.
 **Expected**
 - Only the deleted tune segment is removed.
 - Other tunes are unchanged byte-for-byte.
+- Delete is blocked if the target file has unsaved changes.
+- When Delete succeeds, the file is saved immediately (disk changes apply right away).
+- Library Tree list updates immediately (tune count decreases).
 
 ---
 
@@ -57,6 +60,77 @@ Add new cases here as tickets land so we keep a stable, repeatable checklist.
 
 Notes
 - Under ADR-0006, renumbering updates the working copy immediately; disk changes only after Save.
+
+---
+
+## WC-03b — Renumber X then Save persists renumbering (Critical)
+
+**Preconditions**
+- Open an `.abc` file with at least 3 tunes and messy `X:` numbering (e.g. `X:7`, `X:200`, `X:2`).
+
+**Steps**
+1. Run “Renumber X”.
+2. Confirm Library Tree shows sequential `X:` values.
+3. Press **Save**.
+4. Refresh the library and/or reopen the file.
+
+**Expected**
+- Renumbered `X:` values remain sequential after Save.
+- Save does not revert the file to pre-renumber numbering.
+
+---
+
+## WC-03c — Renumber X blocked when dirty (Critical)
+
+**Preconditions**
+- Open an `.abc` file from Library (working copy is active).
+
+**Steps**
+1. Make any edit so the file becomes dirty (change one character).
+2. Attempt “Renumber X”.
+
+**Expected**
+- Action is blocked.
+- Message tells the user: “Renumber X is disabled while the file has unsaved changes. Save/Discard first.”
+
+---
+
+## WC-03d — Renumber handles non-numeric X values (Critical)
+
+**Preconditions**
+- Prepare a file with multiple tunes where some `X:` values are non-numeric:
+  - `X:100`, `X:0`, `X:cat`, `X:dog`, `X:banana`, `X:3.141592654`
+
+**Steps**
+1. Open the file in ABCarus.
+2. Ensure the file is clean (no unsaved changes).
+3. Run “Renumber X”.
+4. Press Save.
+5. Reopen the file and inspect the `X:` lines.
+
+**Expected**
+- `X:` lines become strictly consecutive: `X:1`, `X:2`, `X:3`, ...
+- Only `X:` lines change; no other lines are modified.
+
+---
+
+## WC-03e — Structural ops blocked when dirty (High)
+
+**Preconditions**
+- Open an `.abc` file from Library (working copy is active).
+
+**Steps**
+1. Make any edit so the file becomes dirty.
+2. Try Library file/tune operations that modify files:
+   - Duplicate Tune
+   - Delete Tune
+   - Paste Tune / Move Tune
+   - Rename file
+   - Import MusicXML into an existing file
+
+**Expected**
+- Actions are blocked (or hidden) until Save/Discard.
+- Message is explicit: Save/Discard first.
 
 ---
 
@@ -97,6 +171,25 @@ Notes
 - Save Copy As & Switch… writes the working copy to a new path and switches the editor to that file.
 - Discard & Reload restores the working copy from disk (losing unsaved edits).
 - Cancel leaves everything unchanged.
+
+---
+
+## WC-05b — Conflict cancel → explicit reload path (High)
+
+**Preconditions**
+- Same as WC-05.
+
+**Steps**
+1. Trigger the conflict dialog (as in WC-05).
+2. Choose **Cancel**.
+3. Try to open the same tune/file again from the Library Tree.
+4. Also try: right-click the file in Library Tree → **Reload from disk…**.
+
+**Expected**
+- After Cancel, ABCarus does not silently “reload behind your back”.
+- When opening that file/tune again, ABCarus offers a **Reload from disk** prompt (discarding unsaved changes).
+- File context menu offers **Reload from disk…** while the conflict is unresolved.
+- After Reload, editor + header reflect disk state, and the conflict prompt no longer appears.
 
 ---
 
@@ -197,6 +290,55 @@ Notes
 ---
 
 ## WC-12 — “Don’t Save” discards Working Copy edits (Critical)
+
+---
+
+## WC-13 — Move tune between files is transactional (Critical)
+
+**Preconditions**
+- Two `.abc` files in the Library, `A.abc` and `B.abc`, each with multiple tunes.
+- Ensure there are **no unsaved changes** in either file (no dirty tune, no dirty header).
+
+**Steps**
+1. In `A.abc`, “Cut” a tune (or whatever UI puts a tune into move buffer).
+2. Select `B.abc` as the target and paste/move the tune into it.
+3. Verify:
+   - The tune is appended to the end of `B.abc`.
+   - `A.abc` no longer contains the tune.
+   - Both files have sequential `X:` numbering after the move.
+4. Repeat the move while introducing a conflict:
+   - Open `B.abc` externally, modify & save it.
+   - Try the move again.
+
+**Expected**
+- The move refuses to run if source/target has unsaved changes.
+- On success:
+  - Target file is saved (append + renumber), then source file is saved (delete + renumber).
+  - Library refreshes both files.
+- On conflict:
+  - Move is refused and no partial duplication/removal occurs.
+
+---
+
+## WC-14 — Duplicate tune inserts next and renumbers (High)
+
+**Preconditions**
+- A `.abc` file with at least 3 tunes.
+- Ensure there are **no unsaved changes** in the file.
+
+**Steps**
+1. Select tune #2.
+2. Run “Duplicate Tune”.
+3. Verify in Library Tree:
+   - A new tune appears immediately after the original.
+   - The new tune’s title is prefixed with `(Copy)`.
+4. Verify:
+   - `X:` numbering remains sequential for the file after duplication.
+   - Disk file is updated immediately (no extra Save needed).
+
+**Expected**
+- Duplicate is refused if the file has unsaved changes.
+- Duplicate is atomic: either the file is updated and renumbered, or nothing changes.
 
 **Preconditions**
 - Open a file from Library (working copy exists).
