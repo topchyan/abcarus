@@ -48,6 +48,7 @@ const $scanStatus = document.getElementById("scanStatus");
 const $libraryTree = document.getElementById("libraryTree");
 const $dirtyIndicator = document.getElementById("dirtyIndicator");
 const $fileTuneSelect = document.getElementById("fileTuneSelect");
+const $btnNewTune = document.getElementById("btnNewTune");
 const $fileHeaderPanel = document.getElementById("fileHeaderPanel");
 const $fileHeaderToggle = document.getElementById("fileHeaderToggle");
 const $fileHeaderEditor = document.getElementById("fileHeaderEditor");
@@ -6852,6 +6853,17 @@ if ($btnFileNew) {
         if (!ok) return;
       }
       await fileNew();
+    } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
+  });
+}
+if ($btnNewTune) {
+  $btnNewTune.addEventListener("click", async () => {
+    try {
+      if (rawMode) {
+        const ok = await leaveRawModeForAction("creating a new tune");
+        if (!ok) return;
+      }
+      await fileNewTune();
     } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
   });
 }

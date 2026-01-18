@@ -889,6 +889,39 @@ body.resizing * {
   outline-offset: 1px;
 }
 
+.file-tune-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--button-border);
+  background: var(--button-bg);
+  color: var(--button-text);
+  border-radius: var(--radius-1);
+  min-height: var(--button-height);
+  width: 32px;
+  padding: 0;
+  cursor: pointer;
+  flex: none;
+}
+
+.file-tune-action:hover {
+  background: var(--button-bg-hover);
+}
+
+.file-tune-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.file-tune-action:disabled:hover {
+  background: var(--button-bg);
+}
+
+.file-tune-action .btn-icon {
+  width: 16px;
+  height: 16px;
+}
+
 .file-header-editor {
   width: 100%;
   height: 150px;
