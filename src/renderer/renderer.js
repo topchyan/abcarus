@@ -12471,6 +12471,19 @@ async function refreshLibraryFile(filePath, options) {
     else libraryIndex.files.push(updatedFile);
     libraryViewStore.invalidate();
   }
+
+  // If this file is the active working copy, immediately attach tuneUid/tuneIndex so
+  // tune selection can reliably slice from `workingCopySnapshot.text` (not stale disk/cache).
+  try {
+    if (
+      workingCopySnapshot
+      && workingCopySnapshot.path
+      && pathsEqual(workingCopySnapshot.path, updatedFile.path)
+    ) {
+      attachTuneUidsToLibraryFile(updatedFile.path, workingCopySnapshot);
+    }
+  } catch {}
+
   renderLibraryTree();
   updateFileContext();
   updateFileHeaderPanel();
