@@ -6,10 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [0.21.7] - 2026-01-18
 ### Fixed
 - Security/CSP: revert temporary `file:` allowances added for icon loading.
-
-
 
 ## [0.21.6] - 2026-01-18
 ### Fixed
