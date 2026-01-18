@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Toolbar: macOS button icons render correctly (SVG masks use alpha mode).
+
 
 
 ## [0.21.2] - 2026-01-17
