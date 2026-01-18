@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- macOS: toolbar button icons render reliably (inline SVG sprite; avoids external SVG loading issues on Monterey).
+
 
 
 ## [0.21.7] - 2026-01-18
