@@ -346,9 +346,11 @@ main {
   height: 16px;
   display: inline-block;
   background-color: currentColor;
+  -webkit-mask-mode: alpha;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
   -webkit-mask-size: contain;
+  mask-mode: alpha;
   mask-repeat: no-repeat;
   mask-position: center;
   mask-size: contain;
