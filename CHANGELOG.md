@@ -8,6 +8,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+## [0.22.0] - 2026-01-18
+### Fixed
+- macOS: toolbar button icons render reliably (inline SVG sprite; avoids external SVG loading issues on Monterey).
+
+## [0.21.7] - 2026-01-18
+### Fixed
+- Security/CSP: revert temporary `file:` allowances added for icon loading.
+
+## [0.21.6] - 2026-01-18
+### Fixed
+- UI/Icons: inline toolbar SVG icons (no external icon file loading; fixes missing icons on macOS Monterey).
+
+## [0.21.5] - 2026-01-18
+### Fixed
+- UI/Icons: allow loading local `file:` SVG/font assets in CSP (fixes missing toolbar icons on some macOS setups).
+
+## [0.21.4] - 2026-01-18
+### Fixed
+- Toolbar: use SVG background images for button icons (improves macOS compatibility).
+
+## [0.21.3] - 2026-01-18
+### Fixed
+- Toolbar: macOS button icons render correctly (SVG masks use alpha mode).
+
+## [0.21.2] - 2026-01-17
+### Fixed
+- Playback: avoid truncating `K:` when applying offset-stable header reordering (prevents cases like `K:Dm` turning into `K:D` during playback).
+
 ## [0.21.1] - 2026-01-17
 ### Added
 - Import (MusicXML): allow selecting and importing multiple files at once (preserves the selection order; appends all imported tunes to the chosen target `.abc` file; auto-drops the default “Untitled” placeholder tune when importing into a brand-new file).

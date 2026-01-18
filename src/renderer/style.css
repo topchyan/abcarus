@@ -345,32 +345,13 @@ main {
   width: 16px;
   height: 16px;
   display: inline-block;
-  background-color: currentColor;
-  -webkit-mask-mode: alpha;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  -webkit-mask-size: contain;
-  mask-mode: alpha;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  mask-size: contain;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   flex: none;
 }
-
-.icon-library { -webkit-mask-image: url("../../assets/icons/ui/library-big.svg"); mask-image: url("../../assets/icons/ui/library-big.svg"); }
-.icon-file-plus { -webkit-mask-image: url("../../assets/icons/ui/file-plus.svg"); mask-image: url("../../assets/icons/ui/file-plus.svg"); }
-.icon-file-x { -webkit-mask-image: url("../../assets/icons/ui/file-x.svg"); mask-image: url("../../assets/icons/ui/file-x.svg"); }
-.icon-file-code { -webkit-mask-image: url("../../assets/icons/ui/file-code.svg"); mask-image: url("../../assets/icons/ui/file-code.svg"); }
-.icon-folder-open { -webkit-mask-image: url("../../assets/icons/ui/folder-open.svg"); mask-image: url("../../assets/icons/ui/folder-open.svg"); }
-.icon-save { -webkit-mask-image: url("../../assets/icons/ui/save.svg"); mask-image: url("../../assets/icons/ui/save.svg"); }
-.icon-play { -webkit-mask-image: url("../../assets/icons/ui/play.svg"); mask-image: url("../../assets/icons/ui/play.svg"); }
-.icon-pause { -webkit-mask-image: url("../../assets/icons/ui/pause.svg"); mask-image: url("../../assets/icons/ui/pause.svg"); }
-.icon-stop { -webkit-mask-image: url("../../assets/icons/ui/square.svg"); mask-image: url("../../assets/icons/ui/square.svg"); }
-.icon-reset { -webkit-mask-image: url("../../assets/icons/ui/rotate-ccw.svg"); mask-image: url("../../assets/icons/ui/rotate-ccw.svg"); }
-.icon-type { -webkit-mask-image: url("../../assets/icons/ui/type.svg"); mask-image: url("../../assets/icons/ui/type.svg"); }
-.icon-repeat { -webkit-mask-image: url("../../assets/icons/ui/repeat.svg"); mask-image: url("../../assets/icons/ui/repeat.svg"); }
-.icon-plus { -webkit-mask-image: url("../../assets/icons/ui/plus.svg"); mask-image: url("../../assets/icons/ui/plus.svg"); }
-.icon-minus { -webkit-mask-image: url("../../assets/icons/ui/minus.svg"); mask-image: url("../../assets/icons/ui/minus.svg"); }
 
 #btnPlayPause .icon-pause { display: none; }
 #btnPlayPause.is-playing .icon-play { display: none; }
