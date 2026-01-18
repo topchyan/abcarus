@@ -49,11 +49,24 @@ const $libraryTree = document.getElementById("libraryTree");
 const $dirtyIndicator = document.getElementById("dirtyIndicator");
 const $fileTuneSelect = document.getElementById("fileTuneSelect");
 const $btnNewTune = document.getElementById("btnNewTune");
+const $btnTemplates = document.getElementById("btnTemplates");
 const $fileHeaderPanel = document.getElementById("fileHeaderPanel");
 const $fileHeaderToggle = document.getElementById("fileHeaderToggle");
 const $fileHeaderEditor = document.getElementById("fileHeaderEditor");
 const $fileHeaderSave = document.getElementById("fileHeaderSave");
 const $fileHeaderReload = document.getElementById("fileHeaderReload");
+const $templatesModal = document.getElementById("templatesModal");
+const $templatesClose = document.getElementById("templatesClose");
+const $templatesSearch = document.getElementById("templatesSearch");
+const $templatesList = document.getElementById("templatesList");
+const $templatesFolderLabel = document.getElementById("templatesFolderLabel");
+const $templatesManage = document.getElementById("templatesManage");
+const $templatesChangeFolder = document.getElementById("templatesChangeFolder");
+const $templatesReload = document.getElementById("templatesReload");
+const $templatesPreviewTitle = document.getElementById("templatesPreviewTitle");
+const $templatesPreviewText = document.getElementById("templatesPreviewText");
+const $templatesInsert = document.getElementById("templatesInsert");
+const $templatesCancel = document.getElementById("templatesCancel");
 const $xIssuesModal = document.getElementById("xIssuesModal");
 const $xIssuesInfo = document.getElementById("xIssuesInfo");
 const $xIssuesClose = document.getElementById("xIssuesClose");
@@ -2453,6 +2466,11 @@ let latestSettingsSnapshot = null;
 let libraryUiStateTimer = null;
 let libraryUiStateDirty = false;
 const LIBRARY_UI_STATE_DEBOUNCE_MS = 300;
+
+let templatesIndex = null;
+let templatesFlat = [];
+let templatesSelectedKey = "";
+const templatesFileCache = new Map(); // filePath -> full text
 
 const libraryViewStore = createLibraryViewStore({
   getIndex: () => libraryIndex,
@@ -6864,6 +6882,17 @@ if ($btnNewTune) {
         if (!ok) return;
       }
       await fileNewTuneAndAppendNow();
+    } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
+  });
+}
+if ($btnTemplates) {
+  $btnTemplates.addEventListener("click", async () => {
+    try {
+      if (rawMode) {
+        const ok = await leaveRawModeForAction("opening templates");
+        if (!ok) return;
+      }
+      await openTemplatesModal();
     } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
   });
 }
@@ -13358,6 +13387,78 @@ async function fileNewTune() {
   showToast("New tune draft (Save will append to the active file).", 2400);
 }
 
+async function appendTuneTextToFileNow(filePath, tuneText, { toastOk = "" } = {}) {
+  const p = String(filePath || "");
+  if (!p) return false;
+  const raw = String(tuneText || "");
+  if (!raw.trim()) return false;
+  if (
+    !window.api
+    || typeof window.api.openWorkingCopy !== "function"
+    || typeof window.api.insertWorkingCopyTuneAfter !== "function"
+    || typeof window.api.commitWorkingCopyToDisk !== "function"
+  ) {
+    await showSaveError("Internal error: working copy is unavailable.");
+    return false;
+  }
+
+  return withFileLock(p, async () => {
+    await window.api.openWorkingCopy(p);
+    const snap = await refreshWorkingCopySnapshot();
+    if (!snap || !snap.path || !pathsEqual(snap.path, p)) {
+      await showSaveError("Unable to open working copy.");
+      return false;
+    }
+
+    const nextX = getNextXNumber(String(snap.text || ""));
+    const prepared = ensureXNumberInAbc(raw, nextX);
+    const afterTuneIndex = Array.isArray(snap.tunes) ? (snap.tunes.length - 1) : -1;
+
+    const insertRes = await window.api.insertWorkingCopyTuneAfter({ afterTuneIndex, text: prepared });
+    if (!insertRes || !insertRes.ok) {
+      await showSaveError((insertRes && insertRes.error) ? insertRes.error : "Unable to add tune.");
+      return false;
+    }
+
+    const saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
+    if (!saveRes || !saveRes.ok) {
+      if (saveRes && saveRes.conflict) {
+        markDiskConflictPath(p, true);
+        await showSaveError("Refusing to save: file changed on disk. Reload/reopen and try again.");
+        return false;
+      }
+      await showSaveError((saveRes && saveRes.error) ? saveRes.error : "Unable to save file.");
+      return false;
+    }
+
+    const snapAfter = await refreshWorkingCopySnapshot();
+    if (snapAfter && snapAfter.path && pathsEqual(snapAfter.path, p)) {
+      setFileContentInCache(p, snapAfter.text);
+      syncLibraryFileFromWorkingCopySnapshot(p, snapAfter);
+    }
+
+    const updatedFile = await refreshLibraryFile(p, { force: true });
+    activeFilePath = p;
+    if (updatedFile && Array.isArray(updatedFile.tunes) && updatedFile.tunes.length) {
+      const last = updatedFile.tunes[updatedFile.tunes.length - 1];
+      if (last && last.id) {
+        await selectTune(last.tuneUid || last.id, { skipConfirm: true, suppressRecent: true });
+      }
+    }
+
+    headerDirty = false;
+    updateHeaderStateUI();
+    if (currentDoc) {
+      currentDoc.path = p;
+      currentDoc.dirty = false;
+    }
+    isNewTuneDraft = false;
+    setDirtyIndicator(false);
+    if (toastOk) showToast(toastOk, 1800);
+    return true;
+  });
+}
+
 async function fileNewTuneAndAppendNow() {
   const entry = getActiveFileEntry();
   if (!entry || !entry.path) {
@@ -13370,71 +13471,8 @@ async function fileNewTuneAndAppendNow() {
   const ok = await ensureSafeToAbandonCurrentDoc("creating a new tune");
   if (!ok) return;
 
-  if (
-    !window.api
-    || typeof window.api.openWorkingCopy !== "function"
-    || typeof window.api.insertWorkingCopyTuneAfter !== "function"
-    || typeof window.api.commitWorkingCopyToDisk !== "function"
-  ) {
-    await showSaveError("Internal error: working copy is unavailable.");
-    return;
-  }
-
-  await withFileLock(filePath, async () => {
-    await window.api.openWorkingCopy(filePath);
-    const snap = await refreshWorkingCopySnapshot();
-    if (!snap || !snap.path || !pathsEqual(snap.path, filePath)) {
-      await showSaveError("Unable to open working copy.");
-      return;
-    }
-
-    const nextX = getNextXNumber(String(snap.text || ""));
-    const template = buildNewTuneDraftTemplate(nextX);
-    const prepared = ensureXNumberInAbc(template, nextX);
-    const afterTuneIndex = Array.isArray(snap.tunes) ? (snap.tunes.length - 1) : -1;
-
-    const insertRes = await window.api.insertWorkingCopyTuneAfter({ afterTuneIndex, text: prepared });
-    if (!insertRes || !insertRes.ok) {
-      await showSaveError((insertRes && insertRes.error) ? insertRes.error : "Unable to add tune.");
-      return;
-    }
-
-    const saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
-    if (!saveRes || !saveRes.ok) {
-      if (saveRes && saveRes.conflict) {
-        markDiskConflictPath(filePath, true);
-        await showSaveError("Refusing to save: file changed on disk. Reload/reopen and try again.");
-        return;
-      }
-      await showSaveError((saveRes && saveRes.error) ? saveRes.error : "Unable to save file.");
-      return;
-    }
-
-    const snapAfter = await refreshWorkingCopySnapshot();
-    if (snapAfter && snapAfter.path && pathsEqual(snapAfter.path, filePath)) {
-      setFileContentInCache(filePath, snapAfter.text);
-      syncLibraryFileFromWorkingCopySnapshot(filePath, snapAfter);
-    }
-
-    const updatedFile = await refreshLibraryFile(filePath, { force: true });
-    activeFilePath = filePath;
-    if (updatedFile && Array.isArray(updatedFile.tunes) && updatedFile.tunes.length) {
-      const last = updatedFile.tunes[updatedFile.tunes.length - 1];
-      if (last && last.id) {
-        await selectTune(last.tuneUid || last.id, { skipConfirm: true, suppressRecent: true });
-      }
-    }
-
-    headerDirty = false;
-    updateHeaderStateUI();
-    if (currentDoc) {
-      currentDoc.path = filePath;
-      currentDoc.dirty = false;
-    }
-    isNewTuneDraft = false;
-    setDirtyIndicator(false);
-    showToast("New tune added.", 1800);
-  });
+  const template = buildNewTuneDraftTemplate("");
+  await appendTuneTextToFileNow(filePath, template, { toastOk: "New tune added." });
 }
 
 async function fileOpen() {
@@ -14481,6 +14519,189 @@ document.addEventListener("keydown", (e) => {
   dumpDebugToFile().catch(() => {});
 });
 
+function isTemplatesModalOpen() {
+  return Boolean($templatesModal && $templatesModal.classList.contains("open"));
+}
+
+function closeTemplatesModal() {
+  if (!$templatesModal) return;
+  $templatesModal.classList.remove("open");
+  $templatesModal.setAttribute("aria-hidden", "true");
+  templatesSelectedKey = "";
+  if ($templatesInsert) $templatesInsert.disabled = true;
+  if ($templatesPreviewTitle) $templatesPreviewTitle.textContent = "Select a template";
+  if ($templatesPreviewText) $templatesPreviewText.textContent = "";
+}
+
+function renderTemplatesList() {
+  if (!$templatesList) return;
+  const q = $templatesSearch ? String($templatesSearch.value || "").trim().toLowerCase() : "";
+  $templatesList.textContent = "";
+  const items = templatesFlat.filter((item) => {
+    if (!q) return true;
+    const hay = `${item.title} ${item.composer} ${item.xNumber} ${item.fileBasename}`.toLowerCase();
+    return hay.includes(q);
+  });
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "templates-item";
+    empty.style.cursor = "default";
+    empty.innerHTML = "<div class=\"templates-item-left\"></div><div><div class=\"templates-item-title\">No templates found</div><div class=\"templates-item-subtitle\">Add .abc files to the templates folder.</div></div>";
+    $templatesList.appendChild(empty);
+    return;
+  }
+  for (const item of items) {
+    const row = document.createElement("div");
+    row.className = `templates-item${item.key === templatesSelectedKey ? " selected" : ""}`;
+    row.dataset.key = item.key;
+    const left = document.createElement("div");
+    left.className = "templates-item-left";
+    left.textContent = item.fileBasename || "";
+    const right = document.createElement("div");
+    const title = document.createElement("div");
+    title.className = "templates-item-title";
+    title.textContent = item.title || item.preview || "Untitled";
+    const subtitle = document.createElement("div");
+    subtitle.className = "templates-item-subtitle";
+    const x = item.xNumber ? `X:${item.xNumber}` : "X:";
+    const c = item.composer ? ` · ${item.composer}` : "";
+    subtitle.textContent = `${x}${c}`;
+    right.appendChild(title);
+    right.appendChild(subtitle);
+    row.appendChild(left);
+    row.appendChild(right);
+    row.addEventListener("click", () => {
+      selectTemplateByKey(item.key).catch(() => {});
+    });
+    row.addEventListener("dblclick", () => {
+      if ($templatesInsert && !$templatesInsert.disabled) $templatesInsert.click();
+    });
+    $templatesList.appendChild(row);
+  }
+}
+
+async function getTemplatesFileText(filePath) {
+  const p = String(filePath || "");
+  if (!p) return "";
+  const cached = templatesFileCache.get(p);
+  if (typeof cached === "string") return cached;
+  if (!window.api || typeof window.api.readFile !== "function") return "";
+  const res = await window.api.readFile(p);
+  if (!res || !res.ok) return "";
+  const text = String(res.data || "");
+  templatesFileCache.set(p, text);
+  return text;
+}
+
+async function selectTemplateByKey(key) {
+  const wanted = String(key || "");
+  const item = templatesFlat.find((t) => t && t.key === wanted) || null;
+  templatesSelectedKey = item ? item.key : "";
+  if ($templatesInsert) $templatesInsert.disabled = !item;
+  renderTemplatesList();
+  if (!$templatesPreviewTitle || !$templatesPreviewText) return;
+  if (!item) {
+    $templatesPreviewTitle.textContent = "Select a template";
+    $templatesPreviewText.textContent = "";
+    return;
+  }
+  const title = item.title || item.preview || "Untitled";
+  const x = item.xNumber ? `X:${item.xNumber}` : "X:";
+  const c = item.composer ? ` · ${item.composer}` : "";
+  $templatesPreviewTitle.textContent = `${title} (${x}${c})`;
+  const full = await getTemplatesFileText(item.filePath);
+  const start = Number(item.startOffset) || 0;
+  const end = Number(item.endOffset) || 0;
+  const slice = full ? full.slice(start, Math.max(start, end)) : "";
+  $templatesPreviewText.textContent = slice.trim() ? slice.trim() : "(Empty template)";
+}
+
+async function insertSelectedTemplateFromModal() {
+  const key = String(templatesSelectedKey || "");
+  const item = templatesFlat.find((t) => t && t.key === key) || null;
+  if (!item) return;
+  const entry = getActiveFileEntry();
+  if (!entry || !entry.path) {
+    showToast("Open/select a file first.", 2600);
+    return;
+  }
+
+  const ok = await ensureSafeToAbandonCurrentDoc("inserting a template");
+  if (!ok) return;
+
+  const full = await getTemplatesFileText(item.filePath);
+  const start = Number(item.startOffset) || 0;
+  const end = Number(item.endOffset) || 0;
+  const slice = full ? full.slice(start, Math.max(start, end)) : "";
+  if (!slice.trim()) {
+    await showSaveError("Template is empty.");
+    return;
+  }
+  const appended = await appendTuneTextToFileNow(entry.path, slice, { toastOk: "Template inserted." });
+  if (appended) closeTemplatesModal();
+}
+
+async function loadTemplatesForModal() {
+  templatesIndex = null;
+  templatesFlat = [];
+  templatesSelectedKey = "";
+  templatesFileCache.clear();
+
+  if (!$templatesFolderLabel) return;
+  if (!window.api || typeof window.api.getTemplatesInfo !== "function" || typeof window.api.scanTemplates !== "function") {
+    $templatesFolderLabel.textContent = "Templates unavailable";
+    $templatesFolderLabel.title = "Missing templates APIs.";
+    return;
+  }
+
+  const info = await window.api.getTemplatesInfo();
+  const folder = info && info.ok ? String(info.folder || "") : "";
+  $templatesFolderLabel.textContent = folder ? safeBasename(folder) : "(none)";
+  $templatesFolderLabel.title = folder || "";
+
+  const scan = await window.api.scanTemplates();
+  if (!scan || !scan.ok) {
+    templatesIndex = null;
+    templatesFlat = [];
+    renderTemplatesList();
+    return;
+  }
+  templatesIndex = { root: scan.root || "", files: scan.files || [] };
+  const flat = [];
+  for (const file of scan.files || []) {
+    const filePath = file && file.path ? String(file.path) : "";
+    const fileBasename = file && file.basename ? String(file.basename) : safeBasename(filePath);
+    for (const tune of (file && file.tunes) ? file.tunes : []) {
+      if (!tune || !Number.isFinite(Number(tune.startOffset)) || !Number.isFinite(Number(tune.endOffset))) continue;
+      flat.push({
+        key: `${filePath}::${tune.startOffset}`,
+        filePath,
+        fileBasename,
+        startOffset: Number(tune.startOffset),
+        endOffset: Number(tune.endOffset),
+        xNumber: tune.xNumber ? String(tune.xNumber) : "",
+        title: tune.title ? String(tune.title) : "",
+        composer: tune.composer ? String(tune.composer) : "",
+        preview: tune.preview ? String(tune.preview) : "",
+      });
+    }
+  }
+  templatesFlat = flat;
+  renderTemplatesList();
+}
+
+async function openTemplatesModal() {
+  if (!$templatesModal) return;
+  $templatesModal.classList.add("open");
+  $templatesModal.setAttribute("aria-hidden", "false");
+  if ($templatesSearch) $templatesSearch.value = "";
+  if ($templatesPreviewTitle) $templatesPreviewTitle.textContent = "Select a template";
+  if ($templatesPreviewText) $templatesPreviewText.textContent = "";
+  if ($templatesInsert) $templatesInsert.disabled = true;
+  await loadTemplatesForModal();
+  try { if ($templatesSearch) $templatesSearch.focus(); } catch {}
+}
+
 initContextMenu();
 
 requestAnimationFrame(() => {
@@ -14609,6 +14830,84 @@ if ($aboutCopy) {
     } catch (e) {
       logErr(e && e.message ? e.message : String(e));
       setStatus("Copy failed.");
+    }
+  });
+}
+
+if ($templatesClose) {
+  $templatesClose.addEventListener("click", () => {
+    closeTemplatesModal();
+  });
+}
+
+if ($templatesCancel) {
+  $templatesCancel.addEventListener("click", () => {
+    closeTemplatesModal();
+  });
+}
+
+if ($templatesSearch) {
+  $templatesSearch.addEventListener("input", () => {
+    renderTemplatesList();
+  });
+}
+
+if ($templatesManage) {
+  $templatesManage.addEventListener("click", async () => {
+    try {
+      if (window.api && typeof window.api.openTemplatesFolder === "function") {
+        await window.api.openTemplatesFolder();
+      }
+    } catch (e) {
+      logErr(e && e.message ? e.message : String(e));
+    }
+  });
+}
+
+if ($templatesChangeFolder) {
+  $templatesChangeFolder.addEventListener("click", async () => {
+    try {
+      if (window.api && typeof window.api.pickTemplatesFolder === "function") {
+        const res = await window.api.pickTemplatesFolder();
+        if (res && res.ok && !res.canceled) {
+          await loadTemplatesForModal();
+        }
+      }
+    } catch (e) {
+      logErr(e && e.message ? e.message : String(e));
+    }
+  });
+}
+
+if ($templatesReload) {
+  $templatesReload.addEventListener("click", async () => {
+    try { await loadTemplatesForModal(); } catch (e) { logErr(e && e.message ? e.message : String(e)); }
+  });
+}
+
+if ($templatesInsert) {
+  $templatesInsert.addEventListener("click", async () => {
+    try { await insertSelectedTemplateFromModal(); } catch (e) { logErr(e && e.message ? e.message : String(e)); }
+  });
+}
+
+if ($templatesModal) {
+  $templatesModal.addEventListener("click", (e) => {
+    if (e.target === $templatesModal) closeTemplatesModal();
+  });
+  $templatesModal.addEventListener("keydown", (e) => {
+    if (!e) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeTemplatesModal();
+      return;
+    }
+    if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (!$templatesInsert || $templatesInsert.disabled) return;
+      e.preventDefault();
+      e.stopPropagation();
+      $templatesInsert.click();
     }
   });
 }

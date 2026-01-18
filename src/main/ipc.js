@@ -210,6 +210,44 @@ function registerIpcHandlers(ctx) {
 	    getLastRecent,
 	  } = ctx;
 
+  const resolveTemplatesFolder = () => {
+    const settings = getSettings ? getSettings() : {};
+    const configured = settings && typeof settings.templatesFolder === "string" ? settings.templatesFolder.trim() : "";
+    const fallback = path.join(app.getPath("userData"), "templates");
+    const folder = configured || fallback;
+    return { folder, configured, fallback };
+  };
+
+  async function scanTemplatesFolder(rootDir) {
+    const absRoot = path.resolve(String(rootDir || ""));
+    const files = [];
+    const stack = [absRoot];
+    while (stack.length) {
+      const dir = stack.pop();
+      if (!dir) continue;
+      let entries = [];
+      try {
+        entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        if (!entry || !entry.name) continue;
+        const name = String(entry.name);
+        if (name === "." || name === "..") continue;
+        const fullPath = path.join(dir, name);
+        if (entry.isDirectory()) {
+          if (name.startsWith(".")) continue;
+          stack.push(fullPath);
+        } else if (entry.isFile() && name.toLowerCase().endsWith(".abc")) {
+          files.push(fullPath);
+        }
+      }
+    }
+    files.sort((a, b) => a.localeCompare(b));
+    return { root: absRoot, files };
+  }
+
   const getParentForDialog = (event, reason) => {
     try {
       if (typeof prepareDialogParent === "function") return prepareDialogParent(event, reason);
@@ -699,6 +737,65 @@ function registerIpcHandlers(ctx) {
     const res = await parseSingleFile(filePath, event.sender, options);
     return res || { root: "", files: [] };
   });
+
+  ipcMain.handle("templates:get-info", async () => {
+    try {
+      const resolved = resolveTemplatesFolder();
+      return { ok: true, folder: resolved.folder, configured: resolved.configured, fallback: resolved.fallback };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("templates:pick-folder", async (event) => {
+    const parent = getParentForDialog(event, "templates:pick-folder");
+    try {
+      const resolved = resolveTemplatesFolder();
+      const res = dialog.showOpenDialogSync(parent || undefined, {
+        title: "Choose Templates Folder",
+        defaultPath: resolved.folder,
+        properties: ["openDirectory", "createDirectory"],
+      });
+      if (!res || !res.length) return { ok: true, canceled: true };
+      const selected = String(res[0] || "");
+      if (!selected) return { ok: true, canceled: true };
+      if (typeof updateSettings === "function") {
+        await updateSettings({ templatesFolder: selected });
+      }
+      return { ok: true, folder: selected };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("templates:open-folder", async () => {
+    try {
+      const resolved = resolveTemplatesFolder();
+      await fs.promises.mkdir(resolved.folder, { recursive: true });
+      await shell.openPath(resolved.folder);
+      return { ok: true, folder: resolved.folder };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("templates:scan", async () => {
+    try {
+      const resolved = resolveTemplatesFolder();
+      await fs.promises.mkdir(resolved.folder, { recursive: true });
+      const discovered = await scanTemplatesFolder(resolved.folder);
+      const outFiles = [];
+      for (const filePath of discovered.files) {
+        const parsed = await parseSingleFile(filePath, null, { force: true });
+        if (!parsed || !parsed.files || !parsed.files.length) continue;
+        outFiles.push(parsed.files[0]);
+      }
+      return { ok: true, root: discovered.root, files: outFiles };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
   ipcMain.handle("print:preview", async (_event, svgMarkup) => {
     if (!svgMarkup) return { ok: false, error: "No notation to print." };
     if (typeof previewPdf === "function") return previewPdf(svgMarkup);

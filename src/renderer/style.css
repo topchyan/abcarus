@@ -922,6 +922,178 @@ body.resizing * {
   height: 16px;
 }
 
+.templates-card {
+  width: min(1100px, calc(100vw - 80px));
+  max-height: min(720px, calc(100vh - 80px));
+  display: flex;
+  flex-direction: column;
+}
+
+.templates-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.templates-toolbar input {
+  font-size: var(--font-size-sm);
+  padding: 6px 8px;
+  border: 1px solid var(--button-border);
+  border-radius: var(--radius-1);
+  width: 100%;
+  min-width: 160px;
+}
+
+.templates-folder {
+  font-size: 12px;
+  color: var(--muted-text);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.templates-toolbar button {
+  border: 1px solid var(--button-border);
+  background: var(--button-bg);
+  color: var(--button-text);
+  padding: 6px 10px;
+  border-radius: var(--button-radius);
+  min-height: var(--button-height);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.templates-toolbar button:hover {
+  background: var(--button-bg-hover);
+}
+
+.templates-body {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 12px;
+  padding: 12px;
+  min-height: 0;
+  flex: 1;
+}
+
+.templates-list {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-2);
+  overflow: auto;
+  min-height: 0;
+  background: var(--panel-bg);
+}
+
+.templates-item {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+}
+
+.templates-item:last-child {
+  border-bottom: none;
+}
+
+.templates-item:hover {
+  background: var(--hover-bg);
+}
+
+.templates-item.selected {
+  background: var(--accent-soft);
+}
+
+.templates-item .templates-item-left {
+  font-size: 12px;
+  color: var(--muted-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.templates-item .templates-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.templates-item .templates-item-subtitle {
+  font-size: 12px;
+  color: var(--muted-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.templates-preview {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-2);
+  overflow: hidden;
+  min-height: 0;
+  background: var(--panel-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.templates-preview-title {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  font-weight: 600;
+}
+
+.templates-preview-text {
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  font-family: var(--editor-font-family);
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: pre;
+  flex: 1;
+}
+
+.templates-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.templates-actions button {
+  border: 1px solid var(--button-border);
+  background: var(--button-bg);
+  color: var(--button-text);
+  padding: 6px 12px;
+  border-radius: var(--button-radius);
+  min-height: var(--button-height);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.templates-actions button:hover {
+  background: var(--button-bg-hover);
+}
+
+.templates-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.templates-actions button:disabled:hover {
+  background: var(--button-bg);
+}
+
 .file-header-editor {
   width: 100%;
   height: 150px;

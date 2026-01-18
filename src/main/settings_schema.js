@@ -428,6 +428,17 @@ function getSettingsSchema() {
       help: "When moving a tune between files, renumber X headers in both files to be sequential (starting at the first X).",
       ui: { input: "checkbox" },
     },
+    {
+      key: "templatesFolder",
+      type: "string",
+      default: "",
+      section: "Library",
+      group: "Templates",
+      groupOrder: 20,
+      label: "Templates folder",
+      help: "Optional folder with .abc files used as tune templates. If empty, ABCarus uses its default templates folder under user data.",
+      ui: { input: "text" },
+    },
     // Non-modal / internal / persisted UI prefs (kept for compatibility).
     { key: "soundfontPaths", type: "array", default: [], section: "Advanced", advanced: true, legacy: true },
     { key: "disclaimerSeen", type: "boolean", default: false, section: "Advanced", advanced: true, legacy: true },
