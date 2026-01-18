@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- UI/Icons: allow loading local `file:` SVG/font assets in CSP (fixes missing toolbar icons on some macOS setups).
+
 
 
 ## [0.21.4] - 2026-01-18
