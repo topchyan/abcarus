@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Toolbar: use SVG background images for button icons (improves macOS compatibility).
+
 
 
 ## [0.21.3] - 2026-01-18
