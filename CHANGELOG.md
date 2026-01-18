@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Working Copy (WC) model: opened files are edited via a versioned in-memory buffer (prevents disk corruption and enables conflict-gated saves).
+
+### Changed
+- Structural file operations (renumber X / move / delete / duplicate / append) are gated on clean state to avoid ambiguous partial results.
+
 
 
 ## [0.22.0] - 2026-01-18
