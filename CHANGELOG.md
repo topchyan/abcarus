@@ -6,10 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [0.22.3] - 2026-01-18
 ### Added
 - Templates: a Templates Library picker (manage folder, search, preview, insert one tune as a new tune in the active file).
-
-
 
 ## [0.22.2] - 2026-01-18
 ### Fixed
