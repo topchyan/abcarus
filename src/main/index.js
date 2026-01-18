@@ -528,15 +528,18 @@ function confirmDeleteTune(label) {
   return "cancel";
 }
 
-function confirmAppendToFile(filePath) {
+function confirmAppendToFile(filePath, tuneLabel) {
   const parent = prepareDialogParent(null, "confirm-append-to-file");
+  const label = String(tuneLabel || "").trim();
   const response = dialog.showMessageBoxSync(parent || undefined, {
     type: "question",
     buttons: ["Append", "Cancel"],
     defaultId: 0,
     cancelId: 1,
     message: "Append tune?",
-    detail: `Append to “${path.basename(filePath)}”?`,
+    detail: label
+      ? `Append “${label}” to the active file “${path.basename(filePath)}”?`
+      : `Append to the active file “${path.basename(filePath)}”?`,
   });
   if (response === 0) return "append";
   return "cancel";

@@ -19,13 +19,34 @@ contextBridge.exposeInMainWorld("api", {
   confirmOverwrite: async (filePath) =>
     ipcRenderer.invoke("dialog:confirm-overwrite", filePath),
   confirmAppendToFile: async (filePath) =>
-    ipcRenderer.invoke("dialog:confirm-append", filePath),
+    ipcRenderer.invoke("dialog:confirm-append", filePath || ""),
+  confirmAppendToFileDetailed: async (filePath, tuneLabel) =>
+    ipcRenderer.invoke("dialog:confirm-append", { filePath: filePath || "", tuneLabel: tuneLabel || "" }),
   confirmImportMusicXmlTarget: async (filePath) =>
     ipcRenderer.invoke("dialog:confirm-import-musicxml-target", filePath || ""),
   confirmRemoveSoundfont: async (label) =>
     ipcRenderer.invoke("dialog:confirm-remove-sf2", label),
   confirmDeleteTune: async (label) =>
     ipcRenderer.invoke("dialog:confirm-delete-tune", label),
+  confirmSaveConflict: async (filePath) =>
+    ipcRenderer.invoke("dialog:confirm-save-conflict", filePath || ""),
+  confirmReloadFromDisk: async (filePath) =>
+    ipcRenderer.invoke("dialog:confirm-reload-from-disk", filePath || ""),
+  openWorkingCopy: async (filePath) => ipcRenderer.invoke("workingcopy:open", filePath),
+  closeWorkingCopy: async () => ipcRenderer.invoke("workingcopy:close"),
+  getWorkingCopySnapshot: async () => ipcRenderer.invoke("workingcopy:get"),
+  getWorkingCopyMeta: async () => ipcRenderer.invoke("workingcopy:get-meta"),
+  reloadWorkingCopyFromDisk: async () => ipcRenderer.invoke("workingcopy:reload"),
+  commitWorkingCopyToDisk: async (payload) => ipcRenderer.invoke("workingcopy:commit", payload || {}),
+  writeWorkingCopyToPath: async (filePath) => ipcRenderer.invoke("workingcopy:write-to-path", { filePath: filePath || "" }),
+  writeWorkingCopyToPathAndSwitch: async (filePath) =>
+    ipcRenderer.invoke("workingcopy:write-to-path-and-switch", { filePath: filePath || "" }),
+  applyWorkingCopyHeaderText: async (text) => ipcRenderer.invoke("workingcopy:apply-header-text", { text: text == null ? "" : String(text) }),
+  applyWorkingCopyFullText: async (text) => ipcRenderer.invoke("workingcopy:apply-full-text", { text: text == null ? "" : String(text) }),
+  insertWorkingCopyTuneAfter: async (payload) => ipcRenderer.invoke("workingcopy:insert-tune-after", payload || {}),
+  renumberWorkingCopyXStartingAt1: async () => ipcRenderer.invoke("workingcopy:renumber-x"),
+  deleteWorkingCopyTune: async (payload) => ipcRenderer.invoke("workingcopy:delete-tune", payload || {}),
+  applyWorkingCopyTuneText: async (payload) => ipcRenderer.invoke("workingcopy:apply-tune-text", payload),
   showSaveError: async (message) =>
     ipcRenderer.invoke("dialog:show-save-error", message),
   showOpenError: async (message) =>

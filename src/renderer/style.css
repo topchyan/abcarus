@@ -1962,6 +1962,13 @@ svg {
   cursor: default;
 }
 
+.context-menu-sep {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border-color);
+  opacity: 0.8;
+}
+
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,

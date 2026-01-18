@@ -11,6 +11,22 @@ const os = require("os");
 const { execFile } = require("child_process");
 const { fileURLToPath } = require("url");
 const { getVersionInfo } = require("../version");
+const {
+  openWorkingCopyFromPath,
+  getWorkingCopySnapshot,
+  getWorkingCopyMetaSnapshot,
+  closeWorkingCopy,
+  applyTuneText,
+  applyHeaderText,
+  applyFullText,
+  insertTuneAfter,
+  renumberXStartingAt1,
+  deleteTune,
+  reloadWorkingCopyFromDisk,
+  commitWorkingCopyToDisk,
+  writeWorkingCopyToPath,
+  writeWorkingCopyToPathAndSwitch,
+} = require("./workingCopyStore");
 
 async function readOsRelease(fs) {
   try {
@@ -163,16 +179,16 @@ function registerIpcHandlers(ctx) {
     shell,
     showOpenDialog,
     showOpenFolderDialog,
-    showSaveDialog,
-    confirmUnsavedChanges,
-    confirmOverwrite,
-    confirmAppendToFile,
-    confirmImportMusicXmlTarget,
-    confirmDeleteTune,
-    showSaveError,
-    showOpenError,
-    scanLibrary,
-    scanLibraryDiscover,
+	    showSaveDialog,
+	    confirmUnsavedChanges,
+	    confirmOverwrite,
+	    confirmAppendToFile,
+	    confirmImportMusicXmlTarget,
+	    confirmDeleteTune,
+	    showSaveError,
+	    showOpenError,
+	    scanLibrary,
+	    scanLibraryDiscover,
     cancelLibraryScan,
     parseSingleFile,
     withMainPrintMode,
@@ -213,9 +229,14 @@ function registerIpcHandlers(ctx) {
   ipcMain.handle("dialog:confirm-overwrite", async (event, filePath) =>
     confirmOverwrite(filePath, event)
   );
-  ipcMain.handle("dialog:confirm-append", async (_e, filePath) =>
-    confirmAppendToFile(filePath)
-  );
+  ipcMain.handle("dialog:confirm-append", async (_e, payload) => {
+    const raw = payload;
+    const filePath = typeof raw === "string"
+      ? String(raw || "")
+      : (raw && raw.filePath ? String(raw.filePath) : "");
+    const tuneLabel = (typeof raw === "object" && raw && raw.tuneLabel) ? String(raw.tuneLabel) : "";
+    return confirmAppendToFile(filePath, tuneLabel);
+  });
   ipcMain.handle("dialog:confirm-import-musicxml-target", async (event, filePath) =>
     confirmImportMusicXmlTarget(filePath, event)
   );
@@ -231,9 +252,177 @@ function registerIpcHandlers(ctx) {
     });
     return response === 0;
   });
+
+  ipcMain.handle("workingcopy:open", async (_event, filePath) => {
+    try {
+      const p = String(filePath || "");
+      if (!p) return { ok: false, error: "Missing file path." };
+      await openWorkingCopyFromPath(p);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:get", async () => {
+    try {
+      const snap = getWorkingCopySnapshot();
+      if (!snap) return { ok: false, error: "No working copy open." };
+      return { ok: true, snapshot: snap };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:get-meta", async () => {
+    try {
+      const meta = getWorkingCopyMetaSnapshot();
+      if (!meta) return { ok: false, error: "No working copy open." };
+      return { ok: true, meta };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:close", async () => {
+    try {
+      await closeWorkingCopy();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:reload", async () => {
+    try {
+      const meta = await reloadWorkingCopyFromDisk();
+      return { ok: true, meta };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:commit", async (_event, payload) => {
+    try {
+      const force = Boolean(payload && payload.force);
+      const res = await commitWorkingCopyToDisk({ force });
+      return res;
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:write-to-path", async (_event, payload) => {
+    try {
+      const p = payload && payload.filePath ? String(payload.filePath) : "";
+      if (!p) return { ok: false, error: "Missing file path." };
+      await writeWorkingCopyToPath(p);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:write-to-path-and-switch", async (_event, payload) => {
+    try {
+      const p = payload && payload.filePath ? String(payload.filePath) : "";
+      if (!p) return { ok: false, error: "Missing file path." };
+      await writeWorkingCopyToPathAndSwitch(p);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:apply-header-text", async (_event, payload) => {
+    try {
+      const text = payload && payload.text != null ? String(payload.text) : "";
+      applyHeaderText(text);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+  ipcMain.handle("workingcopy:apply-full-text", async (_event, payload) => {
+    try {
+      const text = payload && payload.text != null ? String(payload.text) : "";
+      applyFullText(text);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+  ipcMain.handle("workingcopy:insert-tune-after", async (_event, payload) => {
+    try {
+      insertTuneAfter(payload || {});
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:renumber-x", async () => {
+    try {
+      renumberXStartingAt1();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:delete-tune", async (_event, payload) => {
+    try {
+      deleteTune(payload || {});
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("workingcopy:apply-tune-text", async (_event, payload) => {
+    try {
+      applyTuneText(payload || {});
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
   ipcMain.handle("dialog:confirm-delete-tune", async (_e, label) =>
     confirmDeleteTune(label)
   );
+
+  ipcMain.handle("dialog:confirm-save-conflict", async (event, filePath) => {
+    const parent = getParentForDialog(event, "confirm-save-conflict");
+    const p = String(filePath || "");
+    const base = p ? path.basename(p) : "file";
+    const response = dialog.showMessageBoxSync(parent || undefined, {
+      type: "warning",
+      buttons: ["Overwrite", "Save Copy As & Switch…", "Discard & Reload", "Cancel"],
+      defaultId: 1,
+      cancelId: 3,
+      message: "File changed on disk",
+      detail: `“${base}” was modified outside ABCarus. Choose what to do.`,
+    });
+    if (response === 0) return "overwrite";
+    if (response === 1) return "save_copy_as";
+    if (response === 2) return "discard_reload";
+    return "cancel";
+  });
+
+  ipcMain.handle("dialog:confirm-reload-from-disk", async (event, filePath) => {
+    const parent = getParentForDialog(event, "confirm-reload-from-disk");
+    const p = String(filePath || "");
+    const base = p ? path.basename(p) : "file";
+    const response = dialog.showMessageBoxSync(parent || undefined, {
+      type: "warning",
+      buttons: ["Reload from disk", "Cancel"],
+      defaultId: 0,
+      cancelId: 1,
+      message: "Reload from disk?",
+      detail: `Reload “${base}” from disk and discard unsaved changes in ABCarus?`,
+    });
+    return response === 0;
+  });
   ipcMain.handle("dialog:show-save-error", async (_e, message) => {
     showSaveError(message);
   });
