@@ -13154,9 +13154,14 @@ async function performAppendFlow() {
     return false;
   }
 
+  // Strict-write: when saving/appending, read the current editor text directly
+  // to avoid losing last-moment edits due to debounced `currentDoc.content` sync.
+  const editorText = getEditorValue();
+  if (currentDoc) currentDoc.content = editorText;
+
   const deriveTuneLabel = () => {
     try {
-      const parsed = parseTuneIdentityFields(currentDoc && currentDoc.content ? currentDoc.content : getEditorValue());
+      const parsed = parseTuneIdentityFields(editorText);
       const xPart = parsed && parsed.xNumber ? `X:${parsed.xNumber}` : "";
       const title = parsed && parsed.title ? String(parsed.title) : "";
       return `${xPart} ${title}`.trim() || "Untitled";
@@ -13188,7 +13193,7 @@ async function performAppendFlow() {
     }
 
     const nextX = getNextXNumber(String(snap.text || ""));
-    const prepared = ensureXNumberInAbc(serializeDocument(currentDoc), nextX);
+    const prepared = ensureXNumberInAbc(editorText, nextX);
     const afterTuneIndex = Array.isArray(snap.tunes) ? (snap.tunes.length - 1) : -1;
     const insertRes = await window.api.insertWorkingCopyTuneAfter({ afterTuneIndex, text: prepared });
     if (!insertRes || !insertRes.ok) {

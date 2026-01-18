@@ -80,6 +80,24 @@ Notes
 
 ---
 
+## WC-04 — New Tune draft Save captures latest edits (Critical)
+
+**Preconditions**
+- Open an `.abc` file from Library with multiple tunes.
+
+**Steps**
+1. Create a new tune draft in the active file:
+   - `File → New Tune (Draft in Active File)`, or
+   - the `+` button next to the tune selector.
+2. Type a recognizable change (e.g. add a unique comment line near the end of the tune).
+3. Immediately press **Save** (do not wait).
+4. Switch to a different tune, then return to the newly appended tune.
+
+**Expected**
+- The appended tune contains the latest edits you typed (no “previous” draft version).
+
+---
+
 ## WC-03c — Renumber X blocked when dirty (Critical)
 
 **Preconditions**
