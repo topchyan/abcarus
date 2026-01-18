@@ -6863,7 +6863,7 @@ if ($btnNewTune) {
         const ok = await leaveRawModeForAction("creating a new tune");
         if (!ok) return;
       }
-      await fileNewTune();
+      await fileNewTuneAndAppendNow();
     } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
   });
 }
@@ -13356,6 +13356,85 @@ async function fileNewTune() {
     xNumber: nextX,
   });
   showToast("New tune draft (Save will append to the active file).", 2400);
+}
+
+async function fileNewTuneAndAppendNow() {
+  const entry = getActiveFileEntry();
+  if (!entry || !entry.path) {
+    showToast("Open/select a file first.", 2400);
+    return;
+  }
+  const filePath = String(entry.path || "");
+  if (!filePath) return;
+
+  const ok = await ensureSafeToAbandonCurrentDoc("creating a new tune");
+  if (!ok) return;
+
+  if (
+    !window.api
+    || typeof window.api.openWorkingCopy !== "function"
+    || typeof window.api.insertWorkingCopyTuneAfter !== "function"
+    || typeof window.api.commitWorkingCopyToDisk !== "function"
+  ) {
+    await showSaveError("Internal error: working copy is unavailable.");
+    return;
+  }
+
+  await withFileLock(filePath, async () => {
+    await window.api.openWorkingCopy(filePath);
+    const snap = await refreshWorkingCopySnapshot();
+    if (!snap || !snap.path || !pathsEqual(snap.path, filePath)) {
+      await showSaveError("Unable to open working copy.");
+      return;
+    }
+
+    const nextX = getNextXNumber(String(snap.text || ""));
+    const template = buildNewTuneDraftTemplate(nextX);
+    const prepared = ensureXNumberInAbc(template, nextX);
+    const afterTuneIndex = Array.isArray(snap.tunes) ? (snap.tunes.length - 1) : -1;
+
+    const insertRes = await window.api.insertWorkingCopyTuneAfter({ afterTuneIndex, text: prepared });
+    if (!insertRes || !insertRes.ok) {
+      await showSaveError((insertRes && insertRes.error) ? insertRes.error : "Unable to add tune.");
+      return;
+    }
+
+    const saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
+    if (!saveRes || !saveRes.ok) {
+      if (saveRes && saveRes.conflict) {
+        markDiskConflictPath(filePath, true);
+        await showSaveError("Refusing to save: file changed on disk. Reload/reopen and try again.");
+        return;
+      }
+      await showSaveError((saveRes && saveRes.error) ? saveRes.error : "Unable to save file.");
+      return;
+    }
+
+    const snapAfter = await refreshWorkingCopySnapshot();
+    if (snapAfter && snapAfter.path && pathsEqual(snapAfter.path, filePath)) {
+      setFileContentInCache(filePath, snapAfter.text);
+      syncLibraryFileFromWorkingCopySnapshot(filePath, snapAfter);
+    }
+
+    const updatedFile = await refreshLibraryFile(filePath, { force: true });
+    activeFilePath = filePath;
+    if (updatedFile && Array.isArray(updatedFile.tunes) && updatedFile.tunes.length) {
+      const last = updatedFile.tunes[updatedFile.tunes.length - 1];
+      if (last && last.id) {
+        await selectTune(last.tuneUid || last.id, { skipConfirm: true, suppressRecent: true });
+      }
+    }
+
+    headerDirty = false;
+    updateHeaderStateUI();
+    if (currentDoc) {
+      currentDoc.path = filePath;
+      currentDoc.dirty = false;
+    }
+    isNewTuneDraft = false;
+    setDirtyIndicator(false);
+    showToast("New tune added.", 1800);
+  });
 }
 
 async function fileOpen() {

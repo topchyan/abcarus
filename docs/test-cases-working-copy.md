@@ -98,6 +98,24 @@ Notes
 
 ---
 
+## WC-05 — `+` button adds tune immediately (High)
+
+**Preconditions**
+- Active file is selected (tune dropdown visible).
+- Active file is not dirty.
+
+**Steps**
+1. Click the `+` button next to the tune selector.
+2. Observe that a new tune is selected.
+3. Switch to another tune and back.
+4. Reopen the file from Library.
+
+**Expected**
+- The new tune is persisted immediately (no extra Save prompt needed for it to exist).
+- Switching away and back shows the saved tune, not a stale/draft copy.
+
+---
+
 ## WC-03c — Renumber X blocked when dirty (Critical)
 
 **Preconditions**
