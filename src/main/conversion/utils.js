@@ -14,6 +14,22 @@ class ConversionError extends Error {
 let cachedPython = null;
 
 const REQUIRED_PYTHON_MAJOR_MINOR = "3.11";
+const REQUIRED_PYTHON_MIN_MINOR = 11;
+
+function parseMajorMinor(text) {
+  const raw = String(text || "").trim();
+  const m = raw.match(/^(\d+)\.(\d+)$/);
+  if (!m) return null;
+  const major = Number(m[1]);
+  const minor = Number(m[2]);
+  if (!Number.isFinite(major) || !Number.isFinite(minor)) return null;
+  return { major, minor };
+}
+
+function isAcceptablePythonMajorMinor({ major, minor }) {
+  if (major !== 3) return false;
+  return minor >= REQUIRED_PYTHON_MIN_MINOR;
+}
 
 function resolveRepoRootFromHere() {
   // This file lives in `src/main/conversion/`.
@@ -121,9 +137,13 @@ function isBundledPythonExecutable(pythonPath) {
 async function resolvePythonExecutable() {
   if (cachedPython) return cachedPython;
   const candidates = [];
-  for (const c of bundledPythonCandidates()) candidates.push(c);
+  const bundledCandidates = bundledPythonCandidates();
+  for (const c of bundledCandidates) candidates.push(c);
+
   const allowSystemPython = String(process.env.ABCARUS_ALLOW_SYSTEM_PYTHON || "").trim() === "1";
-  if (allowSystemPython) {
+  const hasBundledOnDisk = bundledCandidates.some((c) => c.includes(path.sep) && fs.existsSync(c));
+  const shouldTrySystemPython = allowSystemPython || !hasBundledOnDisk;
+  if (shouldTrySystemPython) {
     if (process.platform === "win32") candidates.push("python");
     else candidates.push("python3", "python");
   }
@@ -150,7 +170,9 @@ async function resolvePythonExecutable() {
         });
       });
       if (!allowOtherVersion) {
-        if (out !== REQUIRED_PYTHON_MAJOR_MINOR) continue;
+        const parsed = parseMajorMinor(out);
+        if (!parsed) continue;
+        if (!isAcceptablePythonMajorMinor(parsed)) continue;
       }
 
       // Second probe for bundled/legacy runtimes only: ensure sys.executable works.
@@ -185,7 +207,7 @@ async function resolvePythonExecutable() {
     "Python not found.",
     lastBundledProbeError
       ? `Bundled Python failed to run: ${lastBundledProbeError}`
-      : `ABCarus requires a bundled Python ${REQUIRED_PYTHON_MAJOR_MINOR} runtime for import/export tools.`,
+      : `ABCarus requires Python 3.${REQUIRED_PYTHON_MIN_MINOR}+ for import/export tools.`,
     "PYTHON_NOT_FOUND"
   );
 }
