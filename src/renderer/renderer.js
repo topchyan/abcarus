@@ -2284,10 +2284,17 @@ async function flushWorkingCopyTuneSync() {
     if (epoch !== workingCopyTuneSyncEpoch) return;
     if (snapshot && snapshot.path && pathsEqual(snapshot.path, filePath)) {
       setFileContentInCache(filePath, snapshot.text);
-      const t = Array.isArray(snapshot.tunes) ? snapshot.tunes[tuneIndex] : null;
-      if (t && Number.isFinite(Number(t.start)) && Number.isFinite(Number(t.end)) && activeTuneMeta) {
-        activeTuneMeta.startOffset = Number(t.start);
-        activeTuneMeta.endOffset = Number(t.end);
+      const tuneEntry = resolveTuneEntryFromSnapshot(snapshot, {
+        tuneUid: activeTuneUid,
+        tuneIndex: activeTuneIndex,
+        startOffset: activeTuneMeta && activeTuneMeta.startOffset,
+      });
+      if (tuneEntry && Number.isFinite(Number(tuneEntry.tuneIndex))) {
+        activeTuneIndex = tuneEntry.tuneIndex;
+      }
+      if (tuneEntry && activeTuneMeta) {
+        activeTuneMeta.startOffset = tuneEntry.start;
+        activeTuneMeta.endOffset = tuneEntry.end;
       }
     }
   } finally {
@@ -2472,6 +2479,37 @@ function syncLibraryFileFromWorkingCopySnapshot(filePath, snapshot) {
   updateLibraryStatus();
   scheduleSaveLibraryUiState();
   return fileEntry;
+}
+
+function resolveTuneEntryFromSnapshot(snapshot, { tuneUid, tuneIndex, startOffset } = {}) {
+  if (!snapshot || !Array.isArray(snapshot.tunes)) return null;
+  const tunes = snapshot.tunes;
+  let idx = -1;
+  if (tuneUid) {
+    idx = tunes.findIndex((t) => t && t.tuneUid && t.tuneUid === tuneUid);
+  }
+  if (idx < 0 && Number.isFinite(Number(tuneIndex))) {
+    const candidate = Number(tuneIndex);
+    if (candidate >= 0 && candidate < tunes.length) idx = candidate;
+  }
+  if (idx < 0 && Number.isFinite(Number(startOffset))) {
+    const target = Number(startOffset);
+    if (Number.isFinite(target)) {
+      idx = tunes.findIndex((t) => Number.isFinite(Number(t && t.start)) && Number(t.start) === target);
+    }
+  }
+  if (idx < 0 || idx >= tunes.length) return null;
+  const tune = tunes[idx];
+  if (!tune) return null;
+  const start = Number(tune.start);
+  const end = Number(tune.end);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start) return null;
+  return {
+    tuneUid: tune.tuneUid || "",
+    tuneIndex: idx,
+    start,
+    end,
+  };
 }
 let activeTuneId = null;
 let activeTuneUid = null;
@@ -6311,23 +6349,46 @@ async function selectTune(tuneId, options = {}) {
   let content = null;
   let sliceStart = Number(selected.startOffset) || 0;
   let sliceEnd = Number(selected.endOffset) || 0;
-  const canUseWorkingCopy = Boolean(
-    workingCopySnapshot
-    && workingCopySnapshot.path
-    && pathsEqual(workingCopySnapshot.path, fileMeta.path)
-    && Array.isArray(workingCopySnapshot.tunes)
-    && Number.isFinite(Number(selected.tuneIndex))
-  );
+  const workingCopyOpen = Boolean(fileMeta.path && isWorkingCopyOpenForFile(fileMeta.path));
 
-  if (canUseWorkingCopy) {
-    const tuneIndex = Number(selected.tuneIndex);
-    const wcTune = workingCopySnapshot.tunes[tuneIndex] || null;
-    if (wcTune && Number.isFinite(Number(wcTune.start)) && Number.isFinite(Number(wcTune.end))) {
-      content = workingCopySnapshot.text;
-      sliceStart = Number(wcTune.start);
-      sliceEnd = Number(wcTune.end);
-      setFileContentInCache(fileMeta.path, content);
+  if (workingCopyOpen) {
+    const attemptSliceFromSnapshot = () => resolveTuneEntryFromSnapshot(
+      workingCopySnapshot,
+      {
+        tuneUid: selected.tuneUid,
+        tuneIndex: selected.tuneIndex,
+        startOffset: selected.startOffset,
+      }
+    );
+    let workingCopySlice = attemptSliceFromSnapshot();
+    if (!workingCopySlice) {
+      await refreshWorkingCopySnapshot();
+      workingCopySlice = attemptSliceFromSnapshot();
     }
+
+    if (!workingCopySlice) {
+      if (options._reloaded) {
+        return { ok: false, error: "Unable to load tune from working copy after reload." };
+      }
+      const shouldReload = await confirmReloadFromDisk(fileMeta.path);
+      if (shouldReload) {
+        const reloadRes = await discardAndReloadWorkingCopyFromDisk(fileMeta.path, { restoreTuneId: tuneId });
+        if (reloadRes && reloadRes.ok) {
+          return selectTune(tuneId, { ...options, skipConfirm: true, _reloaded: true });
+        }
+        return { ok: false, error: (reloadRes && reloadRes.error) ? reloadRes.error : "Unable to reload working copy." };
+      }
+      return { ok: false, error: "Tune offsets could not be resolved; reload the file and try again." };
+    }
+
+    content = String(workingCopySnapshot.text || "");
+    sliceStart = workingCopySlice.start;
+    sliceEnd = workingCopySlice.end;
+    selected.startOffset = sliceStart;
+    selected.endOffset = sliceEnd;
+    if (workingCopySlice.tuneIndex != null) selected.tuneIndex = workingCopySlice.tuneIndex;
+    if (workingCopySlice.tuneUid) selected.tuneUid = workingCopySlice.tuneUid;
+    setFileContentInCache(fileMeta.path, content);
   }
 
   if (content == null) {
@@ -6351,7 +6412,7 @@ async function selectTune(tuneId, options = {}) {
     return true;
   };
 
-  if (!options._reparsed && !isTuneSliceValid(content, selected)) {
+  if (!workingCopyOpen && !options._reparsed && !isTuneSliceValid(content, selected)) {
     try {
       const updatedFile = await refreshLibraryFile(fileMeta.path, { force: true });
       const tunes = updatedFile && Array.isArray(updatedFile.tunes) ? updatedFile.tunes : [];
