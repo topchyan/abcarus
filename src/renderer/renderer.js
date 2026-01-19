@@ -13186,6 +13186,11 @@ async function pasteClipboardToFile(targetPath) {
             }
             throw new Error((saveRes && saveRes.error) ? saveRes.error : "Unable to save file.");
           }
+          const snap = await refreshWorkingCopySnapshot();
+          if (snap && snap.path && pathsEqual(snap.path, filePath)) {
+            setFileContentInCache(filePath, snap.text);
+            syncLibraryFileFromWorkingCopySnapshot(filePath, snap);
+          }
         };
 
         await commitViaWorkingCopy(targetPath, finalTarget);
