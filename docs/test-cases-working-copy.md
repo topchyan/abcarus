@@ -63,7 +63,7 @@ Notes
 
 ---
 
-## WC-03b — Renumber X then Save persists renumbering (Critical)
+## WC-03b — Renumber X persists immediately (Critical)
 
 **Preconditions**
 - Open an `.abc` file with at least 3 tunes and messy `X:` numbering (e.g. `X:7`, `X:200`, `X:2`).
@@ -71,12 +71,10 @@ Notes
 **Steps**
 1. Run “Renumber X”.
 2. Confirm Library Tree shows sequential `X:` values.
-3. Press **Save**.
-4. Refresh the library and/or reopen the file.
+3. Refresh the library and/or reopen the file.
 
 **Expected**
-- Renumbered `X:` values remain sequential after Save.
-- Save does not revert the file to pre-renumber numbering.
+- Renumbered `X:` values remain sequential without requiring an extra Save.
 
 ---
 

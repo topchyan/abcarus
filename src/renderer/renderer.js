@@ -14282,9 +14282,33 @@ async function renumberXInActiveFile(explicitFilePath) {
     }
   }
 
+  // Renumber X is a structural operation; if the file was clean (required), commit immediately so
+  // users can continue navigating and running file ops without being stuck in a dirty state.
+  if (window.api && typeof window.api.commitWorkingCopyToDisk === "function") {
+    const saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
+    if (!saveRes || !saveRes.ok) {
+      await showSaveError((saveRes && saveRes.error) ? saveRes.error : "Unable to save file after renumber.");
+      if (currentDoc) currentDoc.dirty = true;
+      setDirtyIndicator(true);
+      setStatus("Renumbered X (unsaved).");
+      return;
+    }
+    markDiskConflictPath(filePath, false);
+    const snapAfterSave = await refreshWorkingCopySnapshot();
+    if (snapAfterSave && snapAfterSave.path && pathsEqual(snapAfterSave.path, filePath)) {
+      setFileContentInCache(filePath, snapAfterSave.text);
+      attachTuneUidsToLibraryFile(filePath, snapAfterSave);
+      scheduleRenderLibraryTree();
+    }
+    if (currentDoc) currentDoc.dirty = false;
+    setDirtyIndicator(false);
+    setStatus("Renumbered X.");
+    return;
+  }
+
   if (currentDoc) currentDoc.dirty = true;
   setDirtyIndicator(true);
-  setStatus("Renumbered X (working copy).");
+  setStatus("Renumbered X (unsaved).");
 }
 
 async function appQuit() {
