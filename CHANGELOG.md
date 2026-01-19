@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Library: cut/paste (move) uses working copy snapshots more reliably to avoid stale-offset deletes and duplication edge cases.
 - Working Copy: tune sync/selection avoids disk fallback when a working copy is open.
 - Working Copy: reduce “Reload from disk” prompts during normal workflows (treat reload as explicit recovery).
+- Save: handle missing-on-disk (externally deleted) files with an explicit Recreate / Save As / Cancel prompt.
 
 ### Changed
 - Working Copy: Save is session-authoritative and overwrites external on-disk changes by default.
