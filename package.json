@@ -1,6 +1,6 @@
 {
   "name": "abc-electron-proto",
-  "version": "0.22.3",
+  "version": "0.22.4",
   "description": "Desktop application for working with music in ABC notation.",
   "main": "src/main/index.js",
   "private": true,
