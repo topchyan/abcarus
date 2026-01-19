@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Library: cut/paste (move) uses working copy snapshots more reliably to avoid stale-offset deletes and duplication edge cases.
+- Working Copy: tune sync/selection avoids disk fallback when a working copy is open.
+
+### Changed
+- Working Copy: Save is session-authoritative and overwrites external on-disk changes by default.
+- Renumber X: when enabled (clean file), renumber now auto-saves so you can keep navigating immediately.
+
 
 
 ## [0.22.4] - 2026-01-19
