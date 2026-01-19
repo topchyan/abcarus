@@ -235,9 +235,9 @@
             <span id="headerStateMarker" class="header-state-marker" aria-hidden="true">—</span>
           </button>
           <select id="fileTuneSelect"></select>
-          <button id="btnNewTune" class="file-tune-action" type="button" title="New Tune (Draft in Active File) (Cmd/Ctrl+Alt+N)" aria-label="New Tune">
-            <svg class="btn-icon icon-plus" aria-hidden="true"><use href="#ui-plus"></use></svg>
-          </button>
+	          <button id="btnNewTune" class="file-tune-action" type="button" title="New Tune (Add to Active File) (Cmd/Ctrl+Alt+N)" aria-label="New Tune">
+	            <svg class="btn-icon icon-plus" aria-hidden="true"><use href="#ui-plus"></use></svg>
+	          </button>
           <button id="btnTemplates" class="file-tune-action" type="button" title="Templates…" aria-label="Templates">
             <svg class="btn-icon icon-library" aria-hidden="true"><use href="#ui-library"></use></svg>
           </button>
@@ -251,11 +251,11 @@
             <button id="btnToggleFollow" type="button" title="Toggle playback follow">Follow</button>
             <button id="btnToggleGlobals" type="button" title="Toggle global header">Globals</button>
           </div>
-          <div class="file-header-meta">
-            <div class="dirty-indicator" id="dirtyIndicator" aria-live="polite"></div>
-          </div>
-        </div>
-        <div id="fileHeaderEditor" class="file-header-editor" aria-label="File header"></div>
+	          <div class="file-header-meta">
+	            <div class="dirty-indicator" id="dirtyIndicator" aria-live="polite"></div>
+	          </div>
+	        </div>
+	        <div id="fileHeaderEditor" class="file-header-editor" aria-label="File header"></div>
         <div class="file-header-actions">
           <button id="fileHeaderSave" type="button">Save Header</button>
           <button id="fileHeaderReload" type="button">Reload</button>
@@ -273,14 +273,14 @@
     </section>
   </main>
 
-	  <footer class="taskbar">
-	    <div class="taskbar-left">
-	      <div id="status">Ready</div>
-	      <div id="hoverStatus" class="hover-status" aria-live="polite"></div>
-	      <div id="toolStatus" class="tool-status" aria-live="polite"></div>
-	    </div>
-	    <div id="cursorStatus" class="cursor-status"></div>
-	    <div id="bufferStatus" class="buffer-status" aria-live="polite"></div>
+		  <footer class="taskbar">
+		    <div class="taskbar-left">
+		      <div id="status">Ready</div>
+		      <div id="hoverStatus" class="hover-status" aria-live="polite"></div>
+		      <div id="toolStatus" class="tool-status" aria-live="polite"></div>
+		    </div>
+		    <div id="cursorStatus" class="cursor-status"></div>
+		    <div id="bufferStatus" class="buffer-status" aria-live="polite"></div>
 		  </footer>
 		  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 

@@ -32,6 +32,7 @@ import {
 import { createLibraryViewStore } from "./library/store.js";
 import { createLibraryActions } from "./library/actions.js";
 import { normalizeLibraryPath, pathsEqual } from "./library/path_utils.js";
+import { fileExists, mkdirp, readFile, renameFile, safeBasename, safeDirname, writeFile } from "./io/file_ops.js";
 
 const $editorHost = document.getElementById("abc-editor");
 const $out = document.getElementById("out");
@@ -42,6 +43,7 @@ const $toolStatus = document.getElementById("toolStatus");
 const $hoverStatus = document.getElementById("hoverStatus");
 const $main = document.querySelector("main");
 const $divider = document.getElementById("paneDivider");
+const $editorPane = document.querySelector(".editor-pane");
 const $renderPane = document.querySelector(".render-pane");
 const $sidebar = document.querySelector(".sidebar");
 const $scanStatus = document.getElementById("scanStatus");
@@ -120,7 +122,6 @@ const $errorsPopover = document.getElementById("errorsPopover");
 const $errorsPopoverTitle = document.getElementById("errorsPopoverTitle");
 const $errorsListPopover = document.getElementById("errorsList");
 const $sidebarBody = document.querySelector(".sidebar-body");
-const $editorPane = document.querySelector(".editor-pane");
 const $moveTuneModal = document.getElementById("moveTuneModal");
 const $moveTuneClose = document.getElementById("moveTuneClose");
 const $moveTuneTarget = document.getElementById("moveTuneTarget");
@@ -2060,6 +2061,7 @@ function markDiskConflictPath(filePath, hasConflict) {
   if (!p) return;
   if (hasConflict) diskConflictPaths.add(p);
   else diskConflictPaths.delete(p);
+  renderUnifiedStatus();
 }
 
 function hasDiskConflictPath(filePath) {
@@ -2073,12 +2075,50 @@ async function refreshWorkingCopySnapshot() {
   const res = await window.api.getWorkingCopySnapshot();
   if (!res || !res.ok || !res.snapshot) return null;
   workingCopySnapshot = res.snapshot;
+  renderUnifiedStatus();
   return workingCopySnapshot;
 }
 
 async function confirmReloadFromDisk(filePath) {
   if (!window.api || typeof window.api.confirmReloadFromDisk !== "function") return false;
   return Boolean(await window.api.confirmReloadFromDisk(filePath));
+}
+
+async function resolveWorkingCopySaveConflictDefault(filePath, { restoreTuneId = null } = {}) {
+  const p = String(filePath || "");
+  if (!p) return { ok: false, cancelled: true, action: "cancel" };
+  markDiskConflictPath(p, true);
+  const conflictChoice = (window.api && typeof window.api.confirmSaveConflict === "function")
+    ? await window.api.confirmSaveConflict(p)
+    : "cancel";
+
+  if (conflictChoice === "overwrite") {
+    const forced = await window.api.commitWorkingCopyToDisk({ force: true });
+    if (!forced || !forced.ok) {
+      return { ok: false, action: "overwrite", error: (forced && forced.error) ? forced.error : "Unable to save file." };
+    }
+    markDiskConflictPath(p, false);
+    return { ok: true, action: "overwrite" };
+  }
+
+  if (conflictChoice === "save_copy_as") {
+    const savedCopy = await saveWorkingCopyCopyAsAndSwitch(p, { restoreTuneId });
+    if (!savedCopy || !savedCopy.ok) {
+      if (savedCopy && savedCopy.cancelled) return { ok: false, cancelled: true, action: "save_copy_as" };
+      return { ok: false, action: "save_copy_as", error: (savedCopy && savedCopy.error) ? savedCopy.error : "Unable to save copy." };
+    }
+    return { ok: true, action: "save_copy_as", targetPath: savedCopy.targetPath || "" };
+  }
+
+  if (conflictChoice === "discard_reload") {
+    const reloaded = await discardAndReloadWorkingCopyFromDisk(p, { restoreTuneId });
+    if (!reloaded || !reloaded.ok) {
+      return { ok: false, action: "discard_reload", error: (reloaded && reloaded.error) ? reloaded.error : "Unable to reload from disk." };
+    }
+    return { ok: false, action: "discard_reload" };
+  }
+
+  return { ok: false, cancelled: true, action: "cancel" };
 }
 
 async function discardAndReloadWorkingCopyFromDisk(filePath, { restoreTuneId = null } = {}) {
@@ -2944,6 +2984,64 @@ function buildTuneMetaLabel(metadata) {
 let tuneBadgeText = "";
 let bufferStatusText = "";
 
+let appStatusText = "Ready";
+
+function computeWorkingCopyFileState() {
+  const filePath = rawMode
+    ? (rawModeFilePath || (currentDoc && currentDoc.path) || activeFilePath || "")
+    : ((activeTuneMeta && activeTuneMeta.path) || (currentDoc && currentDoc.path) || activeFilePath || "");
+  if (!filePath) return { kind: "ready", label: "Ready", filePath: "" };
+
+  const tuneDirty = Boolean(currentDoc && currentDoc.dirty) || Boolean(isNewTuneDraft);
+  const hdrDirty = Boolean(headerDirty);
+  const conflict = hasDiskConflictPath(filePath);
+
+  if ($editorPane) {
+    $editorPane.classList.toggle("unsaved", Boolean(tuneDirty));
+    $editorPane.classList.toggle("conflict", Boolean(conflict));
+  }
+
+  let label = "";
+  let kind = "";
+  if (conflict) {
+    label = "Changed on disk";
+    kind = "conflict";
+  } else if (tuneDirty || hdrDirty) {
+    label = "Unsaved changes";
+    kind = "dirty";
+  } else {
+    label = "Saved";
+    kind = "saved";
+  }
+
+  return { kind, label, filePath };
+}
+
+function renderUnifiedStatus() {
+  if (!$status) return;
+
+  const raw = String(appStatusText || "");
+  const normalized = raw.trim();
+  const display = normalized === "OK" ? "Ready" : raw;
+  const displayNorm = String(display || "").trim();
+
+  const fileState = computeWorkingCopyFileState();
+
+  const isReady = !displayNorm || /^ready\b/i.test(displayNorm);
+  const label = isReady ? fileState.label : display;
+  const kind = isReady ? fileState.kind : (fileState.kind === "conflict" ? "conflict" : (fileState.kind === "dirty" ? "dirty" : "ready"));
+
+  $status.textContent = label || "Ready";
+
+  $status.classList.toggle("status-ready", kind === "ready");
+  $status.classList.toggle("status-saved", kind === "saved");
+  $status.classList.toggle("status-dirty", kind === "dirty");
+  $status.classList.toggle("status-conflict", kind === "conflict");
+
+  const loading = String(label || "").toLowerCase().startsWith("loading the sound font");
+  $status.classList.toggle("status-loading", loading);
+}
+
 function renderBufferStatus() {
   if (!$bufferStatus) return;
   if (bufferStatusText) {
@@ -2967,14 +3065,10 @@ function setDirtyIndicator(isDirty) {
   const tuneDirty = Boolean(isDirty);
   const hdrDirty = Boolean(headerDirty);
   if (rawMode) {
-    if (tuneDirty && hdrDirty) {
-      $dirtyIndicator.textContent = "Header+File: Unsaved";
-      $dirtyIndicator.classList.add("active");
-    } else if (hdrDirty) {
+    // In raw mode, the file-level dirty state is shown by the File State indicator.
+    // Keep this chip only for header-specific unsaved state to avoid redundant UI.
+    if (hdrDirty) {
       $dirtyIndicator.textContent = "Header: Unsaved";
-      $dirtyIndicator.classList.add("active");
-    } else if (tuneDirty) {
-      $dirtyIndicator.textContent = "File: Unsaved";
       $dirtyIndicator.classList.add("active");
     } else {
       $dirtyIndicator.textContent = "";
@@ -2982,16 +3076,14 @@ function setDirtyIndicator(isDirty) {
     }
     updateLibraryDirtyState(tuneDirty || hdrDirty);
     updateWindowTitle();
+    renderUnifiedStatus();
     return;
   }
-  if (tuneDirty && hdrDirty) {
-    $dirtyIndicator.textContent = "Header+Tune: Unsaved";
-    $dirtyIndicator.classList.add("active");
-  } else if (hdrDirty) {
-    $dirtyIndicator.textContent = "Header: Unsaved";
-    $dirtyIndicator.classList.add("active");
-  } else if (tuneDirty) {
-    $dirtyIndicator.textContent = "Tune: Unsaved";
+
+  // In normal mode, the file-level dirty state is shown by the File State indicator.
+  // Keep this chip only for header-specific unsaved state to avoid redundant UI.
+  if (hdrDirty) {
+    $dirtyIndicator.textContent = tuneDirty ? "Header+Tune: Unsaved" : "Header: Unsaved";
     $dirtyIndicator.classList.add("active");
   } else {
     $dirtyIndicator.textContent = "";
@@ -2999,6 +3091,7 @@ function setDirtyIndicator(isDirty) {
   }
   updateLibraryDirtyState(tuneDirty || hdrDirty);
   updateWindowTitle();
+  renderUnifiedStatus();
 }
 
 function computeHeaderPresence() {
@@ -3898,35 +3991,20 @@ async function performRawSaveFlow() {
     const saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
     if (!saveRes || !saveRes.ok) {
       if (saveRes && saveRes.conflict) {
-        const conflictChoice = (window.api && typeof window.api.confirmSaveConflict === "function")
-          ? await window.api.confirmSaveConflict(filePath)
-          : "cancel";
-        if (conflictChoice === "overwrite") {
-          const forced = await window.api.commitWorkingCopyToDisk({ force: true });
-          if (!forced || !forced.ok) {
-            await showSaveError((forced && forced.error) ? forced.error : "Unable to save file.");
-            return false;
-          }
-          markDiskConflictPath(filePath, false);
-        } else if (conflictChoice === "save_copy_as") {
-          const savedCopy = await saveWorkingCopyCopyAsAndSwitch(filePath, { restoreTuneId: null });
-          if (!savedCopy || !savedCopy.ok) {
-            if (savedCopy && savedCopy.cancelled) return false;
-            await showSaveError((savedCopy && savedCopy.error) ? savedCopy.error : "Unable to save copy.");
-            return false;
-          }
+        const resolved = await resolveWorkingCopySaveConflictDefault(filePath, { restoreTuneId: null });
+        if (resolved && resolved.ok && resolved.action === "overwrite") {
+          // continue below (post-save snapshot/refresh)
+        } else if (resolved && resolved.ok && resolved.action === "save_copy_as") {
           setStatus("Saved copy.");
           return true;
-        } else if (conflictChoice === "discard_reload") {
-          const reloaded = await discardAndReloadWorkingCopyFromDisk(filePath, { restoreTuneId: null });
-          if (!reloaded || !reloaded.ok) {
-            await showSaveError((reloaded && reloaded.error) ? reloaded.error : "Unable to reload from disk.");
-            return false;
-          }
-          return false;
         } else {
-          markDiskConflictPath(filePath, true);
-          await showSaveError("Refusing to save: file changed on disk.");
+          if (resolved && resolved.action === "discard_reload") {
+            setStatus("Reloaded from disk.");
+          } else if (resolved && resolved.error) {
+            await showSaveError(resolved.error);
+          } else {
+            setStatus("Save canceled.");
+          }
           return false;
         }
       }
@@ -3934,6 +4012,7 @@ async function performRawSaveFlow() {
       return false;
     }
 
+    markDiskConflictPath(filePath, false);
     const snapshot = await refreshWorkingCopySnapshot();
     if (snapshot && snapshot.path && pathsEqual(snapshot.path, filePath)) {
       setFileContentInCache(filePath, snapshot.text);
@@ -6989,12 +7068,8 @@ function createBlankDocument() {
 let t = null;
 
 function setStatus(s) {
-  const raw = String(s || "");
-  const normalized = raw.trim();
-  const display = normalized === "OK" ? "Ready" : raw;
-  $status.textContent = display;
-  const loading = String(display || "").toLowerCase().startsWith("loading the sound font");
-  $status.classList.toggle("status-loading", loading);
+  appStatusText = String(s || "");
+  renderUnifiedStatus();
 }
 
 function setButtonText(button, text) {
@@ -11003,16 +11078,6 @@ async function showOpenFolderDialog() {
   return window.api.showOpenFolderDialog();
 }
 
-async function mkdirp(dirPath) {
-  if (!window.api || typeof window.api.mkdirp !== "function") return { ok: false, error: "API missing" };
-  return window.api.mkdirp(dirPath);
-}
-
-async function writeFile(filePath, data) {
-  if (!window.api || typeof window.api.writeFile !== "function") return { ok: false, error: "API missing" };
-  return window.api.writeFile(filePath, data);
-}
-
 const fileOpQueues = new Map();
 
 function normalizeFileOpKey(filePath) {
@@ -11044,35 +11109,6 @@ async function withFileLocks(filePaths, operation) {
     chained = () => withFileLock(p, prevFn);
   }
   return chained();
-}
-
-async function renameFile(oldPath, newPath) {
-  if (!window.api || typeof window.api.renameFile !== "function") return { ok: false, error: "API missing" };
-  return window.api.renameFile(oldPath, newPath);
-}
-
-async function readFile(filePath) {
-  if (!window.api || typeof window.api.readFile !== "function") return { ok: false, error: "API missing" };
-  return window.api.readFile(filePath);
-}
-
-async function fileExists(filePath) {
-  if (!window.api || typeof window.api.fileExists !== "function") return false;
-  return window.api.fileExists(filePath);
-}
-
-function safeBasename(filePath) {
-  if (window.api && typeof window.api.pathBasename === "function") {
-    return window.api.pathBasename(filePath);
-  }
-  return String(filePath || "").split("/").pop() || "";
-}
-
-function safeDirname(filePath) {
-  if (window.api && typeof window.api.pathDirname === "function") {
-    return window.api.pathDirname(filePath);
-  }
-  return String(filePath || "").split("/").slice(0, -1).join("/");
 }
 
 function countLines(text) {
@@ -12176,10 +12212,23 @@ async function performSaveFlow() {
 
   if (headerDirty && activeFilePath) {
     try {
-      await saveFileHeaderText(activeFilePath, getHeaderEditorValue());
-      headerDirty = false;
-      updateHeaderStateUI();
-      setStatus("Header saved.");
+      const headerRes = await saveFileHeaderText(activeFilePath, getHeaderEditorValue());
+      if (headerRes && headerRes.ok) {
+        headerDirty = false;
+        updateHeaderStateUI();
+        setStatus(headerRes.action === "save_copy_as" ? "Saved copy and switched." : "Header saved.");
+      } else if (headerRes && headerRes.action === "discard_reload") {
+        headerEditorFilePath = null;
+        headerDirty = false;
+        updateHeaderStateUI();
+        updateFileHeaderPanel();
+        setStatus("Reloaded from disk.");
+        return false;
+      } else {
+        setStatus("Save canceled.");
+        updateHeaderStateUI();
+        return false;
+      }
     } catch (e) {
       await showSaveError(e && e.message ? e.message : String(e));
       updateHeaderStateUI();
@@ -12200,6 +12249,7 @@ async function performSaveFlow() {
       const res = await window.api.commitWorkingCopyToDisk({ force: false });
       if (res && res.ok) {
         const filePath = activeTuneMeta.path;
+        markDiskConflictPath(filePath, false);
         currentDoc.dirty = false;
         updateUIFromDocument(currentDoc);
         setDirtyIndicator(false);
@@ -12216,6 +12266,7 @@ async function performSaveFlow() {
         return true;
       }
       if (res && res.conflict) {
+        markDiskConflictPath(activeTuneMeta.path, true);
         const conflictChoice = (window.api && typeof window.api.confirmSaveConflict === "function")
           ? await window.api.confirmSaveConflict(activeTuneMeta.path)
           : "cancel";
@@ -12223,6 +12274,7 @@ async function performSaveFlow() {
           const forced = await window.api.commitWorkingCopyToDisk({ force: true });
           if (forced && forced.ok) {
             const filePath = activeTuneMeta.path;
+            markDiskConflictPath(filePath, false);
             currentDoc.dirty = false;
             updateUIFromDocument(currentDoc);
             setDirtyIndicator(false);
@@ -12254,6 +12306,7 @@ async function performSaveFlow() {
             if (window.api && typeof window.api.writeWorkingCopyToPath === "function") {
               const out = await window.api.writeWorkingCopyToPath(destPath);
               if (out && out.ok) {
+                markDiskConflictPath(activeTuneMeta.path, false);
                 try {
                   // The copy is now the safe canonical version; switch to it without prompting.
                   if (currentDoc) currentDoc.dirty = false;
@@ -12311,6 +12364,7 @@ async function performSaveFlow() {
           await discardWorkingCopyChangesForActiveFile();
           await refreshWorkingCopySnapshot();
           reloadActiveTuneTextFromWorkingCopySnapshot();
+          markDiskConflictPath(activeTuneMeta.path, false);
           showToast("Reloaded from disk.", 2200);
           return false;
         }
@@ -12586,33 +12640,22 @@ async function saveFileHeaderText(filePath, headerText) {
     if (!saveRes || !saveRes.ok) {
       if (saveRes && saveRes.conflict) {
         const tuneIdToRestore = rawMode ? activeTuneId : (activeTuneUid || activeTuneId);
-        const conflictChoice = (window.api && typeof window.api.confirmSaveConflict === "function")
-          ? await window.api.confirmSaveConflict(p)
-          : "cancel";
-        if (conflictChoice === "overwrite") {
-          const forced = await window.api.commitWorkingCopyToDisk({ force: true });
-          if (!forced || !forced.ok) throw new Error((forced && forced.error) ? forced.error : "Unable to save header.");
-          markDiskConflictPath(p, false);
-        } else if (conflictChoice === "save_copy_as") {
-          const savedCopy = await saveWorkingCopyCopyAsAndSwitch(p, { restoreTuneId: tuneIdToRestore });
-          if (!savedCopy || !savedCopy.ok) {
-            if (savedCopy && savedCopy.cancelled) return;
-            throw new Error((savedCopy && savedCopy.error) ? savedCopy.error : "Unable to save copy.");
-          }
-          return;
-        } else if (conflictChoice === "discard_reload") {
-          const reloaded = await discardAndReloadWorkingCopyFromDisk(p, { restoreTuneId: tuneIdToRestore });
-          if (!reloaded || !reloaded.ok) throw new Error((reloaded && reloaded.error) ? reloaded.error : "Unable to reload from disk.");
-          return;
+        const resolved = await resolveWorkingCopySaveConflictDefault(p, { restoreTuneId: tuneIdToRestore });
+        if (resolved && resolved.ok && resolved.action === "overwrite") {
+          // continue below (post-save snapshot/refresh)
+        } else if (resolved && resolved.ok && resolved.action === "save_copy_as") {
+          return { ok: true, action: "save_copy_as" };
         } else {
-          markDiskConflictPath(p, true);
-          throw new Error("Refusing to save header: file changed on disk.");
+          if (resolved && resolved.error) throw new Error(resolved.error);
+          if (resolved && resolved.action === "discard_reload") return { ok: false, action: "discard_reload" };
+          return { ok: false, cancelled: true, action: "cancel" };
         }
       } else {
         throw new Error((saveRes && saveRes.error) ? saveRes.error : "Unable to save header.");
       }
     }
 
+    markDiskConflictPath(p, false);
     const snapshot = await refreshWorkingCopySnapshot();
     if (snapshot && snapshot.path && pathsEqual(snapshot.path, p)) {
       setFileContentInCache(p, snapshot.text);
@@ -12625,6 +12668,7 @@ async function saveFileHeaderText(filePath, headerText) {
       const label = updatedFile ? updatedFile.basename : safeBasename(p);
       setFileNameMeta(stripFileExtension(label || ""));
     }
+    return { ok: true, action: "saved" };
   });
 }
 
@@ -13246,14 +13290,24 @@ async function performAppendFlow() {
     const saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
     if (!saveRes || !saveRes.ok) {
       if (saveRes && saveRes.conflict) {
-        markDiskConflictPath(filePath, true);
-        await showSaveError("Refusing to append: file changed on disk. Reload/reopen and try again.");
-        return false;
+        const resolved = await resolveWorkingCopySaveConflictDefault(filePath, { restoreTuneId: null });
+        if (resolved && resolved.ok && resolved.action === "overwrite") {
+          // continue below (post-save snapshot/refresh)
+        } else if (resolved && resolved.ok && resolved.action === "save_copy_as") {
+          showToast("Saved copy and switched.", 3000);
+          return true;
+        } else {
+          if (resolved && resolved.action === "discard_reload") showToast("Reloaded from disk.", 2200);
+          else if (resolved && resolved.error) await showSaveError(resolved.error);
+          else setStatus("Save canceled.");
+          return false;
+        }
       }
       await showSaveError((saveRes && saveRes.error) ? saveRes.error : "Unable to save file.");
       return false;
     }
 
+    markDiskConflictPath(filePath, false);
     const snapAfter = await refreshWorkingCopySnapshot();
     if (snapAfter && snapAfter.path && pathsEqual(snapAfter.path, filePath)) {
       setFileContentInCache(filePath, snapAfter.text);
@@ -13360,31 +13414,9 @@ function setNewTuneDraftInActiveFile(text, { filePath, basename, xNumber } = {})
 }
 
 async function fileNewTune() {
-  const entry = getActiveFileEntry();
-  if (!entry || !entry.path) {
-    const ok = await ensureSafeToAbandonCurrentDoc("creating a new tune");
-    if (!ok) return;
-    const template = ensureXNumberInAbc(buildNewTuneDraftTemplate(""), 1);
-    setActiveTuneText(template, null, { markDirty: true });
-    showToast("New tune draft opened.", 1800);
-    return;
-  }
-  const ok = await ensureSafeToAbandonCurrentDoc("creating a new tune");
-  if (!ok) return;
-
-  let nextX = "";
-  try {
-    const res = await getFileContentCached(entry.path);
-    if (res && res.ok) nextX = getNextXNumber(res.data || "");
-  } catch {}
-
-  const template = buildNewTuneDraftTemplate(nextX);
-  setNewTuneDraftInActiveFile(template, {
-    filePath: entry.path,
-    basename: entry.basename || safeBasename(entry.path),
-    xNumber: nextX,
-  });
-  showToast("New tune draft (Save will append to the active file).", 2400);
+  // Keep the menu action compatible, but use the same semantics as the [+] button:
+  // immediately append a new tune to the active file and save it.
+  await fileNewTuneAndAppendNow();
 }
 
 async function appendTuneTextToFileNow(filePath, tuneText, { toastOk = "" } = {}) {
@@ -13423,14 +13455,24 @@ async function appendTuneTextToFileNow(filePath, tuneText, { toastOk = "" } = {}
     const saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
     if (!saveRes || !saveRes.ok) {
       if (saveRes && saveRes.conflict) {
-        markDiskConflictPath(p, true);
-        await showSaveError("Refusing to save: file changed on disk. Reload/reopen and try again.");
-        return false;
+        const resolved = await resolveWorkingCopySaveConflictDefault(p, { restoreTuneId: null });
+        if (resolved && resolved.ok && resolved.action === "overwrite") {
+          // continue below (post-save snapshot/refresh)
+        } else if (resolved && resolved.ok && resolved.action === "save_copy_as") {
+          showToast("Saved copy and switched.", 3000);
+          return true;
+        } else {
+          if (resolved && resolved.action === "discard_reload") showToast("Reloaded from disk.", 2200);
+          else if (resolved && resolved.error) await showSaveError(resolved.error);
+          else setStatus("Save canceled.");
+          return false;
+        }
       }
       await showSaveError((saveRes && saveRes.error) ? saveRes.error : "Unable to save file.");
       return false;
     }
 
+    markDiskConflictPath(p, false);
     const snapAfter = await refreshWorkingCopySnapshot();
     if (snapAfter && snapAfter.path && pathsEqual(snapAfter.path, p)) {
       setFileContentInCache(p, snapAfter.text);
@@ -14585,8 +14627,7 @@ async function getTemplatesFileText(filePath) {
   if (!p) return "";
   const cached = templatesFileCache.get(p);
   if (typeof cached === "string") return cached;
-  if (!window.api || typeof window.api.readFile !== "function") return "";
-  const res = await window.api.readFile(p);
+  const res = await readFile(p);
   if (!res || !res.ok) return "";
   const text = String(res.data || "");
   templatesFileCache.set(p, text);
@@ -15147,10 +15188,21 @@ if ($fileHeaderSave) {
       return;
     }
     try {
-      await saveFileHeaderText(entry.path, getHeaderEditorValue());
-      headerDirty = false;
-      updateHeaderStateUI();
-      setStatus("Header saved.");
+      const headerRes = await saveFileHeaderText(entry.path, getHeaderEditorValue());
+      if (headerRes && headerRes.ok) {
+        headerDirty = false;
+        updateHeaderStateUI();
+        setStatus(headerRes.action === "save_copy_as" ? "Saved copy and switched." : "Header saved.");
+      } else if (headerRes && headerRes.action === "discard_reload") {
+        headerEditorFilePath = null;
+        headerDirty = false;
+        updateHeaderStateUI();
+        updateFileHeaderPanel();
+        setStatus("Reloaded from disk.");
+      } else {
+        setStatus("Save canceled.");
+        updateHeaderStateUI();
+      }
     } catch (e) {
       await showSaveError(e && e.message ? e.message : String(e));
     }
@@ -15353,6 +15405,13 @@ function setFocusModeEnabled(nextEnabled) {
   }
   if (focusModeEnabled) {
     maybeResetFocusLoopForTune(activeTuneId, { updateUi: false });
+  } else {
+    // Leaving Focus should not "stick" to the last Focus loop plan.
+    // Recompute transport playback plan from the normal-mode playhead.
+    pendingPlaybackRangeOrigin = null;
+    pendingPlaybackPlan = null;
+    currentPlaybackPlan = null;
+    syncPendingPlaybackPlan();
   }
 }
 

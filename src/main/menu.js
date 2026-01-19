@@ -47,7 +47,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
         click: () => sendMenuAction("newFromTemplate"),
       },
       {
-        label: "New Tune (Draft in Active File)",
+        label: "New Tune (Add to Active File)",
         accelerator: "CmdOrCtrl+Alt+N",
         click: () => sendMenuAction("newTune"),
       },
