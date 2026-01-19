@@ -4002,6 +4002,23 @@ async function performRawSaveFlow() {
     }
 
     const saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
+    if (saveRes && saveRes.missingOnDisk) {
+      const handled = await handleMissingWorkingCopySave(filePath);
+      if (handled && handled.ok) {
+        const nextPath = handled.path || filePath;
+        headerDirty = false;
+        updateHeaderStateUI();
+        if (currentDoc) {
+          currentDoc.path = nextPath;
+          currentDoc.content = bodyText;
+          currentDoc.dirty = false;
+        }
+        setDirtyIndicator(false);
+        setStatus("File saved.");
+        return true;
+      }
+      return false;
+    }
     if (!saveRes || !saveRes.ok) {
       if (saveRes && saveRes.conflict) {
         const resolved = await resolveWorkingCopySaveConflictDefault(filePath, { restoreTuneId: null });
@@ -12251,6 +12268,56 @@ async function ensureSafeToAbandonCurrentDoc(actionLabel) {
   return confirmAbandonIfDirty(actionLabel);
 }
 
+async function finalizeWorkingCopySave(filePath) {
+  const normalized = String(filePath || "");
+  if (!normalized) return false;
+
+  markDiskConflictPath(normalized, false);
+  if (currentDoc) {
+    currentDoc.dirty = false;
+    updateUIFromDocument(currentDoc);
+  }
+  setDirtyIndicator(false);
+
+  try {
+    const snapshot = await refreshWorkingCopySnapshot();
+    if (snapshot && snapshot.path && pathsEqual(snapshot.path, normalized)) {
+      setFileContentInCache(normalized, snapshot.text);
+      attachTuneUidsToLibraryFile(normalized, snapshot);
+    }
+  } catch {}
+
+  try { await refreshLibraryFile(normalized, { force: true }); } catch {}
+  updateLibraryStatus();
+  scheduleRenderLibraryTree();
+  return true;
+}
+
+async function handleMissingWorkingCopySave(filePath) {
+  const p = String(filePath || "");
+  if (!p) return { ok: false };
+  if (!window.api || typeof window.api.confirmMissingOnDisk !== "function") return { ok: false };
+
+  const choice = await window.api.confirmMissingOnDisk(p);
+  if (choice === "recreate") {
+    const forced = await window.api.commitWorkingCopyToDisk({ force: true });
+    if (forced && forced.ok) {
+      await finalizeWorkingCopySave(p);
+      return { ok: true, path: p, action: "recreate" };
+    }
+    await showSaveError((forced && forced.error) ? forced.error : "Unable to recreate missing file.");
+    return { ok: false };
+  }
+  if (choice === "save_as") {
+    const ok = await performSaveAsFlow();
+    if (!ok) return { ok: false };
+    const snap = await refreshWorkingCopySnapshot();
+    const nextPath = snap && snap.path ? String(snap.path) : "";
+    return { ok: true, path: nextPath || p, action: "save_as" };
+  }
+  return { ok: false, cancelled: true };
+}
+
 async function performSaveFlow() {
   if (!currentDoc) return false;
 
@@ -12291,42 +12358,18 @@ async function performSaveFlow() {
     } catch {}
     if (window.api && typeof window.api.commitWorkingCopyToDisk === "function") {
       const res = await window.api.commitWorkingCopyToDisk({ force: false });
+      if (res && res.missingOnDisk) {
+        const handled = await handleMissingWorkingCopySave(activeTuneMeta.path);
+        return Boolean(handled && handled.ok);
+      }
       if (res && res.ok) {
-        const filePath = activeTuneMeta.path;
-        markDiskConflictPath(filePath, false);
-        currentDoc.dirty = false;
-        updateUIFromDocument(currentDoc);
-        setDirtyIndicator(false);
-        try {
-          const snapshot = await refreshWorkingCopySnapshot();
-          if (snapshot && snapshot.path && pathsEqual(snapshot.path, filePath)) {
-            setFileContentInCache(filePath, snapshot.text);
-            attachTuneUidsToLibraryFile(filePath, snapshot);
-          }
-        } catch {}
-        try { await refreshLibraryFile(filePath, { force: true }); } catch {}
-        updateLibraryStatus();
-        scheduleRenderLibraryTree();
+        await finalizeWorkingCopySave(activeTuneMeta.path);
         return true;
       }
       if (res && res.conflict) {
         const forced = await window.api.commitWorkingCopyToDisk({ force: true });
         if (forced && forced.ok) {
-          const filePath = activeTuneMeta.path;
-          markDiskConflictPath(filePath, false);
-          currentDoc.dirty = false;
-          updateUIFromDocument(currentDoc);
-          setDirtyIndicator(false);
-          try {
-            const snapshot = await refreshWorkingCopySnapshot();
-            if (snapshot && snapshot.path && pathsEqual(snapshot.path, filePath)) {
-              setFileContentInCache(filePath, snapshot.text);
-              attachTuneUidsToLibraryFile(filePath, snapshot);
-            }
-          } catch {}
-          try { await refreshLibraryFile(filePath, { force: true }); } catch {}
-          updateLibraryStatus();
-          scheduleRenderLibraryTree();
+          await finalizeWorkingCopySave(activeTuneMeta.path);
           return true;
         }
         markDiskConflictPath(activeTuneMeta.path, true);
@@ -12446,6 +12489,32 @@ function appendTuneToContent(existingContent, tuneText) {
   return `${existing}${separator}${tune}\n`;
 }
 
+function dropLibraryFileEntry(filePath) {
+  const p = filePath ? String(filePath) : "";
+  if (!p || !libraryIndex || !Array.isArray(libraryIndex.files)) return false;
+  const idx = libraryIndex.files.findIndex((f) => pathsEqual(f && f.path, p));
+  if (idx >= 0) {
+    libraryIndex.files.splice(idx, 1);
+    libraryViewStore.invalidate();
+  }
+  if (activeFilePath && pathsEqual(activeFilePath, p)) activeFilePath = null;
+  if (activeTuneMeta && pathsEqual(activeTuneMeta.path, p)) {
+    activeTuneMeta = null;
+    activeTuneId = null;
+    activeTuneUid = null;
+    activeTuneIndex = null;
+  }
+  if (currentDoc && currentDoc.path && pathsEqual(currentDoc.path, p)) {
+    currentDoc.path = null;
+    currentDoc.content = "";
+    currentDoc.dirty = false;
+  }
+  setDirtyIndicator(false);
+  updateLibraryStatus();
+  scheduleRenderLibraryTree();
+  return true;
+}
+
 function getNextXNumber(existingContent) {
   let max = 0;
   const re = /^X:\s*(\d+)/gm;
@@ -12505,6 +12574,14 @@ function removeTuneFromContent(content, startOffset, endOffset) {
 
 async function refreshLibraryFile(filePath, options) {
   if (!window.api || typeof window.api.parseLibraryFile !== "function") return null;
+  if (!await fileExists(filePath)) {
+    // If the file is currently open as a working copy, keep the editor session authoritative
+    // and let Save handle the "missing on disk" decision.
+    if (!isWorkingCopyOpenForFile(filePath)) {
+      dropLibraryFileEntry(filePath);
+    }
+    return null;
+  }
   const res = await window.api.parseLibraryFile(filePath, options);
   if (!res || !res.files || !res.files.length) return null;
   const updatedFile = res.files[0];
@@ -12600,6 +12677,11 @@ async function saveFileHeaderText(filePath, headerText) {
     if (!applyRes || !applyRes.ok) throw new Error((applyRes && applyRes.error) ? applyRes.error : "Unable to update header.");
 
     const saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
+    if (saveRes && saveRes.missingOnDisk) {
+      const handled = await handleMissingWorkingCopySave(p);
+      if (handled && handled.ok) return { ok: true, action: "saved" };
+      return { ok: false, action: "cancel" };
+    }
     if (!saveRes || !saveRes.ok) {
       if (saveRes && saveRes.conflict) {
         const tuneIdToRestore = rawMode ? activeTuneId : (activeTuneUid || activeTuneId);
