@@ -3,6 +3,7 @@
 Quick usage (no arguments):
 - Local AppImage staging: `bash scripts/build_appimage_local.sh`
 - Release AppImage (bundle portable Python + build + appimagetool): `bash scripts/build_appimage_release.sh`
+- Shareable context packet (chat exports + debug dumps): `node scripts/context-pack.mjs`
 
 Local-only scripts:
 - Put personal scripts with hardcoded paths under `scripts/local/` (gitignored).
@@ -14,5 +15,6 @@ Details:
 - `build_appimage.sh` is the AppDir staging script used by the other two scripts and always embeds the portable Python runtime.
 - `bundle_python_appimage.mjs` copies Python scripts and the runtime into the AppDir.
 - `install_icons.sh` installs desktop icons for local dev.
+- `context-pack.mjs` generates a single Markdown file (`kitchen/context.md` by default) with repo state + recent `kitchen/chat-exports/` and `kitchen/debug_dumps/` artifacts for sharing.
 - Local runner scripts live under `scripts/local/` (gitignored).
 - `transpose_tests.mjs` is a local utility for transpose tests.
