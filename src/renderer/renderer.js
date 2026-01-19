@@ -2087,38 +2087,13 @@ async function confirmReloadFromDisk(filePath) {
 async function resolveWorkingCopySaveConflictDefault(filePath, { restoreTuneId = null } = {}) {
   const p = String(filePath || "");
   if (!p) return { ok: false, cancelled: true, action: "cancel" };
-  markDiskConflictPath(p, true);
-  const conflictChoice = (window.api && typeof window.api.confirmSaveConflict === "function")
-    ? await window.api.confirmSaveConflict(p)
-    : "cancel";
-
-  if (conflictChoice === "overwrite") {
-    const forced = await window.api.commitWorkingCopyToDisk({ force: true });
-    if (!forced || !forced.ok) {
-      return { ok: false, action: "overwrite", error: (forced && forced.error) ? forced.error : "Unable to save file." };
-    }
+  const forced = await window.api.commitWorkingCopyToDisk({ force: true });
+  if (forced && forced.ok) {
     markDiskConflictPath(p, false);
     return { ok: true, action: "overwrite" };
   }
-
-  if (conflictChoice === "save_copy_as") {
-    const savedCopy = await saveWorkingCopyCopyAsAndSwitch(p, { restoreTuneId });
-    if (!savedCopy || !savedCopy.ok) {
-      if (savedCopy && savedCopy.cancelled) return { ok: false, cancelled: true, action: "save_copy_as" };
-      return { ok: false, action: "save_copy_as", error: (savedCopy && savedCopy.error) ? savedCopy.error : "Unable to save copy." };
-    }
-    return { ok: true, action: "save_copy_as", targetPath: savedCopy.targetPath || "" };
-  }
-
-  if (conflictChoice === "discard_reload") {
-    const reloaded = await discardAndReloadWorkingCopyFromDisk(p, { restoreTuneId });
-    if (!reloaded || !reloaded.ok) {
-      return { ok: false, action: "discard_reload", error: (reloaded && reloaded.error) ? reloaded.error : "Unable to reload from disk." };
-    }
-    return { ok: false, action: "discard_reload" };
-  }
-
-  return { ok: false, cancelled: true, action: "cancel" };
+  markDiskConflictPath(p, true);
+  return { ok: false, action: "overwrite", error: (forced && forced.error) ? forced.error : "Unable to save file." };
 }
 
 async function discardAndReloadWorkingCopyFromDisk(filePath, { restoreTuneId = null } = {}) {
@@ -8621,12 +8596,20 @@ function initContextMenu() {
             const afterTuneIndex = Array.isArray(snap.tunes) ? (snap.tunes.length - 1) : -1;
             const ins = await window.api.insertWorkingCopyTuneAfter({ afterTuneIndex, text: prepared });
             if (!ins || !ins.ok) throw new Error((ins && ins.error) ? ins.error : "Unable to append.");
-            const saved = await window.api.commitWorkingCopyToDisk({ force: false });
+            let saved = await window.api.commitWorkingCopyToDisk({ force: false });
             if (!saved || !saved.ok) {
               if (saved && saved.conflict) {
-                markDiskConflictPath(targetPath, true);
-                throw new Error("Refusing to append: file changed on disk. Reload/reopen and try again.");
+                const forced = await window.api.commitWorkingCopyToDisk({ force: true });
+                if (forced && forced.ok) {
+                  markDiskConflictPath(targetPath, false);
+                  saved = forced;
+                } else {
+                  markDiskConflictPath(targetPath, true);
+                  throw new Error((forced && forced.error) ? forced.error : "Unable to save file.");
+                }
               }
+            }
+            if (!saved || !saved.ok) {
               throw new Error((saved && saved.error) ? saved.error : "Unable to save file.");
             }
             const snapAfter = await refreshWorkingCopySnapshot();
@@ -12327,108 +12310,27 @@ async function performSaveFlow() {
         return true;
       }
       if (res && res.conflict) {
-        markDiskConflictPath(activeTuneMeta.path, true);
-        const conflictChoice = (window.api && typeof window.api.confirmSaveConflict === "function")
-          ? await window.api.confirmSaveConflict(activeTuneMeta.path)
-          : "cancel";
-        if (conflictChoice === "overwrite") {
-          const forced = await window.api.commitWorkingCopyToDisk({ force: true });
-          if (forced && forced.ok) {
-            const filePath = activeTuneMeta.path;
-            markDiskConflictPath(filePath, false);
-            currentDoc.dirty = false;
-            updateUIFromDocument(currentDoc);
-            setDirtyIndicator(false);
-            try {
-              const snapshot = await refreshWorkingCopySnapshot();
-              if (snapshot && snapshot.path && pathsEqual(snapshot.path, filePath)) {
-                setFileContentInCache(filePath, snapshot.text);
-                attachTuneUidsToLibraryFile(filePath, snapshot);
-              }
-            } catch {}
-            try { await refreshLibraryFile(filePath, { force: true }); } catch {}
-            updateLibraryStatus();
-            scheduleRenderLibraryTree();
-            return true;
-          }
-          await showSaveError((forced && forced.error) ? forced.error : "Unable to save file.");
-          return false;
-        }
-        if (conflictChoice === "save_copy_as") {
-          const suggestedName = safeBasename(activeTuneMeta.path) || "untitled.abc";
-          const suggestedDir = getDefaultSaveDir();
-          const destPath = await showSaveDialog(suggestedName, suggestedDir);
-          if (!destPath) return false;
+        const forced = await window.api.commitWorkingCopyToDisk({ force: true });
+        if (forced && forced.ok) {
+          const filePath = activeTuneMeta.path;
+          markDiskConflictPath(filePath, false);
+          currentDoc.dirty = false;
+          updateUIFromDocument(currentDoc);
+          setDirtyIndicator(false);
           try {
-            if (await fileExists(destPath)) {
-              const ok = await confirmOverwrite(destPath);
-              if (!ok) return false;
-            }
-            if (window.api && typeof window.api.writeWorkingCopyToPath === "function") {
-              const out = await window.api.writeWorkingCopyToPath(destPath);
-              if (out && out.ok) {
-                markDiskConflictPath(activeTuneMeta.path, false);
-                try {
-                  // The copy is now the safe canonical version; switch to it without prompting.
-                  if (currentDoc) currentDoc.dirty = false;
-                  setDirtyIndicator(false);
-                } catch {}
-
-                try { await refreshLibraryFile(destPath, { force: true }); } catch {}
-                try {
-                  const opened = await loadLibraryFileIntoEditor(destPath);
-                  if (opened && opened.ok) {
-                    const root = libraryIndex && libraryIndex.root ? normalizeLibraryPath(libraryIndex.root) : "";
-                    const normalizedDest = normalizeLibraryPath(destPath);
-                    const inRoot = Boolean(
-                      root
-                      && (normalizedDest === root || normalizedDest.startsWith(root.endsWith("/") ? root : `${root}/`))
-                    );
-                    if (inRoot) {
-                      showToast("Saved copy and switched.", 3000);
-                    } else {
-                      const dir = safeDirname(destPath);
-                      showToastWithAction(
-                        "Saved copy and switched (outside current Library).",
-                        "Load folder…",
-                        () => { loadLibraryFromFolder(dir).catch(() => {}); },
-                        8000
-                      );
-                    }
-                    return true;
-                  }
-                } catch {}
-
-                // Fallback: at least open a working copy so the user can continue editing.
-                try {
-                  if (window.api && typeof window.api.openWorkingCopy === "function") {
-                    await window.api.openWorkingCopy(destPath);
-                    const snap = await refreshWorkingCopySnapshot();
-                    if (snap && snap.path && pathsEqual(snap.path, destPath)) {
-                      setFileContentInCache(destPath, snap.text);
-                      attachTuneUidsToLibraryFile(destPath, snap);
-                      scheduleRenderLibraryTree();
-                    }
-                  }
-                } catch {}
-                showToast("Saved copy and switched.", 3000);
-                return true;
-              }
-              await showSaveError((out && out.error) ? out.error : "Unable to save copy.");
-              return false;
+            const snapshot = await refreshWorkingCopySnapshot();
+            if (snapshot && snapshot.path && pathsEqual(snapshot.path, filePath)) {
+              setFileContentInCache(filePath, snapshot.text);
+              attachTuneUidsToLibraryFile(filePath, snapshot);
             }
           } catch {}
-          await showSaveError("Unable to save copy.");
-          return false;
+          try { await refreshLibraryFile(filePath, { force: true }); } catch {}
+          updateLibraryStatus();
+          scheduleRenderLibraryTree();
+          return true;
         }
-        if (conflictChoice === "discard_reload") {
-          await discardWorkingCopyChangesForActiveFile();
-          await refreshWorkingCopySnapshot();
-          reloadActiveTuneTextFromWorkingCopySnapshot();
-          markDiskConflictPath(activeTuneMeta.path, false);
-          showToast("Reloaded from disk.", 2200);
-          return false;
-        }
+        markDiskConflictPath(activeTuneMeta.path, true);
+        await showSaveError((forced && forced.error) ? forced.error : "Unable to save file.");
         return false;
       }
       await showSaveError((res && res.error) ? res.error : "Unable to save file.");
@@ -12851,12 +12753,20 @@ async function duplicateTuneById(tuneId) {
         throw new Error("Unable to refresh working copy after renumber.");
       }
 
-      const saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
+      let saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
       if (!saveRes || !saveRes.ok) {
         if (saveRes && saveRes.conflict) {
-          markDiskConflictPath(res.file.path, true);
-          throw new Error("Refusing to duplicate: file changed on disk. Reload/reopen the file and try again.");
+          const forced = await window.api.commitWorkingCopyToDisk({ force: true });
+          if (forced && forced.ok) {
+            markDiskConflictPath(res.file.path, false);
+            saveRes = forced;
+          } else {
+            markDiskConflictPath(res.file.path, true);
+            throw new Error((forced && forced.error) ? forced.error : "Unable to save file after duplication.");
+          }
         }
+      }
+      if (!saveRes || !saveRes.ok) {
         throw new Error((saveRes && saveRes.error) ? saveRes.error : "Unable to save file after duplication.");
       }
 
@@ -13178,12 +13088,20 @@ async function pasteClipboardToFile(targetPath) {
           await window.api.openWorkingCopy(filePath);
           const applyRes = await window.api.applyWorkingCopyFullText(text);
           if (!applyRes || !applyRes.ok) throw new Error((applyRes && applyRes.error) ? applyRes.error : "Unable to update working copy.");
-          const saveRes = await window.api.commitWorkingCopyToDisk({ force: Boolean(force) });
+          let saveRes = await window.api.commitWorkingCopyToDisk({ force: Boolean(force) });
           if (!saveRes || !saveRes.ok) {
             if (saveRes && saveRes.conflict) {
-              markDiskConflictPath(filePath, true);
-              throw new Error("File changed on disk.");
+              const forced = await window.api.commitWorkingCopyToDisk({ force: true });
+              if (forced && forced.ok) {
+                markDiskConflictPath(filePath, false);
+                saveRes = forced;
+              } else {
+                markDiskConflictPath(filePath, true);
+                throw new Error((forced && forced.error) ? forced.error : "Unable to save file.");
+              }
             }
+          }
+          if (!saveRes || !saveRes.ok) {
             throw new Error((saveRes && saveRes.error) ? saveRes.error : "Unable to save file.");
           }
           const snap = await refreshWorkingCopySnapshot();
@@ -13881,10 +13799,17 @@ async function importMusicXml() {
           const saveRes = await window.api.commitWorkingCopyToDisk({ force: false });
           if (!saveRes || !saveRes.ok) {
             if (saveRes && saveRes.conflict) {
-              markDiskConflictPath(targetPath, true);
-              throw new Error("Refusing to import: target file changed on disk. Reload/reopen and try again.");
+              const forced = await window.api.commitWorkingCopyToDisk({ force: true });
+              if (forced && forced.ok) {
+                markDiskConflictPath(targetPath, false);
+              } else {
+                markDiskConflictPath(targetPath, true);
+                throw new Error((forced && forced.error) ? forced.error : "Unable to save file.");
+              }
             }
-            throw new Error((saveRes && saveRes.error) ? saveRes.error : "Unable to save file.");
+            if (!saveRes || !saveRes.ok) {
+              throw new Error((saveRes && saveRes.error) ? saveRes.error : "Unable to save file.");
+            }
           }
           const snapAfter = await refreshWorkingCopySnapshot();
           if (snapAfter && snapAfter.path && pathsEqual(snapAfter.path, targetPath)) {
