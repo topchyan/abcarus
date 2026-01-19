@@ -12743,6 +12743,24 @@ function findTuneById(tuneId) {
 }
 
 async function getTuneText(tune, fileMeta) {
+  if (
+    fileMeta
+    && fileMeta.path
+    && workingCopySnapshot
+    && workingCopySnapshot.path
+    && pathsEqual(workingCopySnapshot.path, fileMeta.path)
+  ) {
+    const entry = resolveTuneEntryFromSnapshot(workingCopySnapshot, {
+      tuneUid: tune && tune.tuneUid,
+      tuneIndex: tune && tune.tuneIndex,
+      startOffset: tune && tune.startOffset,
+    });
+    if (entry && Number.isFinite(Number(entry.start)) && Number.isFinite(Number(entry.end))) {
+      const text = String(workingCopySnapshot.text || "");
+      setFileContentInCache(fileMeta.path, text);
+      return text.slice(entry.start, entry.end);
+    }
+  }
   let content = getFileContentFromCache(fileMeta.path);
   if (content == null) {
     const res = await readFile(fileMeta.path);
@@ -12762,6 +12780,9 @@ async function copyTuneById(tuneId, mode) {
       text,
       sourcePath: res.file.path,
       tuneId,
+      tuneUid: res.tune ? res.tune.tuneUid || null : null,
+      tuneIndex: Number.isFinite(Number(res.tune && res.tune.tuneIndex)) ? Number(res.tune.tuneIndex) : null,
+      startOffset: Number.isFinite(Number(res.tune && res.tune.startOffset)) ? Number(res.tune.startOffset) : null,
       mode,
     };
     setStatus(mode === "move" ? "Tune cut to buffer." : "Tune copied to buffer.");
@@ -13063,26 +13084,55 @@ async function pasteClipboardToFile(targetPath) {
         throw new Error("Refusing to move: source/target file has unsaved changes. Save/Discard them and try again.");
       }
 
-      const sourceRes = await readFile(sourcePath);
-      if (!sourceRes.ok) throw new Error(sourceRes.error || "Unable to read source file.");
-      const sourceContent = String(sourceRes.data || "");
-      const verifySourceRes = await readFile(sourcePath);
-      if (!verifySourceRes.ok) throw new Error(verifySourceRes.error || "Unable to verify source file.");
-      if (String(verifySourceRes.data || "") !== sourceContent) {
-        throw new Error("Refusing to move: source file changed on disk. Refresh/reopen and try again.");
+      if (workingCopySnapshot && workingCopySnapshot.path && pathsEqual(workingCopySnapshot.path, sourcePath)) {
+        try { await flushWorkingCopyTuneSync(); } catch {}
+        await refreshWorkingCopySnapshot();
+      }
+      if (workingCopySnapshot && workingCopySnapshot.path && pathsEqual(workingCopySnapshot.path, targetPath)) {
+        await refreshWorkingCopySnapshot();
       }
 
-      const targetRes = await readFile(targetPath);
-      if (!targetRes.ok) throw new Error(targetRes.error || "Unable to read target file.");
-      const targetContent = String(targetRes.data || "");
-      const verifyTargetRes = await readFile(targetPath);
-      if (!verifyTargetRes.ok) throw new Error(verifyTargetRes.error || "Unable to verify target file.");
-      if (String(verifyTargetRes.data || "") !== targetContent) {
-        throw new Error("Refusing to move: target file changed on disk. Refresh/reopen and try again.");
+      let sourceContent = "";
+      let startOffset = Number(found.tune.startOffset);
+      let endOffset = Number(found.tune.endOffset);
+      if (
+        clipboardTune.tuneUid
+        && workingCopySnapshot
+        && workingCopySnapshot.path
+        && pathsEqual(workingCopySnapshot.path, sourcePath)
+      ) {
+        const entry = resolveTuneEntryFromSnapshot(workingCopySnapshot, {
+          tuneUid: clipboardTune.tuneUid,
+          tuneIndex: clipboardTune.tuneIndex,
+          startOffset: clipboardTune.startOffset,
+        });
+        if (!entry) {
+          throw new Error("Refusing to move: tune offsets look stale. Reload/refresh the library and try again.");
+        }
+        sourceContent = String(workingCopySnapshot.text || "");
+        startOffset = entry.start;
+        endOffset = entry.end;
+        setFileContentInCache(sourcePath, sourceContent);
+      } else {
+        const sourceRes = await readFile(sourcePath);
+        if (!sourceRes.ok) throw new Error(sourceRes.error || "Unable to read source file.");
+        sourceContent = String(sourceRes.data || "");
       }
 
-      const startOffset = Number(found.tune.startOffset);
-      const endOffset = Number(found.tune.endOffset);
+      let targetContent = "";
+      if (
+        workingCopySnapshot
+        && workingCopySnapshot.path
+        && pathsEqual(workingCopySnapshot.path, targetPath)
+      ) {
+        targetContent = String(workingCopySnapshot.text || "");
+        setFileContentInCache(targetPath, targetContent);
+      } else {
+        const targetRes = await readFile(targetPath);
+        if (!targetRes.ok) throw new Error(targetRes.error || "Unable to read target file.");
+        targetContent = String(targetRes.data || "");
+      }
+
       if (!Number.isFinite(startOffset) || !Number.isFinite(endOffset) || startOffset < 0 || endOffset <= startOffset || endOffset > sourceContent.length) {
         throw new Error("Refusing to move: tune offsets look stale. Reload/refresh the library and try again.");
       }
