@@ -198,34 +198,26 @@ Notes
 3. Attempt Save in ABCarus.
 
 **Expected**
-- ABCarus detects conflict and offers:
-  - Overwrite
-  - Save Copy As & Switch…
-  - Discard & Reload
-  - Cancel
-- Overwrite replaces disk content with the working copy.
-- Save Copy As & Switch… writes the working copy to a new path and switches the editor to that file.
-- Discard & Reload restores the working copy from disk (losing unsaved edits).
-- Cancel leaves everything unchanged.
+- Save overwrites disk content with the working copy (session is authoritative).
+- Reloading from disk (discarding in-app edits) remains an explicit action, not a Save-time prompt.
 
 ---
 
-## WC-05b — Conflict cancel → explicit reload path (High)
+## WC-05b — Explicit reload path remains available (High)
 
 **Preconditions**
 - Same as WC-05.
 
 **Steps**
 1. Trigger the conflict dialog (as in WC-05).
-2. Choose **Cancel**.
-3. Try to open the same tune/file again from the Library Tree.
-4. Also try: right-click the file in Library Tree → **Reload from disk…**.
+2. In ABCarus, make any edit (optional) and press **Save**.
+3. Ensure the file on disk matches ABCarus after Save.
+4. Use an explicit **Reload from disk…** action (where available) and confirm it discards in-app changes.
 
 **Expected**
-- After Cancel, ABCarus does not silently “reload behind your back”.
-- When opening that file/tune again, ABCarus offers a **Reload from disk** prompt (discarding unsaved changes).
-- File context menu offers **Reload from disk…** while the conflict is unresolved.
-- After Reload, editor + header reflect disk state, and the conflict prompt no longer appears.
+- Save is not blocked by an external-change prompt.
+- Reload-from-disk is explicit and never happens silently.
+- After Reload, editor + header reflect disk state.
 
 ---
 

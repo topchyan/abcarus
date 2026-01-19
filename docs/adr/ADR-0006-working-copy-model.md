@@ -108,13 +108,10 @@ Before committing to disk:
 - the system rechecks the disk fingerprint
   (mtime/size and/or hash).
 
-If a conflict is detected, the user must choose:
-- Overwrite disk
-- Save As
-- Discard & Reload
-- (optional later) View Diff
-
-No silent overwrite is permitted.
+If a conflict is detected:
+- **Save overwrites disk by default** (the in-app working copy session is authoritative).
+- Reloading from disk (discarding in-app changes) is an explicit user action (e.g., via a reload command),
+  not a blocking prompt during Save.
 
 ---
 
@@ -179,16 +176,12 @@ When:
 - The user attempts to Save in ABCarus.
 
 Then:
-- The system must detect the conflict.
-- The system must present explicit options:
-  - Overwrite disk
-  - Save As
-  - Discard & Reload
-- No silent overwrite is allowed.
+- The system may detect that the file changed on disk.
+- Save overwrites disk (the working copy session remains authoritative).
 
 Fail if:
-- The file is overwritten without warning.
-- The working copy is lost without user choice.
+- Save is blocked by an external-change prompt.
+- The working copy is lost without an explicit user action (e.g., reload/discard).
 
 ### B. Working Copy Authority (**Critical**)
 
