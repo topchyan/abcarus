@@ -447,6 +447,23 @@ function registerIpcHandlers(ctx) {
     return "cancel";
   });
 
+  ipcMain.handle("dialog:confirm-missing-on-disk", async (event, filePath) => {
+    const parent = getParentForDialog(event, "confirm-missing-on-disk");
+    const p = String(filePath || "");
+    const base = p ? path.basename(p) : "file";
+    const response = dialog.showMessageBoxSync(parent || undefined, {
+      type: "warning",
+      buttons: ["Recreate", "Save As…", "Cancel"],
+      defaultId: 0,
+      cancelId: 2,
+      message: "File missing",
+      detail: `“${base}” was deleted from disk. Recreate it, Save As… to another path, or cancel.`,
+    });
+    if (response === 0) return "recreate";
+    if (response === 1) return "save_as";
+    return "cancel";
+  });
+
   ipcMain.handle("dialog:confirm-reload-from-disk", async (event, filePath) => {
     const parent = getParentForDialog(event, "confirm-reload-from-disk");
     const p = String(filePath || "");
