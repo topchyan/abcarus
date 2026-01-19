@@ -194,14 +194,10 @@ async function commitWorkingCopyToDisk({ force = false } = {}) {
     && fpNow
     && (Number(fpOnOpen.mtimeMs) !== Number(fpNow.mtimeMs) || Number(fpOnOpen.size) !== Number(fpNow.size))
   );
-  if (hasConflict && !force) {
-    return {
-      ok: false,
-      conflict: true,
-      diskFingerprintOnOpen: { ...fpOnOpen },
-      diskFingerprintNow: fpNow ? { ...fpNow } : null,
-    };
-  }
+  // By policy, the in-app working copy session is authoritative for its file.
+  // If the file changed on disk while a working copy is open, we overwrite on Save.
+  // (Callers may pass `force=true` for explicitness, but the default behavior is the same.)
+  const overwroteExternalChanges = Boolean(hasConflict && !force);
 
   const text = String(state.text || "");
   await atomicWriteFileWithRetry(p, text);
@@ -209,10 +205,10 @@ async function commitWorkingCopyToDisk({ force = false } = {}) {
   state.diskFingerprintOnOpen = fpAfter;
   state.dirty = false;
   try {
-    state.lastMutationMeta = { kind: "commitToDisk", forced: Boolean(force) };
+    state.lastMutationMeta = { kind: "commitToDisk", forced: Boolean(force), overwroteExternalChanges };
   } catch {}
   notifyChanged();
-  return { ok: true, diskFingerprint: fpAfter };
+  return { ok: true, diskFingerprint: fpAfter, overwroteExternalChanges };
 }
 
 async function writeWorkingCopyToPath(targetPath) {
