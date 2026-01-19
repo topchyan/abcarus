@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Playback/Focus: exiting Focus no longer leaves a stale loop range that makes Play start inside the previous Focus loop segment.
+- New Tune: the File menu action now matches the [+] button behavior (adds directly into the active file, no Untitled draft detour).
+
+### Changed
+- Status: unify app/file status into a single bottom-left chip with clearer Saved/Unsaved/Conflict states.
+
+### Developer
+- Tests: add quick checks to prevent raw renderer disk I/O bypasses and to catch renderer syntax/build errors early.
+- Docs: merge Working Copy acceptance criteria into the Working Copy ADR (removes duplicate ADR-0006 numbering).
+
 
 
 ## [0.22.3] - 2026-01-18
