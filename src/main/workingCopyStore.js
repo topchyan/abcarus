@@ -36,6 +36,11 @@ function freezeSnapshot(obj) {
   }
 }
 
+function isMissingFileError(err) {
+  const code = err && err.code ? String(err.code) : "";
+  return code === "ENOENT";
+}
+
 function getWorkingCopySnapshot() {
   if (!state) return null;
   return freezeSnapshot({
@@ -185,9 +190,16 @@ async function commitWorkingCopyToDisk({ force = false } = {}) {
   const fpOnOpen = state.diskFingerprintOnOpen || null;
 
   let fpNow = null;
+  let missingOnDisk = false;
   try {
     fpNow = await statFingerprint(p);
-  } catch {}
+  } catch (err) {
+    if (isMissingFileError(err)) missingOnDisk = true;
+    else throw err;
+  }
+  if (missingOnDisk && !force) {
+    return { ok: false, missingOnDisk: true, diskFingerprintOnOpen: fpOnOpen };
+  }
 
   const hasConflict = Boolean(
     fpOnOpen
@@ -200,7 +212,14 @@ async function commitWorkingCopyToDisk({ force = false } = {}) {
   const overwroteExternalChanges = Boolean(hasConflict && !force);
 
   const text = String(state.text || "");
-  await atomicWriteFileWithRetry(p, text);
+  try {
+    await atomicWriteFileWithRetry(p, text);
+  } catch (err) {
+    if (isMissingFileError(err) && !force) {
+      return { ok: false, missingOnDisk: true, diskFingerprintOnOpen: fpOnOpen };
+    }
+    throw err;
+  }
   const fpAfter = await statFingerprint(p);
   state.diskFingerprintOnOpen = fpAfter;
   state.dirty = false;
