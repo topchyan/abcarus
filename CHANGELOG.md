@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Save dialogs: avoid double overwrite confirmations (use the native Save dialog prompt without an extra ABCarus prompt).
+
 
 
 ## [0.22.5] - 2026-01-20
