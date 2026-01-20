@@ -6803,6 +6803,27 @@ async function selectTune(tuneId, options = {}) {
     }
 
     if (!workingCopySlice) {
+      // When another instance or external tooling modifies the file, library metadata (tuneUid/index/offsets)
+      // can drift from the current working-copy snapshot. Prefer refreshing library state from the snapshot
+      // over prompting "Reload from disk?" (which is noisy and often doesn't resolve metadata drift).
+      if (!options._syncedFromWorkingCopy && workingCopySnapshot && workingCopySnapshot.path && workingCopySnapshot.text) {
+        try {
+          const syncedFile = syncLibraryFileFromWorkingCopySnapshot(fileMeta.path, workingCopySnapshot);
+          if (syncedFile && Array.isArray(syncedFile.tunes)) {
+            const xNumber = selected && selected.xNumber ? String(selected.xNumber) : "";
+            const idx = Number.isFinite(Number(selected && selected.tuneIndex)) ? Number(selected.tuneIndex) : null;
+            const updated = syncedFile.tunes.find((t) => (
+              (selected && selected.tuneUid && t && t.tuneUid && t.tuneUid === selected.tuneUid)
+              || (xNumber && t && t.xNumber && String(t.xNumber) === xNumber)
+              || (idx != null && t && Number.isFinite(Number(t.tuneIndex)) && Number(t.tuneIndex) === idx)
+            ));
+            const nextId = updated ? (updated.tuneUid || updated.id) : null;
+            if (nextId) {
+              return selectTune(nextId, { ...options, skipConfirm: true, _syncedFromWorkingCopy: true });
+            }
+          }
+        } catch {}
+      }
       if (options._reloaded) {
         return { ok: false, error: "Unable to load tune from working copy after reload." };
       }
