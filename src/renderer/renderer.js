@@ -2086,11 +2086,16 @@ function hasDiskConflictPath(filePath) {
 
 async function refreshWorkingCopySnapshot() {
   if (!window.api || typeof window.api.getWorkingCopySnapshot !== "function") return null;
-  const res = await window.api.getWorkingCopySnapshot();
-  if (!res || !res.ok || !res.snapshot) return null;
-  workingCopySnapshot = res.snapshot;
-  renderUnifiedStatus();
-  return workingCopySnapshot;
+  try {
+    const res = await window.api.getWorkingCopySnapshot();
+    if (!res || !res.ok || !res.snapshot) return null;
+    workingCopySnapshot = res.snapshot;
+    renderUnifiedStatus();
+    return workingCopySnapshot;
+  } catch (err) {
+    logErr(err);
+    return null;
+  }
 }
 
 async function confirmReloadFromDisk(filePath) {
@@ -3840,7 +3845,8 @@ async function refreshIntonationExplorer() {
     clearSvgIntonationBarHighlight();
     setIntonationExplorerStatus(`Base ${intonationExplorerBaseLabel} (${rows.length} classes)`);
   } catch (err) {
-    setIntonationExplorerStatus("Unable to refresh the explorer.", { error: true });
+    const msg = (err && err.message) ? String(err.message) : String(err || "");
+    setIntonationExplorerStatus(msg ? `Unable to refresh the explorer: ${msg}` : "Unable to refresh the explorer.", { error: true });
     logErr(err);
   }
 }

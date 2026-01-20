@@ -1719,7 +1719,7 @@ svg {
   position: fixed;
   top: 72px;
   right: 24px;
-  width: min(360px, calc(100vw - 48px));
+  width: min(520px, calc(100vw - 48px));
   max-height: min(70vh, calc(100vh - 96px));
   background: var(--panel-bg);
   border-radius: var(--radius-2);
@@ -1729,6 +1729,7 @@ svg {
   flex-direction: column;
   z-index: 50;
   overflow: hidden;
+  resize: both;
 }
 
 .tool-panel.hidden {
@@ -1771,6 +1772,7 @@ svg {
 .tool-panel-controls {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 10px 16px;
 }
