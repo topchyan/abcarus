@@ -3574,9 +3574,48 @@ function scanIntonationEntries(snapshot) {
   if (!tune) return { tune: null, entries: [], error: "No active tune snapshot available." };
   const fullText = String(snapshot.text || "");
   const body = fullText.slice(tune.start, tune.end);
+
+  // Avoid counting field headers / metadata as notes:
+  // scan only after the first K: line (if present), and skip free-text blocks.
+  let scanStart = 0;
+  try {
+    const re = /(?:^|\n)K:[^\n]*\n?/i;
+    const m = re.exec(body);
+    if (m) scanStart = Math.max(0, Math.min(body.length, m.index + m[0].length));
+  } catch {}
+
   const seen = new Map();
-  let idx = 0;
+  let idx = scanStart;
+  let inTextBlock = false;
   while (idx < body.length) {
+    // Skip %%begintext … %%endtext blocks (often contain prose with A-G letters).
+    if (!inTextBlock) {
+      const lineStart = idx === 0 || body[idx - 1] === "\n";
+      if (lineStart && body.startsWith("%%begintext", idx)) {
+        inTextBlock = true;
+        idx += "%%begintext".length;
+        continue;
+      }
+    } else {
+      const lineStart = idx === 0 || body[idx - 1] === "\n";
+      if (lineStart && body.startsWith("%%endtext", idx)) {
+        inTextBlock = false;
+        idx += "%%endtext".length;
+        continue;
+      }
+      idx += 1;
+      continue;
+    }
+
+    // Skip quoted chord symbols / annotations: "Am" "G7" etc.
+    if (body[idx] === "\"") {
+      const next = body.indexOf("\"", idx + 1);
+      if (next >= 0) {
+        idx = next + 1;
+        continue;
+      }
+    }
+
     const note = parseNoteTokenAt53(body, idx);
     if (!note) {
       idx += 1;
@@ -3601,8 +3640,9 @@ function scanIntonationEntries(snapshot) {
     };
     entry.count += 1;
     entry.ranges.push({
-      start: tune.start + note.start,
-      end: tune.start + note.end,
+      // NOTE: offsets are relative to the active tune text in the editor (not the full file).
+      start: note.start,
+      end: note.end,
     });
     seen.set(step, entry);
     idx = Math.max(idx + 1, note.end);
