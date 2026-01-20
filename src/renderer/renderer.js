@@ -3594,10 +3594,8 @@ function scanIntonationEntries(snapshot) {
     const octave = computeOctave(note.letter, note.octaveMarks);
     const abs53 = octave * 53 + baseId + micro;
     const step = mod53(abs53);
-    const normalizedStep = mod53(step - baseStep);
     const entry = seen.get(step) || {
       step,
-      normalizedStep,
       count: 0,
       ranges: [],
     };
