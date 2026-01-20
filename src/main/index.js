@@ -528,13 +528,13 @@ function confirmDeleteTune(label) {
   return "cancel";
 }
 
-function confirmAppendToFile(filePath, tuneLabel) {
+async function confirmAppendToFile(filePath, tuneLabel) {
   if (appState && appState.settings && appState.settings.confirmAppendToActiveFile === false) {
     return "append";
   }
   const parent = prepareDialogParent(null, "confirm-append-to-file");
   const label = String(tuneLabel || "").trim();
-  const res = dialog.showMessageBoxSync(parent || undefined, {
+  const res = await dialog.showMessageBox(parent || undefined, {
     type: "question",
     buttons: ["Append", "Cancel"],
     defaultId: 0,
@@ -546,8 +546,8 @@ function confirmAppendToFile(filePath, tuneLabel) {
     checkboxLabel: "Do not show again",
     checkboxChecked: false,
   });
-  const response = typeof res === "number" ? res : (res && typeof res.response === "number" ? res.response : 1);
-  const doNotShowAgain = Boolean(res && typeof res === "object" && res.checkboxChecked);
+  const response = res && typeof res.response === "number" ? res.response : 1;
+  const doNotShowAgain = Boolean(res && res.checkboxChecked);
   if (response === 0) {
     if (doNotShowAgain) {
       try { updateSettings({ confirmAppendToActiveFile: false }); } catch {}

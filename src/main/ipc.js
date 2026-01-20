@@ -273,7 +273,7 @@ function registerIpcHandlers(ctx) {
       ? String(raw || "")
       : (raw && raw.filePath ? String(raw.filePath) : "");
     const tuneLabel = (typeof raw === "object" && raw && raw.tuneLabel) ? String(raw.tuneLabel) : "";
-    return confirmAppendToFile(filePath, tuneLabel);
+    return await confirmAppendToFile(filePath, tuneLabel);
   });
   ipcMain.handle("dialog:confirm-import-musicxml-target", async (event, filePath) =>
     confirmImportMusicXmlTarget(filePath, event)
