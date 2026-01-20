@@ -1750,6 +1750,8 @@ svg {
   border-bottom: 1px solid #e4e4e4;
   font-weight: 600;
   font-size: 14px;
+  cursor: move;
+  user-select: none;
 }
 
 .tool-panel-title {
