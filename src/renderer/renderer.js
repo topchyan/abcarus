@@ -6758,17 +6758,6 @@ async function selectTune(tuneId, options = {}) {
 
   if (!selected || !fileMeta) return { ok: false, error: "Tune not found." };
 
-  if (fileMeta.path && hasDiskConflictPath(fileMeta.path) && isWorkingCopyOpenForFile(fileMeta.path)) {
-    const shouldReload = await confirmReloadFromDisk(fileMeta.path);
-    if (shouldReload) {
-      const reloadRes = await discardAndReloadWorkingCopyFromDisk(fileMeta.path, { restoreTuneId: null });
-      if (reloadRes && reloadRes.ok) {
-        return selectTune(tuneId, { ...options, skipConfirm: true, _reparsed: true });
-      }
-      return { ok: false, error: (reloadRes && reloadRes.error) ? reloadRes.error : "Unable to reload from disk." };
-    }
-  }
-
   try {
     if (window.api && typeof window.api.openWorkingCopy === "function" && fileMeta.path) {
       if (!workingCopySnapshot || !workingCopySnapshot.path || !pathsEqual(workingCopySnapshot.path, fileMeta.path)) {
@@ -6824,18 +6813,9 @@ async function selectTune(tuneId, options = {}) {
           }
         } catch {}
       }
-      if (options._reloaded) {
-        return { ok: false, error: "Unable to load tune from working copy after reload." };
-      }
-      const shouldReload = await confirmReloadFromDisk(fileMeta.path);
-      if (shouldReload) {
-        const reloadRes = await discardAndReloadWorkingCopyFromDisk(fileMeta.path, { restoreTuneId: tuneId });
-        if (reloadRes && reloadRes.ok) {
-          return selectTune(tuneId, { ...options, skipConfirm: true, _reloaded: true });
-        }
-        return { ok: false, error: (reloadRes && reloadRes.error) ? reloadRes.error : "Unable to reload working copy." };
-      }
-      return { ok: false, error: "Tune offsets could not be resolved; reload the file and try again." };
+      showEmptyState();
+      showToast("Tune not found in the current file state.", 3400);
+      return { ok: false, error: "Tune not found in the current file state." };
     }
 
     content = String(workingCopySnapshot.text || "");
