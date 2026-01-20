@@ -479,7 +479,6 @@ function showSaveDialog(suggestedName, suggestedDir, senderOrEvent) {
     title: "Save As",
     defaultPath,
     filters,
-    showOverwritePrompt: false,
   }).then((result) => {
     if (!result || result.canceled) return null;
     return result.filePath || null;

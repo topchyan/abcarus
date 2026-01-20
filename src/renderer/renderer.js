@@ -13487,22 +13487,11 @@ async function fileNew() {
   }
 }
 
-function hasNativeOverwritePrompt() {
-  const platform = process && process.platform ? String(process.platform) : "";
-  return platform === "linux" || platform === "freebsd" || platform === "openbsd";
-}
-
 async function createNewFileAtPath(filePath, content, options = {}) {
   if (!filePath) return false;
   const dir = safeDirname(filePath);
   if (dir) await mkdirp(dir);
-  let shouldConfirm;
-  if (Object.prototype.hasOwnProperty.call(options, "confirmOverwrite")) {
-    shouldConfirm = options.confirmOverwrite;
-  } else {
-    shouldConfirm = !hasNativeOverwritePrompt();
-  }
-  if (await fileExists(filePath) && shouldConfirm) {
+  if (await fileExists(filePath) && options.confirmOverwrite) {
     const ok = await confirmOverwrite(filePath);
     if (!ok) return false;
   }
