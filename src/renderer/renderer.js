@@ -13481,7 +13481,7 @@ async function fileNew() {
   const suggestedDir = getDefaultSaveDir();
   const filePath = await showSaveDialog(suggestedName, suggestedDir);
   if (!filePath) return;
-  const created = await createNewFileAtPath(filePath, NEW_FILE_MINIMAL_ABC);
+  const created = await createNewFileAtPath(filePath, NEW_FILE_MINIMAL_ABC, { confirmOverwrite: false });
   if (created) {
     showToast("New file created.", 2200);
   }
@@ -13500,16 +13500,30 @@ async function createNewFileAtPath(filePath, content, options = {}) {
     await showSaveError((writeRes && writeRes.error) ? writeRes.error : "Unable to create file.");
     return false;
   }
+  setFileContentInCache(filePath, content);
+  if (currentDoc) {
+    currentDoc.path = filePath;
+    currentDoc.dirty = false;
+  }
+  setDirtyIndicator(false);
+  setFileNameMeta(stripFileExtension(safeBasename(filePath)));
+  updateFileHeaderPanel();
+  updateWindowTitle();
   try {
     await refreshLibraryFile(filePath, { force: true });
   } catch {}
   const switched = await loadLibraryFileIntoEditor(filePath);
   if (switched && switched.ok) return true;
+  // Fallback: ensure the session is still pointed at the chosen path even if library navigation fails.
+  activeFilePath = filePath;
+  recordNavFilePath(filePath);
+  try {
+    if (window.api && typeof window.api.openWorkingCopy === "function") {
+      await window.api.openWorkingCopy(filePath);
+      await refreshWorkingCopySnapshot();
+    }
+  } catch {}
   setActiveTuneText(content, null, { markDirty: false });
-  if (currentDoc) {
-    currentDoc.path = filePath;
-    currentDoc.dirty = false;
-  }
   return true;
 }
 
