@@ -21,7 +21,14 @@ import {
 } from "../../third_party/codemirror/cm.js";
 import { ABC2SVG_DECORATIONS } from "./abc_decorations_abc2svg.js";
 import { initSettings } from "./settings.js";
-import { transformTranspose } from "./transpose.mjs";
+import {
+  transformTranspose,
+  parseNoteTokenAt53,
+  parseAccidentalPrefix53,
+  computeOctave,
+  baseId53ForNaturalLetter,
+  NOTE_BASES,
+} from "./transpose.mjs";
 import { normalizeMeasuresLineBreaks, transformMeasuresPerLine } from "./measures.mjs";
 import {
   buildDefaultDrumVelocityMap,
@@ -116,6 +123,13 @@ const $scanErrorTunes = document.getElementById("scanErrorTunes");
 const $fileNameMeta = document.getElementById("fileNameMeta");
 const $sidebarSplit = document.getElementById("sidebarSplit");
 const $toast = document.getElementById("toast");
+const $intonationExplorerPanel = document.getElementById("intonationExplorerPanel");
+const $intonationExplorerClose = document.getElementById("intonationExplorerClose");
+const $intonationExplorerBaseMode = document.getElementById("intonationExplorerBaseMode");
+const $intonationExplorerBaseManual = document.getElementById("intonationExplorerBaseManual");
+const $intonationExplorerRefresh = document.getElementById("intonationExplorerRefresh");
+const $intonationExplorerStatus = document.getElementById("intonationExplorerStatus");
+const $intonationExplorerTableBody = document.getElementById("intonationExplorerTableBody");
 const $errorsIndicator = document.getElementById("errorsIndicator");
 const $errorsFocusMessage = document.getElementById("errorsFocusMessage");
 const $errorsPopover = document.getElementById("errorsPopover");
@@ -3429,6 +3443,429 @@ function setMeasureErrorRanges(ranges) {
   });
 }
 
+let intonationHighlightRanges = [];
+let intonationHighlightVersion = 0;
+function buildIntonationHighlightDecorations(state) {
+  if (!state || !state.doc) return Decoration.none;
+  const builder = new RangeSetBuilder();
+  const length = state.doc.length;
+  for (const range of intonationHighlightRanges || []) {
+    if (!range) continue;
+    const start = Math.max(0, Math.min(length, Number(range.start) || 0));
+    const end = Math.max(start, Math.min(length, Number(range.end) || start));
+    if (end <= start) continue;
+    builder.add(start, end, Decoration.mark({ class: "cm-intonation-highlight" }));
+  }
+  return builder.finish();
+}
+
+const intonationHighlightPlugin = ViewPlugin.fromClass(class {
+  constructor(view) {
+    this.version = intonationHighlightVersion;
+    this.decorations = buildIntonationHighlightDecorations(view.state);
+  }
+  update(update) {
+    if (update.docChanged || this.version !== intonationHighlightVersion) {
+      this.version = intonationHighlightVersion;
+      this.decorations = buildIntonationHighlightDecorations(update.state);
+    }
+  }
+}, {
+  decorations: (v) => v.decorations,
+});
+
+function setIntonationHighlightRanges(ranges) {
+  intonationHighlightRanges = Array.isArray(ranges) ? ranges : [];
+  intonationHighlightVersion += 1;
+  if (!editorView) return;
+  editorView.dispatch({
+    selection: editorView.state.selection,
+    scrollIntoView: false,
+  });
+}
+
+const PC12_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const DEFAULT_INT_BASE = "pc53=0";
+let intonationExplorerVisible = false;
+let intonationExplorerRows = [];
+let intonationExplorerActiveStep = null;
+let intonationExplorerBaseStep = 0;
+let intonationExplorerBaseLabel = "pc53=0";
+let intonationExplorerBaseMode = "auto";
+
+let lastSvgIntonationBarEls = [];
+function clearSvgIntonationBarHighlight() {
+  if (!lastSvgIntonationBarEls || !lastSvgIntonationBarEls.length) return;
+  for (const el of lastSvgIntonationBarEls) {
+    try { el.classList.remove("svg-intonation-bar"); } catch {}
+  }
+  lastSvgIntonationBarEls = [];
+}
+
+function modNumber(value, modulus) {
+  if (!Number.isFinite(modulus) || modulus === 0) return 0;
+  let num = Number(value) || 0;
+  const mod = Number(modulus) || 1;
+  const raw = num % mod;
+  return raw < 0 ? raw + mod : raw;
+}
+
+function mod53(value) {
+  return modNumber(value, 53);
+}
+
+function formatAeuLabel(step) {
+  return `pc53=${mod53(step)}`;
+}
+
+function formatWesternLabel(step) {
+  const normalized = mod53(step);
+  const approx = modNumber(Math.round((normalized * 12) / 53), 12);
+  return PC12_NAMES[approx] || `pc12=${approx}`;
+}
+
+function resolveTonalBaseInput(rawValue) {
+  const raw = String(rawValue || "").trim();
+  if (!raw) {
+    return { ok: true, base: 0, label: "pc53=0" };
+  }
+  const lower = raw.toLowerCase();
+  const pcMatch = lower.match(/^pc53=(\d{1,2})$/);
+  if (pcMatch) {
+    const num = Number(pcMatch[1]);
+    if (Number.isFinite(num) && num >= 0 && num < 53) {
+      return { ok: true, base: num, label: `pc53=${num}` };
+    }
+    return { ok: false, error: `Tonal base pc53=${pcMatch[1]} must be 0–52.` };
+  }
+  const numMatch = lower.match(/^(\d{1,2})$/);
+  if (numMatch) {
+    const num = Number(numMatch[1]);
+    if (Number.isFinite(num) && num >= 0 && num < 53) {
+      return { ok: true, base: num, label: `pc53=${num}` };
+    }
+    return { ok: false, error: `Tonal base ${numMatch[1]} must be 0–52.` };
+  }
+  const letterMatch = raw.match(/^([A-Ga-g])([#b])?$/);
+  if (letterMatch) {
+    const letter = letterMatch[1].toUpperCase();
+    const accidental = letterMatch[2] || "";
+    const basePc = (NOTE_BASES[letter] != null ? NOTE_BASES[letter] : 0)
+      + (accidental === "#" ? 1 : accidental === "b" ? -1 : 0);
+    const normalizedPc = modNumber(basePc, 12);
+    const approx = Math.round((normalizedPc * 53) / 12);
+    return { ok: true, base: mod53(approx), label: `${letter}${accidental}` };
+  }
+  return { ok: false, error: `Unable to parse tonal base (“${raw}”).` };
+}
+
+function scanIntonationEntries(snapshot) {
+  if (!snapshot || !snapshot.text) return { tune: null, entries: [], error: "Unable to read working copy." };
+  const tune = resolveTuneEntryFromSnapshot(snapshot, {
+    tuneUid: activeTuneUid,
+    tuneIndex: activeTuneIndex,
+    startOffset: activeTuneMeta && activeTuneMeta.startOffset,
+  });
+  if (!tune) return { tune: null, entries: [], error: "No active tune snapshot available." };
+  const fullText = String(snapshot.text || "");
+  const body = fullText.slice(tune.start, tune.end);
+  const seen = new Map();
+  let idx = 0;
+  while (idx < body.length) {
+    const note = parseNoteTokenAt53(body, idx);
+    if (!note) {
+      idx += 1;
+      continue;
+    }
+    const letter = note.letter ? note.letter.toUpperCase() : "";
+    if (!letter) {
+      idx = note.end;
+      continue;
+    }
+    const letterPc = NOTE_BASES[letter] != null ? NOTE_BASES[letter] : 0;
+    const baseId = baseId53ForNaturalLetter(letter);
+    const accidental = parseAccidentalPrefix53(note.accPrefix, letterPc);
+    const micro = Number.isFinite(accidental.micro) ? accidental.micro : 0;
+    const octave = computeOctave(note.letter, note.octaveMarks);
+    const abs53 = octave * 53 + baseId + micro;
+    const step = mod53(abs53);
+    const normalizedStep = mod53(step - baseStep);
+    const entry = seen.get(step) || {
+      step,
+      normalizedStep,
+      count: 0,
+      ranges: [],
+    };
+    entry.count += 1;
+    entry.ranges.push({
+      start: tune.start + note.start,
+      end: tune.start + note.end,
+    });
+    seen.set(step, entry);
+    idx = Math.max(idx + 1, note.end);
+  }
+  const entries = Array.from(seen.values());
+  entries.sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return a.step - b.step;
+  });
+  return { tune, entries, error: entries.length ? null : "No musical notes found in the tune." };
+}
+
+function buildIntonationRowsFromEntries(entries, baseStep) {
+  const list = Array.isArray(entries) ? entries : [];
+  const rows = list.map((entry) => ({
+    step: entry.step,
+    normalizedStep: mod53(entry.step - baseStep),
+    count: entry.count,
+    ranges: entry.ranges,
+  }));
+  rows.sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return a.step - b.step;
+  });
+  return rows;
+}
+
+function pickAutoBaseStep(entries) {
+  const list = Array.isArray(entries) ? entries : [];
+  if (!list.length) return 0;
+  const best = list.reduce((acc, entry) => {
+    if (!acc) return entry;
+    if ((entry.count || 0) > (acc.count || 0)) return entry;
+    if ((entry.count || 0) === (acc.count || 0) && entry.step < acc.step) return entry;
+    return acc;
+  }, null);
+  return best ? mod53(best.step) : 0;
+}
+
+function parseTonalBaseFromK(tuneText) {
+  const text = String(tuneText || "");
+  const match = text.match(/(?:^|\n)K:\s*([^\r\n]+)/i);
+  if (!match) return { ok: false, error: "No K: line found in the active tune." };
+  const value = String(match[1] || "").trim();
+  if (!value) return { ok: false, error: "Empty K: line in the active tune." };
+  const token = value.split(/\s+/)[0] || value;
+  const keyMatch = token.match(/^([A-Ga-g])([#b])?/);
+  if (!keyMatch) return { ok: false, error: `Unable to parse K: (“${token}”).` };
+  const letter = keyMatch[1].toUpperCase();
+  const acc = keyMatch[2] || "";
+  return resolveTonalBaseInput(`${letter}${acc}`);
+}
+
+function updateIntonationBaseUi() {
+  const mode = ($intonationExplorerBaseMode && $intonationExplorerBaseMode.value) || "auto";
+  intonationExplorerBaseMode = mode;
+  if ($intonationExplorerBaseManual) {
+    const manual = mode === "manual";
+    $intonationExplorerBaseManual.disabled = !manual;
+    $intonationExplorerBaseManual.setAttribute("aria-disabled", manual ? "false" : "true");
+  }
+}
+
+function highlightSvgIntonationBarsAtEditorOffsets(offsets) {
+  if (!$out || !$renderPane) return false;
+  if (!editorView) return false;
+  const list = Array.isArray(offsets) ? offsets.filter((n) => Number.isFinite(n)) : [];
+  if (!list.length) {
+    clearSvgIntonationBarHighlight();
+    return false;
+  }
+  const renderOffset = (lastRenderPayload && Number.isFinite(lastRenderPayload.offset))
+    ? lastRenderPayload.offset
+    : 0;
+  const editorText = editorView.state.doc.toString();
+  const measures = new Map();
+  for (const offset of list) {
+    const measure = findMeasureRangeAt(editorText, offset);
+    if (!measure) continue;
+    const key = `${measure.start}:${measure.end}`;
+    if (!measures.has(key)) measures.set(key, measure);
+  }
+  const uniqMeasures = Array.from(measures.values());
+  const barEls = uniqMeasures.length ? Array.from($out.querySelectorAll(".bar-hl")) : [];
+  if (!uniqMeasures.length || !barEls.length) {
+    clearSvgIntonationBarHighlight();
+    return false;
+  }
+  const hits = new Set();
+  for (const measure of uniqMeasures) {
+    const start = measure.start + renderOffset;
+    const end = measure.end + renderOffset;
+    for (const el of barEls) {
+      const s = Number(el.dataset && el.dataset.start);
+      const e = Number(el.dataset && el.dataset.end);
+      if (!Number.isFinite(s)) continue;
+      const stop = Number.isFinite(e) ? e : s + 1;
+      if (s < end && stop > start) hits.add(el);
+    }
+  }
+  clearSvgIntonationBarHighlight();
+  lastSvgIntonationBarEls = Array.from(hits);
+  for (const el of lastSvgIntonationBarEls) {
+    try { el.classList.add("svg-intonation-bar"); } catch {}
+  }
+  return lastSvgIntonationBarEls.length > 0;
+}
+
+function renderIntonationExplorerRows(rows) {
+  if (!$intonationExplorerTableBody) return;
+  $intonationExplorerTableBody.innerHTML = "";
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 4;
+    td.textContent = "No pitch classes detected.";
+    td.style.fontStyle = "italic";
+    tr.appendChild(td);
+    $intonationExplorerTableBody.appendChild(tr);
+    return;
+  }
+  for (const row of list) {
+    const tr = document.createElement("tr");
+    tr.tabIndex = 0;
+    tr.dataset.step = String(row.step);
+    if (intonationExplorerActiveStep != null && String(row.step) === String(intonationExplorerActiveStep)) {
+      tr.classList.add("active");
+    }
+    const aeu = document.createElement("td");
+    aeu.textContent = formatAeuLabel(row.normalizedStep);
+    const west = document.createElement("td");
+    west.textContent = formatWesternLabel(row.normalizedStep);
+    const weight = document.createElement("td");
+    weight.textContent = String(row.count || 0);
+    const highlight = document.createElement("td");
+    highlight.textContent = "Highlight";
+    highlight.className = "tool-panel-highlight-label";
+    tr.append(aeu, west, weight, highlight);
+    tr.addEventListener("click", () => {
+      activateIntonationExplorerRow(row.step);
+    });
+    tr.addEventListener("keydown", (event) => {
+      if (!event || (event.key !== "Enter" && event.key !== " ")) return;
+      event.preventDefault();
+      activateIntonationExplorerRow(row.step);
+    });
+    $intonationExplorerTableBody.appendChild(tr);
+  }
+}
+
+function setIntonationExplorerStatus(message, { error } = {}) {
+  if (!$intonationExplorerStatus) return;
+  $intonationExplorerStatus.textContent = String(message || "");
+  $intonationExplorerStatus.classList.toggle("error", Boolean(error));
+}
+
+function highlightScoreFromRange(range) {
+  if (!range || !Number.isFinite(range.start)) return;
+  if (lastSvgIntonationBarEls && lastSvgIntonationBarEls.length) {
+    maybeScrollRenderToNote(lastSvgIntonationBarEls[0]);
+  }
+}
+
+function activateIntonationExplorerRow(step) {
+  const target = (intonationExplorerRows || []).find((r) => String(r.step) === String(step));
+  if (!target) return;
+  intonationExplorerActiveStep = target.step;
+  renderIntonationExplorerRows(intonationExplorerRows);
+  setIntonationHighlightRanges(target.ranges);
+  highlightSvgIntonationBarsAtEditorOffsets((target.ranges || []).map((r) => r && r.start));
+  highlightScoreFromRange(target.ranges && target.ranges[0]);
+  setIntonationExplorerStatus(`Highlighting ${formatAeuLabel(target.normalizedStep)} (${target.count} hits)`);
+}
+
+async function refreshIntonationExplorer() {
+  if (!intonationExplorerVisible) return;
+  if (rawMode) {
+    setIntonationExplorerStatus("Intonation Explorer is not available in Raw mode.", { error: true });
+    return;
+  }
+  setIntonationExplorerStatus("Refreshing…");
+  try {
+    const snapshot = await refreshWorkingCopySnapshot();
+    if (!snapshot || !snapshot.path) {
+      intonationExplorerRows = [];
+      intonationExplorerActiveStep = null;
+      renderIntonationExplorerRows([]);
+      setIntonationHighlightRanges([]);
+      clearSvgIntonationBarHighlight();
+      setIntonationExplorerStatus("Unable to load working copy snapshot.", { error: true });
+      return;
+    }
+    const scanned = scanIntonationEntries(snapshot);
+    if (scanned.error) {
+      intonationExplorerRows = [];
+      intonationExplorerActiveStep = null;
+      renderIntonationExplorerRows([]);
+      setIntonationHighlightRanges([]);
+      clearSvgIntonationBarHighlight();
+      setIntonationExplorerStatus(scanned.error, { error: true });
+      return;
+    }
+    updateIntonationBaseUi();
+    const mode = intonationExplorerBaseMode || "auto";
+    let base = 0;
+    let label = "pc53=0";
+    if (mode === "manual") {
+      const rawManual = ($intonationExplorerBaseManual && $intonationExplorerBaseManual.value) || DEFAULT_INT_BASE;
+      const resolved = resolveTonalBaseInput(rawManual);
+      if (!resolved.ok) {
+        setIntonationExplorerStatus(resolved.error, { error: true });
+        return;
+      }
+      base = resolved.base;
+      label = resolved.label;
+    } else if (mode === "fromK") {
+      const fullText = String(snapshot.text || "");
+      const tuneText = scanned.tune ? fullText.slice(scanned.tune.start, scanned.tune.end) : "";
+      const resolved = parseTonalBaseFromK(tuneText);
+      if (!resolved.ok) {
+        setIntonationExplorerStatus(resolved.error, { error: true });
+        return;
+      }
+      base = resolved.base;
+      label = `K:${resolved.label}`;
+    } else {
+      base = pickAutoBaseStep(scanned.entries);
+      label = `Auto (${formatAeuLabel(base)})`;
+    }
+    intonationExplorerBaseStep = base;
+    intonationExplorerBaseLabel = label;
+    const rows = buildIntonationRowsFromEntries(scanned.entries, base);
+    intonationExplorerRows = rows;
+    intonationExplorerActiveStep = null;
+    renderIntonationExplorerRows(rows);
+    setIntonationHighlightRanges([]);
+    clearSvgIntonationBarHighlight();
+    setIntonationExplorerStatus(`Base ${intonationExplorerBaseLabel} (${rows.length} classes)`);
+  } catch (err) {
+    setIntonationExplorerStatus("Unable to refresh the explorer.", { error: true });
+    logErr(err);
+  }
+}
+
+function showIntonationExplorerPanel() {
+  if (!$intonationExplorerPanel) return;
+  intonationExplorerVisible = true;
+  $intonationExplorerPanel.classList.remove("hidden");
+  $intonationExplorerPanel.setAttribute("aria-hidden", "false");
+  if ($intonationExplorerBaseMode) $intonationExplorerBaseMode.value = "auto";
+  if ($intonationExplorerBaseManual && !$intonationExplorerBaseManual.value) $intonationExplorerBaseManual.value = DEFAULT_INT_BASE;
+  updateIntonationBaseUi();
+  refreshIntonationExplorer().catch(() => {});
+}
+
+function hideIntonationExplorerPanel() {
+  if (!$intonationExplorerPanel) return;
+  intonationExplorerVisible = false;
+  $intonationExplorerPanel.classList.add("hidden");
+  $intonationExplorerPanel.setAttribute("aria-hidden", "true");
+  setIntonationExplorerStatus("");
+  setIntonationHighlightRanges([]);
+  clearSvgIntonationBarHighlight();
+}
+
 function getHeaderEditorValue() {
   if (!headerEditorView) return "";
   return headerEditorView.state.doc.toString();
@@ -5685,6 +6122,7 @@ function initEditor() {
         measureErrorPlugin,
         errorActivationHighlightPlugin,
         practiceBarHighlightPlugin,
+        intonationHighlightPlugin,
       ]),
       abcCompletionCompartment.of([
         autocompletion({ override: [buildAbcCompletionSource()], activateOnTyping: false }),
@@ -14522,7 +14960,11 @@ function wireMenuActions() {
       else if (actionType === "transformMeasures" && action && Number.isFinite(action.value)) {
         await applyAbc2abcTransform({ measuresPerLine: action.value });
       }
-	      else if (actionType === "alignBars") alignBarsInEditor();
+      else if (actionType === "alignBars") alignBarsInEditor();
+      else if (actionType === "openIntonationExplorer") {
+        if (intonationExplorerVisible) hideIntonationExplorerPanel();
+        else showIntonationExplorerPanel();
+      }
 		      else if (actionType === "dumpDebug") dumpDebugToFile().catch(() => {});
 		      else if (actionType === "settings" && settingsController) settingsController.openSettings();
 		      else if (actionType === "fonts" && settingsController) {
@@ -14585,6 +15027,30 @@ function wireMenuActions() {
 }
 
 wireMenuActions();
+
+if ($intonationExplorerClose) {
+  $intonationExplorerClose.addEventListener("click", () => {
+    hideIntonationExplorerPanel();
+  });
+}
+if ($intonationExplorerRefresh) {
+  $intonationExplorerRefresh.addEventListener("click", () => {
+    refreshIntonationExplorer().catch(() => {});
+  });
+}
+if ($intonationExplorerBaseMode) {
+  $intonationExplorerBaseMode.addEventListener("change", () => {
+    updateIntonationBaseUi();
+    refreshIntonationExplorer().catch(() => {});
+  });
+}
+if ($intonationExplorerBaseManual) {
+  $intonationExplorerBaseManual.addEventListener("keydown", (event) => {
+    if (!event || event.key !== "Enter") return;
+    event.preventDefault();
+    refreshIntonationExplorer().catch(() => {});
+  });
+}
 
 if (window.api && typeof window.api.onAppRequestQuit === "function") {
   window.api.onAppRequestQuit(() => {

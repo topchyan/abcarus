@@ -1,4 +1,4 @@
-const NOTE_BASES = {
+export const NOTE_BASES = {
   C: 0,
   D: 2,
   E: 4,
@@ -1335,3 +1335,10 @@ export function transformTranspose(text, semitones, options = {}) {
   const allReplacements = replacements.concat(keyReplacements, keyAccReplacements, chordReplacements);
   return applyReplacements(text, allReplacements);
 }
+
+export {
+  parseNoteTokenAt53,
+  parseAccidentalPrefix53,
+  computeOctave,
+  baseId53ForNaturalLetter,
+};
