@@ -418,6 +418,17 @@ function getSettingsSchema() {
       ui: { input: "checkbox" },
     },
     {
+      key: "confirmAppendToActiveFile",
+      type: "boolean",
+      default: true,
+      section: "Dialogs",
+      group: "Confirmations",
+      groupOrder: 20,
+      label: "Confirm append to active file",
+      help: "When enabled, shows a confirmation dialog before appending (e.g., after moving/copying a tune into the active file).",
+      ui: { input: "checkbox" },
+    },
+    {
       key: "libraryAutoRenumberAfterMove",
       type: "boolean",
       default: false,

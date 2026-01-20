@@ -529,9 +529,12 @@ function confirmDeleteTune(label) {
 }
 
 function confirmAppendToFile(filePath, tuneLabel) {
+  if (appState && appState.settings && appState.settings.confirmAppendToActiveFile === false) {
+    return "append";
+  }
   const parent = prepareDialogParent(null, "confirm-append-to-file");
   const label = String(tuneLabel || "").trim();
-  const response = dialog.showMessageBoxSync(parent || undefined, {
+  const res = dialog.showMessageBoxSync(parent || undefined, {
     type: "question",
     buttons: ["Append", "Cancel"],
     defaultId: 0,
@@ -540,8 +543,17 @@ function confirmAppendToFile(filePath, tuneLabel) {
     detail: label
       ? `Append “${label}” to the active file “${path.basename(filePath)}”?`
       : `Append to the active file “${path.basename(filePath)}”?`,
+    checkboxLabel: "Do not show again",
+    checkboxChecked: false,
   });
-  if (response === 0) return "append";
+  const response = typeof res === "number" ? res : (res && typeof res.response === "number" ? res.response : 1);
+  const doNotShowAgain = Boolean(res && typeof res === "object" && res.checkboxChecked);
+  if (response === 0) {
+    if (doNotShowAgain) {
+      try { updateSettings({ confirmAppendToActiveFile: false }); } catch {}
+    }
+    return "append";
+  }
   return "cancel";
 }
 
@@ -958,6 +970,7 @@ function applySettingsPatch(patch, { persistToSettingsFile = true } = {}) {
   next.editorFontSize = Math.min(32, Math.max(8, Number(next.editorFontSize) || 13));
   next.editorNotesBold = Boolean(next.editorNotesBold);
   next.editorLyricsBold = Boolean(next.editorLyricsBold);
+  next.confirmAppendToActiveFile = Boolean(next.confirmAppendToActiveFile);
   next.autoAlignBarsAfterTransforms = Boolean(next.autoAlignBarsAfterTransforms);
   next.playbackNativeMidiDrums = Boolean(next.playbackNativeMidiDrums);
   next.playbackNativeMidiDrumsSetByUser = Boolean(next.playbackNativeMidiDrumsSetByUser);
