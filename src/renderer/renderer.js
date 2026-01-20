@@ -12439,8 +12439,32 @@ async function performSaveAsFlow() {
     && typeof window.api.writeWorkingCopyToPath === "function"
   );
   if (!hasWorkingCopy) {
-    await showSaveError("Internal error: working copy Save As is unavailable.");
-    return false;
+    const content = serializeDocument(currentDoc);
+    const saved = await createNewFileAtPath(filePath, content, { confirmOverwrite: false });
+    if (!saved) return false;
+    const root = libraryIndex && libraryIndex.root ? normalizeLibraryPath(libraryIndex.root) : "";
+    const normalizedDest = normalizeLibraryPath(filePath);
+    const inRoot = Boolean(
+      root
+      && (normalizedDest === root || normalizedDest.startsWith(root.endsWith("/") ? root : `${root}/`))
+    );
+    if (!inRoot) {
+      const dirPath = safeDirname(filePath);
+      showToastWithAction(
+        "Saved file outside current Library.",
+        "Load folder…",
+        () => { loadLibraryFromFolder(dirPath).catch(() => {}); },
+        8000
+      );
+    }
+    setFileContentInCache(filePath, content);
+    currentDoc.path = filePath;
+    currentDoc.dirty = false;
+    setDirtyIndicator(false);
+    setFileNameMeta(stripFileExtension(safeBasename(filePath)));
+    updateFileHeaderPanel();
+    updateWindowTitle();
+    return true;
   }
 
   // Working Copy path: Save the whole file (header + all tunes), atomically, then switch to it.
@@ -13453,7 +13477,51 @@ async function performAppendFlow() {
 async function fileNew() {
   const ok = await ensureSafeToAbandonCurrentDoc("creating a new file");
   if (!ok) return;
-  setActiveTuneText(NEW_FILE_MINIMAL_ABC, null, { markDirty: true });
+  const suggestedName = `${getSuggestedBaseName() || "NewTune"}.abc`;
+  const suggestedDir = getDefaultSaveDir();
+  const filePath = await showSaveDialog(suggestedName, suggestedDir);
+  if (!filePath) return;
+  const created = await createNewFileAtPath(filePath, NEW_FILE_MINIMAL_ABC);
+  if (created) {
+    showToast("New file created.", 2200);
+  }
+}
+
+function hasNativeOverwritePrompt() {
+  const platform = process && process.platform ? String(process.platform) : "";
+  return platform === "linux" || platform === "freebsd" || platform === "openbsd";
+}
+
+async function createNewFileAtPath(filePath, content, options = {}) {
+  if (!filePath) return false;
+  const dir = safeDirname(filePath);
+  if (dir) await mkdirp(dir);
+  let shouldConfirm;
+  if (Object.prototype.hasOwnProperty.call(options, "confirmOverwrite")) {
+    shouldConfirm = options.confirmOverwrite;
+  } else {
+    shouldConfirm = !hasNativeOverwritePrompt();
+  }
+  if (await fileExists(filePath) && shouldConfirm) {
+    const ok = await confirmOverwrite(filePath);
+    if (!ok) return false;
+  }
+  const writeRes = await withFileLock(filePath, async () => writeFile(filePath, content));
+  if (!writeRes || !writeRes.ok) {
+    await showSaveError((writeRes && writeRes.error) ? writeRes.error : "Unable to create file.");
+    return false;
+  }
+  try {
+    await refreshLibraryFile(filePath, { force: true });
+  } catch {}
+  const switched = await loadLibraryFileIntoEditor(filePath);
+  if (switched && switched.ok) return true;
+  setActiveTuneText(content, null, { markDirty: false });
+  if (currentDoc) {
+    currentDoc.path = filePath;
+    currentDoc.dirty = false;
+  }
+  return true;
 }
 
 async function fileNewFromTemplate() {

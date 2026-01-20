@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Working Copy: tune sync/selection avoids disk fallback when a working copy is open.
 - Working Copy: reduce “Reload from disk” prompts during normal workflows (treat reload as explicit recovery).
 - Save: handle missing-on-disk (externally deleted) files with an explicit Recreate / Save As / Cancel prompt.
+- Save As / New File: prompt once for overwrite, directly create the requested path, and keep Untitled files from lingering in the UI.
 
 ### Changed
 - Working Copy: Save is session-authoritative and overwrites external on-disk changes by default.
