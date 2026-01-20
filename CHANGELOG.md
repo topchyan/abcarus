@@ -6,10 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [0.22.7] - 2026-01-20
 ### Fixed
 - Append confirmation dialog: “Do not show again” now persists and disables the prompt for subsequent appends.
-
-
 
 ## [0.22.6] - 2026-01-20
 ### Fixed
