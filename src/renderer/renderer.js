@@ -3789,7 +3789,7 @@ async function refreshIntonationExplorer() {
   setIntonationExplorerStatus("Refreshing…");
   try {
     const snapshot = await refreshWorkingCopySnapshot();
-    if (!snapshot || !snapshot.path) {
+    if (!snapshot || snapshot.text == null) {
       intonationExplorerRows = [];
       intonationExplorerActiveStep = null;
       renderIntonationExplorerRows([]);
