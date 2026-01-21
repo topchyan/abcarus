@@ -1793,6 +1793,11 @@ svg {
   width: 100%;
 }
 
+.tool-panel-control-inline {
+  width: auto;
+  min-width: 160px;
+}
+
 .tool-panel-control input {
   margin-top: 6px;
   width: 100%;
@@ -1816,6 +1821,15 @@ svg {
   margin-top: 0;
 }
 
+.tool-panel-control select {
+  margin-top: 6px;
+  border-radius: var(--radius-1);
+  border: 1px solid var(--border-color);
+  padding: 6px 8px;
+  font-size: 13px;
+  background: #fff;
+}
+
 .tool-panel-base-row select {
   border-radius: var(--radius-1);
   border: 1px solid var(--border-color);
@@ -1830,6 +1844,19 @@ svg {
 
 .tool-panel-base-row input[disabled] {
   opacity: 0.6;
+}
+
+.tool-panel-checkbox {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.tool-panel-checkbox input {
+  margin: 0;
 }
 
 #intonationExplorerRefresh {

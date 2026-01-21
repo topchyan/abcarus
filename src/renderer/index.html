@@ -291,6 +291,20 @@
             <input id="intonationExplorerBaseManual" type="text" placeholder="pc53=0" />
           </div>
         </label>
+        <label class="tool-panel-control">
+          <span>Sort</span>
+          <select id="intonationExplorerSort" aria-label="Sort mode">
+            <option value="count" selected>Count</option>
+            <option value="first">First appearance</option>
+          </select>
+        </label>
+        <label class="tool-panel-control tool-panel-control-inline">
+          <span>Options</span>
+          <label class="tool-panel-checkbox">
+            <input id="intonationExplorerSkipGrace" type="checkbox" checked />
+            <span>Ignore grace notes</span>
+          </label>
+        </label>
         <button id="intonationExplorerRefresh" type="button">Refresh</button>
       </div>
       <div id="intonationExplorerStatus" class="tool-panel-status" aria-live="polite"></div>
