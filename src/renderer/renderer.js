@@ -3491,7 +3491,6 @@ function setIntonationHighlightRanges(ranges) {
   });
 }
 
-const PC12_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const DEFAULT_INT_BASE = "pc53=0";
 let intonationExplorerVisible = false;
 let intonationExplorerRows = [];
@@ -3533,13 +3532,22 @@ function mod53(value) {
 }
 
 function formatAeuLabel(step) {
-  return `pc53=${mod53(step)}`;
+  return String(mod53(step));
 }
 
-function formatWesternLabel(step) {
-  const normalized = mod53(step);
-  const approx = modNumber(Math.round((normalized * 12) / 53), 12);
-  return PC12_NAMES[approx] || `pc12=${approx}`;
+function pickDominantSpelling(spellings) {
+  const entries = spellings && typeof spellings.entries === "function" ? Array.from(spellings.entries()) : [];
+  if (!entries.length) return "";
+  entries.sort((a, b) => {
+    const ac = Number(a[1]) || 0;
+    const bc = Number(b[1]) || 0;
+    if (bc !== ac) return bc - ac;
+    const aKey = String(a[0] || "");
+    const bKey = String(b[0] || "");
+    if (aKey.length !== bKey.length) return aKey.length - bKey.length;
+    return aKey.localeCompare(bKey);
+  });
+  return String(entries[0][0] || "");
 }
 
 function resolveTonalBaseInput(rawValue) {
@@ -3670,9 +3678,14 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
       count: 0,
       ranges: [],
       firstStart: null,
+      spellings: new Map(),
     };
     entry.count += 1;
     if (entry.firstStart == null || note.start < entry.firstStart) entry.firstStart = note.start;
+    try {
+      const spelling = `${String(note.accPrefix || "")}${String(note.letter || "").toUpperCase()}`;
+      if (spelling) entry.spellings.set(spelling, (Number(entry.spellings.get(spelling)) || 0) + 1);
+    } catch {}
     entry.ranges.push({
       // NOTE: offsets are relative to the active tune text in the editor (not the full file).
       start: note.start,
@@ -3690,6 +3703,7 @@ function buildIntonationRowsFromEntries(entries, baseStep, { sortMode = "count" 
   const rows = list.map((entry) => ({
     step: entry.step,
     normalizedStep: mod53(entry.step - baseStep),
+    abcSpelling: pickDominantSpelling(entry.spellings),
     count: entry.count,
     ranges: entry.ranges,
     firstStart: entry.firstStart,
@@ -3850,7 +3864,7 @@ function renderIntonationExplorerRows(rows) {
   if (!list.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 4;
+    td.colSpan = 3;
     td.textContent = "No pitch classes detected.";
     td.style.fontStyle = "italic";
     tr.appendChild(td);
@@ -3861,19 +3875,17 @@ function renderIntonationExplorerRows(rows) {
     const tr = document.createElement("tr");
     tr.tabIndex = 0;
     tr.dataset.step = String(row.step);
+    tr.title = `abs pc53=${mod53(row.step)}`;
     if (intonationExplorerActiveStep != null && String(row.step) === String(intonationExplorerActiveStep)) {
       tr.classList.add("active");
     }
-    const aeu = document.createElement("td");
-    aeu.textContent = formatAeuLabel(row.normalizedStep);
-    const west = document.createElement("td");
-    west.textContent = formatWesternLabel(row.normalizedStep);
+    const pc = document.createElement("td");
+    pc.textContent = formatAeuLabel(row.normalizedStep);
+    const abc = document.createElement("td");
+    abc.textContent = row.abcSpelling || "";
     const weight = document.createElement("td");
     weight.textContent = String(row.count || 0);
-    const highlight = document.createElement("td");
-    highlight.textContent = "Highlight";
-    highlight.className = "tool-panel-highlight-label";
-    tr.append(aeu, west, weight, highlight);
+    tr.append(pc, abc, weight);
     tr.addEventListener("click", () => {
       activateIntonationExplorerRow(row.step);
     });
@@ -3911,7 +3923,8 @@ function activateIntonationExplorerRow(step) {
   const noteOk = highlightSvgIntonationNotesAtEditorOffsets(offsets);
   if (!noteOk) highlightSvgIntonationBarsAtEditorOffsets(offsets);
   highlightScoreFromRange(target.ranges && target.ranges[0]);
-  setIntonationExplorerStatus(`Highlighting ${formatAeuLabel(target.normalizedStep)} (${target.count} hits)`);
+  const label = target.abcSpelling ? `${target.abcSpelling} / pc53=${formatAeuLabel(target.normalizedStep)}` : `pc53=${formatAeuLabel(target.normalizedStep)}`;
+  setIntonationExplorerStatus(`Highlighting ${label} (${target.count} hits)`);
 }
 
 async function refreshIntonationExplorer() {
