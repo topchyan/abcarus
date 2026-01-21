@@ -3499,12 +3499,21 @@ let intonationExplorerBaseLabel = "pc53=0";
 let intonationExplorerBaseMode = "auto";
 
 let lastSvgIntonationBarEls = [];
+let lastSvgIntonationNoteEls = [];
 function clearSvgIntonationBarHighlight() {
   if (!lastSvgIntonationBarEls || !lastSvgIntonationBarEls.length) return;
   for (const el of lastSvgIntonationBarEls) {
     try { el.classList.remove("svg-intonation-bar"); } catch {}
   }
   lastSvgIntonationBarEls = [];
+}
+
+function clearSvgIntonationNoteHighlight() {
+  if (!lastSvgIntonationNoteEls || !lastSvgIntonationNoteEls.length) return;
+  for (const el of lastSvgIntonationNoteEls) {
+    try { el.classList.remove("svg-intonation-note"); } catch {}
+  }
+  lastSvgIntonationNoteEls = [];
 }
 
 function modNumber(value, modulus) {
@@ -3751,6 +3760,61 @@ function highlightSvgIntonationBarsAtEditorOffsets(offsets) {
   return lastSvgIntonationBarEls.length > 0;
 }
 
+function highlightSvgIntonationNotesAtEditorOffsets(offsets) {
+  if (!$out || !$renderPane) return false;
+  if (!Number.isFinite(lastRenderIdx)) {
+    // Rendering may not be ready yet; avoid highlighting stale DOM.
+  }
+  const list = Array.isArray(offsets) ? offsets.filter((n) => Number.isFinite(n)) : [];
+  clearSvgIntonationNoteHighlight();
+  if (!list.length) return false;
+
+  const renderOffset = (lastRenderPayload && Number.isFinite(lastRenderPayload.offset))
+    ? lastRenderPayload.offset
+    : 0;
+  const hits = new Set();
+  const maxHits = 800; // keep UI responsive for very dense tunes
+  const maxBack = 120;
+
+  for (const editorOffset of list) {
+    if (hits.size >= maxHits) break;
+    const renderIdx = Number(editorOffset) + renderOffset;
+    if (!Number.isFinite(renderIdx)) continue;
+    let els = $out.querySelectorAll("._" + renderIdx + "_");
+    if ((!els || !els.length) && Number.isFinite(renderIdx)) {
+      for (let d = 1; d <= maxBack; d += 1) {
+        const probe = renderIdx - d;
+        if (probe < 0) break;
+        els = $out.querySelectorAll("._" + probe + "_");
+        if (els && els.length) break;
+      }
+    }
+    if (!els || !els.length) continue;
+    for (const el of Array.from(els)) {
+      if (hits.size >= maxHits) break;
+      if (!el) continue;
+      // Prefer note overlay elements for highlighting (more precise than bar-wide regions).
+      if (el.classList && el.classList.contains("note-hl")) {
+        hits.add(el);
+        continue;
+      }
+      const noteEls = el.querySelectorAll ? el.querySelectorAll(".note-hl") : [];
+      if (noteEls && noteEls.length) {
+        for (const n of Array.from(noteEls)) {
+          if (hits.size >= maxHits) break;
+          hits.add(n);
+        }
+      }
+    }
+  }
+
+  lastSvgIntonationNoteEls = Array.from(hits);
+  for (const el of lastSvgIntonationNoteEls) {
+    try { el.classList.add("svg-intonation-note"); } catch {}
+  }
+  return lastSvgIntonationNoteEls.length > 0;
+}
+
 function renderIntonationExplorerRows(rows) {
   if (!$intonationExplorerTableBody) return;
   $intonationExplorerTableBody.innerHTML = "";
@@ -3802,9 +3866,11 @@ function setIntonationExplorerStatus(message, { error } = {}) {
 
 function highlightScoreFromRange(range) {
   if (!range || !Number.isFinite(range.start)) return;
-  if (lastSvgIntonationBarEls && lastSvgIntonationBarEls.length) {
-    maybeScrollRenderToNote(lastSvgIntonationBarEls[0]);
+  if (lastSvgIntonationNoteEls && lastSvgIntonationNoteEls.length) {
+    maybeScrollRenderToNote(lastSvgIntonationNoteEls[0]);
+    return;
   }
+  if (lastSvgIntonationBarEls && lastSvgIntonationBarEls.length) maybeScrollRenderToNote(lastSvgIntonationBarEls[0]);
 }
 
 function activateIntonationExplorerRow(step) {
@@ -3813,7 +3879,9 @@ function activateIntonationExplorerRow(step) {
   intonationExplorerActiveStep = target.step;
   renderIntonationExplorerRows(intonationExplorerRows);
   setIntonationHighlightRanges(target.ranges);
-  highlightSvgIntonationBarsAtEditorOffsets((target.ranges || []).map((r) => r && r.start));
+  const offsets = (target.ranges || []).map((r) => r && r.start);
+  const noteOk = highlightSvgIntonationNotesAtEditorOffsets(offsets);
+  if (!noteOk) highlightSvgIntonationBarsAtEditorOffsets(offsets);
   highlightScoreFromRange(target.ranges && target.ranges[0]);
   setIntonationExplorerStatus(`Highlighting ${formatAeuLabel(target.normalizedStep)} (${target.count} hits)`);
 }
@@ -3830,22 +3898,24 @@ async function refreshIntonationExplorer() {
     if (!snapshot || snapshot.text == null) {
       intonationExplorerRows = [];
       intonationExplorerActiveStep = null;
-      renderIntonationExplorerRows([]);
-      setIntonationHighlightRanges([]);
-      clearSvgIntonationBarHighlight();
-      setIntonationExplorerStatus("Unable to load working copy snapshot.", { error: true });
-      return;
-    }
-    const scanned = scanIntonationEntries(snapshot);
-    if (scanned.error) {
+    renderIntonationExplorerRows([]);
+    setIntonationHighlightRanges([]);
+    clearSvgIntonationBarHighlight();
+    clearSvgIntonationNoteHighlight();
+    setIntonationExplorerStatus("Unable to load working copy snapshot.", { error: true });
+    return;
+  }
+  const scanned = scanIntonationEntries(snapshot);
+  if (scanned.error) {
       intonationExplorerRows = [];
       intonationExplorerActiveStep = null;
-      renderIntonationExplorerRows([]);
-      setIntonationHighlightRanges([]);
-      clearSvgIntonationBarHighlight();
-      setIntonationExplorerStatus(scanned.error, { error: true });
-      return;
-    }
+    renderIntonationExplorerRows([]);
+    setIntonationHighlightRanges([]);
+    clearSvgIntonationBarHighlight();
+    clearSvgIntonationNoteHighlight();
+    setIntonationExplorerStatus(scanned.error, { error: true });
+    return;
+  }
     updateIntonationBaseUi();
     const mode = intonationExplorerBaseMode || "auto";
     let base = 0;
@@ -3881,6 +3951,7 @@ async function refreshIntonationExplorer() {
     renderIntonationExplorerRows(rows);
     setIntonationHighlightRanges([]);
     clearSvgIntonationBarHighlight();
+    clearSvgIntonationNoteHighlight();
     setIntonationExplorerStatus(`Base ${intonationExplorerBaseLabel} (${rows.length} classes)`);
   } catch (err) {
     const msg = (err && err.message) ? String(err.message) : String(err || "");
@@ -3909,6 +3980,7 @@ function hideIntonationExplorerPanel() {
   setIntonationExplorerStatus("");
   setIntonationHighlightRanges([]);
   clearSvgIntonationBarHighlight();
+  clearSvgIntonationNoteHighlight();
 }
 
 function enableDraggableToolPanel(panelEl) {
