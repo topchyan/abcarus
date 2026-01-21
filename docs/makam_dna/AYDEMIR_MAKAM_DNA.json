@@ -34,7 +34,12 @@
     "guclu": "Dominant: the degree (often 4th or 5th) used for half cadence (Yarım Karar) and melodic gravity.",
     "yeden": "Leading tone: a pitch a semitone or whole tone below the tonic used to strengthen the final cadence.",
     "seyir": "Behavior (ascending/descending/compound): describes where the melodic progression starts and how it moves.",
-    "cesni": "Flavor/segment: tetrachord/pentachord building blocks (e.g., Rast, Uşşak, Hicaz) used to construct the makam skeleton."
+    "cesni": "Flavor/segment: tetrachord/pentachord building blocks (e.g., Rast, Uşşak, Hicaz) used to construct the makam skeleton.",
+    "notes": {
+      "dualDominants": "Some makams list primary/secondary dominant degrees (Güçlü). In descending seyir, the upper-register dominant can be primary (e.g., Mahur: Gerdaniye primary, Neva secondary).",
+      "ascendingDescendingAttraction": "Some makams exhibit direction-dependent pitch attraction/spelling changes (e.g., in Rast: ascending uses Evç (F#) while descending often favors Acem (F)). Model as direction-specific preferences rather than a fixed scale.",
+      "yedenTypes": "Yeden (leading tone) can be whole-tone below tonic (tam sesli yeden) or semitone below tonic (yarım sesli yeden). Example: Sultanî Yegâh uses Kaba Nim Hicaz as yeden."
+    }
   },
   "rawTable": {
     "note": "Skeleton table as captured from notes (may be incomplete; append more entries as they become available).",
@@ -308,4 +313,3 @@
     ]
   }
 }
-
