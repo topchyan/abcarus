@@ -15065,7 +15065,7 @@ function wireMenuActions() {
         if (view) toggleLineComments(view);
       }
       else if (actionType === "clearLibraryFilter") clearLibraryFilter();
-      else if (actionType === "playStart") await startPlaybackAtIndex(0);
+      else if (actionType === "playStart") await transportStartOver();
       else if (actionType === "playToggle") { await togglePlayPauseEffective(); }
       else if (actionType === "playGotoMeasure") await goToMeasureFromMenu();
       else if (actionType === "resetLayout") resetLayout();
@@ -16857,6 +16857,15 @@ async function togglePlayPauseEffective() {
     origin: focusModeEnabled ? "focus" : "transport",
     loop: plan.loopEnabled,
   });
+}
+
+async function transportStartOver() {
+  // "Start Over" should always restart from the beginning, even while playing or paused.
+  // Use the transport stop to cancel any active run and reset the playhead deterministically.
+  if (isPlaying || isPaused || waitingForFirstNote || playbackStartArmed) {
+    stopPlaybackTransport();
+  }
+  await startPlaybackAtIndex(0);
 }
 
 async function transportTogglePlayPause() {
