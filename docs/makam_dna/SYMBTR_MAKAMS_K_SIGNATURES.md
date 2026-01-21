@@ -1,0 +1,79 @@
+# SymbTr Makams: K-signature correlation
+- Source: `/home/avetik/Projects/ABC/abc/makams.abc`
+- SHA-256: `c8e17bbe1d6acc2c03a00406d32d445f960b676ac90e33fd5a7aaff47b26ee95`
+- Tunes: `2200`
+- Unique detected makam tokens: `155` (heuristic)
+
+## Top K: values (whole corpus)
+- `K:C _2B^3f` — `256`
+- `K:C _2B` — `203`
+- `K:C _4B^4f^4c` — `174`
+- `K:C _5B` — `165`
+- `K:C _1B^4f` — `158`
+- `K:C _5B_5e` — `137`
+- `K:C ^5f` — `107`
+- `K:C _1B_4e_4A^4f` — `106`
+- `K:C _1B_1e^4f` — `104`
+- `K:C _1B_3e^3f` — `96`
+- `K:C` — `86`
+- `K:C _2B_3d` — `81`
+- `K:C _5B_5e_5A` — `71`
+- `K:C _2B_3e^3f` — `53`
+- `K:C _4B^4c` — `41`
+- `K:C ^1f^4g^4d` — `39`
+- `K:C _1B^4f^4c` — `33`
+- `K:C _4B^1f^4c^4g` — `32`
+- `K:C _1B_4e^4f` — `28`
+- `K:C _1B` — `27`
+- `K:C ^5f^3c^3g` — `26`
+- `K:C _4B_4e^4f^4c` — `24`
+- `K:C _4B^3f^4c` — `24`
+- `K:C _1B_4d` — `22`
+- `K:C _5B^4c` — `22`
+
+## Makam → most common K: (top 40 makams by tune count)
+- `hicaz` — `157` tunes; K:C _4B^4f^4c (157)
+- `nihavent` — `130` tunes; K:C _5B_5e (130)
+- `ussak` — `118` tunes; K:C _2B (118)
+- `rast` — `109` tunes; K:C _1B^4f (109)
+- `huzzam` — `96` tunes; K:C _1B_3e^3f (96)
+- `huseyni` — `92` tunes; K:C _2B^3f (92)
+- `segah` — `92` tunes; K:C _1B_1e^4f (92)
+- `mahur` — `88` tunes; K:C ^5f (88)
+- `hicazkar` — `79` tunes; K:C _1B_4e_4A^4f (79)
+- `kurdilihicazkar` — `70` tunes; K:C _5B_5e_5A (70)
+- `muhayyer` — `67` tunes; K:C _2B^3f (67)
+- `saba` — `66` tunes; K:C _2B_3d (66)
+- `acemasiran` — `63` tunes; K:C _5B (63)
+- `beyati` — `62` tunes; K:C _2B (62)
+- `buselik` — `57` tunes; K:C (57)
+- `karcigar` — `53` tunes; K:C _2B_3e^3f (53)
+- `hicaz-humayun` — `38` tunes; K:C _4B^4c (38)
+- `acemkurdi` — `37` tunes; K:C _5B (37)
+- `evic` — `33` tunes; K:C _1B^4f^4c (33)
+- `muhayyerkurdi` — `32` tunes; K:C _5B (32)
+- `tahir` — `31` tunes; K:C _2B^3f (31)
+- `gerdaniye` — `26` tunes; K:C _2B^3f (26)
+- `nisaburek` — `26` tunes; K:C ^5f^3c^3g (26)
+- `suzinak-zirgule` — `26` tunes; K:C _1B_4e_4A^4f (26)
+- `sehnaz` — `25` tunes; K:C _4B^1f^4c^4g (25)
+- `nikriz` — `24` tunes; K:C _4B^3f^4c (24)
+- `sultaniyegah` — `22` tunes; K:C _5B^4c (22)
+- `yegah` — `22` tunes; K:C _2B^4f (22)
+- `neva` — `21` tunes; K:C _2B^3f (21)
+- `hisarbuselik` — `20` tunes; K:C ^1f^4g^4d (20)
+- `isfahan` — `20` tunes; K:C _2B (20)
+- `suzidil` — `19` tunes; K:C ^1f^4g^4d (19)
+- `suzinak` — `19` tunes; K:C _1B_4e^4f (19)
+- `ferahfeza` — `17` tunes; K:C _5B (17)
+- `sedaraban` — `15` tunes; K:C _4B_4e^4f^4c (15)
+- `kurdi` — `14` tunes; K:C _5B (14)
+- `bestenigar` — `13` tunes; K:C _2B_3d (13)
+- `ferahnak` — `12` tunes; K:C ^4f^4c (12)
+- `hicaz-uzzal` — `12` tunes; K:C _4B^4f^4c (12)
+- `sevkefza` — `11` tunes; K:C _5B_4d (11)
+
+## Notes
+- `K:` appears to be used as a **53-EDO accidental signature** (not classical major/minor).
+- The makam token is inferred from the **first word of the 2nd `T:` line** when present (common SymbTr convention).
+- Some makams have multiple `K:` variants; this likely reflects subtypes, modulations, or inconsistent tagging.

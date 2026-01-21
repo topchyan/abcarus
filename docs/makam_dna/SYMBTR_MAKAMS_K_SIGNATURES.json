@@ -1,0 +1,3819 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-01-21T06:49:04Z",
+  "source": {
+    "path": "/home/avetik/Projects/ABC/abc/makams.abc",
+    "sha256": "c8e17bbe1d6acc2c03a00406d32d445f960b676ac90e33fd5a7aaff47b26ee95",
+    "note": "This file is outside the repo; the hash pins the exact corpus used to generate counts."
+  },
+  "tunesTotal": 2200,
+  "kSignatureTotals": {
+    "C _2B^3f": 256,
+    "C _2B": 203,
+    "C _4B^4f^4c": 174,
+    "C _5B": 165,
+    "C _1B^4f": 158,
+    "C _5B_5e": 137,
+    "C ^5f": 107,
+    "C _1B_4e_4A^4f": 106,
+    "C _1B_1e^4f": 104,
+    "C _1B_3e^3f": 96,
+    "C": 86,
+    "C _2B_3d": 81,
+    "C _5B_5e_5A": 71,
+    "C _2B_3e^3f": 53,
+    "C _4B^4c": 41,
+    "C ^1f^4g^4d": 39,
+    "C _1B^4f^4c": 33,
+    "C _4B^1f^4c^4g": 32,
+    "C _1B_4e^4f": 28,
+    "C _1B": 27,
+    "C ^5f^3c^3g": 26,
+    "C _4B_4e^4f^4c": 24,
+    "C _4B^3f^4c": 24,
+    "C _1B_4d": 22,
+    "C _5B^4c": 22,
+    "C _2B^4f": 22,
+    "C ^4f^4c": 15,
+    "C _5B_4d": 13,
+    "C _1B^4f^4c^4A^4e": 9,
+    "C _1B_1e": 6,
+    "C _2B_2e": 4,
+    "C ^4c": 4,
+    "C ^4f": 3,
+    "C _4B^4c^4f": 2,
+    "C _5B_4e^4f^4c": 2,
+    "none": 1,
+    "C ^4g^4d": 1,
+    "C ^4d^5f": 1,
+    "C _4A_1B_4d": 1,
+    "C _1B_1e^4f^4c^4A": 1
+  },
+  "makamTotals": {
+    "uniqueMakamsDetected": 155,
+    "tunesWithMakamAndK": 2199
+  },
+  "byMakam": {
+    "hicaz": {
+      "count": 157,
+      "kSignatures": {
+        "C _4B^4f^4c": 157
+      },
+      "topK": [
+        {
+          "k": "C _4B^4f^4c",
+          "count": 157
+        }
+      ],
+      "examples": {
+        "C _4B^4f^4c": [
+          {
+            "x": "411",
+            "title": "Hicaz Ağırsemâî"
+          },
+          {
+            "x": "412",
+            "title": "Hicaz Aranağme"
+          },
+          {
+            "x": "413",
+            "title": "Hicaz Aranağme"
+          }
+        ]
+      }
+    },
+    "nihavent": {
+      "count": 130,
+      "kSignatures": {
+        "C _5B_5e": 130
+      },
+      "topK": [
+        {
+          "k": "C _5B_5e",
+          "count": 130
+        }
+      ],
+      "examples": {
+        "C _5B_5e": [
+          {
+            "x": "1337",
+            "title": "Nihâvent Ağırsemâî"
+          },
+          {
+            "x": "1338",
+            "title": "Nihâvent Aranağme"
+          },
+          {
+            "x": "1339",
+            "title": "Nihâvent Aranağme"
+          }
+        ]
+      }
+    },
+    "ussak": {
+      "count": 118,
+      "kSignatures": {
+        "C _2B": 118
+      },
+      "topK": [
+        {
+          "k": "C _2B",
+          "count": 118
+        }
+      ],
+      "examples": {
+        "C _2B": [
+          {
+            "x": "2037",
+            "title": "Uşşak Ağırsemâî"
+          },
+          {
+            "x": "2038",
+            "title": "Uşşak Aranağme"
+          },
+          {
+            "x": "2039",
+            "title": "Uşşak Aranağme"
+          }
+        ]
+      }
+    },
+    "rast": {
+      "count": 109,
+      "kSignatures": {
+        "C _1B^4f": 109
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 109
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1539",
+            "title": "Rast Ağırsemâî"
+          },
+          {
+            "x": "1540",
+            "title": "Rast Aranağme"
+          },
+          {
+            "x": "1541",
+            "title": "Rast Aranağme"
+          }
+        ]
+      }
+    },
+    "huzzam": {
+      "count": 96,
+      "kSignatures": {
+        "C _1B_3e^3f": 96
+      },
+      "topK": [
+        {
+          "k": "C _1B_3e^3f",
+          "count": 96
+        }
+      ],
+      "examples": {
+        "C _1B_3e^3f": [
+          {
+            "x": "836",
+            "title": "Hüzzam Ağırsemâî"
+          },
+          {
+            "x": "837",
+            "title": "Hüzzam Aranağme"
+          },
+          {
+            "x": "838",
+            "title": "Hüzzam Aranağme"
+          }
+        ]
+      }
+    },
+    "huseyni": {
+      "count": 92,
+      "kSignatures": {
+        "C _2B^3f": 92
+      },
+      "topK": [
+        {
+          "k": "C _2B^3f",
+          "count": 92
+        }
+      ],
+      "examples": {
+        "C _2B^3f": [
+          {
+            "x": "736",
+            "title": "Hüseynî Ağırsemâî"
+          },
+          {
+            "x": "737",
+            "title": "Hüseynî Ağırsemâî"
+          },
+          {
+            "x": "738",
+            "title": "Hüseynî Aranağme"
+          }
+        ]
+      }
+    },
+    "segah": {
+      "count": 92,
+      "kSignatures": {
+        "C _1B_1e^4f": 92
+      },
+      "topK": [
+        {
+          "k": "C _1B_1e^4f",
+          "count": 92
+        }
+      ],
+      "examples": {
+        "C _1B_1e^4f": [
+          {
+            "x": "1753",
+            "title": "Segâh Aranağme"
+          },
+          {
+            "x": "1754",
+            "title": "Segâh Fantezi"
+          },
+          {
+            "x": "1755",
+            "title": "Segâh İlâhî"
+          }
+        ]
+      }
+    },
+    "mahur": {
+      "count": 88,
+      "kSignatures": {
+        "C ^5f": 88
+      },
+      "topK": [
+        {
+          "k": "C ^5f",
+          "count": 88
+        }
+      ],
+      "examples": {
+        "C ^5f": [
+          {
+            "x": "1099",
+            "title": "Mâhur Ağırsemâî"
+          },
+          {
+            "x": "1100",
+            "title": "Mâhur Aranağme"
+          },
+          {
+            "x": "1101",
+            "title": "Mâhur Aranağme"
+          }
+        ]
+      }
+    },
+    "hicazkar": {
+      "count": 79,
+      "kSignatures": {
+        "C _1B_4e_4A^4f": 79
+      },
+      "topK": [
+        {
+          "k": "C _1B_4e_4A^4f",
+          "count": 79
+        }
+      ],
+      "examples": {
+        "C _1B_4e_4A^4f": [
+          {
+            "x": "469",
+            "title": "Hicazkâr Ağırsemâî"
+          },
+          {
+            "x": "470",
+            "title": "Hicazkâr Aranağme"
+          },
+          {
+            "x": "471",
+            "title": "Hicazkâr Aranağme"
+          }
+        ]
+      }
+    },
+    "kurdilihicazkar": {
+      "count": 70,
+      "kSignatures": {
+        "C _5B_5e_5A": 70
+      },
+      "topK": [
+        {
+          "k": "C _5B_5e_5A",
+          "count": 70
+        }
+      ],
+      "examples": {
+        "C _5B_5e_5A": [
+          {
+            "x": "1019",
+            "title": "Kürdîlihicazkâr Aranağme"
+          },
+          {
+            "x": "1020",
+            "title": "Kürdîlihicazkâr Aranağme"
+          },
+          {
+            "x": "1021",
+            "title": "Kürdîlihicazkâr Etüd"
+          }
+        ]
+      }
+    },
+    "muhayyer": {
+      "count": 67,
+      "kSignatures": {
+        "C _2B^3f": 67
+      },
+      "topK": [
+        {
+          "k": "C _2B^3f",
+          "count": 67
+        }
+      ],
+      "examples": {
+        "C _2B^3f": [
+          {
+            "x": "1191",
+            "title": "Muhayyer Aranağme"
+          },
+          {
+            "x": "1192",
+            "title": "Muhayyer Beste"
+          },
+          {
+            "x": "1193",
+            "title": "Muhayyer Beste"
+          }
+        ]
+      }
+    },
+    "saba": {
+      "count": 66,
+      "kSignatures": {
+        "C _2B_3d": 66
+      },
+      "topK": [
+        {
+          "k": "C _2B_3d",
+          "count": 66
+        }
+      ],
+      "examples": {
+        "C _2B_3d": [
+          {
+            "x": "1664",
+            "title": "Sabâ Aranağme"
+          },
+          {
+            "x": "1666",
+            "title": "Sabâ Beste"
+          },
+          {
+            "x": "1667",
+            "title": "Sabâ Beste"
+          }
+        ]
+      }
+    },
+    "acemasiran": {
+      "count": 63,
+      "kSignatures": {
+        "C _5B": 63
+      },
+      "topK": [
+        {
+          "k": "C _5B",
+          "count": 63
+        }
+      ],
+      "examples": {
+        "C _5B": [
+          {
+            "x": "1",
+            "title": "Acemaşîrân Aranağme"
+          },
+          {
+            "x": "2",
+            "title": "Acemaşîrân Aranağme"
+          },
+          {
+            "x": "3",
+            "title": "Acemaşîrân Aranağme"
+          }
+        ]
+      }
+    },
+    "beyati": {
+      "count": 62,
+      "kSignatures": {
+        "C _2B": 62
+      },
+      "topK": [
+        {
+          "k": "C _2B",
+          "count": 62
+        }
+      ],
+      "examples": {
+        "C _2B": [
+          {
+            "x": "141",
+            "title": "Beyâtî Ağırsemâî"
+          },
+          {
+            "x": "142",
+            "title": "Beyâtî Ağırsemâî"
+          },
+          {
+            "x": "143",
+            "title": "Beyâtî Ağırsemâî"
+          }
+        ]
+      }
+    },
+    "buselik": {
+      "count": 57,
+      "kSignatures": {
+        "C": 57
+      },
+      "topK": [
+        {
+          "k": "C",
+          "count": 57
+        }
+      ],
+      "examples": {
+        "C": [
+          {
+            "x": "212",
+            "title": "Bûselik Ağırsemâî"
+          },
+          {
+            "x": "213",
+            "title": "Bûselik Ağırsemâî"
+          },
+          {
+            "x": "214",
+            "title": "Bûselik Aranağme"
+          }
+        ]
+      }
+    },
+    "karcigar": {
+      "count": 53,
+      "kSignatures": {
+        "C _2B_3e^3f": 53
+      },
+      "topK": [
+        {
+          "k": "C _2B_3e^3f",
+          "count": 53
+        }
+      ],
+      "examples": {
+        "C _2B_3e^3f": [
+          {
+            "x": "960",
+            "title": "Karcığar Ağırsemâî"
+          },
+          {
+            "x": "961",
+            "title": "Karcığar Aranağme"
+          },
+          {
+            "x": "962",
+            "title": "Karcığar Aranağme"
+          }
+        ]
+      }
+    },
+    "hicaz-humayun": {
+      "count": 38,
+      "kSignatures": {
+        "C _4B^4c": 38
+      },
+      "topK": [
+        {
+          "k": "C _4B^4c",
+          "count": 38
+        }
+      ],
+      "examples": {
+        "C _4B^4c": [
+          {
+            "x": "426",
+            "title": "Hicaz-Hümâyûn Ağırsemâî"
+          },
+          {
+            "x": "427",
+            "title": "Hicaz-Hümâyûn Aranağme"
+          },
+          {
+            "x": "428",
+            "title": "Hicaz-Hümâyûn Aranağme"
+          }
+        ]
+      }
+    },
+    "acemkurdi": {
+      "count": 37,
+      "kSignatures": {
+        "C _5B": 37
+      },
+      "topK": [
+        {
+          "k": "C _5B",
+          "count": 37
+        }
+      ],
+      "examples": {
+        "C _5B": [
+          {
+            "x": "69",
+            "title": "Acemkürdî Ağırsemâî"
+          },
+          {
+            "x": "70",
+            "title": "Acemkürdî Aranağme"
+          },
+          {
+            "x": "71",
+            "title": "Acemkürdî Aranağme"
+          }
+        ]
+      }
+    },
+    "evic": {
+      "count": 33,
+      "kSignatures": {
+        "C _1B^4f^4c": 33
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f^4c",
+          "count": 33
+        }
+      ],
+      "examples": {
+        "C _1B^4f^4c": [
+          {
+            "x": "303",
+            "title": "Eviç Ağırsemâî"
+          },
+          {
+            "x": "304",
+            "title": "Eviç Aranağme"
+          },
+          {
+            "x": "305",
+            "title": "Eviç Aranağme"
+          }
+        ]
+      }
+    },
+    "muhayyerkurdi": {
+      "count": 32,
+      "kSignatures": {
+        "C _5B": 32
+      },
+      "topK": [
+        {
+          "k": "C _5B",
+          "count": 32
+        }
+      ],
+      "examples": {
+        "C _5B": [
+          {
+            "x": "1201",
+            "title": "Muhayyerkürdî Aranağme"
+          },
+          {
+            "x": "1202",
+            "title": "Muhayyerkürdî Fantezi"
+          },
+          {
+            "x": "1203",
+            "title": "Muhayyerkürdî Küpe"
+          }
+        ]
+      }
+    },
+    "tahir": {
+      "count": 31,
+      "kSignatures": {
+        "C _2B^3f": 31
+      },
+      "topK": [
+        {
+          "k": "C _2B^3f",
+          "count": 31
+        }
+      ],
+      "examples": {
+        "C _2B^3f": [
+          {
+            "x": "2000",
+            "title": "Tâhir Aranağme"
+          },
+          {
+            "x": "2004",
+            "title": "Tâhir Küpe"
+          },
+          {
+            "x": "2005",
+            "title": "Tâhir Peşrev"
+          }
+        ]
+      }
+    },
+    "gerdaniye": {
+      "count": 26,
+      "kSignatures": {
+        "C _2B^3f": 26
+      },
+      "topK": [
+        {
+          "k": "C _2B^3f",
+          "count": 26
+        }
+      ],
+      "examples": {
+        "C _2B^3f": [
+          {
+            "x": "372",
+            "title": "Gerdâniye Küpe"
+          },
+          {
+            "x": "373",
+            "title": "Gerdâniye Oyunhavası"
+          },
+          {
+            "x": "374",
+            "title": "Gerdâniye Rumelitürküsü"
+          }
+        ]
+      }
+    },
+    "nisaburek": {
+      "count": 26,
+      "kSignatures": {
+        "C ^5f^3c^3g": 26
+      },
+      "topK": [
+        {
+          "k": "C ^5f^3c^3g",
+          "count": 26
+        }
+      ],
+      "examples": {
+        "C ^5f^3c^3g": [
+          {
+            "x": "1492",
+            "title": "Nişâburek Ağırsemâî"
+          },
+          {
+            "x": "1493",
+            "title": "Nişâburek Aranağme"
+          },
+          {
+            "x": "1494",
+            "title": "Nişâburek Küpe"
+          }
+        ]
+      }
+    },
+    "suzinak-zirgule": {
+      "count": 26,
+      "kSignatures": {
+        "C _1B_4e_4A^4f": 26
+      },
+      "topK": [
+        {
+          "k": "C _1B_4e_4A^4f",
+          "count": 26
+        }
+      ],
+      "examples": {
+        "C _1B_4e_4A^4f": [
+          {
+            "x": "1974",
+            "title": "Sûzinâk-Zirgüle Küpe"
+          },
+          {
+            "x": "1975",
+            "title": "Sûzinâk-Zirgüle Longa"
+          },
+          {
+            "x": "1976",
+            "title": "Sûzinâk-Zirgüle Nakış"
+          }
+        ]
+      }
+    },
+    "sehnaz": {
+      "count": 25,
+      "kSignatures": {
+        "C _4B^1f^4c^4g": 25
+      },
+      "topK": [
+        {
+          "k": "C _4B^1f^4c^4g",
+          "count": 25
+        }
+      ],
+      "examples": {
+        "C _4B^1f^4c^4g": [
+          {
+            "x": "1849",
+            "title": "Şehnâz Ağırsemâî"
+          },
+          {
+            "x": "1850",
+            "title": "Şehnâz Aranağme"
+          },
+          {
+            "x": "1851",
+            "title": "Şehnâz Aranağme"
+          }
+        ]
+      }
+    },
+    "nikriz": {
+      "count": 24,
+      "kSignatures": {
+        "C _4B^3f^4c": 24
+      },
+      "topK": [
+        {
+          "k": "C _4B^3f^4c",
+          "count": 24
+        }
+      ],
+      "examples": {
+        "C _4B^3f^4c": [
+          {
+            "x": "1467",
+            "title": "Nikrîz Ağırsemâî"
+          },
+          {
+            "x": "1468",
+            "title": "Nikrîz Aranağme"
+          },
+          {
+            "x": "1469",
+            "title": "Nikrîz Fantezi"
+          }
+        ]
+      }
+    },
+    "sultaniyegah": {
+      "count": 22,
+      "kSignatures": {
+        "C _5B^4c": 22
+      },
+      "topK": [
+        {
+          "k": "C _5B^4c",
+          "count": 22
+        }
+      ],
+      "examples": {
+        "C _5B^4c": [
+          {
+            "x": "1907",
+            "title": "Sultânîyegâh Aranağme"
+          },
+          {
+            "x": "1908",
+            "title": "Sultânîyegâh Aranağme"
+          },
+          {
+            "x": "1909",
+            "title": "Sultânîyegâh Küpe"
+          }
+        ]
+      }
+    },
+    "yegah": {
+      "count": 22,
+      "kSignatures": {
+        "C _2B^4f": 22
+      },
+      "topK": [
+        {
+          "k": "C _2B^4f",
+          "count": 22
+        }
+      ],
+      "examples": {
+        "C _2B^4f": [
+          {
+            "x": "2158",
+            "title": "Yegâh Ağırsemâî"
+          },
+          {
+            "x": "2159",
+            "title": "Yegâh Aranağme"
+          },
+          {
+            "x": "2160",
+            "title": "Yegâh Beste"
+          }
+        ]
+      }
+    },
+    "neva": {
+      "count": 21,
+      "kSignatures": {
+        "C _2B^3f": 21
+      },
+      "topK": [
+        {
+          "k": "C _2B^3f",
+          "count": 21
+        }
+      ],
+      "examples": {
+        "C _2B^3f": [
+          {
+            "x": "1300",
+            "title": "Nevâ Ağırsemâî"
+          },
+          {
+            "x": "1303",
+            "title": "Nevâ Kâr"
+          },
+          {
+            "x": "1304",
+            "title": "Nevâ Küpe"
+          }
+        ]
+      }
+    },
+    "hisarbuselik": {
+      "count": 20,
+      "kSignatures": {
+        "C ^1f^4g^4d": 20
+      },
+      "topK": [
+        {
+          "k": "C ^1f^4g^4d",
+          "count": 20
+        }
+      ],
+      "examples": {
+        "C ^1f^4g^4d": [
+          {
+            "x": "711",
+            "title": "Hisarbûselik Aranağme"
+          },
+          {
+            "x": "712",
+            "title": "Hisarbûselik Aranağme"
+          },
+          {
+            "x": "713",
+            "title": "Hisarbûselik Beste"
+          }
+        ]
+      }
+    },
+    "isfahan": {
+      "count": 20,
+      "kSignatures": {
+        "C _2B": 20
+      },
+      "topK": [
+        {
+          "k": "C _2B",
+          "count": 20
+        }
+      ],
+      "examples": {
+        "C _2B": [
+          {
+            "x": "939",
+            "title": "Isfahân Aranağme"
+          },
+          {
+            "x": "940",
+            "title": "Isfahân Beste"
+          },
+          {
+            "x": "942",
+            "title": "Isfahân Küpe"
+          }
+        ]
+      }
+    },
+    "suzidil": {
+      "count": 19,
+      "kSignatures": {
+        "C ^1f^4g^4d": 19
+      },
+      "topK": [
+        {
+          "k": "C ^1f^4g^4d",
+          "count": 19
+        }
+      ],
+      "examples": {
+        "C ^1f^4g^4d": [
+          {
+            "x": "1929",
+            "title": "Sûzidil Ağırsemâî"
+          },
+          {
+            "x": "1930",
+            "title": "Sûzidil Ağırsemâî"
+          },
+          {
+            "x": "1932",
+            "title": "Sûzidil Aranağme"
+          }
+        ]
+      }
+    },
+    "suzinak": {
+      "count": 19,
+      "kSignatures": {
+        "C _1B_4e^4f": 19
+      },
+      "topK": [
+        {
+          "k": "C _1B_4e^4f",
+          "count": 19
+        }
+      ],
+      "examples": {
+        "C _1B_4e^4f": [
+          {
+            "x": "1955",
+            "title": "Sûzinâk Ağırsemâî"
+          },
+          {
+            "x": "1956",
+            "title": "Sûzinâk Aranağme"
+          },
+          {
+            "x": "1957",
+            "title": "Sûzinâk Aranağme"
+          }
+        ]
+      }
+    },
+    "ferahfeza": {
+      "count": 17,
+      "kSignatures": {
+        "C _5B": 17
+      },
+      "topK": [
+        {
+          "k": "C _5B",
+          "count": 17
+        }
+      ],
+      "examples": {
+        "C _5B": [
+          {
+            "x": "337",
+            "title": "Ferahfezâ Ağırsemâî"
+          },
+          {
+            "x": "338",
+            "title": "Ferahfezâ Beste"
+          },
+          {
+            "x": "339",
+            "title": "Ferahfezâ Küpe"
+          }
+        ]
+      }
+    },
+    "sedaraban": {
+      "count": 15,
+      "kSignatures": {
+        "C _4B_4e^4f^4c": 15
+      },
+      "topK": [
+        {
+          "k": "C _4B_4e^4f^4c",
+          "count": 15
+        }
+      ],
+      "examples": {
+        "C _4B_4e^4f^4c": [
+          {
+            "x": "1738",
+            "title": "Şedarabân Ağırsemâî"
+          },
+          {
+            "x": "1739",
+            "title": "Şedarabân Aranağme"
+          },
+          {
+            "x": "1740",
+            "title": "Şedarabân Beste"
+          }
+        ]
+      }
+    },
+    "kurdi": {
+      "count": 14,
+      "kSignatures": {
+        "C _5B": 14
+      },
+      "topK": [
+        {
+          "k": "C _5B",
+          "count": 14
+        }
+      ],
+      "examples": {
+        "C _5B": [
+          {
+            "x": "1014",
+            "title": "Kürdî Aranağme"
+          },
+          {
+            "x": "1015",
+            "title": "Kürdî Beste"
+          },
+          {
+            "x": "1017",
+            "title": "Kürdî Küpe"
+          }
+        ]
+      }
+    },
+    "bestenigar": {
+      "count": 13,
+      "kSignatures": {
+        "C _2B_3d": 13
+      },
+      "topK": [
+        {
+          "k": "C _2B_3d",
+          "count": 13
+        }
+      ],
+      "examples": {
+        "C _2B_3d": [
+          {
+            "x": "128",
+            "title": "Bestenigâr Küpe"
+          },
+          {
+            "x": "129",
+            "title": "Bestenigâr Peşrev"
+          },
+          {
+            "x": "130",
+            "title": "Bestenigâr Şarkı"
+          }
+        ]
+      }
+    },
+    "ferahnak": {
+      "count": 12,
+      "kSignatures": {
+        "C ^4f^4c": 12
+      },
+      "topK": [
+        {
+          "k": "C ^4f^4c",
+          "count": 12
+        }
+      ],
+      "examples": {
+        "C ^4f^4c": [
+          {
+            "x": "355",
+            "title": "Ferahnâk Küpe"
+          },
+          {
+            "x": "356",
+            "title": "Ferahnâk Şarkı"
+          },
+          {
+            "x": "357",
+            "title": "Ferahnâk Şarkı"
+          }
+        ]
+      }
+    },
+    "hicaz-uzzal": {
+      "count": 12,
+      "kSignatures": {
+        "C _4B^4f^4c": 12
+      },
+      "topK": [
+        {
+          "k": "C _4B^4f^4c",
+          "count": 12
+        }
+      ],
+      "examples": {
+        "C _4B^4f^4c": [
+          {
+            "x": "688",
+            "title": "Hicaz-Uzzâl Küpe"
+          },
+          {
+            "x": "689",
+            "title": "Hicaz-Uzzâl Şarkı"
+          },
+          {
+            "x": "690",
+            "title": "Hicaz-Uzzâl Şarkı"
+          }
+        ]
+      }
+    },
+    "sevkefza": {
+      "count": 11,
+      "kSignatures": {
+        "C _5B_4d": 11
+      },
+      "topK": [
+        {
+          "k": "C _5B_4d",
+          "count": 11
+        }
+      ],
+      "examples": {
+        "C _5B_4d": [
+          {
+            "x": "1886",
+            "title": "Şevk'efzâ Küpe"
+          },
+          {
+            "x": "1887",
+            "title": "Şevk'efzâ Peşrev"
+          },
+          {
+            "x": "1888",
+            "title": "Şevk'efzâ Şarkı"
+          }
+        ]
+      }
+    },
+    "evcara": {
+      "count": 9,
+      "kSignatures": {
+        "C _1B^4f^4c^4A^4e": 9
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f^4c^4A^4e",
+          "count": 9
+        }
+      ],
+      "examples": {
+        "C _1B^4f^4c^4A^4e": [
+          {
+            "x": "293",
+            "title": "Evcârâ Küpe"
+          },
+          {
+            "x": "294",
+            "title": "Evcârâ Şarkı"
+          },
+          {
+            "x": "295",
+            "title": "Evcârâ Şarkı"
+          }
+        ]
+      }
+    },
+    "zavil": {
+      "count": 9,
+      "kSignatures": {
+        "C ^5f": 9
+      },
+      "topK": [
+        {
+          "k": "C ^5f",
+          "count": 9
+        }
+      ],
+      "examples": {
+        "C ^5f": [
+          {
+            "x": "2187",
+            "title": "Zâvil Ağırsemâî"
+          },
+          {
+            "x": "2188",
+            "title": "Zâvil Küpe"
+          },
+          {
+            "x": "2189",
+            "title": "Zâvil Peşrev"
+          }
+        ]
+      }
+    },
+    "neveser": {
+      "count": 8,
+      "kSignatures": {
+        "C _4B_4e^4f^4c": 8
+      },
+      "topK": [
+        {
+          "k": "C _4B_4e^4f^4c",
+          "count": 8
+        }
+      ],
+      "examples": {
+        "C _4B_4e^4f^4c": [
+          {
+            "x": "1324",
+            "title": "Nev'eser Etüd"
+          },
+          {
+            "x": "1325",
+            "title": "Nev'eser Küpe"
+          },
+          {
+            "x": "1326",
+            "title": "Nev'eser Peşrev"
+          }
+        ]
+      }
+    },
+    "sehnazbuselik": {
+      "count": 8,
+      "kSignatures": {
+        "C": 8
+      },
+      "topK": [
+        {
+          "k": "C",
+          "count": 8
+        }
+      ],
+      "examples": {
+        "C": [
+          {
+            "x": "1852",
+            "title": "Şehnâzbûselik Ağırsemâî"
+          },
+          {
+            "x": "1853",
+            "title": "Şehnâzbûselik Aranağme"
+          },
+          {
+            "x": "1854",
+            "title": "Şehnâzbûselik Küpe"
+          }
+        ]
+      }
+    },
+    "acem": {
+      "count": 7,
+      "kSignatures": {
+        "C _1B": 7
+      },
+      "topK": [
+        {
+          "k": "C _1B",
+          "count": 7
+        }
+      ],
+      "examples": {
+        "C _1B": [
+          {
+            "x": "66",
+            "title": "Acem İlâhî"
+          },
+          {
+            "x": "67",
+            "title": "Acem İlâhî"
+          },
+          {
+            "x": "68",
+            "title": "Acem Küpe"
+          }
+        ]
+      }
+    },
+    "beyati-araban": {
+      "count": 7,
+      "kSignatures": {
+        "C _1B_4e^4f": 7
+      },
+      "topK": [
+        {
+          "k": "C _1B_4e^4f",
+          "count": 7
+        }
+      ],
+      "examples": {
+        "C _1B_4e^4f": [
+          {
+            "x": "145",
+            "title": "Beyâtî-Arabân İlâhî"
+          },
+          {
+            "x": "146",
+            "title": "Beyâtî-Arabân Küpe"
+          },
+          {
+            "x": "147",
+            "title": "Beyâtî-Arabân Şarkı"
+          }
+        ]
+      }
+    },
+    "dugah": {
+      "count": 7,
+      "kSignatures": {
+        "C _1B_4d": 7
+      },
+      "topK": [
+        {
+          "k": "C _1B_4d",
+          "count": 7
+        }
+      ],
+      "examples": {
+        "C _1B_4d": [
+          {
+            "x": "284",
+            "title": "Dügâh İlâhî"
+          },
+          {
+            "x": "285",
+            "title": "Dügâh Kâr"
+          },
+          {
+            "x": "286",
+            "title": "Dügâh Küpe"
+          }
+        ]
+      }
+    },
+    "gulizar": {
+      "count": 7,
+      "kSignatures": {
+        "C _2B^3f": 7
+      },
+      "topK": [
+        {
+          "k": "C _2B^3f",
+          "count": 7
+        }
+      ],
+      "examples": {
+        "C _2B^3f": [
+          {
+            "x": "401",
+            "title": "Gülizâr Köçekçe"
+          },
+          {
+            "x": "402",
+            "title": "Gülizâr Küpe"
+          },
+          {
+            "x": "403",
+            "title": "Gülizâr Şarkı"
+          }
+        ]
+      }
+    },
+    "hicaz-zirgule": {
+      "count": 7,
+      "kSignatures": {
+        "C _4B^1f^4c^4g": 7
+      },
+      "topK": [
+        {
+          "k": "C _4B^1f^4c^4g",
+          "count": 7
+        }
+      ],
+      "examples": {
+        "C _4B^1f^4c^4g": [
+          {
+            "x": "704",
+            "title": "Hicaz-Zirgüle Küpe"
+          },
+          {
+            "x": "705",
+            "title": "Hicaz-Zirgüle Şarkı"
+          },
+          {
+            "x": "706",
+            "title": "Hicaz-Zirgüle Şarkı"
+          }
+        ]
+      }
+    },
+    "suzidilara": {
+      "count": 7,
+      "kSignatures": {
+        "C ^5f": 7
+      },
+      "topK": [
+        {
+          "k": "C ^5f",
+          "count": 7
+        }
+      ],
+      "examples": {
+        "C ^5f": [
+          {
+            "x": "1931",
+            "title": "Sûzidilârâ Küpe"
+          },
+          {
+            "x": "1934",
+            "title": "Sûzidilârâ Peşrev"
+          },
+          {
+            "x": "1935",
+            "title": "Sûzidilârâ Sazsemâîsi"
+          }
+        ]
+      }
+    },
+    "cargahyeni": {
+      "count": 7,
+      "kSignatures": {
+        "C": 7
+      },
+      "topK": [
+        {
+          "k": "C",
+          "count": 7
+        }
+      ],
+      "examples": {
+        "C": [
+          {
+            "x": "2180",
+            "title": "Çargâh(Yeni) Destan"
+          },
+          {
+            "x": "2181",
+            "title": "Çargâh(Yeni) Peşrev"
+          },
+          {
+            "x": "2182",
+            "title": "Çargâh(Yeni) Sazeseri"
+          }
+        ]
+      }
+    },
+    "irak": {
+      "count": 6,
+      "kSignatures": {
+        "C _2B^3f": 6
+      },
+      "topK": [
+        {
+          "k": "C _2B^3f",
+          "count": 6
+        }
+      ],
+      "examples": {
+        "C _2B^3f": [
+          {
+            "x": "933",
+            "title": "Irak İlâhî"
+          },
+          {
+            "x": "934",
+            "title": "Irak Küpe"
+          },
+          {
+            "x": "935",
+            "title": "Irak Şarkı"
+          }
+        ]
+      }
+    },
+    "mustear": {
+      "count": 6,
+      "kSignatures": {
+        "C _1B_1e^4f": 6
+      },
+      "topK": [
+        {
+          "k": "C _1B_1e^4f",
+          "count": 6
+        }
+      ],
+      "examples": {
+        "C _1B_1e^4f": [
+          {
+            "x": "1294",
+            "title": "Müstear Küpe"
+          },
+          {
+            "x": "1295",
+            "title": "Müstear Şarkı"
+          },
+          {
+            "x": "1296",
+            "title": "Müstear Şarkı"
+          }
+        ]
+      }
+    },
+    "rehavi": {
+      "count": 6,
+      "kSignatures": {
+        "C _1B^4f": 6
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 6
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1650",
+            "title": "Rehâvî Beste"
+          },
+          {
+            "x": "1651",
+            "title": "Rehâvî Küpe"
+          },
+          {
+            "x": "1652",
+            "title": "Rehâvî Marş"
+          }
+        ]
+      }
+    },
+    "hisar": {
+      "count": 5,
+      "kSignatures": {
+        "C _1B": 5
+      },
+      "topK": [
+        {
+          "k": "C _1B",
+          "count": 5
+        }
+      ],
+      "examples": {
+        "C _1B": [
+          {
+            "x": "731",
+            "title": "Hisar Küpe"
+          },
+          {
+            "x": "732",
+            "title": "Hisar Nakış"
+          },
+          {
+            "x": "733",
+            "title": "Hisar Sazsemâîsi"
+          }
+        ]
+      }
+    },
+    "huseyniasiran": {
+      "count": 5,
+      "kSignatures": {
+        "C _1B^4f": 5
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 5
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "741",
+            "title": "Hüseynîaşîrân Küpe"
+          },
+          {
+            "x": "742",
+            "title": "Hüseynîaşîrân Şarkı"
+          },
+          {
+            "x": "743",
+            "title": "Hüseynîaşîrân Seyir"
+          }
+        ]
+      }
+    },
+    "arazbar": {
+      "count": 4,
+      "kSignatures": {
+        "C _2B_2e": 4
+      },
+      "topK": [
+        {
+          "k": "C _2B_2e",
+          "count": 4
+        }
+      ],
+      "examples": {
+        "C _2B_2e": [
+          {
+            "x": "114",
+            "title": "Arazbâr Küpe"
+          },
+          {
+            "x": "115",
+            "title": "Arazbâr Seyir"
+          },
+          {
+            "x": "116",
+            "title": "Arazbâr Seyir"
+          }
+        ]
+      }
+    },
+    "dilkeshaveran": {
+      "count": 4,
+      "kSignatures": {
+        "C _2B^3f": 4
+      },
+      "topK": [
+        {
+          "k": "C _2B^3f",
+          "count": 4
+        }
+      ],
+      "examples": {
+        "C _2B^3f": [
+          {
+            "x": "277",
+            "title": "Dilkeşhâveran Ağırsemâî"
+          },
+          {
+            "x": "278",
+            "title": "Dilkeşhâveran Küpe"
+          },
+          {
+            "x": "279",
+            "title": "Dilkeşhâveran Seyir"
+          }
+        ]
+      }
+    },
+    "ferahnuma": {
+      "count": 4,
+      "kSignatures": {
+        "C _5B_5e": 4
+      },
+      "topK": [
+        {
+          "k": "C _5B_5e",
+          "count": 4
+        }
+      ],
+      "examples": {
+        "C _5B_5e": [
+          {
+            "x": "367",
+            "title": "Ferahnümâ Şarkı"
+          },
+          {
+            "x": "368",
+            "title": "Ferahnümâ Seyir"
+          },
+          {
+            "x": "369",
+            "title": "Ferahnümâ Türkü"
+          }
+        ]
+      }
+    },
+    "nisabur": {
+      "count": 4,
+      "kSignatures": {
+        "C ^4c": 4
+      },
+      "topK": [
+        {
+          "k": "C ^4c",
+          "count": 4
+        }
+      ],
+      "examples": {
+        "C ^4c": [
+          {
+            "x": "1491",
+            "title": "Nişâbur Beste"
+          },
+          {
+            "x": "1519",
+            "title": "Nişâbur Küpe"
+          },
+          {
+            "x": "1520",
+            "title": "Nişâbur Seyir"
+          }
+        ]
+      }
+    },
+    "pesendide": {
+      "count": 4,
+      "kSignatures": {
+        "C _1B^4f": 4
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 4
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1531",
+            "title": "Pesendîde Küpe"
+          },
+          {
+            "x": "1532",
+            "title": "Pesendîde Nakış"
+          },
+          {
+            "x": "1533",
+            "title": "Pesendîde Sazsemâîsi"
+          }
+        ]
+      }
+    },
+    "segah-maye": {
+      "count": 4,
+      "kSignatures": {
+        "C _1B_1e^4f": 4
+      },
+      "topK": [
+        {
+          "k": "C _1B_1e^4f",
+          "count": 4
+        }
+      ],
+      "examples": {
+        "C _1B_1e^4f": [
+          {
+            "x": "1761",
+            "title": "Segâh-Mâye İlâhî"
+          },
+          {
+            "x": "1762",
+            "title": "Segâh-Mâye Küpe"
+          },
+          {
+            "x": "1763",
+            "title": "Segâh-Mâye Seyir"
+          }
+        ]
+      }
+    },
+    "askefza": {
+      "count": 3,
+      "kSignatures": {
+        "C": 3
+      },
+      "topK": [
+        {
+          "k": "C",
+          "count": 3
+        }
+      ],
+      "examples": {
+        "C": [
+          {
+            "x": "120",
+            "title": "Aşkefzâ Peşrev"
+          },
+          {
+            "x": "121",
+            "title": "Aşkefzâ Şarkı"
+          },
+          {
+            "x": "122",
+            "title": "Aşkefzâ Seyir"
+          }
+        ]
+      }
+    },
+    "beste-isfahan": {
+      "count": 3,
+      "kSignatures": {
+        "C _1B": 3
+      },
+      "topK": [
+        {
+          "k": "C _1B",
+          "count": 3
+        }
+      ],
+      "examples": {
+        "C _1B": [
+          {
+            "x": "125",
+            "title": "Beste-Isfahan Küpe"
+          },
+          {
+            "x": "126",
+            "title": "Beste-Isfahan Seyir"
+          },
+          {
+            "x": "127",
+            "title": "Beste-Isfahan Yürüksemâî"
+          }
+        ]
+      }
+    },
+    "hicazasiran": {
+      "count": 3,
+      "kSignatures": {
+        "C _4B^4f^4c": 3
+      },
+      "topK": [
+        {
+          "k": "C _4B^4f^4c",
+          "count": 3
+        }
+      ],
+      "examples": {
+        "C _4B^4f^4c": [
+          {
+            "x": "416",
+            "title": "Hicazaşîrân Beste"
+          },
+          {
+            "x": "417",
+            "title": "Hicazaşîrân Küpe"
+          },
+          {
+            "x": "418",
+            "title": "Hicazaşîrân Seyir"
+          }
+        ]
+      }
+    },
+    "nuhuft": {
+      "count": 3,
+      "kSignatures": {
+        "C _1B^4f": 3
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 3
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1522",
+            "title": "Nühüft Beste"
+          },
+          {
+            "x": "1523",
+            "title": "Nühüft Küpe"
+          },
+          {
+            "x": "1524",
+            "title": "Nühüft Seyir"
+          }
+        ]
+      }
+    },
+    "pencgah": {
+      "count": 3,
+      "kSignatures": {
+        "C _1B^4f": 3
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 3
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1528",
+            "title": "Pençgâh Seyir"
+          },
+          {
+            "x": "1529",
+            "title": "Pençgâh Seyir"
+          },
+          {
+            "x": "1530",
+            "title": "Pençgâh Tevşihilâhi"
+          }
+        ]
+      }
+    },
+    "saba-zemzeme": {
+      "count": 3,
+      "kSignatures": {
+        "C _1B_4d": 3
+      },
+      "topK": [
+        {
+          "k": "C _1B_4d",
+          "count": 3
+        }
+      ],
+      "examples": {
+        "C _1B_4d": [
+          {
+            "x": "1732",
+            "title": "Sabâ-Zemzeme Küpe"
+          },
+          {
+            "x": "1733",
+            "title": "Sabâ-Zemzeme Şarkı"
+          },
+          {
+            "x": "1734",
+            "title": "Sabâ-Zemzeme Şarkı"
+          }
+        ]
+      }
+    },
+    "sazkar": {
+      "count": 3,
+      "kSignatures": {
+        "C _1B^4f": 3
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 3
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1735",
+            "title": "Sazkâr Ağırsemâî"
+          },
+          {
+            "x": "1736",
+            "title": "Sazkâr Küpe"
+          },
+          {
+            "x": "1737",
+            "title": "Sazkâr Seyir"
+          }
+        ]
+      }
+    },
+    "sevkutarab": {
+      "count": 3,
+      "kSignatures": {
+        "C _1B_4d": 3
+      },
+      "topK": [
+        {
+          "k": "C _1B_4d",
+          "count": 3
+        }
+      ],
+      "examples": {
+        "C _1B_4d": [
+          {
+            "x": "1900",
+            "title": "Şevkutarab Küpe"
+          },
+          {
+            "x": "1901",
+            "title": "Şevkutarab Seyir"
+          },
+          {
+            "x": "1902",
+            "title": "Şevkutarab Seyir"
+          }
+        ]
+      }
+    },
+    "tahirbuselik": {
+      "count": 3,
+      "kSignatures": {
+        "C _1B^4f": 3
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 3
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "2001",
+            "title": "Tâhirbûselik Beste"
+          },
+          {
+            "x": "2002",
+            "title": "Tâhirbûselik Küpe"
+          },
+          {
+            "x": "2003",
+            "title": "Tâhirbûselik Sazsemâîsi"
+          }
+        ]
+      }
+    },
+    "acembuselik": {
+      "count": 2,
+      "kSignatures": {
+        "C _1B": 2
+      },
+      "topK": [
+        {
+          "k": "C _1B",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C _1B": [
+          {
+            "x": "64",
+            "title": "Acembûselik Küpe"
+          },
+          {
+            "x": "65",
+            "title": "Acembûselik Şarkı"
+          }
+        ]
+      }
+    },
+    "arazbarbuselik": {
+      "count": 2,
+      "kSignatures": {
+        "C _1B_1e": 2
+      },
+      "topK": [
+        {
+          "k": "C _1B_1e",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C _1B_1e": [
+          {
+            "x": "112",
+            "title": "Arazbârbûselik Küpe"
+          },
+          {
+            "x": "113",
+            "title": "Arazbârbûselik Sazsemâîsi"
+          }
+        ]
+      }
+    },
+    "buselikasiran": {
+      "count": 2,
+      "kSignatures": {
+        "C": 2
+      },
+      "topK": [
+        {
+          "k": "C",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C": [
+          {
+            "x": "219",
+            "title": "Bûselikaşîrân Küpe"
+          },
+          {
+            "x": "220",
+            "title": "Bûselikaşîrân Seyir"
+          }
+        ]
+      }
+    },
+    "buzurk": {
+      "count": 2,
+      "kSignatures": {
+        "C ^4f": 2
+      },
+      "topK": [
+        {
+          "k": "C ^4f",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C ^4f": [
+          {
+            "x": "271",
+            "title": "Büzürk Küpe"
+          },
+          {
+            "x": "272",
+            "title": "Büzürk Seyir"
+          }
+        ]
+      }
+    },
+    "canfeza": {
+      "count": 2,
+      "kSignatures": {
+        "C _1B_4d": 2
+      },
+      "topK": [
+        {
+          "k": "C _1B_4d",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C _1B_4d": [
+          {
+            "x": "273",
+            "title": "Canfezâ Küpe"
+          },
+          {
+            "x": "274",
+            "title": "Canfezâ Seyir"
+          }
+        ]
+      }
+    },
+    "cargah": {
+      "count": 2,
+      "kSignatures": {
+        "C _2B_3d": 2
+      },
+      "topK": [
+        {
+          "k": "C _2B_3d",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C _2B_3d": [
+          {
+            "x": "275",
+            "title": "Çargâh İlâhî"
+          },
+          {
+            "x": "276",
+            "title": "Çargâh Küpe"
+          }
+        ]
+      }
+    },
+    "gulzar": {
+      "count": 2,
+      "kSignatures": {
+        "C _1B": 2
+      },
+      "topK": [
+        {
+          "k": "C _1B",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C _1B": [
+          {
+            "x": "409",
+            "title": "Gülzâr Küpe"
+          },
+          {
+            "x": "410",
+            "title": "Gülzâr Sazsemâîsi"
+          }
+        ]
+      }
+    },
+    "huzi": {
+      "count": 2,
+      "kSignatures": {
+        "C _2B": 2
+      },
+      "topK": [
+        {
+          "k": "C _2B",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C _2B": [
+          {
+            "x": "834",
+            "title": "Hûzî İlâhî"
+          },
+          {
+            "x": "835",
+            "title": "Hûzî Türkü"
+          }
+        ]
+      }
+    },
+    "muhayyersunbule": {
+      "count": 2,
+      "kSignatures": {
+        "C _1B_4d": 2
+      },
+      "topK": [
+        {
+          "k": "C _1B_4d",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C _1B_4d": [
+          {
+            "x": "1264",
+            "title": "Muhayyersünbüle Küpe"
+          },
+          {
+            "x": "1265",
+            "title": "Muhayyersünbüle Şarkı"
+          }
+        ]
+      }
+    },
+    "nevabuselik": {
+      "count": 2,
+      "kSignatures": {
+        "C _1B^4f": 2
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1301",
+            "title": "Nevâbûselik Küpe"
+          },
+          {
+            "x": "1302",
+            "title": "Nevâbûselik Şarkı"
+          }
+        ]
+      }
+    },
+    "nihavend-i-kebir": {
+      "count": 2,
+      "kSignatures": {
+        "C _5B_5e": 2
+      },
+      "topK": [
+        {
+          "k": "C _5B_5e",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C _5B_5e": [
+          {
+            "x": "1334",
+            "title": "Nihâvend-i-Kebîr Küpe"
+          },
+          {
+            "x": "1335",
+            "title": "Nihâvend-i-Kebîr Seyir"
+          }
+        ]
+      }
+    },
+    "pencgah-i-zaid": {
+      "count": 2,
+      "kSignatures": {
+        "C _1B^4f": 2
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1526",
+            "title": "Pençgâh-ı-Zâid Küpe"
+          },
+          {
+            "x": "1527",
+            "title": "Pençgâh-ı-Zâid Seyir"
+          }
+        ]
+      }
+    },
+    "rahatulervah": {
+      "count": 2,
+      "kSignatures": {
+        "C _4B^4c^4f": 2
+      },
+      "topK": [
+        {
+          "k": "C _4B^4c^4f",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C _4B^4c^4f": [
+          {
+            "x": "1537",
+            "title": "Rahatülervah Küpe"
+          },
+          {
+            "x": "1538",
+            "title": "Rahatülervah Seyir"
+          }
+        ]
+      }
+    },
+    "ruhnuvaz": {
+      "count": 2,
+      "kSignatures": {
+        "C ^5f": 2
+      },
+      "topK": [
+        {
+          "k": "C ^5f",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C ^5f": [
+          {
+            "x": "1659",
+            "title": "Ruhnüvaz Sazsemâîsi"
+          },
+          {
+            "x": "1660",
+            "title": "Ruhnüvaz Seyir"
+          }
+        ]
+      }
+    },
+    "ruy-i-irak": {
+      "count": 2,
+      "kSignatures": {
+        "C _1B_1e^4f": 2
+      },
+      "topK": [
+        {
+          "k": "C _1B_1e^4f",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C _1B_1e^4f": [
+          {
+            "x": "1662",
+            "title": "Rûy-i-Irâk Küpe"
+          },
+          {
+            "x": "1663",
+            "title": "Rûy-i-Irâk Sazsemâîsi"
+          }
+        ]
+      }
+    },
+    "sevkaver": {
+      "count": 2,
+      "kSignatures": {
+        "C _1B_1e": 2
+      },
+      "topK": [
+        {
+          "k": "C _1B_1e",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C _1B_1e": [
+          {
+            "x": "1884",
+            "title": "Şevkâver Küpe"
+          },
+          {
+            "x": "1885",
+            "title": "Şevkâver Peşrev"
+          }
+        ]
+      }
+    },
+    "sevk-i-dil": {
+      "count": 2,
+      "kSignatures": {
+        "C _1B^4f": 2
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1898",
+            "title": "Şevk-ı-Dil Küpe"
+          },
+          {
+            "x": "1899",
+            "title": "Şevk-ı-Dil Peşrev"
+          }
+        ]
+      }
+    },
+    "tarz-i-nevin": {
+      "count": 2,
+      "kSignatures": {
+        "C _5B_4d": 2
+      },
+      "topK": [
+        {
+          "k": "C _5B_4d",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C _5B_4d": [
+          {
+            "x": "2035",
+            "title": "Tarz-ı-Nevîn Küpe"
+          },
+          {
+            "x": "2036",
+            "title": "Tarz-ı-Nevîn Seyir"
+          }
+        ]
+      }
+    },
+    "zirefkend": {
+      "count": 2,
+      "kSignatures": {
+        "C": 2
+      },
+      "topK": [
+        {
+          "k": "C",
+          "count": 2
+        }
+      ],
+      "examples": {
+        "C": [
+          {
+            "x": "2198",
+            "title": "Zîrefkend Küpe"
+          },
+          {
+            "x": "2199",
+            "title": "Zîrefkend Peşrev"
+          }
+        ]
+      }
+    },
+    "acemtarab": {
+      "count": 1,
+      "kSignatures": {
+        "C": 1
+      },
+      "topK": [
+        {
+          "k": "C",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C": [
+          {
+            "x": "109",
+            "title": "Acemtarab Peşrev"
+          }
+        ]
+      }
+    },
+    "araban": {
+      "count": 1,
+      "kSignatures": {
+        "C _4B_4e^4f^4c": 1
+      },
+      "topK": [
+        {
+          "k": "C _4B_4e^4f^4c",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _4B_4e^4f^4c": [
+          {
+            "x": "111",
+            "title": "Arabân Küpe"
+          }
+        ]
+      }
+    },
+    "asiran-maye": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B": [
+          {
+            "x": "118",
+            "title": "Aşîrân-Mâye Küpe"
+          }
+        ]
+      }
+    },
+    "asiran": {
+      "count": 1,
+      "kSignatures": {
+        "C ^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C ^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C ^4f": [
+          {
+            "x": "119",
+            "title": "Aşîrân Zemzeme Peşrev"
+          }
+        ]
+      }
+    },
+    "bahr-i-nazik": {
+      "count": 1,
+      "kSignatures": {
+        "C": 1
+      },
+      "topK": [
+        {
+          "k": "C",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C": [
+          {
+            "x": "123",
+            "title": "Bahr-i-Nâzik Küpe"
+          }
+        ]
+      }
+    },
+    "bend-i-hisar": {
+      "count": 1,
+      "kSignatures": {
+        "C ^4g^4d": 1
+      },
+      "topK": [
+        {
+          "k": "C ^4g^4d",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C ^4g^4d": [
+          {
+            "x": "124",
+            "title": "Bend-i-Hisar Küpe"
+          }
+        ]
+      }
+    },
+    "beyati-arabanbuselik": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B_4e^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B_4e^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B_4e^4f": [
+          {
+            "x": "144",
+            "title": "Beyâtî-Arabânbûselik Küpe"
+          }
+        ]
+      }
+    },
+    "beyatibuselik": {
+      "count": 1,
+      "kSignatures": {
+        "C _2B": 1
+      },
+      "topK": [
+        {
+          "k": "C _2B",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _2B": [
+          {
+            "x": "156",
+            "title": "Beyâtîbûselik Küpe"
+          }
+        ]
+      }
+    },
+    "dilkeside": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "281",
+            "title": "Dilkeşîde Küpe"
+          }
+        ]
+      }
+    },
+    "dilkusa": {
+      "count": 1,
+      "kSignatures": {
+        "C ^4f^4c": 1
+      },
+      "topK": [
+        {
+          "k": "C ^4f^4c",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C ^4f^4c": [
+          {
+            "x": "282",
+            "title": "Dilküşâ Sazsemâîsi"
+          }
+        ]
+      }
+    },
+    "dilnisin": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "283",
+            "title": "Dilnişîn Küpe"
+          }
+        ]
+      }
+    },
+    "dugah-maye": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B": [
+          {
+            "x": "287",
+            "title": "Dügâh-Mâye Küpe"
+          }
+        ]
+      }
+    },
+    "eski-sipihr": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B_4d": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B_4d",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B_4d": [
+          {
+            "x": "292",
+            "title": "Eski-Sipihr Peşrev"
+          }
+        ]
+      }
+    },
+    "evic-huzi": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "302",
+            "title": "Eviç-Hûzî Türkü"
+          }
+        ]
+      }
+    },
+    "evicbuselik": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "307",
+            "title": "Eviçbûselik Küpe"
+          }
+        ]
+      }
+    },
+    "ferahnakasiran": {
+      "count": 1,
+      "kSignatures": {
+        "C ^4f^4c": 1
+      },
+      "topK": [
+        {
+          "k": "C ^4f^4c",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C ^4f^4c": [
+          {
+            "x": "354",
+            "title": "Ferahnâkaşîrân Peşrev"
+          }
+        ]
+      }
+    },
+    "gerdaniyebuselik": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "371",
+            "title": "Gerdâniyebûselik Küpe"
+          }
+        ]
+      }
+    },
+    "gevest": {
+      "count": 1,
+      "kSignatures": {
+        "C": 1
+      },
+      "topK": [
+        {
+          "k": "C",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C": [
+          {
+            "x": "398",
+            "title": "Geveşt Sazsemâîsi"
+          }
+        ]
+      }
+    },
+    "gonca-i-rana": {
+      "count": 1,
+      "kSignatures": {
+        "C": 1
+      },
+      "topK": [
+        {
+          "k": "C",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C": [
+          {
+            "x": "399",
+            "title": "Gonca-i-Rânâ Küpe"
+          }
+        ]
+      }
+    },
+    "guldeste": {
+      "count": 1,
+      "kSignatures": {
+        "C ^4d^5f": 1
+      },
+      "topK": [
+        {
+          "k": "C ^4d^5f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C ^4d^5f": [
+          {
+            "x": "400",
+            "title": "Güldeste Sazsemâîsi"
+          }
+        ]
+      }
+    },
+    "gulsen-i-vefa": {
+      "count": 1,
+      "kSignatures": {
+        "C _4B^4f^4c": 1
+      },
+      "topK": [
+        {
+          "k": "C _4B^4f^4c",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _4B^4f^4c": [
+          {
+            "x": "408",
+            "title": "Gülşen-i-Vefâ Sazsemâîsi"
+          }
+        ]
+      }
+    },
+    "hicazbuselik": {
+      "count": 1,
+      "kSignatures": {
+        "C _4B^4c": 1
+      },
+      "topK": [
+        {
+          "k": "C _4B^4c",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _4B^4c": [
+          {
+            "x": "421",
+            "title": "Hicazbûselik Küpe"
+          }
+        ]
+      }
+    },
+    "hicazi-ussak": {
+      "count": 1,
+      "kSignatures": {
+        "C _4B^4c": 1
+      },
+      "topK": [
+        {
+          "k": "C _4B^4c",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _4B^4c": [
+          {
+            "x": "466",
+            "title": "Hicâzî-Uşşak Nefes"
+          }
+        ]
+      }
+    },
+    "hicazkar-kurdi": {
+      "count": 1,
+      "kSignatures": {
+        "C _5B_5e_5A": 1
+      },
+      "topK": [
+        {
+          "k": "C _5B_5e_5A",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _5B_5e_5A": [
+          {
+            "x": "486",
+            "title": "Hicazkâr-Kürdî Seyir"
+          }
+        ]
+      }
+    },
+    "hicaz-zemzeme": {
+      "count": 1,
+      "kSignatures": {
+        "C _4B^4c": 1
+      },
+      "topK": [
+        {
+          "k": "C _4B^4c",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _4B^4c": [
+          {
+            "x": "701",
+            "title": "Hicaz-Zemzeme Şarkı"
+          }
+        ]
+      }
+    },
+    "huseynigulizar": {
+      "count": 1,
+      "kSignatures": {
+        "C _2B^3f": 1
+      },
+      "topK": [
+        {
+          "k": "C _2B^3f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _2B^3f": [
+          {
+            "x": "752",
+            "title": "Hüseynîgülizâr İlâhî"
+          }
+        ]
+      }
+    },
+    "huzzam-i-cedid": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B_4e^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B_4e^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B_4e^4f": [
+          {
+            "x": "841",
+            "title": "Hüzzam-ı-Cedîd İlâhî"
+          }
+        ]
+      }
+    },
+    "isfahanek": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B": [
+          {
+            "x": "941",
+            "title": "Isfahânek Küpe"
+          }
+        ]
+      }
+    },
+    "kucek": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B_4d": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B_4d",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B_4d": [
+          {
+            "x": "1013",
+            "title": "Kûçek Küpe"
+          }
+        ]
+      }
+    },
+    "kurdi-gerdaniye": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1016",
+            "title": "Kürdî-Gerdâniye Küpe"
+          }
+        ]
+      }
+    },
+    "mahurbuselik": {
+      "count": 1,
+      "kSignatures": {
+        "C ^5f": 1
+      },
+      "topK": [
+        {
+          "k": "C ^5f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C ^5f": [
+          {
+            "x": "1105",
+            "title": "Mâhurbûselik Küpe"
+          }
+        ]
+      }
+    },
+    "maveraunnehr": {
+      "count": 1,
+      "kSignatures": {
+        "C": 1
+      },
+      "topK": [
+        {
+          "k": "C",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C": [
+          {
+            "x": "1188",
+            "title": "Mâverâünnehr Küpe"
+          }
+        ]
+      }
+    },
+    "muberka": {
+      "count": 1,
+      "kSignatures": {
+        "C _5B": 1
+      },
+      "topK": [
+        {
+          "k": "C _5B",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _5B": [
+          {
+            "x": "1189",
+            "title": "Müberka Sazsemâîsi"
+          }
+        ]
+      }
+    },
+    "muhalif": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B": [
+          {
+            "x": "1190",
+            "title": "Muhâlif Peşrev"
+          }
+        ]
+      }
+    },
+    "muhayyerbuselik": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1195",
+            "title": "Muhayyerbûselik Küpe"
+          }
+        ]
+      }
+    },
+    "murekkep-isfahan": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B": [
+          {
+            "x": "1293",
+            "title": "Mürekkep-Isfahan Şarkı"
+          }
+        ]
+      }
+    },
+    "nevakurdi": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1305",
+            "title": "Nevâkürdî Küpe"
+          }
+        ]
+      }
+    },
+    "nevruz": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B": [
+          {
+            "x": "1332",
+            "title": "Nevrûz Şarkı"
+          }
+        ]
+      }
+    },
+    "nigar": {
+      "count": 1,
+      "kSignatures": {
+        "C": 1
+      },
+      "topK": [
+        {
+          "k": "C",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C": [
+          {
+            "x": "1333",
+            "title": "Nigâr Sazsemâîsi"
+          }
+        ]
+      }
+    },
+    "nihavend-i-rumi": {
+      "count": 1,
+      "kSignatures": {
+        "C _5B_5e": 1
+      },
+      "topK": [
+        {
+          "k": "C _5B_5e",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _5B_5e": [
+          {
+            "x": "1336",
+            "title": "Nihâvend-i-Rûmî Küpe"
+          }
+        ]
+      }
+    },
+    "nisabureyn": {
+      "count": 1,
+      "kSignatures": {
+        "C ^4f^4c": 1
+      },
+      "topK": [
+        {
+          "k": "C ^4f^4c",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C ^4f^4c": [
+          {
+            "x": "1518",
+            "title": "Nişâbureyn Peşrev"
+          }
+        ]
+      }
+    },
+    "pencgah-i-asl": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1525",
+            "title": "Pençgâh-ı-Asl Küpe"
+          }
+        ]
+      }
+    },
+    "peyk-i-nesat": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1535",
+            "title": "Peyk-i-Neşat Peşrev"
+          }
+        ]
+      }
+    },
+    "rahatfeza": {
+      "count": 1,
+      "kSignatures": {
+        "C _2B^3f": 1
+      },
+      "topK": [
+        {
+          "k": "C _2B^3f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _2B^3f": [
+          {
+            "x": "1536",
+            "title": "Râhatfezâ Küpe"
+          }
+        ]
+      }
+    },
+    "rast-i-cedid": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1545",
+            "title": "Rast-ı-Cedîd Küpe"
+          }
+        ]
+      }
+    },
+    "rast-maye": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1554",
+            "title": "Rast-Mâye Küpe"
+          }
+        ]
+      }
+    },
+    "rengidil": {
+      "count": 1,
+      "kSignatures": {
+        "C _4A_1B_4d": 1
+      },
+      "topK": [
+        {
+          "k": "C _4A_1B_4d",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _4A_1B_4d": [
+          {
+            "x": "1656",
+            "title": "Rengidil Şarkı"
+          }
+        ]
+      }
+    },
+    "revnaknuma": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B_1e^4f^4c^4A": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B_1e^4f^4c^4A",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B_1e^4f^4c^4A": [
+          {
+            "x": "1657",
+            "title": "Revnâknümâ Küpe"
+          }
+        ]
+      }
+    },
+    "reyya": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B_4e_4A^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B_4e_4A^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B_4e_4A^4f": [
+          {
+            "x": "1658",
+            "title": "Reyyâ Şarkı"
+          }
+        ]
+      }
+    },
+    "ruy-i-dilara": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B": [
+          {
+            "x": "1661",
+            "title": "Rûy-i-Dilârâ Sazsemâîsi"
+          }
+        ]
+      }
+    },
+    "sabaasiran": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B_4d": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B_4d",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B_4d": [
+          {
+            "x": "1665",
+            "title": "Sabâaşîrân Seyir"
+          }
+        ]
+      }
+    },
+    "sababuselik": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B_4d": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B_4d",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B_4d": [
+          {
+            "x": "1668",
+            "title": "Sabâbûselik Küpe"
+          }
+        ]
+      }
+    },
+    "selmek": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1882",
+            "title": "Selmek Sazsemâîsi"
+          }
+        ]
+      }
+    },
+    "serefnuma": {
+      "count": 1,
+      "kSignatures": {
+        "C _4B^4f^4c": 1
+      },
+      "topK": [
+        {
+          "k": "C _4B^4f^4c",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _4B^4f^4c": [
+          {
+            "x": "1883",
+            "title": "Şerefnümâ Sazsemâîsi"
+          }
+        ]
+      }
+    },
+    "sevk-i-cedid": {
+      "count": 1,
+      "kSignatures": {
+        "C _5B_4e^4f^4c": 1
+      },
+      "topK": [
+        {
+          "k": "C _5B_4e^4f^4c",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _5B_4e^4f^4c": [
+          {
+            "x": "1897",
+            "title": "Şevk-ı-Cedîd Küpe"
+          }
+        ]
+      }
+    },
+    "sipihr": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B": [
+          {
+            "x": "1903",
+            "title": "Sipihr Küpe"
+          }
+        ]
+      }
+    },
+    "sivenuma": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B_4d": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B_4d",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B_4d": [
+          {
+            "x": "1904",
+            "title": "Şîvenümâ Beste"
+          }
+        ]
+      }
+    },
+    "sultan-i-irak": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "1905",
+            "title": "Sultan-ı-Irak Küpe"
+          }
+        ]
+      }
+    },
+    "sultanisegah": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B_1e": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B_1e",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B_1e": [
+          {
+            "x": "1906",
+            "title": "Sultânîsegâh Peşrev"
+          }
+        ]
+      }
+    },
+    "tarz-i-cedid": {
+      "count": 1,
+      "kSignatures": {
+        "C _5B": 1
+      },
+      "topK": [
+        {
+          "k": "C _5B",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _5B": [
+          {
+            "x": "2034",
+            "title": "Tarz-ı-Cedîd Küpe"
+          }
+        ]
+      }
+    },
+    "vecd-i-dil": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "2155",
+            "title": "Vecd-i-Dil Peşrev"
+          }
+        ]
+      }
+    },
+    "vech-i-arazbar": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B_1e": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B_1e",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B_1e": [
+          {
+            "x": "2156",
+            "title": "Vech-i-Arazbâr Küpe"
+          }
+        ]
+      }
+    },
+    "vech-i-sehnaz": {
+      "count": 1,
+      "kSignatures": {
+        "C": 1
+      },
+      "topK": [
+        {
+          "k": "C",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C": [
+          {
+            "x": "2157",
+            "title": "Vech-i-Şehnâz Küpe"
+          }
+        ]
+      }
+    },
+    "zevk-i-dil": {
+      "count": 1,
+      "kSignatures": {
+        "C _1B^4f": 1
+      },
+      "topK": [
+        {
+          "k": "C _1B^4f",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _1B^4f": [
+          {
+            "x": "2196",
+            "title": "Zevk-i-Dil Küpe"
+          }
+        ]
+      }
+    },
+    "zevk-i-tarab": {
+      "count": 1,
+      "kSignatures": {
+        "C _5B_4e^4f^4c": 1
+      },
+      "topK": [
+        {
+          "k": "C _5B_4e^4f^4c",
+          "count": 1
+        }
+      ],
+      "examples": {
+        "C _5B_4e^4f^4c": [
+          {
+            "x": "2197",
+            "title": "Zevk-i-Tarab Küpe"
+          }
+        ]
+      }
+    }
+  },
+  "unclassified": {
+    "missingK": 0,
+    "missingMakam": 1,
+    "missingBoth": 0,
+    "examplesMissingMakam": [
+      {
+        "x": "0",
+        "title": "_",
+        "k": "none"
+      }
+    ],
+    "examplesMissingK": []
+  },
+  "notes": {
+    "makamDetection": "Heuristic: uses the first token of the 2nd T: line (if present) else 1st; keeps hyphenated forms; falls back to any word-like token if needed. Normalized keys strip diacritics and punctuation.",
+    "kFormat": "K: lines in this corpus often encode a 53-EDO microtonal key-signature-like accidental set (e.g. \"K:C _1B^4f^4c\") rather than major/minor."
+  }
+}

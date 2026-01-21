@@ -2430,3 +2430,61 @@ body.print-mode .pane {
 body.print-mode {
   overflow: visible;
 }
+
+.modal-card.print-all-options-card {
+  width: min(520px, 92vw);
+  max-width: 92vw;
+  min-width: 360px;
+}
+
+.modal-card.print-all-options-card .modal-header {
+  cursor: move;
+}
+
+.modal-card.print-all-options-card.dragging .modal-header {
+  cursor: grabbing;
+}
+
+.modal-card.print-all-options-card.dragging {
+  user-select: none;
+}
+
+.modal-card.print-all-options-card .modal-header,
+.modal-card.print-all-options-card .modal-footer {
+  padding: 8px 10px;
+}
+
+.modal-card.print-all-options-card .modal-body {
+  padding: 10px 10px 12px;
+  gap: 10px;
+}
+
+.print-all-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.print-all-row select {
+  width: 100%;
+  min-width: 0;
+}
+
+.print-all-label {
+  font-size: var(--font-size-sm);
+  color: var(--text);
+}
+
+.print-all-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  user-select: none;
+  margin-top: 2px;
+  font-size: var(--font-size-sm);
+}
+
+.print-all-inline input[type="checkbox"] {
+  margin: 0;
+}

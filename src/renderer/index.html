@@ -458,28 +458,55 @@
     </div>
   </div>
 
-  <div class="modal" id="xIssuesModal" aria-hidden="true">
-    <div class="modal-card" role="dialog" aria-label="X Issues">
-      <div class="modal-header">
-        <div class="modal-title">X issues</div>
-        <button class="modal-close" id="xIssuesClose" type="button">Close</button>
-      </div>
-      <div class="modal-body">
-        <pre id="xIssuesInfo" class="about-info"></pre>
-      </div>
-      <div class="modal-footer">
-        <button id="xIssuesAutoFix" type="button">Auto-fix: Renumber X…</button>
-        <button id="xIssuesJump" type="button">Jump</button>
-        <button id="xIssuesCopy" type="button">Copy</button>
-      </div>
-    </div>
-  </div>
+	  <div class="modal" id="xIssuesModal" aria-hidden="true">
+	    <div class="modal-card" role="dialog" aria-label="X Issues">
+	      <div class="modal-header">
+	        <div class="modal-title">X issues</div>
+	        <button class="modal-close" id="xIssuesClose" type="button">Close</button>
+	      </div>
+	      <div class="modal-body">
+	        <pre id="xIssuesInfo" class="about-info"></pre>
+	      </div>
+	      <div class="modal-footer">
+	        <button id="xIssuesAutoFix" type="button">Auto-fix: Renumber X…</button>
+	        <button id="xIssuesJump" type="button">Jump</button>
+	        <button id="xIssuesCopy" type="button">Copy</button>
+	      </div>
+	    </div>
+	  </div>
 
-  <div class="modal" id="disclaimerModal" aria-hidden="true">
-    <div class="modal-card" role="dialog" aria-label="Early-stage release">
-      <div class="modal-header">
-        <div class="modal-title">Early-stage release</div>
-      </div>
+	  <div class="modal" id="printAllOptionsModal" aria-hidden="true">
+	    <div class="modal-card print-all-options-card" role="dialog" aria-label="Print All Tunes">
+	      <div class="modal-header">
+	        <div class="modal-title">Print All Tunes</div>
+	      </div>
+	      <div class="modal-body">
+	        <div class="print-all-row">
+	          <label class="print-all-label" for="printAllPageBreaks">Page breaks</label>
+	          <select id="printAllPageBreaks">
+	            <option value="perTune">Per tune</option>
+	            <option value="continuous">Continuous (use %%newpage)</option>
+	          </select>
+	        </div>
+	        <label class="print-all-inline" for="printAllRemember">
+	          <input id="printAllRemember" type="checkbox" />
+	          <span>Remember (change later in Settings → Print → All tunes)</span>
+	        </label>
+	      </div>
+	      <div class="modal-footer">
+          <div class="modal-footer-left">
+	          <button id="printAllOptionsOk" class="primary" type="button">OK</button>
+          </div>
+	        <button id="printAllOptionsCancel" type="button">Cancel</button>
+	      </div>
+	    </div>
+	  </div>
+
+	  <div class="modal" id="disclaimerModal" aria-hidden="true">
+	    <div class="modal-card" role="dialog" aria-label="Early-stage release">
+	      <div class="modal-header">
+	        <div class="modal-title">Early-stage release</div>
+	      </div>
       <div class="modal-body">
         <p>ABCarus is functional but still under active development. Expect changes and keep backups.</p>
       </div>

@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Print All Tunes: allow continuous printing/export (multiple tunes per page) and honor manual `%%newpage` directives.
+
+### Added
+- Settings: Print → All tunes options for Print All (page breaks + “ask each time”).
+- Docs: add SymbTr makam → `K:` signature correlation report under `docs/makam_dna/`.
+
 
 
 ## [0.22.7] - 2026-01-20

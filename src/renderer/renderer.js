@@ -75,6 +75,11 @@ const $xIssuesClose = document.getElementById("xIssuesClose");
 const $xIssuesCopy = document.getElementById("xIssuesCopy");
 const $xIssuesJump = document.getElementById("xIssuesJump");
 const $xIssuesAutoFix = document.getElementById("xIssuesAutoFix");
+const $printAllOptionsModal = document.getElementById("printAllOptionsModal");
+const $printAllPageBreaks = document.getElementById("printAllPageBreaks");
+const $printAllRemember = document.getElementById("printAllRemember");
+const $printAllOptionsCancel = document.getElementById("printAllOptionsCancel");
+const $printAllOptionsOk = document.getElementById("printAllOptionsOk");
 const $groupBy = document.getElementById("groupBy");
 const $sortBy = document.getElementById("sortBy");
 const $librarySearch = document.getElementById("librarySearch");
@@ -492,6 +497,10 @@ let setListHeaderText = "%%stretchlast 1\n";
 const SET_LIST_STORAGE_KEY = "abcarus.setList.v1";
 let setListSaveTimer = null;
 
+const PRINT_ALL_OPTIONS_STORAGE_KEY = "abcarus.printAllOptions.v1";
+let printAllPageBreaks = "perTune"; // perTune | continuous
+let printAllAskEachTime = true;
+
 function safeReadJsonLocalStorage(key) {
   try {
     const raw = localStorage.getItem(key);
@@ -579,6 +588,33 @@ function loadSetListFromStorage() {
 }
 
 loadSetListFromStorage();
+
+function loadPrintAllOptionsFromStorage() {
+  const saved = safeReadJsonLocalStorage(PRINT_ALL_OPTIONS_STORAGE_KEY);
+  if (!saved || typeof saved !== "object") return;
+  const version = saved && saved.version ? String(saved.version) : "";
+  if (version !== "1") return;
+  const pageBreaks = saved.pageBreaks ? String(saved.pageBreaks) : "";
+  if (pageBreaks === "perTune") {
+    printAllPageBreaks = "perTune";
+  } else if (pageBreaks === "continuous" || pageBreaks === "none" || pageBreaks === "auto") {
+    printAllPageBreaks = "continuous";
+  }
+  if (typeof saved.askEachTime === "boolean") {
+    printAllAskEachTime = saved.askEachTime;
+  }
+}
+
+function persistPrintAllOptionsToStorageNow() {
+  safeWriteJsonLocalStorage(PRINT_ALL_OPTIONS_STORAGE_KEY, {
+    version: "1",
+    savedAtMs: Date.now(),
+    pageBreaks: printAllPageBreaks,
+    askEachTime: !!printAllAskEachTime,
+  });
+}
+
+loadPrintAllOptionsFromStorage();
 
 function normalizeSetListHeaderTemplate(text) {
   const raw = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
@@ -10272,6 +10308,7 @@ async function getFileContentCached(filePath) {
 
 async function renderPrintAllSvgMarkup(entry, content, options = {}) {
   const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+  const pageBreaks = String(options.pageBreaks || "perTune");
   if (!entry || !entry.tunes || !entry.tunes.length) {
     return { ok: false, error: "No tunes to print." };
   }
@@ -10283,7 +10320,13 @@ async function renderPrintAllSvgMarkup(entry, content, options = {}) {
     skipped: 0,
     tunes: [],
   } : null;
-  const parts = [];
+  const blocks = [];
+  let current = [];
+  const flush = () => {
+    if (!current.length) return;
+    blocks.push(current);
+    current = [];
+  };
   const summary = [];
   for (let i = 0; i < entry.tunes.length; i += 1) {
     const tune = entry.tunes[i];
@@ -10299,6 +10342,10 @@ async function renderPrintAllSvgMarkup(entry, content, options = {}) {
       if (debugInfo) debugInfo.skipped += 1;
       continue;
     }
+
+    const breakBefore = (pageBreaks === "perTune") ? (i > 0) : false;
+    if (breakBefore) flush();
+
     const effectiveHeader = (entry && entry.path && pathsEqual(entry.path, activeFilePath)) ? getHeaderEditorValue() : (entry.headerText || "");
     const prefix = buildHeaderPrefix(effectiveHeader, false, tuneText);
     const block = prefix.text ? `${prefix.text}${tuneText}` : tuneText;
@@ -10344,7 +10391,7 @@ async function renderPrintAllSvgMarkup(entry, content, options = {}) {
       setLibraryErrorIndexForTune(tune.id, 0);
     }
     if (tuneMarkup.length) {
-      parts.push(`<div class="print-tune">${tuneMarkup.join("\n")}</div>`);
+      current.push(tuneMarkup.join("\n"));
       if (debugInfo && meta) {
         meta.svgLength = res.svg.length;
         debugInfo.rendered += 1;
@@ -10357,18 +10404,121 @@ async function renderPrintAllSvgMarkup(entry, content, options = {}) {
     }
   }
   setErrorLineOffsetFromHeader("");
-  if (!parts.length) return { ok: false, error: "No SVG output produced." };
-  const svg = parts.join("\n");
+  flush();
+  if (!blocks.length) return { ok: false, error: "No SVG output produced." };
+  const svg = blocks.map((b) => `<div class="print-tune">${b.join("\n")}</div>`).join("\n");
   if (debugInfo) {
-    debugInfo.svgParts = parts.length;
+    debugInfo.pageBreaks = pageBreaks;
+    debugInfo.svgParts = blocks.length;
     console.info("[print-all]", debugInfo);
     window.__abcarusDebugPrintAllSvg = svg;
   }
   return { ok: true, svg };
 }
 
+let printAllOptionsResolve = null;
+let printAllOptionsDragState = null;
+let printAllOptionsDragBaseRect = null;
+
+function closePrintAllOptionsModal(result) {
+  if (!$printAllOptionsModal) return;
+  $printAllOptionsModal.classList.remove("open");
+  $printAllOptionsModal.setAttribute("aria-hidden", "true");
+  if (typeof printAllOptionsResolve === "function") {
+    const resolve = printAllOptionsResolve;
+    printAllOptionsResolve = null;
+    resolve(result || null);
+  }
+}
+
+function readTranslateXY(value) {
+  const raw = String(value || "");
+  const m = raw.match(/translate\(\s*(-?\d+(?:\.\d+)?)px,\s*(-?\d+(?:\.\d+)?)px\)/);
+  if (!m) return { x: 0, y: 0 };
+  return { x: Number(m[1]) || 0, y: Number(m[2]) || 0 };
+}
+
+function clampPrintAllOptionsTranslate(pos) {
+  if (!printAllOptionsDragBaseRect) return pos;
+  const margin = 12;
+  const base = printAllOptionsDragBaseRect;
+  const minX = margin - base.left;
+  const maxX = (window.innerWidth - margin) - base.right;
+  const minY = margin - base.top;
+  const maxY = (window.innerHeight - margin) - base.bottom;
+  return {
+    x: Math.min(maxX, Math.max(minX, pos.x)),
+    y: Math.min(maxY, Math.max(minY, pos.y)),
+  };
+}
+
+function applyPrintAllOptionsTranslate(pos) {
+  if (!$printAllOptionsModal) return;
+  const card = $printAllOptionsModal.querySelector(".modal-card");
+  if (!card) return;
+  const p = clampPrintAllOptionsTranslate(pos);
+  card.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
+}
+
+function openPrintAllOptionsModal({ defaultPageBreaks = "perTune" } = {}) {
+  if (!$printAllOptionsModal || !$printAllPageBreaks) return Promise.resolve(null);
+  const value = String(defaultPageBreaks || "perTune");
+  $printAllPageBreaks.value = (value === "perTune" || value === "continuous") ? value : "perTune";
+  if ($printAllRemember) $printAllRemember.checked = false;
+  $printAllOptionsModal.classList.add("open");
+  $printAllOptionsModal.setAttribute("aria-hidden", "false");
+  $printAllPageBreaks.focus();
+  requestAnimationFrame(() => {
+    const card = $printAllOptionsModal.querySelector(".modal-card");
+    if (!card) return;
+    printAllOptionsDragBaseRect = card.getBoundingClientRect();
+    // Clamp any existing transform (e.g., after a resize).
+    const current = readTranslateXY(card.style.transform);
+    applyPrintAllOptionsTranslate(current);
+  });
+  return new Promise((resolve) => {
+    printAllOptionsResolve = resolve;
+  });
+}
+
+async function getPrintAllPageBreaksForAction() {
+  const value = String(printAllPageBreaks || "perTune");
+  if (!printAllAskEachTime) return value;
+  const res = await openPrintAllOptionsModal({ defaultPageBreaks: value });
+  if (!res) return null;
+  const pageBreaks = String(res.pageBreaks || "perTune");
+  if (pageBreaks === "perTune" || pageBreaks === "continuous") printAllPageBreaks = pageBreaks;
+  if (res.remember) printAllAskEachTime = false;
+
+  // Persist in settings (preferred) and localStorage (fallback / older builds).
+  const patch = { printAllPageBreaks, printAllAskEachTime };
+  try {
+    if (window.api && typeof window.api.updateSettings === "function") {
+      await window.api.updateSettings(patch);
+    }
+  } catch {}
+  persistPrintAllOptionsToStorageNow();
+  return printAllPageBreaks;
+}
+
+function setPrintAllFromSettings(settings) {
+  if (!settings) return;
+  const mode = String(settings.printAllPageBreaks || "").trim();
+  if (mode === "perTune" || mode === "continuous") {
+    printAllPageBreaks = mode;
+  } else if (mode === "none" || mode === "auto") {
+    // Compatibility with any legacy values.
+    printAllPageBreaks = "continuous";
+  }
+  if (typeof settings.printAllAskEachTime === "boolean") {
+    printAllAskEachTime = settings.printAllAskEachTime;
+  }
+}
+
 async function runPrintAllAction(type) {
   if (!window.api) return;
+  const pageBreaks = await getPrintAllPageBreaksForAction();
+  if (!pageBreaks) return;
   const entry = getActiveFileEntry();
   if (!entry || !entry.path) {
     setStatus("No active file to print.");
@@ -10391,6 +10541,7 @@ async function runPrintAllAction(type) {
   }
   setStatus("Rendering…");
   const renderRes = await renderPrintAllSvgMarkup(entry, contentRes.data || "", {
+    pageBreaks,
     onProgress: (current, total) => {
       setStatus(`Rendering tunes… ${current}/${total}`);
     },
@@ -11911,6 +12062,70 @@ if ($xIssuesModal) {
     e.preventDefault();
     e.stopPropagation();
     closeXIssuesModal();
+  });
+}
+
+if ($printAllOptionsModal) {
+  $printAllOptionsModal.addEventListener("click", (e) => {
+    if (e.target === $printAllOptionsModal) closePrintAllOptionsModal(null);
+  });
+  $printAllOptionsModal.addEventListener("keydown", (e) => {
+    if (!e) return;
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    closePrintAllOptionsModal(null);
+  });
+
+  const card = $printAllOptionsModal.querySelector(".modal-card");
+  const header = $printAllOptionsModal.querySelector(".modal-header");
+  if (card && header) {
+    header.addEventListener("pointerdown", (event) => {
+      if (!event || event.button !== 0) return;
+      const target = event.target;
+      if (target && (target.closest("button") || target.closest("input") || target.closest("select") || target.closest("textarea"))) {
+        return;
+      }
+      if (!$printAllOptionsModal.classList.contains("open")) return;
+      const start = readTranslateXY(card.style.transform);
+      printAllOptionsDragState = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: start.x,
+        originY: start.y,
+      };
+      card.classList.add("dragging");
+      try { header.setPointerCapture(event.pointerId); } catch {}
+      event.preventDefault();
+    });
+
+    header.addEventListener("pointermove", (event) => {
+      if (!printAllOptionsDragState || printAllOptionsDragState.pointerId !== event.pointerId) return;
+      const dx = event.clientX - printAllOptionsDragState.startX;
+      const dy = event.clientY - printAllOptionsDragState.startY;
+      applyPrintAllOptionsTranslate({ x: printAllOptionsDragState.originX + dx, y: printAllOptionsDragState.originY + dy });
+    });
+
+    const endDrag = (event) => {
+      if (!printAllOptionsDragState) return;
+      if (event && printAllOptionsDragState.pointerId != null && event.pointerId !== printAllOptionsDragState.pointerId) return;
+      printAllOptionsDragState = null;
+      card.classList.remove("dragging");
+      try { if (event) header.releasePointerCapture(event.pointerId); } catch {}
+    };
+    header.addEventListener("pointerup", endDrag);
+    header.addEventListener("pointercancel", endDrag);
+  }
+}
+if ($printAllOptionsCancel) {
+  $printAllOptionsCancel.addEventListener("click", () => closePrintAllOptionsModal(null));
+}
+if ($printAllOptionsOk) {
+  $printAllOptionsOk.addEventListener("click", () => {
+    const pageBreaks = $printAllPageBreaks ? String($printAllPageBreaks.value || "perTune") : "perTune";
+    const remember = Boolean($printAllRemember && $printAllRemember.checked);
+    closePrintAllOptionsModal({ pageBreaks, remember });
   });
 }
 
@@ -14605,6 +14820,7 @@ if (window.api && typeof window.api.getSettings === "function") {
 	      setFollowFromSettings(settings);
 	      setLoopFromSettings(settings);
 	      setPlaybackAutoScrollFromSettings(settings);
+        setPrintAllFromSettings(settings);
 	      applyLibraryPrefsFromSettings(settings);
 	      updateGlobalHeaderToggle();
       updateErrorsFeatureUI();
@@ -14636,6 +14852,7 @@ if (window.api && typeof window.api.onSettingsChanged === "function") {
 	    setFollowFromSettings(settings);
 	    setLoopFromSettings(settings);
 	    setPlaybackAutoScrollFromSettings(settings);
+      setPrintAllFromSettings(settings);
 	    applyLibraryPrefsFromSettings(settings);
 	    updateGlobalHeaderToggle();
     updateErrorsFeatureUI();
