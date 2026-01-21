@@ -1,0 +1,315 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-01-21",
+  "provenance": {
+    "sourceTitle": "Murat Aydemir — Turkish Music Makam Guide",
+    "sourceYear": 2010,
+    "sourceFormatNote": "The PDF in kitchen/chat-exports is a scanned (image-only) document; many fields below were extracted via OCR and/or copied from NotebookLM notes.",
+    "whereFromInRepo": [
+      "kitchen/chat-exports/20260119_pitcher/AYDEMIR-MAKAM GUIDE (2010).pdf",
+      "kitchen/chat-exports/20260119_pitcher/makam_characteristics.json"
+    ]
+  },
+  "frames": {
+    "notation": {
+      "label": "Bolahenk written notation (as printed in the source)",
+      "writtenToConcertSemitones": -5,
+      "note": "Rule of thumb used in this project: written Bolahenk notes sound a perfect fourth lower in concert pitch."
+    },
+    "playbackExamples": {
+      "oudExample": {
+        "label": "Oud playback convenience",
+        "writtenToInstrumentSemitones": -17,
+        "note": "This is a user preference for playback alignment; it is not a makam property."
+      },
+      "alternateExample": {
+        "label": "Alternate instrument example",
+        "writtenToInstrumentSemitones": -5,
+        "note": "Example: another instrument may prefer sounding one octave higher than the oud setup; values vary by instrument/context."
+      }
+    }
+  },
+  "terminology": {
+    "durak": "Finalis / tonic: the degree where the full cadence (Tam Karar) resolves.",
+    "guclu": "Dominant: the degree (often 4th or 5th) used for half cadence (Yarım Karar) and melodic gravity.",
+    "yeden": "Leading tone: a pitch a semitone or whole tone below the tonic used to strengthen the final cadence.",
+    "seyir": "Behavior (ascending/descending/compound): describes where the melodic progression starts and how it moves.",
+    "cesni": "Flavor/segment: tetrachord/pentachord building blocks (e.g., Rast, Uşşak, Hicaz) used to construct the makam skeleton.",
+    "notes": {
+      "dualDominants": "Some makams list primary/secondary dominant degrees (Güçlü). In descending seyir, the upper-register dominant can be primary (e.g., Mahur: Gerdaniye primary, Neva secondary).",
+      "ascendingDescendingAttraction": "Some makams exhibit direction-dependent pitch attraction/spelling changes (e.g., in Rast: ascending uses Evç (F#) while descending often favors Acem (F)). Model as direction-specific preferences rather than a fixed scale.",
+      "yedenTypes": "Yeden (leading tone) can be whole-tone below tonic (tam sesli yeden) or semitone below tonic (yarım sesli yeden). Example: Sultanî Yegâh uses Kaba Nim Hicaz as yeden."
+    }
+  },
+  "rawTable": {
+    "note": "Skeleton table as captured from notes (may be incomplete; append more entries as they become available).",
+    "entries": [
+      { "n": 1, "makam": "Rast", "durak": "Rast (G)", "guclu": "Neva (D)", "yeden": "Irak (low F#)", "seyir": "Ascending", "construction": "Pent. Rast (G) + Tetr. Rast (D)" },
+      { "n": 2, "makam": "Rehavi", "durak": "Rast (G)", "guclu": "Neva (D), Dügâh (A)", "yeden": "Irak (low F#)", "seyir": "Ascending-descending", "construction": "Combination of Rast and Beyati" },
+      { "n": 3, "makam": "Pençgâh", "durak": "Rast (G)", "guclu": "Neva (D)", "yeden": "Irak (low F#)", "seyir": "Ascending-descending", "construction": "Rast + Acem + Beyati" },
+      { "n": 4, "makam": "Pesendide", "durak": "Rast (G)", "guclu": "Neva (D)", "yeden": "Irak (low F#)", "seyir": "Ascending-descending", "construction": "Nişabur (B) + Buselik (D) + Rast (G)" },
+      { "n": 5, "makam": "Suzidilara", "durak": "Rast (G)", "guclu": "Neva (D), Çargâh (C)", "yeden": "Geveşt (low F 5#)", "seyir": "Ascending", "construction": "Çargâh scales on G and on C" },
+      { "n": 6, "makam": "Mahur", "durak": "Rast (G)", "guclu": "Gerdaniye (G), Neva (D)", "yeden": "Geveşt (low F 5#)", "seyir": "Descending", "construction": "Transposition of Çargâh on Rast (G)" },
+      { "n": 7, "makam": "Zavil", "durak": "Rast (G)", "guclu": "Gerdaniye (G), Neva (D)", "yeden": "Geveşt (low F 5#)", "seyir": "Descending", "construction": "Nikriz + Mahur on G" },
+      { "n": 8, "makam": "Nikriz", "durak": "Rast (G)", "guclu": "Neva (D)", "yeden": "Irak (low F#)", "seyir": "Ascending / Ascending-descending", "construction": "Pent. Nikriz (G) + Tetr. Rast/Buselik (D)" },
+      { "n": 9, "makam": "Segâh", "durak": "Segâh (B1♭)", "guclu": "Neva (D)", "yeden": "Kürdi (A#)", "seyir": "Ascending", "construction": "Pent. Segâh + Tetr. Hicaz on Evç (F#)" },
+      { "n": 10, "makam": "Müstear", "durak": "Segâh (B1♭)", "guclu": "Neva (D)", "yeden": "Kürdi (A#)", "seyir": "Ascending", "construction": "Pent. Müstear + Tetr. Hicaz on F#" },
+      { "n": 11, "makam": "Segâh Maye", "durak": "Segâh (B1♭)", "guclu": "Neva (D)", "yeden": "Kürdi (A#)", "seyir": "Ascending", "construction": "Segâh scale + Uşşak" },
+      { "n": 12, "makam": "Hüzzam", "durak": "Segâh (B1♭)", "guclu": "Neva (D)", "yeden": "Kürdi (A#)", "seyir": "Ascending-descending", "construction": "Pent. Hüzzam + Hicaz Hümayun on D" },
+      { "n": 13, "makam": "Basit Suznâk", "durak": "Rast (G)", "guclu": "Neva (D)", "yeden": "Irak (F#)", "seyir": "Ascending-descending", "construction": "Pent. Rast (G) + Tetr. Hicaz (D)" },
+      { "n": 14, "makam": "Hicazkâr", "durak": "Rast (G)", "guclu": "Gerdaniye (G), Neva (D)", "yeden": "Irak (low F#)", "seyir": "Descending", "construction": "Descending Hicaz Zirgüle on G" },
+      { "n": 15, "makam": "Kürdili Hicazkâr", "durak": "Rast (G)", "guclu": "Gerdaniye (G)", "yeden": "Acem Aşiran (low F)", "seyir": "Descending", "construction": "Descending Kürdi on G" },
+      { "n": 16, "makam": "Buselik", "durak": "Dügâh (A)", "guclu": "Hüseyni (E)", "yeden": "Nim Zirgüle (G#)", "seyir": "Ascending / Ascending-descending", "construction": "Pent. Buselik (A) + Tetr. Kürdi/Hicaz (E)" },
+      { "n": 17, "makam": "Nihavent", "durak": "Rast (G)", "guclu": "Neva (D)", "yeden": "Irak (F#)", "seyir": "Ascending-descending", "construction": "Transposition of Buselik on G" },
+      { "n": 18, "makam": "Neveser", "durak": "Rast (G)", "guclu": "Neva (D)", "yeden": "Irak (F 4#)", "seyir": "Ascending / Ascending-descending", "construction": "Pent. Nikriz (G) + Tetr. Hicaz (D)" },
+      { "n": 19, "makam": "Şedd-i Araban", "durak": "Yegâh (low D)", "guclu": "Neva (D), Rast (G)", "yeden": "Kaba Nim Hicaz (C#)", "seyir": "Descending", "construction": "Transposition of Hicaz Zirgüle on Yegâh" },
+      { "n": 20, "makam": "Acem", "durak": "Dügâh (A)", "guclu": "Neva (D), Acem (F)", "yeden": "Rast (G)", "seyir": "Ascending-descending", "construction": "Pent. Çargâh on F + Beyati" },
+      { "n": 21, "makam": "Acem Aşiran", "durak": "Acem Aşiran (F)", "guclu": "Acem (F), Çargâh (C)", "yeden": "Hüseyni Aşiran (E)", "seyir": "Descending", "construction": "Transposition of Çargâh on low F" },
+      { "n": 22, "makam": "Ferahfeza", "durak": "Yegâh (low D)", "guclu": "Acem (F), Çargâh (C)", "yeden": "Kaba Nim Hicaz (C#)", "seyir": "Descending", "construction": "Acem + Acem Aşiran + Buselik on D" },
+      { "n": 23, "makam": "Uşşak", "durak": "Dügâh (A)", "guclu": "Neva (D)", "yeden": "Rast (G)", "seyir": "Ascending", "construction": "Tetr. Uşşak (A) + Pent. Buselik (D)" },
+      { "n": 24, "makam": "Beyati", "durak": "Dügâh (A)", "guclu": "Neva (D)", "yeden": "Rast (G)", "seyir": "Ascending-descending", "construction": "Tetr. Uşşak (A) + Pent. Buselik (D)" },
+      { "n": 25, "makam": "Beyati Araban", "durak": "Dügâh (A)", "guclu": "Muhayyer (high A)", "yeden": "Rast (G)", "seyir": "Descending", "construction": "Araban + Beyati" },
+      { "n": 26, "makam": "Karcığar", "durak": "Dügâh (A)", "guclu": "Neva (D)", "yeden": "Rast (G)", "seyir": "Ascending-descending", "construction": "Tetr. Uşşak (A) + Tetr. Hicaz (D)" },
+      { "n": 27, "makam": "Neva", "durak": "Dügâh (A)", "guclu": "Neva (D)", "yeden": "Rast (G)", "seyir": "Ascending-descending", "construction": "Tetr. Uşşak (A) + Pent. Rast (D)" },
+      { "n": 28, "makam": "Tahir", "durak": "Dügâh (A)", "guclu": "Muhayyer (high A)", "yeden": "Rast (G)", "seyir": "Descending", "construction": "Tetr. Uşşak on Muhayyer + Neva" },
+      { "n": 29, "makam": "Hüseyni", "durak": "Dügâh (A)", "guclu": "Hüseyni (E)", "yeden": "Rast (G)", "seyir": "Ascending-descending", "construction": "Pent. Hüseyni (A) + Tetr. Uşşak (E)" },
+      { "n": 30, "makam": "Muhayyer", "durak": "Dügâh (A)", "guclu": "Muhayyer (high A)", "yeden": "Rast (G)", "seyir": "Descending", "construction": "Pent. Hüseyni on Muhayyer + Uşşak" },
+      { "n": 31, "makam": "Hüseyni Aşiran", "durak": "Hüseyni Aşiran (E)", "guclu": "Hüseyni (E)", "yeden": "Rast (G)", "seyir": "Ascending-descending", "construction": "Hüseyni with cadence on low E" },
+      { "n": 32, "makam": "Dilkeş Haveryan", "durak": "Irak (low F#)", "guclu": "Hüseyni (E)", "yeden": "Acem Aşiran (F)", "seyir": "Descending", "construction": "Pent. Hüseyni (A) + Tetr. Segâh (F#)" },
+      { "n": 33, "makam": "Kürdi", "durak": "Dügâh (A)", "guclu": "Neva (D)", "yeden": "Rast (G)", "seyir": "Ascending-descending", "construction": "Tetr. Kürdi (A) + Pent. Buselik (D)" },
+      { "n": 34, "makam": "Muhayyer Sünbüle", "durak": "Dügâh (A)", "guclu": "Muhayyer (high A)", "yeden": "Rast (G)", "seyir": "Descending", "construction": "Hicaz on Çargâh + Kürdi on Dügâh" },
+      { "n": 35, "makam": "Gerdaniye", "durak": "Dügâh (A)", "guclu": "Gerdaniye (G), Neva (D)", "yeden": "Rast (G)", "seyir": "Descending", "construction": "Descending Rast (G) + Hüseyni (A)" },
+      { "n": 36, "makam": "Gülizar", "durak": "Dügâh (A)", "guclu": "Hüseyni (E)", "yeden": "Rast (G)", "seyir": "Descending", "construction": "Descending Hüseyni + Buselik (D) + Karcığar" },
+      { "n": 37, "makam": "Isfahan", "durak": "Dügâh (A)", "guclu": "Neva (D)", "yeden": "Rast (G)", "seyir": "Ascending-descending", "construction": "Uşşak (A) + Tetr. Rast on Dügâh" },
+      { "n": 38, "makam": "Nişaburek", "durak": "Dügâh (A)", "guclu": "Hüseyni (E)", "yeden": "Nim Zirgüle (G#)", "seyir": "Ascending-descending", "construction": "Pent. Rast on Dügâh + Pent. Buselik (E)" },
+      { "n": 39, "makam": "Yegâh", "durak": "Yegâh (low D)", "guclu": "Neva (D)", "yeden": "Kaba Nim Hicaz (C#)", "seyir": "Descending", "construction": "Tetr. Uşşak (A) + Pent. Rast (D)" },
+      { "n": 40, "makam": "Hicaz Family", "durak": "Dügâh (A)", "guclu": "Neva (D) / Hüseyni (E)", "yeden": "Rast (G) / G#", "seyir": "Ascending-descending", "construction": "Tetr. Hicaz + Rast/Buselik/Uşşak" },
+      { "n": 41, "makam": "Sultani Yegâh", "durak": "Yegâh (low D)", "guclu": "Neva (D), Dügâh (A)", "yeden": "Kaba Nim Hicaz (C#)", "seyir": "Descending", "construction": "Transposition of Buselik on Yegâh" },
+      { "n": 42, "makam": "Şehnaz", "durak": "Dügâh (A)", "guclu": "Muhayyer (high A)", "yeden": "Rast (G) / G#", "seyir": "Descending", "construction": "Hicaz Hümayun on Hüseyni (E)" },
+      { "n": 43, "makam": "Hisar", "durak": "Dügâh (A)", "guclu": "Hüseyni (E)", "yeden": "Rast (G)", "seyir": "Ascending-descending", "construction": "Zirgüleli Hicaz on E + Hüseyni" },
+      { "n": 44, "makam": "Hisar Buselik", "durak": "Dügâh (A)", "guclu": "Hüseyni (E)", "yeden": "Nim Zirgüle (G#)", "seyir": "Ascending-descending", "construction": "Pent. Buselik (A) + makam Hisar" },
+      { "n": 45, "makam": "Suzidil", "durak": "Hüseyni Aşiran (E)", "guclu": "Hüseyni (E)", "yeden": "Kaba Nim Hisar (D#)", "seyir": "Descending", "construction": "Zirgüleli Hicaz on E + Hicaz Hümayun" },
+      { "n": 46, "makam": "Kûçek", "durak": "Dügâh (A)", "guclu": "Çargâh (C), Hüseyni (E)", "yeden": "Rast (G)", "seyir": "Ascending / Ascending-descending", "construction": "Hüseyni (E) + Saba on Dügâh" },
+      { "n": 47, "makam": "Sipihr", "durak": "Dügâh (A)", "guclu": "Hüseyni (E), Çargâh (C)", "yeden": "Rast (G)", "seyir": "Descending", "construction": "Kûçek + Hisar" },
+      { "n": 48, "makam": "Evç", "durak": "Irak (low F#)", "guclu": "Evç (high F#), Dügâh (A)", "yeden": "Acem Aşiran (F)", "seyir": "Descending", "construction": "Tetr. Segâh (F#) + Uşşak (A)" },
+      { "n": 49, "makam": "Ferahnâk", "durak": "Irak (low F#)", "guclu": "Neva (D), Dügâh (A)", "yeden": "Acem Aşiran (F)", "seyir": "Descending", "construction": "Pent. Rast (D) + Tetr. Hicaz (C#) + Pent. Ferahnâk (B♭)" },
+      { "n": 50, "makam": "Evcara", "durak": "Irak (low F#)", "guclu": "Evç (F#)", "yeden": "Acem Aşiran (F)", "seyir": "Descending", "construction": "Descending Zirgüleli Hicaz on F#" },
+      { "n": 51, "makam": "Çargâh", "durak": "Kaba Çargâh (C)", "guclu": "Rast (G)", "yeden": "Kaba Buselik (B)", "seyir": "Ascending / Ascending-descending", "construction": "Pent. Çargâh (C) + Tetr. Çargâh (G)" },
+      { "n": 52, "makam": "Saba", "durak": "Dügâh (A)", "guclu": "Çargâh (C)", "yeden": "Rast (G)", "seyir": "Ascending", "construction": "Tetr. Saba (A) + Hicaz Zirgüle on C" },
+      { "n": 53, "makam": "Bestenigâr", "durak": "Irak (low F#)", "guclu": "Çargâh (C)", "yeden": "Acem Aşiran (F)", "seyir": "Ascending-descending", "construction": "Saba (A) + Tetr. Segâh (F#)" },
+      { "n": 54, "makam": "Şevkefza", "durak": "Acem Aşiran (F)", "guclu": "Gerdaniye (G), Çargâh (C)", "yeden": "Hüseyni Aşiran (E)", "seyir": "Descending", "construction": "Acem Aşiran + Nikriz (F) + Hicaz Zirgüle (C)" }
+    ]
+  },
+  "detailedExamples": {
+    "note": "Subset of makams with extra details (e.g. notes_used) as extracted from the source notes; expand over time.",
+    "entries": [
+      {
+        "makam": "Rast",
+        "tonic": "Rast (G)",
+        "dominant": "Neva (D)",
+        "leading_tone": "Irak (low F#)",
+        "behavior": "Ascending",
+        "accidentals": ["Segâh (B 1 koma flat)", "Evç (F#)"],
+        "construction": "Rast pentachord on G + Rast tetrachord on D",
+        "notes_used": [
+          { "tr": "Yegâh", "eu": "D (low)" },
+          { "tr": "Hüseyni Aşiran", "eu": "E (low)" },
+          { "tr": "Irak", "eu": "F# (low)" },
+          { "tr": "Rast", "eu": "G" },
+          { "tr": "Dügâh", "eu": "A" },
+          { "tr": "Segâh", "eu": "B 1♭" },
+          { "tr": "Çargâh", "eu": "C" },
+          { "tr": "Neva", "eu": "D" },
+          { "tr": "Hüseyni", "eu": "E" },
+          { "tr": "Evç", "eu": "F#" },
+          { "tr": "Gerdaniye", "eu": "G (high)" }
+        ],
+        "source_index": 31
+      },
+      {
+        "makam": "Rehavi",
+        "tonic": "Rast (G)",
+        "dominant": "Neva (D), Dügâh (A)",
+        "leading_tone": "Irak (low F#)",
+        "behavior": "Ascending-descending",
+        "accidentals": ["Segâh (B 1 koma flat)", "Evç (F#)", "Acem (F)"],
+        "construction": "Combination of Rast and Beyati scales",
+        "notes_used": [
+          { "tr": "Dügâh", "eu": "A" },
+          { "tr": "Segâh", "eu": "B 1♭" },
+          { "tr": "Çargâh", "eu": "C" },
+          { "tr": "Neva", "eu": "D" },
+          { "tr": "Hüseyni", "eu": "E" },
+          { "tr": "Acem", "eu": "F" },
+          { "tr": "Gerdaniye", "eu": "G" },
+          { "tr": "Muhayyer", "eu": "A (high)" }
+        ],
+        "source_index": 34
+      },
+      {
+        "makam": "Suzidilara",
+        "tonic": "Rast (G)",
+        "dominant": "Neva (D), Çargâh (C)",
+        "leading_tone": "Geveşt (low F 5#)",
+        "behavior": "Ascending",
+        "accidentals": [],
+        "construction": "Çargâh scale on Rast (G) + Çargâh scale on Çargâh (C)",
+        "notes_used": [
+          { "tr": "Rast", "eu": "G" },
+          { "tr": "Dügâh", "eu": "A" },
+          { "tr": "Buselik", "eu": "B" },
+          { "tr": "Çargâh", "eu": "C" },
+          { "tr": "Neva", "eu": "D" },
+          { "tr": "Hüseyni", "eu": "E" },
+          { "tr": "Mahur", "eu": "F 5#" },
+          { "tr": "Gerdaniye", "eu": "G" }
+        ],
+        "source_index": 43
+      },
+      {
+        "makam": "Nikriz",
+        "tonic": "Rast (G)",
+        "dominant": "Neva (D)",
+        "leading_tone": "Irak (low F#)",
+        "behavior": "Ascending or Ascending-descending",
+        "accidentals": ["Dik Kürdi (B 4 komas flat)", "Nim Hicaz (C#)"],
+        "construction": "Nikriz pentachord on G + Rast or Buselik tetrachord on D",
+        "notes_used": [
+          { "tr": "Rast", "eu": "G" },
+          { "tr": "Dügâh", "eu": "A" },
+          { "tr": "Dik Kürdi", "eu": "B 4♭" },
+          { "tr": "Nim Hicaz", "eu": "C#" },
+          { "tr": "Neva", "eu": "D" },
+          { "tr": "Hüseyni", "eu": "E" },
+          { "tr": "Evç", "eu": "F#" },
+          { "tr": "Gerdaniye", "eu": "G" }
+        ],
+        "source_index": 53
+      },
+      {
+        "makam": "Segâh",
+        "tonic": "Segâh (B 1 koma flat)",
+        "dominant": "Neva (D)",
+        "leading_tone": "Kürdi (A#)",
+        "behavior": "Ascending",
+        "accidentals": ["Segâh (B 1 koma flat)", "Dik Hisar (E 1 koma flat)", "Evç (F#)"],
+        "construction": "Segâh pentachord + Hicaz tetrachord on Evç (F#)",
+        "notes_used": [
+          { "tr": "Segâh", "eu": "B 1♭" },
+          { "tr": "Çargâh", "eu": "C" },
+          { "tr": "Neva", "eu": "D" },
+          { "tr": "Dik Hisar", "eu": "E 1♭" },
+          { "tr": "Evç", "eu": "F#" },
+          { "tr": "Gerdaniye", "eu": "G" },
+          { "tr": "Sünbüle", "eu": "Bb" },
+          { "tr": "Tiz Segâh", "eu": "B 1♭ (high)" }
+        ],
+        "source_index": 56
+      },
+      {
+        "makam": "Hüzzam",
+        "tonic": "Segâh (B 1 koma flat)",
+        "dominant": "Neva (D)",
+        "leading_tone": "Kürdi (A#)",
+        "behavior": "Ascending-descending",
+        "accidentals": ["Segâh (B 1 koma flat)", "Evç (F#)", "Hisar (E 4 komas flat)"],
+        "construction": "Hicaz Hümayun added to 3rd degree of Hüzzam pentachord on Neva",
+        "notes_used": [
+          { "tr": "Segâh", "eu": "B 1♭" },
+          { "tr": "Çargâh", "eu": "C" },
+          { "tr": "Neva", "eu": "D" },
+          { "tr": "Hisar", "eu": "E 4♭" },
+          { "tr": "Evç", "eu": "F#" },
+          { "tr": "Gerdaniye", "eu": "G" },
+          { "tr": "Muhayyer", "eu": "A" },
+          { "tr": "Sünbüle", "eu": "Bb" }
+        ],
+        "source_index": 67
+      },
+      {
+        "makam": "Uşşak",
+        "tonic": "Dügâh (A)",
+        "dominant": "Neva (D)",
+        "leading_tone": "Rast (G)",
+        "behavior": "Ascending",
+        "accidentals": ["Segâh (B 1 koma flat)"],
+        "construction": "Uşşak tetrachord on A + Buselik pentachord on Neva (D)",
+        "notes_used": [
+          { "tr": "Yegâh", "eu": "D" },
+          { "tr": "Hüseyni Aşiran", "eu": "E" },
+          { "tr": "Irak", "eu": "F#" },
+          { "tr": "Rast", "eu": "G" },
+          { "tr": "Dügâh", "eu": "A" },
+          { "tr": "Segâh", "eu": "B 1♭" },
+          { "tr": "Çargâh", "eu": "C" },
+          { "tr": "Neva", "eu": "D" },
+          { "tr": "Hüseyni", "eu": "E" },
+          { "tr": "Acem", "eu": "F" },
+          { "tr": "Gerdaniye", "eu": "G" },
+          { "tr": "Muhayyer", "eu": "A (high)" }
+        ],
+        "source_index": 106
+      },
+      {
+        "makam": "Saba",
+        "tonic": "Dügâh (A)",
+        "dominant": "Çargâh (C)",
+        "leading_tone": "Rast (G)",
+        "behavior": "Ascending",
+        "accidentals": ["Segâh (B 1 koma flat)", "Hicaz (D 4 komas flat)"],
+        "construction": "Saba tetrachord on A + Hicaz Zirgüle scale on Çargâh (C)",
+        "notes_used": [
+          { "tr": "Dügâh", "eu": "A" },
+          { "tr": "Segâh", "eu": "B 1♭" },
+          { "tr": "Çargâh", "eu": "C" },
+          { "tr": "Hicaz", "eu": "D 4♭" },
+          { "tr": "Dik Hisar", "eu": "E 1♭" },
+          { "tr": "Hüseyni", "eu": "E" },
+          { "tr": "Acem", "eu": "F" },
+          { "tr": "Gerdaniye", "eu": "G" }
+        ],
+        "source_index": 194
+      },
+      {
+        "makam": "Bestenigâr",
+        "tonic": "Irak (F#)",
+        "dominant": "Çargâh (C)",
+        "leading_tone": "Acem Aşiran (low F)",
+        "behavior": "Ascending-descending",
+        "accidentals": ["Segâh (B 1 koma flat)", "Hicaz (D 4 komas flat)"],
+        "construction": "Saba scale + Segâh tetrachord on Irak (F#)",
+        "notes_used": [
+          { "tr": "Irak", "eu": "F#" },
+          { "tr": "Rast", "eu": "G" },
+          { "tr": "Dügâh", "eu": "A" },
+          { "tr": "Segâh", "eu": "B 1♭" },
+          { "tr": "Çargâh", "eu": "C" },
+          { "tr": "Hicaz", "eu": "D 4♭" },
+          { "tr": "Hüseyni", "eu": "E" },
+          { "tr": "Acem", "eu": "F" }
+        ],
+        "source_index": 197
+      },
+      {
+        "makam": "Evcara",
+        "tonic": "Irak (F#)",
+        "dominant": "Evç (F#)",
+        "leading_tone": "Acem Aşiran (low F)",
+        "behavior": "Descending",
+        "accidentals": ["Segâh (B 1 koma flat)", "Evç (F#)", "Nim Hicaz (C#)", "Kürdi (A#)", "Acem (E#)"],
+        "construction": "Descending Zirgüleli Hicaz scale on Irak (F#)",
+        "notes_used": [
+          { "tr": "Irak", "eu": "F#" },
+          { "tr": "Rast", "eu": "G" },
+          { "tr": "Kürdi", "eu": "A#" },
+          { "tr": "Segâh", "eu": "B 1♭" },
+          { "tr": "Nim Hicaz", "eu": "C#" },
+          { "tr": "Neva", "eu": "D" },
+          { "tr": "Acem", "eu": "E#" },
+          { "tr": "Evç", "eu": "F#" }
+        ],
+        "source_index": 189
+      }
+    ]
+  }
+}
