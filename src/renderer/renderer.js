@@ -12395,7 +12395,9 @@ async function applyAbc2abcTransform(options) {
         const entry = getActiveFileEntry();
         const headerText = buildHeaderPrefix(entry ? entry.headerText : "", false, abcText).text;
         const transformed = transformTranspose(abcText, Number(options.transposeSemitones), { headerText });
-        const aligned = alignBarsInText(transformed);
+        const aligned = (latestSettingsSnapshot && latestSettingsSnapshot.autoAlignBarsAfterTransforms)
+          ? alignBarsInText(transformed)
+          : transformed;
         applyTransformedText(aligned);
         setStatus("OK");
         return;
@@ -17967,7 +17969,8 @@ function buildHeaderPrefix(entryHeader, includeCheckbars, tuneText) {
     if (fontLayerRaw) layers.push(fontLayerRaw);
   }
   const fileHeaderRaw = String(entryHeader || "");
-  if (fileHeaderRaw.trim()) layers.push(fileHeaderRaw.replace(/[\r\n]+$/, ""));
+  const fileHeaderClean = sanitizeFileHeaderForPrefix(fileHeaderRaw);
+  if (fileHeaderClean.trim()) layers.push(fileHeaderClean.replace(/[\r\n]+$/, ""));
   const deduped = dedupeHeaderLayers(layers, tuneHeaderKeys);
   let header = deduped.join("\n");
   if (includeCheckbars && isMeasureCheckEnabled()) {
@@ -17976,6 +17979,62 @@ function buildHeaderPrefix(entryHeader, includeCheckbars, tuneText) {
   if (!header.trim()) return { text: "", offset: 0 };
   const prefix = /[\r\n]$/.test(header) ? header : `${header}\n`;
   return { text: prefix, offset: prefix.length };
+}
+
+function sanitizeFileHeaderForPrefix(text) {
+  const raw = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  if (!raw.trim()) return "";
+  const lines = raw.split("\n");
+  const out = [];
+  let inTextBlock = false;
+
+  for (const line of lines) {
+    const trimmed = String(line || "").trim();
+    if (/^%%\s*begintext\b/i.test(trimmed)) {
+      inTextBlock = true;
+      continue;
+    }
+    if (inTextBlock) {
+      if (/^%%\s*endtext\b/i.test(trimmed)) inTextBlock = false;
+      continue;
+    }
+    if (!trimmed) {
+      out.push("");
+      continue;
+    }
+    // Keep only ABC-like header lines. Drop free-form prose to avoid repeating it before every tune.
+    if (/^%%/.test(trimmed)) {
+      const directive = trimmed
+        .replace(/^%%\s*/, "")
+        .split(/\s+/, 1)[0]
+        .toLowerCase();
+      // Book/layout/text directives from file headers should not be repeated per-tune in the interactive view.
+      const skip = new Set([
+        "begintext",
+        "endtext",
+        "text",
+        "center",
+        "vskip",
+        "textfont",
+        "titleformat",
+        "subtitleformat",
+        "header",
+        "footer",
+        "newpage",
+        "multicol",
+        "eps",
+        "leftmargin",
+        "rightmargin",
+      ]);
+      if (!skip.has(directive)) out.push(line);
+      continue;
+    }
+    if (/^%/.test(trimmed) || /^[A-Za-z]:/.test(trimmed)) {
+      out.push(line);
+      continue;
+    }
+  }
+  return out.join("\n").replace(/\s+$/, "");
 }
 
 function parseFraction(value) {
