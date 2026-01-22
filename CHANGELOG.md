@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Tools → Diagnostics: Intonation Explorer (MVP+) for analyzing pitch usage of the active tune and highlighting occurrences in the editor + score.
+
 
 
 ## [0.22.9] - 2026-01-22
