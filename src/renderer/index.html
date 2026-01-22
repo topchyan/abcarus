@@ -266,14 +266,64 @@
           <div id="abc-editor"></div>
         </div>
         <div class="split-divider" id="splitDivider" role="separator" aria-orientation="vertical" tabindex="0"></div>
-        <div class="render-pane">
-          <div id="out"></div>
-        </div>
-      </div>
-    </section>
-  </main>
+    <div class="render-pane">
+      <div id="out"></div>
+    </div>
+  </div>
+</section>
+</main>
 
-		  <footer class="taskbar">
+  <div id="intonationExplorerPanel" class="tool-panel hidden" role="dialog" aria-label="Intonation Explorer" aria-hidden="true">
+    <div class="tool-panel-card">
+      <div class="tool-panel-header">
+        <span class="tool-panel-title">Intonation Explorer</span>
+        <button id="intonationExplorerClose" type="button" class="tool-panel-close" aria-label="Close Explorer">×</button>
+      </div>
+      <div class="tool-panel-controls">
+        <label class="tool-panel-control">
+          <span>Tonal Base</span>
+          <div class="tool-panel-base-row">
+            <select id="intonationExplorerBaseMode" aria-label="Tonal base mode">
+              <option value="auto" selected>Auto</option>
+              <option value="manual">Manual</option>
+              <option value="fromK">From K:</option>
+            </select>
+            <input id="intonationExplorerBaseManual" type="text" placeholder="pc53=0" />
+          </div>
+        </label>
+        <label class="tool-panel-control">
+          <span>Sort</span>
+          <select id="intonationExplorerSort" aria-label="Sort mode">
+            <option value="count" selected>Count</option>
+            <option value="first">First appearance</option>
+          </select>
+        </label>
+        <label class="tool-panel-control tool-panel-control-inline">
+          <span>Options</span>
+          <label class="tool-panel-checkbox">
+            <input id="intonationExplorerSkipGrace" type="checkbox" checked />
+            <span>Ignore grace notes</span>
+          </label>
+        </label>
+        <button id="intonationExplorerRefresh" type="button">Refresh</button>
+      </div>
+      <div id="intonationExplorerStatus" class="tool-panel-status" aria-live="polite"></div>
+      <div class="tool-panel-table">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">pc53</th>
+              <th scope="col">ABC</th>
+              <th scope="col">Weight</th>
+            </tr>
+          </thead>
+          <tbody id="intonationExplorerTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <footer class="taskbar">
 		    <div class="taskbar-left">
 		      <div id="status">Ready</div>
 		      <div id="hoverStatus" class="hover-status" aria-live="polite"></div>

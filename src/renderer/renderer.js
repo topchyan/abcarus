@@ -21,7 +21,14 @@ import {
 } from "../../third_party/codemirror/cm.js";
 import { ABC2SVG_DECORATIONS } from "./abc_decorations_abc2svg.js";
 import { initSettings } from "./settings.js";
-import { transformTranspose } from "./transpose.mjs";
+import {
+  transformTranspose,
+  parseNoteTokenAt53,
+  parseAccidentalPrefix53,
+  computeOctave,
+  baseId53ForNaturalLetter,
+  NOTE_BASES,
+} from "./transpose.mjs";
 import { normalizeMeasuresLineBreaks, transformMeasuresPerLine } from "./measures.mjs";
 import {
   buildDefaultDrumVelocityMap,
@@ -121,6 +128,15 @@ const $scanErrorTunes = document.getElementById("scanErrorTunes");
 const $fileNameMeta = document.getElementById("fileNameMeta");
 const $sidebarSplit = document.getElementById("sidebarSplit");
 const $toast = document.getElementById("toast");
+const $intonationExplorerPanel = document.getElementById("intonationExplorerPanel");
+const $intonationExplorerClose = document.getElementById("intonationExplorerClose");
+const $intonationExplorerBaseMode = document.getElementById("intonationExplorerBaseMode");
+const $intonationExplorerBaseManual = document.getElementById("intonationExplorerBaseManual");
+const $intonationExplorerSort = document.getElementById("intonationExplorerSort");
+const $intonationExplorerSkipGrace = document.getElementById("intonationExplorerSkipGrace");
+const $intonationExplorerRefresh = document.getElementById("intonationExplorerRefresh");
+const $intonationExplorerStatus = document.getElementById("intonationExplorerStatus");
+const $intonationExplorerTableBody = document.getElementById("intonationExplorerTableBody");
 const $errorsIndicator = document.getElementById("errorsIndicator");
 const $errorsFocusMessage = document.getElementById("errorsFocusMessage");
 const $errorsPopover = document.getElementById("errorsPopover");
@@ -2108,11 +2124,16 @@ function hasDiskConflictPath(filePath) {
 
 async function refreshWorkingCopySnapshot() {
   if (!window.api || typeof window.api.getWorkingCopySnapshot !== "function") return null;
-  const res = await window.api.getWorkingCopySnapshot();
-  if (!res || !res.ok || !res.snapshot) return null;
-  workingCopySnapshot = res.snapshot;
-  renderUnifiedStatus();
-  return workingCopySnapshot;
+  try {
+    const res = await window.api.getWorkingCopySnapshot();
+    if (!res || !res.ok || !res.snapshot) return null;
+    workingCopySnapshot = res.snapshot;
+    renderUnifiedStatus();
+    return workingCopySnapshot;
+  } catch (err) {
+    logErr(err);
+    return null;
+  }
 }
 
 async function confirmReloadFromDisk(filePath) {
@@ -3462,6 +3483,660 @@ function setMeasureErrorRanges(ranges) {
   editorView.dispatch({
     selection: editorView.state.selection,
     scrollIntoView: false,
+  });
+}
+
+let intonationHighlightRanges = [];
+let intonationHighlightVersion = 0;
+function buildIntonationHighlightDecorations(state) {
+  if (!state || !state.doc) return Decoration.none;
+  const builder = new RangeSetBuilder();
+  const length = state.doc.length;
+  for (const range of intonationHighlightRanges || []) {
+    if (!range) continue;
+    const start = Math.max(0, Math.min(length, Number(range.start) || 0));
+    const end = Math.max(start, Math.min(length, Number(range.end) || start));
+    if (end <= start) continue;
+    builder.add(start, end, Decoration.mark({ class: "cm-intonation-highlight" }));
+  }
+  return builder.finish();
+}
+
+const intonationHighlightPlugin = ViewPlugin.fromClass(class {
+  constructor(view) {
+    this.version = intonationHighlightVersion;
+    this.decorations = buildIntonationHighlightDecorations(view.state);
+  }
+  update(update) {
+    if (update.docChanged || this.version !== intonationHighlightVersion) {
+      this.version = intonationHighlightVersion;
+      this.decorations = buildIntonationHighlightDecorations(update.state);
+    }
+  }
+}, {
+  decorations: (v) => v.decorations,
+});
+
+function setIntonationHighlightRanges(ranges) {
+  intonationHighlightRanges = Array.isArray(ranges) ? ranges : [];
+  intonationHighlightVersion += 1;
+  if (!editorView) return;
+  editorView.dispatch({
+    selection: editorView.state.selection,
+    scrollIntoView: false,
+  });
+}
+
+const DEFAULT_INT_BASE = "pc53=0";
+let intonationExplorerVisible = false;
+let intonationExplorerRows = [];
+let intonationExplorerActiveStep = null;
+let intonationExplorerBaseStep = 0;
+let intonationExplorerBaseLabel = "pc53=0";
+let intonationExplorerBaseMode = "auto";
+let intonationExplorerSortMode = "count";
+let intonationExplorerSkipGraceNotes = true;
+
+let lastSvgIntonationBarEls = [];
+let lastSvgIntonationNoteEls = [];
+function clearSvgIntonationBarHighlight() {
+  if (!lastSvgIntonationBarEls || !lastSvgIntonationBarEls.length) return;
+  for (const el of lastSvgIntonationBarEls) {
+    try { el.classList.remove("svg-intonation-bar"); } catch {}
+  }
+  lastSvgIntonationBarEls = [];
+}
+
+function clearSvgIntonationNoteHighlight() {
+  if (!lastSvgIntonationNoteEls || !lastSvgIntonationNoteEls.length) return;
+  for (const el of lastSvgIntonationNoteEls) {
+    try { el.classList.remove("svg-intonation-note"); } catch {}
+  }
+  lastSvgIntonationNoteEls = [];
+}
+
+function modNumber(value, modulus) {
+  if (!Number.isFinite(modulus) || modulus === 0) return 0;
+  let num = Number(value) || 0;
+  const mod = Number(modulus) || 1;
+  const raw = num % mod;
+  return raw < 0 ? raw + mod : raw;
+}
+
+function mod53(value) {
+  return modNumber(value, 53);
+}
+
+function formatAeuLabel(step) {
+  return String(mod53(step));
+}
+
+function pickDominantSpelling(spellings) {
+  const entries = spellings && typeof spellings.entries === "function" ? Array.from(spellings.entries()) : [];
+  if (!entries.length) return "";
+  entries.sort((a, b) => {
+    const ac = Number(a[1]) || 0;
+    const bc = Number(b[1]) || 0;
+    if (bc !== ac) return bc - ac;
+    const aKey = String(a[0] || "");
+    const bKey = String(b[0] || "");
+    if (aKey.length !== bKey.length) return aKey.length - bKey.length;
+    return aKey.localeCompare(bKey);
+  });
+  return String(entries[0][0] || "");
+}
+
+function resolveTonalBaseInput(rawValue) {
+  const raw = String(rawValue || "").trim();
+  if (!raw) {
+    return { ok: true, base: 0, label: "pc53=0" };
+  }
+  const lower = raw.toLowerCase();
+  const pcMatch = lower.match(/^pc53=(\d{1,2})$/);
+  if (pcMatch) {
+    const num = Number(pcMatch[1]);
+    if (Number.isFinite(num) && num >= 0 && num < 53) {
+      return { ok: true, base: num, label: `pc53=${num}` };
+    }
+    return { ok: false, error: `Tonal base pc53=${pcMatch[1]} must be 0–52.` };
+  }
+  const numMatch = lower.match(/^(\d{1,2})$/);
+  if (numMatch) {
+    const num = Number(numMatch[1]);
+    if (Number.isFinite(num) && num >= 0 && num < 53) {
+      return { ok: true, base: num, label: `pc53=${num}` };
+    }
+    return { ok: false, error: `Tonal base ${numMatch[1]} must be 0–52.` };
+  }
+  const letterMatch = raw.match(/^([A-Ga-g])([#b])?$/);
+  if (letterMatch) {
+    const letter = letterMatch[1].toUpperCase();
+    const accidental = letterMatch[2] || "";
+    const basePc = (NOTE_BASES[letter] != null ? NOTE_BASES[letter] : 0)
+      + (accidental === "#" ? 1 : accidental === "b" ? -1 : 0);
+    const normalizedPc = modNumber(basePc, 12);
+    const approx = Math.round((normalizedPc * 53) / 12);
+    return { ok: true, base: mod53(approx), label: `${letter}${accidental}` };
+  }
+  return { ok: false, error: `Unable to parse tonal base (“${raw}”).` };
+}
+
+function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
+  if (!snapshot || !snapshot.text) return { tune: null, entries: [], error: "Unable to read working copy." };
+  const tune = resolveTuneEntryFromSnapshot(snapshot, {
+    tuneUid: activeTuneUid,
+    tuneIndex: activeTuneIndex,
+    startOffset: activeTuneMeta && activeTuneMeta.startOffset,
+  });
+  if (!tune) return { tune: null, entries: [], error: "No active tune snapshot available." };
+  const fullText = String(snapshot.text || "");
+  const body = fullText.slice(tune.start, tune.end);
+
+  // Avoid counting field headers / metadata as notes:
+  // scan only after the first K: line (if present), and skip free-text blocks.
+  let scanStart = 0;
+  try {
+    const re = /(?:^|\n)K:[^\n]*\n?/i;
+    const m = re.exec(body);
+    if (m) scanStart = Math.max(0, Math.min(body.length, m.index + m[0].length));
+  } catch {}
+
+  const seen = new Map();
+  let idx = scanStart;
+  let inTextBlock = false;
+  let graceDepth = 0;
+  while (idx < body.length) {
+    // Skip %%begintext … %%endtext blocks (often contain prose with A-G letters).
+    if (!inTextBlock) {
+      const lineStart = idx === 0 || body[idx - 1] === "\n";
+      if (lineStart && body.startsWith("%%begintext", idx)) {
+        inTextBlock = true;
+        idx += "%%begintext".length;
+        continue;
+      }
+    } else {
+      const lineStart = idx === 0 || body[idx - 1] === "\n";
+      if (lineStart && body.startsWith("%%endtext", idx)) {
+        inTextBlock = false;
+        idx += "%%endtext".length;
+        continue;
+      }
+      idx += 1;
+      continue;
+    }
+
+    // Skip quoted chord symbols / annotations: "Am" "G7" etc.
+    if (body[idx] === "\"") {
+      const next = body.indexOf("\"", idx + 1);
+      if (next >= 0) {
+        idx = next + 1;
+        continue;
+      }
+    }
+
+    if (skipGraceNotes) {
+      const ch = body[idx];
+      if (ch === "{") {
+        graceDepth += 1;
+        idx += 1;
+        continue;
+      }
+      if (ch === "}") {
+        graceDepth = Math.max(0, graceDepth - 1);
+        idx += 1;
+        continue;
+      }
+      if (graceDepth > 0) {
+        idx += 1;
+        continue;
+      }
+    }
+
+    const note = parseNoteTokenAt53(body, idx);
+    if (!note) {
+      idx += 1;
+      continue;
+    }
+    const letter = note.letter ? note.letter.toUpperCase() : "";
+    if (!letter) {
+      idx = note.end;
+      continue;
+    }
+    const letterPc = NOTE_BASES[letter] != null ? NOTE_BASES[letter] : 0;
+    const baseId = baseId53ForNaturalLetter(letter);
+    const accidental = parseAccidentalPrefix53(note.accPrefix, letterPc);
+    const micro = Number.isFinite(accidental.micro) ? accidental.micro : 0;
+    const octave = computeOctave(note.letter, note.octaveMarks);
+    const abs53 = octave * 53 + baseId + micro;
+    const step = mod53(abs53);
+    const entry = seen.get(step) || {
+      step,
+      count: 0,
+      ranges: [],
+      firstStart: null,
+      spellings: new Map(),
+    };
+    entry.count += 1;
+    if (entry.firstStart == null || note.start < entry.firstStart) entry.firstStart = note.start;
+    try {
+      const spelling = `${String(note.accPrefix || "")}${String(note.letter || "").toUpperCase()}`;
+      if (spelling) entry.spellings.set(spelling, (Number(entry.spellings.get(spelling)) || 0) + 1);
+    } catch {}
+    entry.ranges.push({
+      // NOTE: offsets are relative to the active tune text in the editor (not the full file).
+      start: note.start,
+      end: note.end,
+    });
+    seen.set(step, entry);
+    idx = Math.max(idx + 1, note.end);
+  }
+  const entries = Array.from(seen.values());
+  return { tune, entries, error: entries.length ? null : "No musical notes found in the tune." };
+}
+
+function buildIntonationRowsFromEntries(entries, baseStep, { sortMode = "count" } = {}) {
+  const list = Array.isArray(entries) ? entries : [];
+  const rows = list.map((entry) => ({
+    step: entry.step,
+    normalizedStep: mod53(entry.step - baseStep),
+    abcSpelling: pickDominantSpelling(entry.spellings),
+    count: entry.count,
+    ranges: entry.ranges,
+    firstStart: entry.firstStart,
+  }));
+  rows.sort((a, b) => {
+    if (sortMode === "first") {
+      const aFirst = Number.isFinite(Number(a.firstStart)) ? Number(a.firstStart) : Number.POSITIVE_INFINITY;
+      const bFirst = Number.isFinite(Number(b.firstStart)) ? Number(b.firstStart) : Number.POSITIVE_INFINITY;
+      if (aFirst !== bFirst) return aFirst - bFirst;
+      return a.step - b.step;
+    }
+    if (b.count !== a.count) return b.count - a.count;
+    return a.step - b.step;
+  });
+  return rows;
+}
+
+function pickAutoBaseStep(entries) {
+  const list = Array.isArray(entries) ? entries : [];
+  if (!list.length) return 0;
+  const best = list.reduce((acc, entry) => {
+    if (!acc) return entry;
+    if ((entry.count || 0) > (acc.count || 0)) return entry;
+    if ((entry.count || 0) === (acc.count || 0) && entry.step < acc.step) return entry;
+    return acc;
+  }, null);
+  return best ? mod53(best.step) : 0;
+}
+
+function parseTonalBaseFromK(tuneText) {
+  const text = String(tuneText || "");
+  const match = text.match(/(?:^|\n)K:\s*([^\r\n]+)/i);
+  if (!match) return { ok: false, error: "No K: line found in the active tune." };
+  const value = String(match[1] || "").trim();
+  if (!value) return { ok: false, error: "Empty K: line in the active tune." };
+  const token = value.split(/\s+/)[0] || value;
+  const keyMatch = token.match(/^([A-Ga-g])([#b])?/);
+  if (!keyMatch) return { ok: false, error: `Unable to parse K: (“${token}”).` };
+  const letter = keyMatch[1].toUpperCase();
+  const acc = keyMatch[2] || "";
+  return resolveTonalBaseInput(`${letter}${acc}`);
+}
+
+function updateIntonationBaseUi() {
+  const mode = ($intonationExplorerBaseMode && $intonationExplorerBaseMode.value) || "auto";
+  intonationExplorerBaseMode = mode;
+  if ($intonationExplorerBaseManual) {
+    const manual = mode === "manual";
+    $intonationExplorerBaseManual.disabled = !manual;
+    $intonationExplorerBaseManual.setAttribute("aria-disabled", manual ? "false" : "true");
+  }
+}
+
+function highlightSvgIntonationBarsAtEditorOffsets(offsets) {
+  if (!$out || !$renderPane) return false;
+  if (!editorView) return false;
+  const list = Array.isArray(offsets) ? offsets.filter((n) => Number.isFinite(n)) : [];
+  if (!list.length) {
+    clearSvgIntonationBarHighlight();
+    return false;
+  }
+  const renderOffset = (lastRenderPayload && Number.isFinite(lastRenderPayload.offset))
+    ? lastRenderPayload.offset
+    : 0;
+  const editorText = editorView.state.doc.toString();
+  const measures = new Map();
+  for (const offset of list) {
+    const measure = findMeasureRangeAt(editorText, offset);
+    if (!measure) continue;
+    const key = `${measure.start}:${measure.end}`;
+    if (!measures.has(key)) measures.set(key, measure);
+  }
+  const uniqMeasures = Array.from(measures.values());
+  const barEls = uniqMeasures.length ? Array.from($out.querySelectorAll(".bar-hl")) : [];
+  if (!uniqMeasures.length || !barEls.length) {
+    clearSvgIntonationBarHighlight();
+    return false;
+  }
+  const hits = new Set();
+  for (const measure of uniqMeasures) {
+    const start = measure.start + renderOffset;
+    const end = measure.end + renderOffset;
+    for (const el of barEls) {
+      const s = Number(el.dataset && el.dataset.start);
+      const e = Number(el.dataset && el.dataset.end);
+      if (!Number.isFinite(s)) continue;
+      const stop = Number.isFinite(e) ? e : s + 1;
+      if (s < end && stop > start) hits.add(el);
+    }
+  }
+  clearSvgIntonationBarHighlight();
+  lastSvgIntonationBarEls = Array.from(hits);
+  for (const el of lastSvgIntonationBarEls) {
+    try { el.classList.add("svg-intonation-bar"); } catch {}
+  }
+  return lastSvgIntonationBarEls.length > 0;
+}
+
+function highlightSvgIntonationNotesAtEditorOffsets(offsets) {
+  if (!$out || !$renderPane) return false;
+  if (!Number.isFinite(lastRenderIdx)) {
+    // Rendering may not be ready yet; avoid highlighting stale DOM.
+  }
+  const list = Array.isArray(offsets) ? offsets.filter((n) => Number.isFinite(n)) : [];
+  clearSvgIntonationNoteHighlight();
+  if (!list.length) return false;
+
+  const renderOffset = (lastRenderPayload && Number.isFinite(lastRenderPayload.offset))
+    ? lastRenderPayload.offset
+    : 0;
+  const hits = new Set();
+  const maxHits = 800; // keep UI responsive for very dense tunes
+  const maxBack = 120;
+
+  for (const editorOffset of list) {
+    if (hits.size >= maxHits) break;
+    const renderIdx = Number(editorOffset) + renderOffset;
+    if (!Number.isFinite(renderIdx)) continue;
+    let els = $out.querySelectorAll("._" + renderIdx + "_");
+    if ((!els || !els.length) && Number.isFinite(renderIdx)) {
+      for (let d = 1; d <= maxBack; d += 1) {
+        const probe = renderIdx - d;
+        if (probe < 0) break;
+        els = $out.querySelectorAll("._" + probe + "_");
+        if (els && els.length) break;
+      }
+    }
+    if (!els || !els.length) continue;
+    for (const el of Array.from(els)) {
+      if (hits.size >= maxHits) break;
+      if (!el) continue;
+      // Prefer note overlay elements for highlighting (more precise than bar-wide regions).
+      if (el.classList && el.classList.contains("note-hl")) {
+        hits.add(el);
+        continue;
+      }
+      const noteEls = el.querySelectorAll ? el.querySelectorAll(".note-hl") : [];
+      if (noteEls && noteEls.length) {
+        for (const n of Array.from(noteEls)) {
+          if (hits.size >= maxHits) break;
+          hits.add(n);
+        }
+      }
+    }
+  }
+
+  lastSvgIntonationNoteEls = Array.from(hits);
+  for (const el of lastSvgIntonationNoteEls) {
+    try { el.classList.add("svg-intonation-note"); } catch {}
+  }
+  return lastSvgIntonationNoteEls.length > 0;
+}
+
+function renderIntonationExplorerRows(rows) {
+  if (!$intonationExplorerTableBody) return;
+  $intonationExplorerTableBody.innerHTML = "";
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 3;
+    td.textContent = "No pitch classes detected.";
+    td.style.fontStyle = "italic";
+    tr.appendChild(td);
+    $intonationExplorerTableBody.appendChild(tr);
+    return;
+  }
+  for (const row of list) {
+    const tr = document.createElement("tr");
+    tr.tabIndex = 0;
+    tr.dataset.step = String(row.step);
+    tr.title = `abs pc53=${mod53(row.step)}`;
+    if (intonationExplorerActiveStep != null && String(row.step) === String(intonationExplorerActiveStep)) {
+      tr.classList.add("active");
+    }
+    const pc = document.createElement("td");
+    pc.textContent = formatAeuLabel(row.normalizedStep);
+    const abc = document.createElement("td");
+    abc.textContent = row.abcSpelling || "";
+    const weight = document.createElement("td");
+    weight.textContent = String(row.count || 0);
+    tr.append(pc, abc, weight);
+    tr.addEventListener("click", () => {
+      activateIntonationExplorerRow(row.step);
+    });
+    tr.addEventListener("keydown", (event) => {
+      if (!event || (event.key !== "Enter" && event.key !== " ")) return;
+      event.preventDefault();
+      activateIntonationExplorerRow(row.step);
+    });
+    $intonationExplorerTableBody.appendChild(tr);
+  }
+}
+
+function setIntonationExplorerStatus(message, { error } = {}) {
+  if (!$intonationExplorerStatus) return;
+  $intonationExplorerStatus.textContent = String(message || "");
+  $intonationExplorerStatus.classList.toggle("error", Boolean(error));
+}
+
+function highlightScoreFromRange(range) {
+  if (!range || !Number.isFinite(range.start)) return;
+  if (lastSvgIntonationNoteEls && lastSvgIntonationNoteEls.length) {
+    maybeScrollRenderToNote(lastSvgIntonationNoteEls[0]);
+    return;
+  }
+  if (lastSvgIntonationBarEls && lastSvgIntonationBarEls.length) maybeScrollRenderToNote(lastSvgIntonationBarEls[0]);
+}
+
+function activateIntonationExplorerRow(step) {
+  const target = (intonationExplorerRows || []).find((r) => String(r.step) === String(step));
+  if (!target) return;
+  intonationExplorerActiveStep = target.step;
+  renderIntonationExplorerRows(intonationExplorerRows);
+  setIntonationHighlightRanges(target.ranges);
+  const offsets = (target.ranges || []).map((r) => r && r.start);
+  const noteOk = highlightSvgIntonationNotesAtEditorOffsets(offsets);
+  if (!noteOk) highlightSvgIntonationBarsAtEditorOffsets(offsets);
+  highlightScoreFromRange(target.ranges && target.ranges[0]);
+  const label = target.abcSpelling ? `${target.abcSpelling} / pc53=${formatAeuLabel(target.normalizedStep)}` : `pc53=${formatAeuLabel(target.normalizedStep)}`;
+  setIntonationExplorerStatus(`Highlighting ${label} (${target.count} hits)`);
+}
+
+async function refreshIntonationExplorer() {
+  if (!intonationExplorerVisible) return;
+  if (rawMode) {
+    setIntonationExplorerStatus("Intonation Explorer is not available in Raw mode.", { error: true });
+    return;
+  }
+  setIntonationExplorerStatus("Refreshing…");
+  try {
+    const snapshot = await refreshWorkingCopySnapshot();
+    if (!snapshot || snapshot.text == null) {
+      intonationExplorerRows = [];
+      intonationExplorerActiveStep = null;
+    renderIntonationExplorerRows([]);
+    setIntonationHighlightRanges([]);
+    clearSvgIntonationBarHighlight();
+    clearSvgIntonationNoteHighlight();
+    setIntonationExplorerStatus("Unable to load working copy snapshot.", { error: true });
+    return;
+  }
+    const scanned = scanIntonationEntries(snapshot, { skipGraceNotes: intonationExplorerSkipGraceNotes });
+  if (scanned.error) {
+      intonationExplorerRows = [];
+      intonationExplorerActiveStep = null;
+    renderIntonationExplorerRows([]);
+    setIntonationHighlightRanges([]);
+    clearSvgIntonationBarHighlight();
+    clearSvgIntonationNoteHighlight();
+    setIntonationExplorerStatus(scanned.error, { error: true });
+    return;
+  }
+    updateIntonationBaseUi();
+    const mode = intonationExplorerBaseMode || "auto";
+    let base = 0;
+    let label = "pc53=0";
+    if (mode === "manual") {
+      const rawManual = ($intonationExplorerBaseManual && $intonationExplorerBaseManual.value) || DEFAULT_INT_BASE;
+      const resolved = resolveTonalBaseInput(rawManual);
+      if (!resolved.ok) {
+        setIntonationExplorerStatus(resolved.error, { error: true });
+        return;
+      }
+      base = resolved.base;
+      label = resolved.label;
+    } else if (mode === "fromK") {
+      const fullText = String(snapshot.text || "");
+      const tuneText = scanned.tune ? fullText.slice(scanned.tune.start, scanned.tune.end) : "";
+      const resolved = parseTonalBaseFromK(tuneText);
+      if (!resolved.ok) {
+        setIntonationExplorerStatus(resolved.error, { error: true });
+        return;
+      }
+      base = resolved.base;
+      label = `K:${resolved.label}`;
+    } else {
+      base = pickAutoBaseStep(scanned.entries);
+      label = `Auto (${formatAeuLabel(base)})`;
+    }
+    intonationExplorerBaseStep = base;
+    intonationExplorerBaseLabel = label;
+    const rows = buildIntonationRowsFromEntries(scanned.entries, base, { sortMode: intonationExplorerSortMode });
+    intonationExplorerRows = rows;
+    intonationExplorerActiveStep = null;
+    renderIntonationExplorerRows(rows);
+    setIntonationHighlightRanges([]);
+    clearSvgIntonationBarHighlight();
+    clearSvgIntonationNoteHighlight();
+    const graceLabel = intonationExplorerSkipGraceNotes ? "grace off" : "grace on";
+    const sortLabel = intonationExplorerSortMode === "first" ? "sort:first" : "sort:count";
+    setIntonationExplorerStatus(`Base ${intonationExplorerBaseLabel} (${rows.length} classes; ${sortLabel}; ${graceLabel})`);
+  } catch (err) {
+    const msg = (err && err.message) ? String(err.message) : String(err || "");
+    setIntonationExplorerStatus(msg ? `Unable to refresh the explorer: ${msg}` : "Unable to refresh the explorer.", { error: true });
+    logErr(err);
+  }
+}
+
+function showIntonationExplorerPanel() {
+  if (!$intonationExplorerPanel) return;
+  enableDraggableToolPanel($intonationExplorerPanel);
+  intonationExplorerVisible = true;
+  $intonationExplorerPanel.classList.remove("hidden");
+  $intonationExplorerPanel.setAttribute("aria-hidden", "false");
+  if ($intonationExplorerBaseMode) $intonationExplorerBaseMode.value = "auto";
+  if ($intonationExplorerBaseManual && !$intonationExplorerBaseManual.value) $intonationExplorerBaseManual.value = DEFAULT_INT_BASE;
+  if ($intonationExplorerSort) $intonationExplorerSort.value = "count";
+  if ($intonationExplorerSkipGrace) $intonationExplorerSkipGrace.checked = true;
+  intonationExplorerSortMode = "count";
+  intonationExplorerSkipGraceNotes = true;
+  updateIntonationBaseUi();
+  refreshIntonationExplorer().catch(() => {});
+}
+
+function hideIntonationExplorerPanel() {
+  if (!$intonationExplorerPanel) return;
+  intonationExplorerVisible = false;
+  $intonationExplorerPanel.classList.add("hidden");
+  $intonationExplorerPanel.setAttribute("aria-hidden", "true");
+  setIntonationExplorerStatus("");
+  setIntonationHighlightRanges([]);
+  clearSvgIntonationBarHighlight();
+  clearSvgIntonationNoteHighlight();
+}
+
+function enableDraggableToolPanel(panelEl) {
+  if (!panelEl || panelEl.__abcarusDraggableToolPanel) return;
+  const handle = panelEl.querySelector(".tool-panel-header");
+  if (!handle) return;
+  panelEl.__abcarusDraggableToolPanel = true;
+
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+  let startLeft = 0;
+  let startTop = 0;
+  let rafPending = false;
+  let nextLeft = 0;
+  let nextTop = 0;
+
+  const applyPosition = () => {
+    rafPending = false;
+    const rect = panelEl.getBoundingClientRect();
+    const maxLeft = Math.max(0, window.innerWidth - rect.width);
+    const maxTop = Math.max(0, window.innerHeight - rect.height);
+    const left = Math.max(0, Math.min(maxLeft, nextLeft));
+    const top = Math.max(0, Math.min(maxTop, nextTop));
+    panelEl.style.left = `${left}px`;
+    panelEl.style.top = `${top}px`;
+    panelEl.style.right = "auto";
+    panelEl.style.bottom = "auto";
+  };
+
+  const onPointerMove = (ev) => {
+    if (!dragging) return;
+    nextLeft = startLeft + (ev.clientX - startX);
+    nextTop = startTop + (ev.clientY - startY);
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(applyPosition);
+  };
+
+  const stopDrag = () => {
+    if (!dragging) return;
+    dragging = false;
+    try {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", stopDrag);
+      window.removeEventListener("pointercancel", stopDrag);
+    } catch {}
+  };
+
+  handle.addEventListener("pointerdown", (ev) => {
+    if (!ev || ev.button !== 0) return;
+    const tag = ev.target && ev.target.tagName ? String(ev.target.tagName).toLowerCase() : "";
+    if (tag === "button" || tag === "input" || tag === "select" || tag === "textarea") return;
+    if (ev.target && ev.target.closest && ev.target.closest("button,input,select,textarea")) return;
+
+    const rect = panelEl.getBoundingClientRect();
+    dragging = true;
+    startX = ev.clientX;
+    startY = ev.clientY;
+    startLeft = Number.isFinite(rect.left) ? rect.left : 0;
+    startTop = Number.isFinite(rect.top) ? rect.top : 0;
+    nextLeft = startLeft;
+    nextTop = startTop;
+    panelEl.style.left = `${startLeft}px`;
+    panelEl.style.top = `${startTop}px`;
+    panelEl.style.right = "auto";
+    panelEl.style.bottom = "auto";
+    try {
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", stopDrag);
+      window.addEventListener("pointercancel", stopDrag);
+    } catch {}
+    ev.preventDefault();
   });
 }
 
@@ -5721,6 +6396,7 @@ function initEditor() {
         measureErrorPlugin,
         errorActivationHighlightPlugin,
         practiceBarHighlightPlugin,
+        intonationHighlightPlugin,
       ]),
       abcCompletionCompartment.of([
         autocompletion({ override: [buildAbcCompletionSource()], activateOnTyping: false }),
@@ -6350,17 +7026,6 @@ async function selectTune(tuneId, options = {}) {
 
   if (!selected || !fileMeta) return { ok: false, error: "Tune not found." };
 
-  if (fileMeta.path && hasDiskConflictPath(fileMeta.path) && isWorkingCopyOpenForFile(fileMeta.path)) {
-    const shouldReload = await confirmReloadFromDisk(fileMeta.path);
-    if (shouldReload) {
-      const reloadRes = await discardAndReloadWorkingCopyFromDisk(fileMeta.path, { restoreTuneId: null });
-      if (reloadRes && reloadRes.ok) {
-        return selectTune(tuneId, { ...options, skipConfirm: true, _reparsed: true });
-      }
-      return { ok: false, error: (reloadRes && reloadRes.error) ? reloadRes.error : "Unable to reload from disk." };
-    }
-  }
-
   try {
     if (window.api && typeof window.api.openWorkingCopy === "function" && fileMeta.path) {
       if (!workingCopySnapshot || !workingCopySnapshot.path || !pathsEqual(workingCopySnapshot.path, fileMeta.path)) {
@@ -6395,18 +7060,30 @@ async function selectTune(tuneId, options = {}) {
     }
 
     if (!workingCopySlice) {
-      if (options._reloaded) {
-        return { ok: false, error: "Unable to load tune from working copy after reload." };
+      // When another instance or external tooling modifies the file, library metadata (tuneUid/index/offsets)
+      // can drift from the current working-copy snapshot. Prefer refreshing library state from the snapshot
+      // over prompting "Reload from disk?" (which is noisy and often doesn't resolve metadata drift).
+      if (!options._syncedFromWorkingCopy && workingCopySnapshot && workingCopySnapshot.path && workingCopySnapshot.text) {
+        try {
+          const syncedFile = syncLibraryFileFromWorkingCopySnapshot(fileMeta.path, workingCopySnapshot);
+          if (syncedFile && Array.isArray(syncedFile.tunes)) {
+            const xNumber = selected && selected.xNumber ? String(selected.xNumber) : "";
+            const idx = Number.isFinite(Number(selected && selected.tuneIndex)) ? Number(selected.tuneIndex) : null;
+            const updated = syncedFile.tunes.find((t) => (
+              (selected && selected.tuneUid && t && t.tuneUid && t.tuneUid === selected.tuneUid)
+              || (xNumber && t && t.xNumber && String(t.xNumber) === xNumber)
+              || (idx != null && t && Number.isFinite(Number(t.tuneIndex)) && Number(t.tuneIndex) === idx)
+            ));
+            const nextId = updated ? (updated.tuneUid || updated.id) : null;
+            if (nextId) {
+              return selectTune(nextId, { ...options, skipConfirm: true, _syncedFromWorkingCopy: true });
+            }
+          }
+        } catch {}
       }
-      const shouldReload = await confirmReloadFromDisk(fileMeta.path);
-      if (shouldReload) {
-        const reloadRes = await discardAndReloadWorkingCopyFromDisk(fileMeta.path, { restoreTuneId: tuneId });
-        if (reloadRes && reloadRes.ok) {
-          return selectTune(tuneId, { ...options, skipConfirm: true, _reloaded: true });
-        }
-        return { ok: false, error: (reloadRes && reloadRes.error) ? reloadRes.error : "Unable to reload working copy." };
-      }
-      return { ok: false, error: "Tune offsets could not be resolved; reload the file and try again." };
+      showEmptyState();
+      showToast("Tune not found in the current file state.", 3400);
+      return { ok: false, error: "Tune not found in the current file state." };
     }
 
     content = String(workingCopySnapshot.text || "");
@@ -14739,7 +15416,11 @@ function wireMenuActions() {
       else if (actionType === "transformMeasures" && action && Number.isFinite(action.value)) {
         await applyAbc2abcTransform({ measuresPerLine: action.value });
       }
-	      else if (actionType === "alignBars") alignBarsInEditor();
+      else if (actionType === "alignBars") alignBarsInEditor();
+      else if (actionType === "openIntonationExplorer") {
+        if (intonationExplorerVisible) hideIntonationExplorerPanel();
+        else showIntonationExplorerPanel();
+      }
 		      else if (actionType === "dumpDebug") dumpDebugToFile().catch(() => {});
 		      else if (actionType === "settings" && settingsController) settingsController.openSettings();
 		      else if (actionType === "fonts" && settingsController) {
@@ -14802,6 +15483,42 @@ function wireMenuActions() {
 }
 
 wireMenuActions();
+
+if ($intonationExplorerClose) {
+  $intonationExplorerClose.addEventListener("click", () => {
+    hideIntonationExplorerPanel();
+  });
+}
+if ($intonationExplorerRefresh) {
+  $intonationExplorerRefresh.addEventListener("click", () => {
+    refreshIntonationExplorer().catch(() => {});
+  });
+}
+if ($intonationExplorerBaseMode) {
+  $intonationExplorerBaseMode.addEventListener("change", () => {
+    updateIntonationBaseUi();
+    refreshIntonationExplorer().catch(() => {});
+  });
+}
+if ($intonationExplorerBaseManual) {
+  $intonationExplorerBaseManual.addEventListener("keydown", (event) => {
+    if (!event || event.key !== "Enter") return;
+    event.preventDefault();
+    refreshIntonationExplorer().catch(() => {});
+  });
+}
+if ($intonationExplorerSort) {
+  $intonationExplorerSort.addEventListener("change", () => {
+    intonationExplorerSortMode = ($intonationExplorerSort && $intonationExplorerSort.value) || "count";
+    refreshIntonationExplorer().catch(() => {});
+  });
+}
+if ($intonationExplorerSkipGrace) {
+  $intonationExplorerSkipGrace.addEventListener("change", () => {
+    intonationExplorerSkipGraceNotes = Boolean($intonationExplorerSkipGrace && $intonationExplorerSkipGrace.checked);
+    refreshIntonationExplorer().catch(() => {});
+  });
+}
 
 if (window.api && typeof window.api.onAppRequestQuit === "function") {
   window.api.onAppRequestQuit(() => {

@@ -1379,6 +1379,12 @@ svg {
   stroke-width: 1.4;
 }
 
+.note-hl.svg-intonation-note {
+  fill-opacity: 0.25;
+  stroke: #b8860b;
+  stroke-width: 1.2;
+}
+
 .bar-hl.svg-error-activation {
   fill: #ffe564;
   fill-opacity: 0.22;
@@ -1391,6 +1397,13 @@ svg {
   fill-opacity: 0.16;
   stroke: #2f855a;
   stroke-width: 1.2;
+}
+
+.bar-hl.svg-intonation-bar {
+  fill: #ffc04d;
+  fill-opacity: 0.16;
+  stroke: #b8860b;
+  stroke-width: 1.1;
 }
 
 .bar-hl.svg-follow-bar {
@@ -1706,6 +1719,219 @@ svg {
   padding: 10px 12px;
   border-radius: var(--radius-2);
   color: var(--text);
+}
+
+.tool-panel {
+  position: fixed;
+  top: 72px;
+  right: 24px;
+  width: min(520px, calc(100vw - 48px));
+  max-height: min(70vh, calc(100vh - 96px));
+  background: var(--panel-bg);
+  border-radius: var(--radius-2);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+  overflow: hidden;
+  resize: both;
+}
+
+.tool-panel.hidden {
+  display: none;
+}
+
+.tool-panel-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.tool-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e4e4e4;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: move;
+  user-select: none;
+}
+
+.tool-panel-title {
+  font-size: 14px;
+}
+
+.tool-panel-close {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--muted-text);
+}
+
+.tool-panel-close:hover {
+  color: var(--text);
+}
+
+.tool-panel-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 16px;
+}
+
+.tool-panel-control {
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+  color: var(--muted-text);
+  width: 100%;
+}
+
+.tool-panel-control-inline {
+  width: auto;
+  min-width: 160px;
+}
+
+.tool-panel-control input {
+  margin-top: 6px;
+  width: 100%;
+  border-radius: var(--radius-1);
+  border: 1px solid var(--border-color);
+  padding: 6px 8px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.tool-panel-base-row {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-panel-base-row select,
+.tool-panel-base-row input {
+  width: auto;
+  margin-top: 0;
+}
+
+.tool-panel-control select {
+  margin-top: 6px;
+  border-radius: var(--radius-1);
+  border: 1px solid var(--border-color);
+  padding: 6px 8px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.tool-panel-base-row select {
+  border-radius: var(--radius-1);
+  border: 1px solid var(--border-color);
+  padding: 6px 8px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.tool-panel-base-row input {
+  flex: 1;
+}
+
+.tool-panel-base-row input[disabled] {
+  opacity: 0.6;
+}
+
+.tool-panel-checkbox {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.tool-panel-checkbox input {
+  margin: 0;
+}
+
+#intonationExplorerRefresh {
+  padding: 6px 12px;
+  border-radius: var(--radius-1);
+  border: 1px solid var(--button-border);
+  background: var(--button-bg);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#intonationExplorerRefresh:hover {
+  background: var(--button-bg-hover);
+}
+
+.tool-panel-status {
+  min-height: 24px;
+  padding: 0 16px 6px;
+  font-size: 12px;
+  color: var(--muted-text);
+}
+
+.tool-panel-status.error {
+  color: #a72222;
+}
+
+.tool-panel-table {
+  flex: 1;
+  overflow: auto;
+  padding: 0 16px 12px;
+}
+
+.tool-panel-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tool-panel-table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-bottom: 6px;
+  color: var(--muted-text);
+}
+
+.tool-panel-table td {
+  padding: 4px 0;
+}
+
+.tool-panel-table tbody tr {
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.tool-panel-table tbody tr:hover,
+.tool-panel-table tbody tr.active {
+  background: rgba(27, 95, 191, 0.06);
+}
+
+.tool-panel-table tbody tr td:last-child {
+  text-align: right;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.tool-panel-highlight-label {
+  font-weight: 600;
+}
+
+.cm-intonation-highlight {
+  background: rgba(255, 200, 80, 0.25);
+  border-bottom: 1px solid rgba(255, 200, 80, 0.65);
 }
 
 .modal {
