@@ -11027,7 +11027,8 @@ async function renderPrintAllSvgMarkup(entry, content, options = {}) {
     if (breakBefore) flush();
 
     const effectiveHeader = (entry && entry.path && pathsEqual(entry.path, activeFilePath)) ? getHeaderEditorValue() : (entry.headerText || "");
-    const prefix = buildHeaderPrefix(effectiveHeader, false, tuneText);
+    const headerText = sanitizeFileHeaderForPerTuneRender(effectiveHeader);
+    const prefix = buildHeaderPrefix(headerText, false, tuneText);
     const block = prefix.text ? `${prefix.text}${tuneText}` : tuneText;
     const meta = debugInfo ? {
       id: tune.id,
@@ -11298,7 +11299,8 @@ async function renderSetListSvgMarkupForPrint(options = {}) {
 
     const renumbered = ensureXNumberInAbc(raw, i + 1);
     const combinedHeader = `${getSetListFileHeaderText()}${item.headerText || ""}`;
-    const prefix = buildHeaderPrefix(combinedHeader, false, renumbered);
+    const headerText = sanitizeFileHeaderForPerTuneRender(combinedHeader);
+    const prefix = buildHeaderPrefix(headerText, false, renumbered);
     const block = prefix.text ? `${prefix.text}${renumbered}` : renumbered;
     const context = { tuneLabel: buildPrintTuneLabel(tune) };
     setErrorLineOffsetFromHeader(prefix.text);
@@ -18746,6 +18748,56 @@ function sanitizeFileHeaderForInteractiveRender(text) {
         "eps",
         "leftmargin",
         "rightmargin",
+      ]);
+      if (!skip.has(directive)) out.push(line);
+      continue;
+    }
+    if (/^%/.test(trimmed) || /^[A-Za-z]:/.test(trimmed)) {
+      out.push(line);
+      continue;
+    }
+  }
+  return out.join("\n").replace(/\s+$/, "");
+}
+
+function sanitizeFileHeaderForPerTuneRender(text) {
+  const raw = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  if (!raw.trim()) return "";
+  const lines = raw.split("\n");
+  const out = [];
+  let inTextBlock = false;
+
+  for (const line of lines) {
+    const trimmed = String(line || "").trim();
+    if (/^%%\s*begintext\b/i.test(trimmed)) {
+      inTextBlock = true;
+      continue;
+    }
+    if (inTextBlock) {
+      if (/^%%\s*endtext\b/i.test(trimmed)) inTextBlock = false;
+      continue;
+    }
+    if (!trimmed) {
+      out.push("");
+      continue;
+    }
+    if (/^%%/.test(trimmed)) {
+      const directive = trimmed
+        .replace(/^%%\s*/, "")
+        .split(/\s+/, 1)[0]
+        .toLowerCase();
+      // Keep print/layout directives, but drop book-style prose that shouldn't be repeated per tune.
+      const skip = new Set([
+        "begintext",
+        "endtext",
+        "text",
+        "center",
+        "vskip",
+        "textfont",
+        "titleformat",
+        "subtitleformat",
+        // File-level %%newpage would force a page break before every tune in Print All / Set List.
+        "newpage",
       ]);
       if (!skip.has(directive)) out.push(line);
       continue;
