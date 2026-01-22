@@ -10966,9 +10966,12 @@ async function renderAbcToSvgMarkup(abcText, options = {}) {
 }
 
 async function renderCurrentTuneSvgMarkupForPrint() {
-  const payload = getRenderPayload();
-  const text = payload && payload.text ? payload.text : "";
-  if (!text.trim()) return { ok: false, error: "No notation to print." };
+  const tuneText = getEditorValue();
+  if (!String(tuneText || "").trim()) return { ok: false, error: "No notation to print." };
+  const entry = getActiveFileEntry();
+  const headerText = entry ? getHeaderEditorValue() : "";
+  const prefixPayload = buildHeaderPrefix(headerText, true, tuneText);
+  const text = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
   return renderAbcToSvgMarkup(text);
 }
 
@@ -13435,7 +13438,7 @@ function dropLibraryFileEntry(filePath) {
 
 function getNextXNumber(existingContent) {
   let max = 0;
-  const re = /^X:\s*(\d+)/gm;
+  const re = /^\s*X:\s*(\d+)/gm;
   let match;
   const text = String(existingContent || "");
   while ((match = re.exec(text)) !== null) {
@@ -13449,10 +13452,12 @@ function ensureXNumberInAbc(abcText, xNumber) {
   const text = String(abcText || "");
   if (!text.trim()) return text;
   const lines = text.split(/\r\n|\n|\r/);
-  const idx = lines.findIndex((line) => /^X:/.test(line));
+  const idx = lines.findIndex((line) => /^\s*X:/.test(line));
   const line = `X:${xNumber}`;
   if (idx >= 0) {
-    lines[idx] = line;
+    const rawLine = String(lines[idx] || "");
+    const prefix = rawLine.match(/^(\s*)X:/) ? RegExp.$1 : "";
+    lines[idx] = `${prefix}${line}`;
     return lines.join("\n");
   }
   lines.unshift(line);
@@ -18686,8 +18691,7 @@ function buildHeaderPrefix(entryHeader, includeCheckbars, tuneText) {
     if (fontLayerRaw) layers.push(fontLayerRaw);
   }
   const fileHeaderRaw = String(entryHeader || "");
-  const fileHeaderClean = sanitizeFileHeaderForPrefix(fileHeaderRaw);
-  if (fileHeaderClean.trim()) layers.push(fileHeaderClean.replace(/[\r\n]+$/, ""));
+  if (fileHeaderRaw.trim()) layers.push(fileHeaderRaw.replace(/[\r\n]+$/, ""));
   const deduped = dedupeHeaderLayers(layers, tuneHeaderKeys);
   let header = deduped.join("\n");
   if (includeCheckbars && isMeasureCheckEnabled()) {
@@ -18698,7 +18702,7 @@ function buildHeaderPrefix(entryHeader, includeCheckbars, tuneText) {
   return { text: prefix, offset: prefix.length };
 }
 
-function sanitizeFileHeaderForPrefix(text) {
+function sanitizeFileHeaderForInteractiveRender(text) {
   const raw = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   if (!raw.trim()) return "";
   const lines = raw.split("\n");
@@ -20061,7 +20065,9 @@ function getPlaybackPayload() {
 function getRenderPayload() {
   const tuneText = getEditorValue();
   const entry = getActiveFileEntry();
-  const prefixPayload = buildHeaderPrefix(entry ? getHeaderEditorValue() : "", true, tuneText);
+  const headerTextRaw = entry ? getHeaderEditorValue() : "";
+  const headerText = sanitizeFileHeaderForInteractiveRender(headerTextRaw);
+  const prefixPayload = buildHeaderPrefix(headerText, true, tuneText);
   if (!prefixPayload.text) return { text: tuneText, offset: 0 };
   const out = { text: `${prefixPayload.text}${tuneText}`, offset: prefixPayload.offset };
   assertCleanAbcText(out.text, "render payload");
