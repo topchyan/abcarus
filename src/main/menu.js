@@ -211,6 +211,15 @@ function buildMenuTemplate(appState, sendMenuAction) {
       },
       { type: "separator" },
       {
+        label: "Diagnostics",
+        submenu: [
+          {
+            label: "Intonation Explorer…",
+            click: () => sendMenuAction("openIntonationExplorer"),
+          },
+        ],
+      },
+      {
         label: "Renumber X (Active File)…",
         accelerator: "CmdOrCtrl+Shift+X",
         click: () => sendMenuAction("renumberXInFile"),
