@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Transpose: avoid injecting large spacing/alignment unless “Auto-align bars after transforms” is enabled.
+- Render: ignore file-level prose/layout header blocks (e.g., `%%begintext`, `%%center`) when rendering a single selected tune.
+
 
 
 ## [0.22.8] - 2026-01-21
