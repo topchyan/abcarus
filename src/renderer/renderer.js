@@ -13642,19 +13642,17 @@ async function saveFileHeaderText(filePath, headerText) {
       setFileContentInCache(p, snapshot.text);
       attachTuneUidsToLibraryFile(p, snapshot);
     }
-    // Prefer the working-copy snapshot as the source of truth for the active file.
-    // This avoids UI "snap-back" where stale `entry.headerText` overwrites the just-saved header.
-    const updatedFile = (snapshot && snapshot.path && pathsEqual(snapshot.path, p))
-      ? syncLibraryFileFromWorkingCopySnapshot(p, snapshot)
-      : await refreshLibraryFile(p, { force: true });
+    // Re-parse from disk to update the library header text. This is the most reliable source of truth
+    // for UI, and avoids depending on WC segmentation heuristics for where the header ends.
+    const updatedFile = await refreshLibraryFile(p, { force: true });
     try {
-      // Keep the header editor aligned with the canonical post-save text so the user can trust Save Header.
-      if (snapshot && snapshot.path && pathsEqual(snapshot.path, p) && headerEditorFilePath && pathsEqual(headerEditorFilePath, p)) {
-        const parts = splitFileIntoHeaderAndBody(snapshot.text);
+      // Keep the header editor aligned with what the file parser sees after the save.
+      if (updatedFile && updatedFile.path && pathsEqual(updatedFile.path, p) && headerEditorFilePath && pathsEqual(headerEditorFilePath, p)) {
+        const next = String(updatedFile.headerText || "");
         suppressHeaderDirty = true;
-        setHeaderEditorValue(parts.headerText);
+        setHeaderEditorValue(next);
         suppressHeaderDirty = false;
-        headerBaselineText = parts.headerText;
+        headerBaselineText = next;
         headerBaselineFilePath = p;
       }
     } catch {}
