@@ -3886,6 +3886,15 @@ function buildIntonationRowsFromEntries(entries, baseStep, { sortMode = "count" 
       if (aFirst !== bFirst) return aFirst - bFirst;
       return a.step - b.step;
     }
+    if (sortMode === "pitch") {
+      const aAbs = Number(a.step);
+      const bAbs = Number(b.step);
+      if (aAbs !== bAbs) return aAbs - bAbs;
+      const aKey = String(a.abcSpelling || "").toLowerCase();
+      const bKey = String(b.abcSpelling || "").toLowerCase();
+      if (aKey !== bKey) return aKey.localeCompare(bKey);
+      return a.absStep - b.absStep;
+    }
     if (sortMode === "rel") {
       if (a.normalizedStep !== b.normalizedStep) return a.normalizedStep - b.normalizedStep;
       return a.absStep - b.absStep;
