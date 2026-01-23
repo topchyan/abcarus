@@ -497,6 +497,8 @@ let headerDirty = false;
 let suppressHeaderDirty = false;
 let lastHeaderToastFilePath = null;
 let headerEditorFilePath = null;
+let headerBaselineText = "";
+let headerBaselineFilePath = null;
 let lastErrors = [];
 let errorsPopoverOpen = false;
 let isNewTuneDraft = false;
@@ -4302,17 +4304,14 @@ function updateFileHeaderPanel() {
     suppressHeaderDirty = false;
     headerDirty = false;
     headerEditorFilePath = null;
+    headerBaselineText = "";
+    headerBaselineFilePath = null;
     updateHeaderStateUI();
     return;
   }
   $fileHeaderPanel.classList.add("active");
   const nextHeaderText = entry.headerText || "";
   const currentHeaderText = getHeaderEditorValue();
-  // Defensive: if the header editor diverges from the library snapshot for the same file,
-  // treat it as dirty so the UI doesn't "snap back" and overwrite user edits.
-  if (headerEditorFilePath === entry.path && !headerDirty && currentHeaderText !== nextHeaderText) {
-    headerDirty = true;
-  }
   const shouldReplace = headerEditorFilePath !== entry.path
     || (!headerDirty && currentHeaderText !== nextHeaderText);
   if (shouldReplace) {
@@ -4321,6 +4320,8 @@ function updateFileHeaderPanel() {
     suppressHeaderDirty = false;
     headerDirty = false;
     headerEditorFilePath = entry.path || null;
+    headerBaselineText = nextHeaderText;
+    headerBaselineFilePath = headerEditorFilePath;
   }
   updateHeaderStateUI({ announce: true });
 }
@@ -6604,7 +6605,11 @@ function initHeaderEditor() {
   const updateListener = EditorView.updateListener.of((update) => {
     if (!update.docChanged) return;
     if (suppressHeaderDirty) return;
-    headerDirty = true;
+    const current = update.state.doc.toString();
+    const baseline = (headerBaselineFilePath && headerEditorFilePath && pathsEqual(headerBaselineFilePath, headerEditorFilePath))
+      ? headerBaselineText
+      : headerBaselineText;
+    headerDirty = current !== baseline;
     updateHeaderStateUI();
     if (headerRenderTimer) clearTimeout(headerRenderTimer);
     headerRenderTimer = setTimeout(() => {
@@ -13649,6 +13654,8 @@ async function saveFileHeaderText(filePath, headerText) {
         suppressHeaderDirty = true;
         setHeaderEditorValue(parts.headerText);
         suppressHeaderDirty = false;
+        headerBaselineText = parts.headerText;
+        headerBaselineFilePath = p;
       }
     } catch {}
     if (activeTuneMeta && pathsEqual(activeTuneMeta.path, p)) {
