@@ -52,8 +52,8 @@ export const PERDE_NAMES_BY_ABC_TOKEN = Object.freeze({
   "A": Object.freeze(["Dügâh"]),
   "_5B": Object.freeze(["Kürdî"]),
   "^4A": Object.freeze(["Kürdî"]),
-  "_4B": Object.freeze(["Dik Kürdî", "Nihavend", "NihavendiDügah"]),
-  "^5A": Object.freeze(["Dik Kürdî", "Nihavend", "NihavendiDügah"]),
+  "_4B": Object.freeze(["Dik Kürdî", "NihavendiDügah", "Nihavend"]),
+  "^5A": Object.freeze(["Dik Kürdî", "NihavendiDügah", "Nihavend"]),
   "_1B": Object.freeze(["Segâh"]),
   "^8A": Object.freeze(["Segâh"]),
   "B": Object.freeze(["Bûselik"]),
@@ -66,9 +66,10 @@ export const PERDE_NAMES_BY_ABC_TOKEN = Object.freeze({
   "_4d": Object.freeze(["Hicâz"]),
   "_1d": Object.freeze(["Dik Hicâz"]),
   "^8c": Object.freeze(["Dik Hicâz"]),
-  "d": Object.freeze(["Nevâ", "Tiz Neva"]),
-  "_5e": Object.freeze(["Beyati", "Nim Hisâr"]),
-  "^4d": Object.freeze(["Beyati", "Nim Hisâr"]),
+  "d": Object.freeze(["Nevâ"]),
+  "d'": Object.freeze(["Tiz Neva"]),
+  "_5e": Object.freeze(["Nim Hisâr", "Beyati"]),
+  "^4d": Object.freeze(["Nim Hisâr", "Beyati"]),
   "_4e": Object.freeze(["Hisâr"]),
   "^5d": Object.freeze(["Hisâr"]),
   "_1e": Object.freeze(["Dik Hisâr"]),
@@ -120,4 +121,3 @@ export function resolvePerdeNamesFromAbcToken(abcToken) {
   const list = PERDE_NAMES_BY_ABC_TOKEN[token];
   return Array.isArray(list) ? list : [];
 }
-
