@@ -4307,8 +4307,14 @@ function updateFileHeaderPanel() {
   }
   $fileHeaderPanel.classList.add("active");
   const nextHeaderText = entry.headerText || "";
+  const currentHeaderText = getHeaderEditorValue();
+  // Defensive: if the header editor diverges from the library snapshot for the same file,
+  // treat it as dirty so the UI doesn't "snap back" and overwrite user edits.
+  if (headerEditorFilePath === entry.path && !headerDirty && currentHeaderText !== nextHeaderText) {
+    headerDirty = true;
+  }
   const shouldReplace = headerEditorFilePath !== entry.path
-    || (!headerDirty && getHeaderEditorValue() !== nextHeaderText);
+    || (!headerDirty && currentHeaderText !== nextHeaderText);
   if (shouldReplace) {
     suppressHeaderDirty = true;
     setHeaderEditorValue(nextHeaderText);
