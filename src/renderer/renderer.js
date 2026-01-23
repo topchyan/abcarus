@@ -31,6 +31,7 @@ import {
   NOTE_BASES,
 } from "./transpose.mjs";
 import { resolvePerdeName } from "./perde53.mjs";
+import { resolvePerdeNamesFromAbcToken } from "./perde_by_abc.mjs";
 import { normalizeMeasuresLineBreaks, transformMeasuresPerLine } from "./measures.mjs";
 import {
   buildDefaultDrumVelocityMap,
@@ -4071,7 +4072,15 @@ function renderIntonationExplorerRows(rows, { is53 } = {}) {
     pcAbs.className = "subtle";
     pc.append(pcRel, pcAbs);
     const perde = document.createElement("td");
-    const perdeName = is53 ? (resolvePerdeName({ pc53: row.absStep, octave: row.octave }) || "") : "";
+    let perdeName = "";
+    if (is53) {
+      const fromToken = resolvePerdeNamesFromAbcToken(row.abcSpelling).filter(Boolean);
+      if (fromToken.length) {
+        perdeName = fromToken.join(" / ");
+      } else {
+        perdeName = resolvePerdeName({ pc53: row.absStep, octave: row.octave }) || "";
+      }
+    }
     if (!is53) {
       perde.textContent = "";
       perde.title = "";
@@ -4079,7 +4088,7 @@ function renderIntonationExplorerRows(rows, { is53 } = {}) {
     } else {
       perde.textContent = perdeName || "??";
       if (!perdeName) {
-        perde.title = `No Perde label yet for pc53=${formatAeuLabel(row.absStep)} at this register.`;
+        perde.title = `No Perde label yet for token=${String(row.abcSpelling || "")} (pc53=${formatAeuLabel(row.absStep)}).`;
         perde.classList.add("subtle");
       } else {
         perde.title = "";
