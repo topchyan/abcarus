@@ -8,7 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Templates: tolerate indented `X:` when inserting/appending templates (prevents duplicate `X:` headers).
+- Header: editing no longer “snaps back” to the library index; Reload stays explicit.
+- Header: Save Header no longer injects leading blank lines before `X:` (prevents shifting tune starts).
 - Render/Print: keep file-level `%%header`/`%%footer` for print/export while suppressing repeated book-style prose in per-tune renders.
+- Working Copy: header/tune boundary detection uses `^[\\t ]*X:` (not `^\\s*X:`) to avoid newline-eating boundary bugs.
+
+### Docs
+- ADR-0007: document header authority and header/X boundary rules.
 
 
 
