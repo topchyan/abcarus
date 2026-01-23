@@ -3538,6 +3538,7 @@ let intonationExplorerBaseLabel = "pc53=0";
 let intonationExplorerBaseMode = "auto";
 let intonationExplorerSortMode = "count";
 let intonationExplorerSkipGraceNotes = true;
+let intonationExplorerIs53 = false;
 
 let lastSvgIntonationBarEls = [];
 let lastSvgIntonationNoteEls = [];
@@ -3634,6 +3635,13 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
   if (!tune) return { tune: null, entries: [], error: "No active tune snapshot available." };
   const fullText = String(snapshot.text || "");
   const body = fullText.slice(tune.start, tune.end);
+
+  let is53 = false;
+  try {
+    // Prefer tune-local detection; also allow file-level header directives to be picked up.
+    // This flag gates Perde naming (EDO-12 doesn't need Perde labels).
+    is53 = /%%\s*MIDI\s+temperamentequal\s+53\b/i.test(body) || /%%\s*MIDI\s+temperamentequal\s+53\b/i.test(fullText);
+  } catch { is53 = false; }
 
   const formatEffectiveAccPrefix53 = (letterPc12, micro) => {
     const m = Number(micro) || 0;
@@ -3853,7 +3861,7 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 	    idx = Math.max(idx + 1, note.end);
 	  }
 	  const entries = Array.from(seen.values());
-  return { tune, entries, error: entries.length ? null : "No musical notes found in the tune." };
+  return { tune, entries, is53, error: entries.length ? null : "No musical notes found in the tune." };
 }
 
 function buildIntonationRowsFromEntries(entries, baseStep, { sortMode = "count" } = {}) {
@@ -4033,7 +4041,7 @@ function highlightSvgIntonationNotesAtEditorOffsets(offsets) {
   return lastSvgIntonationNoteEls.length > 0;
 }
 
-function renderIntonationExplorerRows(rows) {
+function renderIntonationExplorerRows(rows, { is53 } = {}) {
   if (!$intonationExplorerTableBody) return;
   $intonationExplorerTableBody.innerHTML = "";
   const list = Array.isArray(rows) ? rows : [];
@@ -4063,11 +4071,20 @@ function renderIntonationExplorerRows(rows) {
     pcAbs.className = "subtle";
     pc.append(pcRel, pcAbs);
     const perde = document.createElement("td");
-    const perdeName = resolvePerdeName({ pc53: row.absStep, octave: row.octave }) || "";
-    perde.textContent = perdeName || "—";
-    if (!perdeName) {
-      perde.title = `No Perde label yet for pc53=${formatAeuLabel(row.absStep)} at this register.`;
-      perde.classList.add("subtle");
+    const perdeName = is53 ? (resolvePerdeName({ pc53: row.absStep, octave: row.octave }) || "") : "";
+    if (!is53) {
+      perde.textContent = "";
+      perde.title = "";
+      perde.classList.remove("subtle");
+    } else {
+      perde.textContent = perdeName || "??";
+      if (!perdeName) {
+        perde.title = `No Perde label yet for pc53=${formatAeuLabel(row.absStep)} at this register.`;
+        perde.classList.add("subtle");
+      } else {
+        perde.title = "";
+        perde.classList.remove("subtle");
+      }
     }
     const abc = document.createElement("td");
     abc.textContent = row.abcSpelling || "";
@@ -4105,7 +4122,7 @@ function activateIntonationExplorerRow(step) {
   const target = (intonationExplorerRows || []).find((r) => String(r.step) === String(step));
   if (!target) return;
   intonationExplorerActiveStep = target.step;
-  renderIntonationExplorerRows(intonationExplorerRows);
+  renderIntonationExplorerRows(intonationExplorerRows, { is53: intonationExplorerIs53 });
   setIntonationHighlightRanges(target.ranges);
   const offsets = (target.ranges || []).map((r) => r && r.start);
   const noteOk = highlightSvgIntonationNotesAtEditorOffsets(offsets);
@@ -4123,29 +4140,32 @@ async function refreshIntonationExplorer() {
   }
   setIntonationExplorerStatus("Refreshing…");
   try {
-    const snapshot = await refreshWorkingCopySnapshot();
-    if (!snapshot || snapshot.text == null) {
-      intonationExplorerRows = [];
-      intonationExplorerActiveStep = null;
-    renderIntonationExplorerRows([]);
-    setIntonationHighlightRanges([]);
-    clearSvgIntonationBarHighlight();
-    clearSvgIntonationNoteHighlight();
-    setIntonationExplorerStatus("Unable to load working copy snapshot.", { error: true });
-    return;
-  }
-    const scanned = scanIntonationEntries(snapshot, { skipGraceNotes: intonationExplorerSkipGraceNotes });
-  if (scanned.error) {
-      intonationExplorerRows = [];
-      intonationExplorerActiveStep = null;
-    renderIntonationExplorerRows([]);
-    setIntonationHighlightRanges([]);
-    clearSvgIntonationBarHighlight();
-    clearSvgIntonationNoteHighlight();
-    setIntonationExplorerStatus(scanned.error, { error: true });
-    return;
-  }
-    updateIntonationBaseUi();
+	    const snapshot = await refreshWorkingCopySnapshot();
+	    if (!snapshot || snapshot.text == null) {
+	      intonationExplorerRows = [];
+	      intonationExplorerActiveStep = null;
+      intonationExplorerIs53 = false;
+	    renderIntonationExplorerRows([], { is53: false });
+	    setIntonationHighlightRanges([]);
+	    clearSvgIntonationBarHighlight();
+	    clearSvgIntonationNoteHighlight();
+	    setIntonationExplorerStatus("Unable to load working copy snapshot.", { error: true });
+	    return;
+	  }
+	    const scanned = scanIntonationEntries(snapshot, { skipGraceNotes: intonationExplorerSkipGraceNotes });
+	  if (scanned.error) {
+	      intonationExplorerRows = [];
+	      intonationExplorerActiveStep = null;
+      intonationExplorerIs53 = false;
+	    renderIntonationExplorerRows([], { is53: false });
+	    setIntonationHighlightRanges([]);
+	    clearSvgIntonationBarHighlight();
+	    clearSvgIntonationNoteHighlight();
+	    setIntonationExplorerStatus(scanned.error, { error: true });
+	    return;
+	  }
+      intonationExplorerIs53 = Boolean(scanned.is53);
+	    updateIntonationBaseUi();
     const mode = intonationExplorerBaseMode || "auto";
     let base = 0;
     let label = "pc53=0";
@@ -4174,21 +4194,22 @@ async function refreshIntonationExplorer() {
     }
     intonationExplorerBaseStep = base;
     intonationExplorerBaseLabel = label;
-    const rows = buildIntonationRowsFromEntries(scanned.entries, base, { sortMode: intonationExplorerSortMode });
-    intonationExplorerRows = rows;
-    intonationExplorerActiveStep = null;
-    renderIntonationExplorerRows(rows);
-    setIntonationHighlightRanges([]);
-    clearSvgIntonationBarHighlight();
-    clearSvgIntonationNoteHighlight();
-    const graceLabel = intonationExplorerSkipGraceNotes ? "grace off" : "grace on";
-    const sortLabel = `sort:${String(intonationExplorerSortMode || "count")}`;
-    setIntonationExplorerStatus(`Base ${intonationExplorerBaseLabel} (${rows.length} classes; ${sortLabel}; ${graceLabel})`);
-  } catch (err) {
-    const msg = (err && err.message) ? String(err.message) : String(err || "");
-    setIntonationExplorerStatus(msg ? `Unable to refresh the explorer: ${msg}` : "Unable to refresh the explorer.", { error: true });
-    logErr(err);
-  }
+	    const rows = buildIntonationRowsFromEntries(scanned.entries, base, { sortMode: intonationExplorerSortMode });
+	    intonationExplorerRows = rows;
+	    intonationExplorerActiveStep = null;
+	    renderIntonationExplorerRows(rows, { is53: intonationExplorerIs53 });
+	    setIntonationHighlightRanges([]);
+	    clearSvgIntonationBarHighlight();
+	    clearSvgIntonationNoteHighlight();
+	    const graceLabel = intonationExplorerSkipGraceNotes ? "grace off" : "grace on";
+	    const sortLabel = `sort:${String(intonationExplorerSortMode || "count")}`;
+      const modeLabel = intonationExplorerIs53 ? "EDO-53" : "EDO-12";
+	    setIntonationExplorerStatus(`Base ${intonationExplorerBaseLabel} (${rows.length} classes; ${sortLabel}; ${graceLabel}; ${modeLabel})`);
+	  } catch (err) {
+	    const msg = (err && err.message) ? String(err.message) : String(err || "");
+	    setIntonationExplorerStatus(msg ? `Unable to refresh the explorer: ${msg}` : "Unable to refresh the explorer.", { error: true });
+	    logErr(err);
+	  }
 }
 
 function showIntonationExplorerPanel() {
