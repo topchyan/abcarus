@@ -3582,20 +3582,25 @@ const TURKISH_PERDE_BY_LETTER = {
   B: "Buselik",
 };
 
-function describePerdeFromAbcSpelling(abcSpelling) {
-  const s = String(abcSpelling || "").trim();
-  if (!s) return "";
-  const m = s.match(/^(\^\^|__|\^\/|_\/|\^[-]?\d+\/\d+|_[-]?\d+\/\d+|\^[-]?\d+|_[-]?\d+|\^|_|=)?([A-G])$/);
-  if (!m) return "";
-  const prefix = m[1] || "";
-  const letter = m[2] || "";
+function describePerde({ letterUpper, octave, micro } = {}) {
+  const letter = String(letterUpper || "").toUpperCase();
+  if (!letter || !/[A-G]/.test(letter)) return "";
   const baseName = TURKISH_PERDE_BY_LETTER[letter] || letter;
-  const letterPc12 = NOTE_BASES[letter] != null ? NOTE_BASES[letter] : 0;
-  const parsed = parseAccidentalPrefix53(prefix, letterPc12);
-  const micro = parsed && parsed.explicit && Number.isFinite(parsed.micro) ? parsed.micro : 0;
-  if (!micro) return baseName;
-  const suffix = micro > 0 ? ` (+${micro})` : ` (${micro})`;
-  return `${baseName}${suffix}`;
+
+  // ABC octave is derived from letter case and ',' / '\'' marks.
+  // In Turkish practice, degrees are commonly referred to with register prefixes:
+  // - "Kaba" for lower register
+  // - "Tiz" for upper register
+  const oct = Number(octave);
+  let register = "";
+  if (Number.isFinite(oct)) {
+    if (oct <= 5) register = "Kaba";
+    else if (oct >= 7) register = "Tiz";
+  }
+
+  const m = Number(micro) || 0;
+  const microSuffix = m ? (m > 0 ? ` (+${m})` : ` (${m})`) : "";
+  return `${register ? `${register} ` : ""}${baseName}${microSuffix}`;
 }
 
 function pickDominantSpelling(spellings) {
@@ -3848,44 +3853,52 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
         appliedMicro = Number.isFinite(keyMicro) ? keyMicro : 0;
       }
 	    const abs53 = octave * 53 + baseId + appliedMicro;
-	    const step = mod53(abs53);
-	    const entry = seen.get(step) || {
-	      step,
+	    const pc53 = mod53(abs53);
+	    const entryKey = String(abs53);
+	    const entry = seen.get(entryKey) || {
+	      abs53,
+	      pc53,
+	      octave,
+	      letterUpper: letter,
+	      micro: appliedMicro,
 	      count: 0,
-      ranges: [],
-      firstStart: null,
-      spellings: new Map(),
-    };
+	      ranges: [],
+	      firstStart: null,
+	      spellings: new Map(),
+	    };
 	    entry.count += 1;
 	    if (entry.firstStart == null || note.start < entry.firstStart) entry.firstStart = note.start;
 	    try {
         const effectivePrefix = String(note.accPrefix || "")
           || formatEffectiveAccPrefix53(letterPc, appliedMicro);
-	      const spelling = `${effectivePrefix}${String(note.letter || "").toUpperCase()}`;
+	      const spelling = `${effectivePrefix}${String(note.letter || "")}`;
 	      if (spelling) entry.spellings.set(spelling, (Number(entry.spellings.get(spelling)) || 0) + 1);
 	    } catch {}
-    entry.ranges.push({
+	    entry.ranges.push({
       // NOTE: offsets are relative to the active tune text in the editor (not the full file).
       start: note.start,
       end: note.end,
     });
-    seen.set(step, entry);
-    idx = Math.max(idx + 1, note.end);
-  }
-  const entries = Array.from(seen.values());
+	    seen.set(entryKey, entry);
+	    idx = Math.max(idx + 1, note.end);
+	  }
+	  const entries = Array.from(seen.values());
   return { tune, entries, error: entries.length ? null : "No musical notes found in the tune." };
 }
 
 function buildIntonationRowsFromEntries(entries, baseStep, { sortMode = "count" } = {}) {
   const list = Array.isArray(entries) ? entries : [];
   const rows = list.map((entry) => ({
-    step: entry.step,
-    normalizedStep: mod53(entry.step - baseStep),
-    absStep: mod53(entry.step),
+    step: entry.abs53, // unique row id (octave-aware)
+    normalizedStep: mod53((entry.pc53 || 0) - baseStep),
+    absStep: mod53(entry.pc53 || 0),
     abcSpelling: pickDominantSpelling(entry.spellings),
     count: entry.count,
     ranges: entry.ranges,
     firstStart: entry.firstStart,
+    octave: entry.octave,
+    letterUpper: entry.letterUpper,
+    micro: entry.micro,
   }));
   rows.sort((a, b) => {
     if (sortMode === "first") {
@@ -4080,7 +4093,7 @@ function renderIntonationExplorerRows(rows) {
     pcAbs.className = "subtle";
     pc.append(pcRel, pcAbs);
     const perde = document.createElement("td");
-    perde.textContent = describePerdeFromAbcSpelling(row.abcSpelling) || "";
+    perde.textContent = describePerde(row) || "";
     const abc = document.createElement("td");
     abc.textContent = row.abcSpelling || "";
     const weight = document.createElement("td");
