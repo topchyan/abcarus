@@ -13632,6 +13632,15 @@ async function saveFileHeaderText(filePath, headerText) {
       attachTuneUidsToLibraryFile(p, snapshot);
     }
     const updatedFile = await refreshLibraryFile(p, { force: true });
+    try {
+      // Keep the header editor aligned with the canonical post-save text so the user can trust Save Header.
+      if (snapshot && snapshot.path && pathsEqual(snapshot.path, p) && headerEditorFilePath && pathsEqual(headerEditorFilePath, p)) {
+        const parts = splitFileIntoHeaderAndBody(snapshot.text);
+        suppressHeaderDirty = true;
+        setHeaderEditorValue(parts.headerText);
+        suppressHeaderDirty = false;
+      }
+    } catch {}
     if (activeTuneMeta && pathsEqual(activeTuneMeta.path, p)) {
       const tuneIdToRestore = rawMode ? activeTuneId : (activeTuneUid || activeTuneId);
       if (tuneIdToRestore) await selectTune(tuneIdToRestore, { skipConfirm: true, suppressRecent: true });
@@ -16349,6 +16358,7 @@ if ($fileHeaderSave) {
       return;
     }
     try {
+      try { await flushWorkingCopyTuneSync(); } catch {}
       const headerRes = await saveFileHeaderText(entry.path, getHeaderEditorValue());
       if (headerRes && headerRes.ok) {
         headerDirty = false;
