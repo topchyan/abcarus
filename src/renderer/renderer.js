@@ -3572,6 +3572,32 @@ function formatAeuLabel(step) {
   return String(mod53(step));
 }
 
+const TURKISH_PERDE_BY_LETTER = {
+  C: "Çargâh",
+  D: "Neva",
+  E: "Hüseynî",
+  F: "Acem",
+  G: "Rast",
+  A: "Dügâh",
+  B: "Buselik",
+};
+
+function describePerdeFromAbcSpelling(abcSpelling) {
+  const s = String(abcSpelling || "").trim();
+  if (!s) return "";
+  const m = s.match(/^(\^\^|__|\^\/|_\/|\^[-]?\d+\/\d+|_[-]?\d+\/\d+|\^[-]?\d+|_[-]?\d+|\^|_|=)?([A-G])$/);
+  if (!m) return "";
+  const prefix = m[1] || "";
+  const letter = m[2] || "";
+  const baseName = TURKISH_PERDE_BY_LETTER[letter] || letter;
+  const letterPc12 = NOTE_BASES[letter] != null ? NOTE_BASES[letter] : 0;
+  const parsed = parseAccidentalPrefix53(prefix, letterPc12);
+  const micro = parsed && parsed.explicit && Number.isFinite(parsed.micro) ? parsed.micro : 0;
+  if (!micro) return baseName;
+  const suffix = micro > 0 ? ` (+${micro})` : ` (${micro})`;
+  return `${baseName}${suffix}`;
+}
+
 function pickDominantSpelling(spellings) {
   const entries = spellings && typeof spellings.entries === "function" ? Array.from(spellings.entries()) : [];
   if (!entries.length) return "";
@@ -4031,7 +4057,7 @@ function renderIntonationExplorerRows(rows) {
   if (!list.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 3;
+    td.colSpan = 4;
     td.textContent = "No pitch classes detected.";
     td.style.fontStyle = "italic";
     tr.appendChild(td);
@@ -4053,11 +4079,13 @@ function renderIntonationExplorerRows(rows) {
     pcAbs.textContent = ` (${formatAeuLabel(row.absStep)})`;
     pcAbs.className = "subtle";
     pc.append(pcRel, pcAbs);
+    const perde = document.createElement("td");
+    perde.textContent = describePerdeFromAbcSpelling(row.abcSpelling) || "";
     const abc = document.createElement("td");
     abc.textContent = row.abcSpelling || "";
     const weight = document.createElement("td");
     weight.textContent = String(row.count || 0);
-    tr.append(pc, abc, weight);
+    tr.append(pc, perde, abc, weight);
     tr.addEventListener("click", () => {
       activateIntonationExplorerRow(row.step);
     });
