@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [0.22.11] - 2026-01-23
 ### Fixed
 - Templates: tolerate indented `X:` when inserting/appending templates (prevents duplicate `X:` headers).
 - Header: editing no longer “snaps back” to the library index; Reload stays explicit.
@@ -15,8 +18,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Docs
 - ADR-0007: document header authority and header/X boundary rules.
-
-
 
 ## [0.22.10] - 2026-01-22
 ### Added
