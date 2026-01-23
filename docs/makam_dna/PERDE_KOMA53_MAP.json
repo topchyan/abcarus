@@ -3,7 +3,7 @@
   "updatedAt": "2026-01-23",
   "provenance": {
     "sourceProjectPath": "/home/avetik/Projects/Makams",
-    "sourceFile": "master_koma53_with_abc_octaves.csv",
+    "sourceFile": "master_koma53_rebuilt.csv",
     "note": "This mapping is used to label 53-EDO pitch classes (pc53=0..52) with Turkish Perde names by register. Fields are not exhaustive; only steps with known Perde names are listed."
   },
   "registerModel": {
@@ -13,15 +13,18 @@
   },
   "perdeByPc53": {
     "0": { "low": "Kaba Çargâh", "mid": "Çargâh", "high": "Tiz Çargâh" },
+    "3": { "low": "", "mid": "Saba", "high": "" },
     "4": { "low": "Kaba Nim Hicâz", "mid": "Nim Hicâz", "high": "Tiz Nim Hicâz" },
     "5": { "low": "Kaba Hicâz", "mid": "Hicâz", "high": "Tiz Hicâz" },
+    "6": { "low": "Kaba Hicâz", "mid": "Hicâz", "high": "Tiz Hicâz" },
     "8": { "low": "Kaba Dik Hicâz", "mid": "Dik Hicâz", "high": "Tiz Dik Hicâz" },
     "9": { "low": "Yegâh", "mid": "Neva", "high": "Tiz Neva" },
-    "13": { "low": "Kaba Nim Hisâr", "mid": "Nim Hisâr", "high": "" },
-    "14": { "low": "Kaba Hisâr", "mid": "Hisâr", "high": "" },
-    "17": { "low": "Kaba Dik Hisâr", "mid": "Dik Hisâr", "high": "" },
-    "18": { "low": "Hüseynî Aşiran", "mid": "Hüseynî", "high": "" },
-    "22": { "low": "Acem Aşiran", "mid": "Acem", "high": "" },
+    "13": { "low": "Kaba Nim Hisâr", "mid": "Nim Hisâr", "high": "Tiz Nim Hisâr" },
+    "14": { "low": "Kaba Hisâr", "mid": "Hisâr", "high": "Tiz Hisâr" },
+    "16": { "low": "", "mid": "Beyati", "high": "" },
+    "17": { "low": "Kaba Dik Hisâr", "mid": "Dik Hisâr", "high": "Tiz Dik Hisâr" },
+    "18": { "low": "Hüseynî Aşiran", "mid": "Hüseynî", "high": "Tiz Hüseynî" },
+    "22": { "low": "Acem Aşiran", "mid": "Acem", "high": "Tiz Acem" },
     "23": { "low": "Dik Acem Aşiran", "mid": "Dik Acem", "high": "" },
     "26": { "low": "Irak", "mid": "Eviç", "high": "" },
     "27": { "low": "Geveşt", "mid": "Mahur", "high": "" },
@@ -33,9 +36,9 @@
     "40": { "low": "Dügâh", "mid": "Muhayyer", "high": "" },
     "44": { "low": "Kürdî", "mid": "Sümbüle", "high": "" },
     "45": { "low": "Dik Kürdî", "mid": "Dik Sümbüle", "high": "" },
+    "47": { "low": "Nihavend", "mid": "", "high": "" },
     "48": { "low": "Segâh", "mid": "Tiz Segâh", "high": "" },
     "49": { "low": "Buselik", "mid": "Tiz Buselik", "high": "" },
     "52": { "low": "Dik Buselik", "mid": "Tiz Dik Buselik", "high": "" }
   }
 }
-
