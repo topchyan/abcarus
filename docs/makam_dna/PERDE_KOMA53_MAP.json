@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-01-23",
+  "provenance": {
+    "sourceProjectPath": "/home/avetik/Projects/Makams",
+    "sourceFile": "master_koma53_with_abc_octaves.csv",
+    "note": "This mapping is used to label 53-EDO pitch classes (pc53=0..52) with Turkish Perde names by register. Fields are not exhaustive; only steps with known Perde names are listed."
+  },
+  "registerModel": {
+    "low": "ABC octave 3 (e.g. D,)",
+    "mid": "ABC octave 4 (e.g. D)",
+    "high": "ABC octave 5 (e.g. d)"
+  },
+  "perdeByPc53": {
+    "0": { "low": "Kaba Çargâh", "mid": "Çargâh", "high": "Tiz Çargâh" },
+    "4": { "low": "Kaba Nim Hicâz", "mid": "Nim Hicâz", "high": "Tiz Nim Hicâz" },
+    "5": { "low": "Kaba Hicâz", "mid": "Hicâz", "high": "Tiz Hicâz" },
+    "8": { "low": "Kaba Dik Hicâz", "mid": "Dik Hicâz", "high": "Tiz Dik Hicâz" },
+    "9": { "low": "Yegâh", "mid": "Neva", "high": "Tiz Neva" },
+    "13": { "low": "Kaba Nim Hisâr", "mid": "Nim Hisâr", "high": "" },
+    "14": { "low": "Kaba Hisâr", "mid": "Hisâr", "high": "" },
+    "17": { "low": "Kaba Dik Hisâr", "mid": "Dik Hisâr", "high": "" },
+    "18": { "low": "Hüseynî Aşiran", "mid": "Hüseynî", "high": "" },
+    "22": { "low": "Acem Aşiran", "mid": "Acem", "high": "" },
+    "23": { "low": "Dik Acem Aşiran", "mid": "Dik Acem", "high": "" },
+    "26": { "low": "Irak", "mid": "Eviç", "high": "" },
+    "27": { "low": "Geveşt", "mid": "Mahur", "high": "" },
+    "30": { "low": "Dik Geveşt", "mid": "Dik Mahur", "high": "" },
+    "31": { "low": "Rast", "mid": "Gerdaniye", "high": "" },
+    "35": { "low": "Nim Zirgüle", "mid": "Nim Şehnaz", "high": "" },
+    "36": { "low": "Zirgüle", "mid": "Şehnaz", "high": "" },
+    "39": { "low": "Dik Zirgüle", "mid": "Dik Şehnaz", "high": "" },
+    "40": { "low": "Dügâh", "mid": "Muhayyer", "high": "" },
+    "44": { "low": "Kürdî", "mid": "Sümbüle", "high": "" },
+    "45": { "low": "Dik Kürdî", "mid": "Dik Sümbüle", "high": "" },
+    "48": { "low": "Segâh", "mid": "Tiz Segâh", "high": "" },
+    "49": { "low": "Buselik", "mid": "Tiz Buselik", "high": "" },
+    "52": { "low": "Dik Buselik", "mid": "Tiz Dik Buselik", "high": "" }
+  }
+}
+

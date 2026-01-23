@@ -30,6 +30,7 @@ import {
   baseId53ForNaturalLetter,
   NOTE_BASES,
 } from "./transpose.mjs";
+import { resolvePerdeName } from "./perde53.mjs";
 import { normalizeMeasuresLineBreaks, transformMeasuresPerLine } from "./measures.mjs";
 import {
   buildDefaultDrumVelocityMap,
@@ -3572,37 +3573,6 @@ function formatAeuLabel(step) {
   return String(mod53(step));
 }
 
-const TURKISH_PERDE_BY_LETTER = {
-  C: "Çargâh",
-  D: "Neva",
-  E: "Hüseynî",
-  F: "Acem",
-  G: "Rast",
-  A: "Dügâh",
-  B: "Buselik",
-};
-
-function describePerde({ letterUpper, octave, micro } = {}) {
-  const letter = String(letterUpper || "").toUpperCase();
-  if (!letter || !/[A-G]/.test(letter)) return "";
-  const baseName = TURKISH_PERDE_BY_LETTER[letter] || letter;
-
-  // ABC octave is derived from letter case and ',' / '\'' marks.
-  // In Turkish practice, degrees are commonly referred to with register prefixes:
-  // - "Kaba" for lower register
-  // - "Tiz" for upper register
-  const oct = Number(octave);
-  let register = "";
-  if (Number.isFinite(oct)) {
-    if (oct <= 5) register = "Kaba";
-    else if (oct >= 7) register = "Tiz";
-  }
-
-  const m = Number(micro) || 0;
-  const microSuffix = m ? (m > 0 ? ` (+${m})` : ` (${m})`) : "";
-  return `${register ? `${register} ` : ""}${baseName}${microSuffix}`;
-}
-
 function pickDominantSpelling(spellings) {
   const entries = spellings && typeof spellings.entries === "function" ? Array.from(spellings.entries()) : [];
   if (!entries.length) return "";
@@ -4093,7 +4063,7 @@ function renderIntonationExplorerRows(rows) {
     pcAbs.className = "subtle";
     pc.append(pcRel, pcAbs);
     const perde = document.createElement("td");
-    perde.textContent = describePerde(row) || "";
+    perde.textContent = resolvePerdeName({ pc53: row.absStep, octave: row.octave }) || "";
     const abc = document.createElement("td");
     abc.textContent = row.abcSpelling || "";
     const weight = document.createElement("td");
