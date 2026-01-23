@@ -3616,7 +3616,8 @@ function resolveTonalBaseInput(rawValue) {
       + (accidental === "#" ? 1 : accidental === "b" ? -1 : 0);
     const normalizedPc = modNumber(basePc, 12);
     const approx = Math.round((normalizedPc * 53) / 12);
-    return { ok: true, base: mod53(approx), label: `${letter}${accidental}` };
+    const base = mod53(approx);
+    return { ok: true, base, label: `${letter}${accidental} (pc53=${base})` };
   }
   return { ok: false, error: `Unable to parse tonal base (“${raw}”).` };
 }
@@ -3787,6 +3788,7 @@ function buildIntonationRowsFromEntries(entries, baseStep, { sortMode = "count" 
   const rows = list.map((entry) => ({
     step: entry.step,
     normalizedStep: mod53(entry.step - baseStep),
+    absStep: mod53(entry.step),
     abcSpelling: pickDominantSpelling(entry.spellings),
     count: entry.count,
     ranges: entry.ranges,
@@ -3798,6 +3800,20 @@ function buildIntonationRowsFromEntries(entries, baseStep, { sortMode = "count" 
       const bFirst = Number.isFinite(Number(b.firstStart)) ? Number(b.firstStart) : Number.POSITIVE_INFINITY;
       if (aFirst !== bFirst) return aFirst - bFirst;
       return a.step - b.step;
+    }
+    if (sortMode === "rel") {
+      if (a.normalizedStep !== b.normalizedStep) return a.normalizedStep - b.normalizedStep;
+      return a.absStep - b.absStep;
+    }
+    if (sortMode === "abs") {
+      if (a.absStep !== b.absStep) return a.absStep - b.absStep;
+      return a.normalizedStep - b.normalizedStep;
+    }
+    if (sortMode === "abc") {
+      const aKey = String(a.abcSpelling || "").toLowerCase();
+      const bKey = String(b.abcSpelling || "").toLowerCase();
+      if (aKey !== bKey) return aKey.localeCompare(bKey);
+      return a.absStep - b.absStep;
     }
     if (b.count !== a.count) return b.count - a.count;
     return a.step - b.step;
@@ -3959,12 +3975,17 @@ function renderIntonationExplorerRows(rows) {
     const tr = document.createElement("tr");
     tr.tabIndex = 0;
     tr.dataset.step = String(row.step);
-    tr.title = `abs pc53=${mod53(row.step)}`;
+    tr.title = `pc53 rel=${formatAeuLabel(row.normalizedStep)}; abs=${formatAeuLabel(row.absStep)}`;
     if (intonationExplorerActiveStep != null && String(row.step) === String(intonationExplorerActiveStep)) {
       tr.classList.add("active");
     }
     const pc = document.createElement("td");
-    pc.textContent = formatAeuLabel(row.normalizedStep);
+    const pcRel = document.createElement("span");
+    pcRel.textContent = formatAeuLabel(row.normalizedStep);
+    const pcAbs = document.createElement("span");
+    pcAbs.textContent = ` (${formatAeuLabel(row.absStep)})`;
+    pcAbs.className = "subtle";
+    pc.append(pcRel, pcAbs);
     const abc = document.createElement("td");
     abc.textContent = row.abcSpelling || "";
     const weight = document.createElement("td");
@@ -4066,7 +4087,7 @@ async function refreshIntonationExplorer() {
       label = `K:${resolved.label}`;
     } else {
       base = pickAutoBaseStep(scanned.entries);
-      label = `Auto (${formatAeuLabel(base)})`;
+      label = `Auto pc53=${formatAeuLabel(base)}`;
     }
     intonationExplorerBaseStep = base;
     intonationExplorerBaseLabel = label;
@@ -4078,7 +4099,7 @@ async function refreshIntonationExplorer() {
     clearSvgIntonationBarHighlight();
     clearSvgIntonationNoteHighlight();
     const graceLabel = intonationExplorerSkipGraceNotes ? "grace off" : "grace on";
-    const sortLabel = intonationExplorerSortMode === "first" ? "sort:first" : "sort:count";
+    const sortLabel = `sort:${String(intonationExplorerSortMode || "count")}`;
     setIntonationExplorerStatus(`Base ${intonationExplorerBaseLabel} (${rows.length} classes; ${sortLabel}; ${graceLabel})`);
   } catch (err) {
     const msg = (err && err.message) ? String(err.message) : String(err || "");
