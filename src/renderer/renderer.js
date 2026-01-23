@@ -25,6 +25,7 @@ import {
   transformTranspose,
   parseNoteTokenAt53,
   parseAccidentalPrefix53,
+  buildEffectiveKeyMicroMap53FromKBody,
   computeOctave,
   baseId53ForNaturalLetter,
   NOTE_BASES,
@@ -3633,19 +3634,47 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
   const fullText = String(snapshot.text || "");
   const body = fullText.slice(tune.start, tune.end);
 
+  const formatEffectiveAccPrefix53 = (letterPc12, micro) => {
+    const m = Number(micro) || 0;
+    if (m === 0) return "";
+    try {
+      const sharp = parseAccidentalPrefix53("^", letterPc12);
+      if (sharp && sharp.explicit && sharp.micro === m) return "^";
+      const flat = parseAccidentalPrefix53("_", letterPc12);
+      if (flat && flat.explicit && flat.micro === m) return "_";
+      const halfSharp = parseAccidentalPrefix53("^/", letterPc12);
+      if (halfSharp && halfSharp.explicit && halfSharp.micro === m) return "^/";
+      const halfFlat = parseAccidentalPrefix53("_/", letterPc12);
+      if (halfFlat && halfFlat.explicit && halfFlat.micro === m) return "_/";
+    } catch {}
+    return m > 0 ? `^${m}` : `_${-m}`;
+  };
+
   // Avoid counting field headers / metadata as notes:
   // scan only after the first K: line (if present), and skip free-text blocks.
   let scanStart = 0;
+  let kLineBody = "";
   try {
-    const re = /(?:^|\n)K:[^\n]*\n?/i;
+    const re = /(?:^|\n)K:([^\r\n]*)(?:\r?\n)?/i;
     const m = re.exec(body);
-    if (m) scanStart = Math.max(0, Math.min(body.length, m.index + m[0].length));
+    if (m) {
+      kLineBody = String(m[1] || "");
+      scanStart = Math.max(0, Math.min(body.length, m.index + m[0].length));
+    }
   } catch {}
+
+  let keyMicroMap = {};
+  try {
+    keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(kLineBody);
+  } catch {
+    keyMicroMap = {};
+  }
 
 	  const seen = new Map();
 	  let idx = scanStart;
 	  let inTextBlock = false;
 	  let graceDepth = 0;
+    let barAccidentals = new Map();
 	  while (idx < body.length) {
 	    // Skip %%begintext … %%endtext blocks (often contain prose with A-G letters).
 	    if (!inTextBlock) {
@@ -3686,33 +3715,50 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 	      continue;
 	    }
 
-	    // Skip inline fields like [K:Dm], [M:6/8], [V:1], etc.
-	    // These can contain A–G letters and would be mis-counted as notes.
-	    if (body[idx] === "[" && idx + 2 < body.length && /[A-Za-z]/.test(body[idx + 1]) && body[idx + 2] === ":") {
-	      const close = body.indexOf("]", idx + 3);
-	      if (close >= 0) {
-	        idx = close + 1;
-	        continue;
-	      }
-	    }
+		    // Skip inline fields like [K:Dm], [M:6/8], [V:1], etc.
+		    // These can contain A–G letters and would be mis-counted as notes.
+		    if (body[idx] === "[" && idx + 2 < body.length && /[A-Za-z]/.test(body[idx + 1]) && body[idx + 2] === ":") {
+		      const close = body.indexOf("]", idx + 3);
+		      if (close >= 0) {
+            const tag = String(body[idx + 1] || "").toUpperCase();
+            if (tag === "K") {
+              try {
+                const tokenPart = body.slice(idx + 3, close);
+                keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(tokenPart);
+                barAccidentals = new Map();
+              } catch {}
+            }
+		        idx = close + 1;
+		        continue;
+		      }
+		    }
 
-	    // Skip mid-tune field lines like "K:Dm" / "M:6/8" / "V:1" (line-based fields).
-	    // This is separate from the inline [K:...] form above.
-	    {
-	      const prev = idx > 0 ? body[idx - 1] : "";
-	      const lineStart = idx === 0 || prev === "\n" || prev === "\r";
-	      if (lineStart) {
-	        let j = idx;
-	        while (j < body.length && (body[j] === " " || body[j] === "\t")) j += 1;
-	        if (j + 1 < body.length && /[A-Za-z]/.test(body[j]) && body[j + 1] === ":") {
-	          const nextNl = body.indexOf("\n", j + 2);
-	          const nextCr = body.indexOf("\r", j + 2);
-	          const next = (nextNl >= 0 && nextCr >= 0) ? Math.min(nextNl, nextCr) : (nextNl >= 0 ? nextNl : nextCr);
-	          idx = next >= 0 ? next + 1 : body.length;
-	          continue;
-	        }
-	      }
-	    }
+		    // Skip mid-tune field lines like "K:Dm" / "M:6/8" / "V:1" (line-based fields).
+		    // This is separate from the inline [K:...] form above.
+		    {
+		      const prev = idx > 0 ? body[idx - 1] : "";
+		      const lineStart = idx === 0 || prev === "\n" || prev === "\r";
+		      if (lineStart) {
+		        let j = idx;
+		        while (j < body.length && (body[j] === " " || body[j] === "\t")) j += 1;
+		        if (j + 1 < body.length && /[A-Za-z]/.test(body[j]) && body[j + 1] === ":") {
+              const tag = String(body[j] || "").toUpperCase();
+		          const nextNl = body.indexOf("\n", j + 2);
+		          const nextCr = body.indexOf("\r", j + 2);
+		          const next = (nextNl >= 0 && nextCr >= 0) ? Math.min(nextNl, nextCr) : (nextNl >= 0 ? nextNl : nextCr);
+              if (tag === "K") {
+                try {
+                  const lineEnd = next >= 0 ? next : body.length;
+                  const tokenPart = body.slice(j + 2, lineEnd);
+                  keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(tokenPart);
+                  barAccidentals = new Map();
+                } catch {}
+              }
+		          idx = next >= 0 ? next + 1 : body.length;
+		          continue;
+		        }
+		      }
+		    }
 
 	    // Skip quoted chord symbols / annotations: "Am" "G7" etc.
 	    if (body[idx] === "\"") {
@@ -3723,8 +3769,8 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
       }
     }
 
-    if (skipGraceNotes) {
-      const ch = body[idx];
+	    if (skipGraceNotes) {
+	      const ch = body[idx];
       if (ch === "{") {
         graceDepth += 1;
         idx += 1;
@@ -3739,38 +3785,59 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
         idx += 1;
         continue;
       }
-    }
+	    }
 
-    const note = parseNoteTokenAt53(body, idx);
-    if (!note) {
-      idx += 1;
-      continue;
-    }
+      // Reset bar-accidental memory at barlines.
+      if (body[idx] === "|") {
+        barAccidentals = new Map();
+        idx += 1;
+        continue;
+      }
+
+	    const note = parseNoteTokenAt53(body, idx);
+	    if (!note) {
+	      idx += 1;
+	      continue;
+	    }
     const letter = note.letter ? note.letter.toUpperCase() : "";
     if (!letter) {
       idx = note.end;
       continue;
     }
-    const letterPc = NOTE_BASES[letter] != null ? NOTE_BASES[letter] : 0;
-    const baseId = baseId53ForNaturalLetter(letter);
-    const accidental = parseAccidentalPrefix53(note.accPrefix, letterPc);
-    const micro = Number.isFinite(accidental.micro) ? accidental.micro : 0;
-    const octave = computeOctave(note.letter, note.octaveMarks);
-    const abs53 = octave * 53 + baseId + micro;
-    const step = mod53(abs53);
-    const entry = seen.get(step) || {
-      step,
-      count: 0,
+	    const letterPc = NOTE_BASES[letter] != null ? NOTE_BASES[letter] : 0;
+	    const baseId = baseId53ForNaturalLetter(letter);
+	    const accidental = parseAccidentalPrefix53(note.accPrefix, letterPc);
+	    const octave = computeOctave(note.letter, note.octaveMarks);
+      const barKey = `${letter}:${octave}`;
+      let appliedMicro = 0;
+      if (accidental && accidental.explicit) {
+        appliedMicro = Number.isFinite(accidental.micro) ? accidental.micro : 0;
+        barAccidentals.set(barKey, appliedMicro);
+      } else if (barAccidentals.has(barKey)) {
+        appliedMicro = barAccidentals.get(barKey);
+      } else {
+        const keyMicro = keyMicroMap && Object.prototype.hasOwnProperty.call(keyMicroMap, letter)
+          ? keyMicroMap[letter]
+          : 0;
+        appliedMicro = Number.isFinite(keyMicro) ? keyMicro : 0;
+      }
+	    const abs53 = octave * 53 + baseId + appliedMicro;
+	    const step = mod53(abs53);
+	    const entry = seen.get(step) || {
+	      step,
+	      count: 0,
       ranges: [],
       firstStart: null,
       spellings: new Map(),
     };
-    entry.count += 1;
-    if (entry.firstStart == null || note.start < entry.firstStart) entry.firstStart = note.start;
-    try {
-      const spelling = `${String(note.accPrefix || "")}${String(note.letter || "").toUpperCase()}`;
-      if (spelling) entry.spellings.set(spelling, (Number(entry.spellings.get(spelling)) || 0) + 1);
-    } catch {}
+	    entry.count += 1;
+	    if (entry.firstStart == null || note.start < entry.firstStart) entry.firstStart = note.start;
+	    try {
+        const effectivePrefix = String(note.accPrefix || "")
+          || formatEffectiveAccPrefix53(letterPc, appliedMicro);
+	      const spelling = `${effectivePrefix}${String(note.letter || "").toUpperCase()}`;
+	      if (spelling) entry.spellings.set(spelling, (Number(entry.spellings.get(spelling)) || 0) + 1);
+	    } catch {}
     entry.ranges.push({
       // NOTE: offsets are relative to the active tune text in the editor (not the full file).
       start: note.start,
