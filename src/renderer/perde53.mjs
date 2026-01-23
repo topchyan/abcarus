@@ -3,9 +3,11 @@
 // IMPORTANT:
 // - This mapping is octave-sensitive: the same pc53 has different Perde names by register.
 // - The low/mid/high labels correspond to ABC octaves roughly as:
-//   low  = ABC octave 3 (e.g. "D,"), mid = ABC octave 4 (e.g. "D"), high = ABC octave 5 (e.g. "d")
-//   In this codebase, `computeOctave()` returns 4/5/6 for those, so we map:
-//     octave <= 4 -> low, octave == 5 -> mid, octave >= 6 -> high.
+//   low  = uppercase (e.g. "D"), mid = lowercase (e.g. "d"), high = lowercase with "'" (e.g. "d'")
+//   In this codebase, `computeOctave()` returns:
+//     uppercase = 5, lowercase = 6, then +/- 1 per "," / "'".
+//   So we map:
+//     octave <= 5 -> low, octave == 6 -> mid, octave >= 7 -> high.
 //
 // Data provenance (generated, then curated):
 // - /home/avetik/Projects/Makams/master_koma53_with_abc_octaves.csv
@@ -71,6 +73,6 @@ export function resolvePerdeName({ pc53, octave } = {}) {
   if (!names) return "";
 
   const oct = Number(octave);
-  const register = Number.isFinite(oct) ? (oct <= 4 ? "low" : (oct === 5 ? "mid" : "high")) : "mid";
+  const register = Number.isFinite(oct) ? (oct <= 5 ? "low" : (oct === 6 ? "mid" : "high")) : "mid";
   return pickRegisterName(names, register);
 }
