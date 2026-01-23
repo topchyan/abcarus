@@ -3641,34 +3641,82 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
     if (m) scanStart = Math.max(0, Math.min(body.length, m.index + m[0].length));
   } catch {}
 
-  const seen = new Map();
-  let idx = scanStart;
-  let inTextBlock = false;
-  let graceDepth = 0;
-  while (idx < body.length) {
-    // Skip %%begintext … %%endtext blocks (often contain prose with A-G letters).
-    if (!inTextBlock) {
-      const lineStart = idx === 0 || body[idx - 1] === "\n";
-      if (lineStart && body.startsWith("%%begintext", idx)) {
-        inTextBlock = true;
-        idx += "%%begintext".length;
-        continue;
-      }
-    } else {
-      const lineStart = idx === 0 || body[idx - 1] === "\n";
-      if (lineStart && body.startsWith("%%endtext", idx)) {
-        inTextBlock = false;
-        idx += "%%endtext".length;
-        continue;
-      }
-      idx += 1;
-      continue;
-    }
+	  const seen = new Map();
+	  let idx = scanStart;
+	  let inTextBlock = false;
+	  let graceDepth = 0;
+	  while (idx < body.length) {
+	    // Skip %%begintext … %%endtext blocks (often contain prose with A-G letters).
+	    if (!inTextBlock) {
+	      const prev = idx > 0 ? body[idx - 1] : "";
+	      const lineStart = idx === 0 || prev === "\n" || prev === "\r";
+	      if (lineStart) {
+	        let j = idx;
+	        while (j < body.length && (body[j] === " " || body[j] === "\t")) j += 1;
+	        if (body.startsWith("%%begintext", j)) {
+	          inTextBlock = true;
+	          idx = j + "%%begintext".length;
+	          continue;
+	        }
+	      }
+	    } else {
+	      const prev = idx > 0 ? body[idx - 1] : "";
+	      const lineStart = idx === 0 || prev === "\n" || prev === "\r";
+	      if (lineStart) {
+	        let j = idx;
+	        while (j < body.length && (body[j] === " " || body[j] === "\t")) j += 1;
+	        if (body.startsWith("%%endtext", j)) {
+	          inTextBlock = false;
+	          idx = j + "%%endtext".length;
+	          continue;
+	        }
+	      }
+	      idx += 1;
+	      continue;
+	    }
 
-    // Skip quoted chord symbols / annotations: "Am" "G7" etc.
-    if (body[idx] === "\"") {
-      const next = body.indexOf("\"", idx + 1);
-      if (next >= 0) {
+	    // Skip ABC comments (% ... to end-of-line). These can contain A–G letters and confuse note scanning.
+	    // IMPORTANT: don't treat "%%" directives as comments.
+	    if (body[idx] === "%" && !(idx + 1 < body.length && body[idx + 1] === "%")) {
+	      const nextNl = body.indexOf("\n", idx + 1);
+	      const nextCr = body.indexOf("\r", idx + 1);
+	      const next = (nextNl >= 0 && nextCr >= 0) ? Math.min(nextNl, nextCr) : (nextNl >= 0 ? nextNl : nextCr);
+	      idx = next >= 0 ? next + 1 : body.length;
+	      continue;
+	    }
+
+	    // Skip inline fields like [K:Dm], [M:6/8], [V:1], etc.
+	    // These can contain A–G letters and would be mis-counted as notes.
+	    if (body[idx] === "[" && idx + 2 < body.length && /[A-Za-z]/.test(body[idx + 1]) && body[idx + 2] === ":") {
+	      const close = body.indexOf("]", idx + 3);
+	      if (close >= 0) {
+	        idx = close + 1;
+	        continue;
+	      }
+	    }
+
+	    // Skip mid-tune field lines like "K:Dm" / "M:6/8" / "V:1" (line-based fields).
+	    // This is separate from the inline [K:...] form above.
+	    {
+	      const prev = idx > 0 ? body[idx - 1] : "";
+	      const lineStart = idx === 0 || prev === "\n" || prev === "\r";
+	      if (lineStart) {
+	        let j = idx;
+	        while (j < body.length && (body[j] === " " || body[j] === "\t")) j += 1;
+	        if (j + 1 < body.length && /[A-Za-z]/.test(body[j]) && body[j + 1] === ":") {
+	          const nextNl = body.indexOf("\n", j + 2);
+	          const nextCr = body.indexOf("\r", j + 2);
+	          const next = (nextNl >= 0 && nextCr >= 0) ? Math.min(nextNl, nextCr) : (nextNl >= 0 ? nextNl : nextCr);
+	          idx = next >= 0 ? next + 1 : body.length;
+	          continue;
+	        }
+	      }
+	    }
+
+	    // Skip quoted chord symbols / annotations: "Am" "G7" etc.
+	    if (body[idx] === "\"") {
+	      const next = body.indexOf("\"", idx + 1);
+	      if (next >= 0) {
         idx = next + 1;
         continue;
       }
