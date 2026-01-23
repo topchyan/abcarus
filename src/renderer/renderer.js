@@ -3845,14 +3845,16 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 	      firstStart: null,
 	      spellings: new Map(),
 	    };
-	    entry.count += 1;
-	    if (entry.firstStart == null || note.start < entry.firstStart) entry.firstStart = note.start;
-	    try {
-        const effectivePrefix = String(note.accPrefix || "")
-          || formatEffectiveAccPrefix53(letterPc, appliedMicro);
-	      const spelling = `${effectivePrefix}${String(note.letter || "")}`;
-	      if (spelling) entry.spellings.set(spelling, (Number(entry.spellings.get(spelling)) || 0) + 1);
-	    } catch {}
+		    entry.count += 1;
+		    if (entry.firstStart == null || note.start < entry.firstStart) entry.firstStart = note.start;
+		    try {
+	        // Always show the *effective* accidental in a stable, micro-aware spelling so that:
+	        // - key-signature microtones are visible (even when the token is written natural), and
+	        // - plain ^/_ accidentals are normalized to numeric micro steps for EDO-53 labeling.
+	        const effectivePrefix = formatEffectiveAccPrefix53(letterPc, appliedMicro);
+		      const spelling = `${effectivePrefix}${String(note.letter || "")}`;
+		      if (spelling) entry.spellings.set(spelling, (Number(entry.spellings.get(spelling)) || 0) + 1);
+		    } catch {}
 	    entry.ranges.push({
       // NOTE: offsets are relative to the active tune text in the editor (not the full file).
       start: note.start,
