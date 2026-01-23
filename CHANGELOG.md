@@ -6,10 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [0.22.12] - 2026-01-23
 ### Fixed
 - Intonation Explorer: skip comments (`% ...`) and mid-tune field lines (`K:`, `M:`, `V:` / `[K:...]`) during pitch scanning so counts/highlights reflect only music tokens.
-
-
 
 ## [0.22.11] - 2026-01-23
 ### Fixed
