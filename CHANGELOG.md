@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Templates: tolerate indented `X:` when inserting/appending templates (prevents duplicate `X:` headers).
+- Render/Print: keep file-level `%%header`/`%%footer` for print/export while suppressing repeated book-style prose in per-tune renders.
+
 
 
 ## [0.22.10] - 2026-01-22

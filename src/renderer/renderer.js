@@ -4294,6 +4294,9 @@ function getActiveFileEntry() {
 
 function updateFileHeaderPanel() {
   if (!$fileHeaderPanel || !$fileHeaderEditor) return;
+  // Ensure the CodeMirror instance exists before we attempt to sync text into it.
+  // Otherwise, `setHeaderEditorValue()` is a no-op and we can end up with a blank header until Reload.
+  initHeaderEditor();
   const entry = getActiveFileEntry();
   if (!entry) {
     $fileHeaderPanel.classList.remove("active");
@@ -4307,20 +4310,29 @@ function updateFileHeaderPanel() {
   }
   $fileHeaderPanel.classList.add("active");
   const nextHeaderText = entry.headerText || "";
-  const shouldReplace = headerEditorFilePath !== entry.path
-    || (!headerDirty && getHeaderEditorValue() !== nextHeaderText);
-  if (shouldReplace) {
+  const currentHeaderText = getHeaderEditorValue();
+  // Header editor is authoritative for the active file: once loaded, do not auto-overwrite it
+  // (avoid "snap-back" and invisible edits). Reload is always explicit via the Reload button.
+  if (headerEditorFilePath !== entry.path) {
     suppressHeaderDirty = true;
     setHeaderEditorValue(nextHeaderText);
     suppressHeaderDirty = false;
     headerDirty = false;
     headerEditorFilePath = entry.path || null;
+  } else if (!headerDirty && !String(currentHeaderText || "").trim() && String(nextHeaderText || "").trim()) {
+    // Initial-load recovery: library scanning/parsing can populate `entry.headerText` after the panel first shows.
+    // If the header editor is still empty and not dirty, hydrate it once (without requiring a manual Reload).
+    suppressHeaderDirty = true;
+    setHeaderEditorValue(nextHeaderText);
+    suppressHeaderDirty = false;
+    headerDirty = false;
   }
   updateHeaderStateUI({ announce: true });
 }
 
 function findHeaderEndOffset(content) {
-  const match = String(content || "").match(/^\s*X:/m);
+  // Avoid `\s*` which can consume newlines and shift the boundary into blank lines.
+  const match = String(content || "").match(/^[\t ]*X:/m);
   if (!match) return String(content || "").length;
   return Number.isFinite(match.index) ? match.index : 0;
 }
@@ -10966,9 +10978,12 @@ async function renderAbcToSvgMarkup(abcText, options = {}) {
 }
 
 async function renderCurrentTuneSvgMarkupForPrint() {
-  const payload = getRenderPayload();
-  const text = payload && payload.text ? payload.text : "";
-  if (!text.trim()) return { ok: false, error: "No notation to print." };
+  const tuneText = getEditorValue();
+  if (!String(tuneText || "").trim()) return { ok: false, error: "No notation to print." };
+  const entry = getActiveFileEntry();
+  const headerText = entry ? getHeaderEditorValue() : "";
+  const prefixPayload = buildHeaderPrefix(headerText, true, tuneText);
+  const text = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
   return renderAbcToSvgMarkup(text);
 }
 
@@ -11024,7 +11039,8 @@ async function renderPrintAllSvgMarkup(entry, content, options = {}) {
     if (breakBefore) flush();
 
     const effectiveHeader = (entry && entry.path && pathsEqual(entry.path, activeFilePath)) ? getHeaderEditorValue() : (entry.headerText || "");
-    const prefix = buildHeaderPrefix(effectiveHeader, false, tuneText);
+    const headerText = sanitizeFileHeaderForPerTuneRender(effectiveHeader);
+    const prefix = buildHeaderPrefix(headerText, false, tuneText);
     const block = prefix.text ? `${prefix.text}${tuneText}` : tuneText;
     const meta = debugInfo ? {
       id: tune.id,
@@ -11295,7 +11311,8 @@ async function renderSetListSvgMarkupForPrint(options = {}) {
 
     const renumbered = ensureXNumberInAbc(raw, i + 1);
     const combinedHeader = `${getSetListFileHeaderText()}${item.headerText || ""}`;
-    const prefix = buildHeaderPrefix(combinedHeader, false, renumbered);
+    const headerText = sanitizeFileHeaderForPerTuneRender(combinedHeader);
+    const prefix = buildHeaderPrefix(headerText, false, renumbered);
     const block = prefix.text ? `${prefix.text}${renumbered}` : renumbered;
     const context = { tuneLabel: buildPrintTuneLabel(tune) };
     setErrorLineOffsetFromHeader(prefix.text);
@@ -13435,7 +13452,7 @@ function dropLibraryFileEntry(filePath) {
 
 function getNextXNumber(existingContent) {
   let max = 0;
-  const re = /^X:\s*(\d+)/gm;
+  const re = /^\s*X:\s*(\d+)/gm;
   let match;
   const text = String(existingContent || "");
   while ((match = re.exec(text)) !== null) {
@@ -13449,10 +13466,12 @@ function ensureXNumberInAbc(abcText, xNumber) {
   const text = String(abcText || "");
   if (!text.trim()) return text;
   const lines = text.split(/\r\n|\n|\r/);
-  const idx = lines.findIndex((line) => /^X:/.test(line));
+  const idx = lines.findIndex((line) => /^\s*X:/.test(line));
   const line = `X:${xNumber}`;
   if (idx >= 0) {
-    lines[idx] = line;
+    const rawLine = String(lines[idx] || "");
+    const prefix = rawLine.match(/^(\s*)X:/) ? RegExp.$1 : "";
+    lines[idx] = `${prefix}${line}`;
     return lines.join("\n");
   }
   lines.unshift(line);
@@ -13624,7 +13643,16 @@ async function saveFileHeaderText(filePath, headerText) {
       setFileContentInCache(p, snapshot.text);
       attachTuneUidsToLibraryFile(p, snapshot);
     }
+    // Re-parse from disk to update the library header text. This is the most reliable source of truth
+    // for UI, and avoids depending on WC segmentation heuristics for where the header ends.
     const updatedFile = await refreshLibraryFile(p, { force: true });
+    try {
+      // Mark the header editor clean after successful save.
+      if (updatedFile && updatedFile.path && pathsEqual(updatedFile.path, p) && headerEditorFilePath && pathsEqual(headerEditorFilePath, p)) {
+        headerDirty = false;
+        updateHeaderStateUI();
+      }
+    } catch {}
     if (activeTuneMeta && pathsEqual(activeTuneMeta.path, p)) {
       const tuneIdToRestore = rawMode ? activeTuneId : (activeTuneUid || activeTuneId);
       if (tuneIdToRestore) await selectTune(tuneIdToRestore, { skipConfirm: true, suppressRecent: true });
@@ -16342,6 +16370,7 @@ if ($fileHeaderSave) {
       return;
     }
     try {
+      try { await flushWorkingCopyTuneSync(); } catch {}
       const headerRes = await saveFileHeaderText(entry.path, getHeaderEditorValue());
       if (headerRes && headerRes.ok) {
         headerDirty = false;
@@ -18686,8 +18715,7 @@ function buildHeaderPrefix(entryHeader, includeCheckbars, tuneText) {
     if (fontLayerRaw) layers.push(fontLayerRaw);
   }
   const fileHeaderRaw = String(entryHeader || "");
-  const fileHeaderClean = sanitizeFileHeaderForPrefix(fileHeaderRaw);
-  if (fileHeaderClean.trim()) layers.push(fileHeaderClean.replace(/[\r\n]+$/, ""));
+  if (fileHeaderRaw.trim()) layers.push(fileHeaderRaw.replace(/[\r\n]+$/, ""));
   const deduped = dedupeHeaderLayers(layers, tuneHeaderKeys);
   let header = deduped.join("\n");
   if (includeCheckbars && isMeasureCheckEnabled()) {
@@ -18698,7 +18726,7 @@ function buildHeaderPrefix(entryHeader, includeCheckbars, tuneText) {
   return { text: prefix, offset: prefix.length };
 }
 
-function sanitizeFileHeaderForPrefix(text) {
+function sanitizeFileHeaderForInteractiveRender(text) {
   const raw = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   if (!raw.trim()) return "";
   const lines = raw.split("\n");
@@ -18742,6 +18770,56 @@ function sanitizeFileHeaderForPrefix(text) {
         "eps",
         "leftmargin",
         "rightmargin",
+      ]);
+      if (!skip.has(directive)) out.push(line);
+      continue;
+    }
+    if (/^%/.test(trimmed) || /^[A-Za-z]:/.test(trimmed)) {
+      out.push(line);
+      continue;
+    }
+  }
+  return out.join("\n").replace(/\s+$/, "");
+}
+
+function sanitizeFileHeaderForPerTuneRender(text) {
+  const raw = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  if (!raw.trim()) return "";
+  const lines = raw.split("\n");
+  const out = [];
+  let inTextBlock = false;
+
+  for (const line of lines) {
+    const trimmed = String(line || "").trim();
+    if (/^%%\s*begintext\b/i.test(trimmed)) {
+      inTextBlock = true;
+      continue;
+    }
+    if (inTextBlock) {
+      if (/^%%\s*endtext\b/i.test(trimmed)) inTextBlock = false;
+      continue;
+    }
+    if (!trimmed) {
+      out.push("");
+      continue;
+    }
+    if (/^%%/.test(trimmed)) {
+      const directive = trimmed
+        .replace(/^%%\s*/, "")
+        .split(/\s+/, 1)[0]
+        .toLowerCase();
+      // Keep print/layout directives, but drop book-style prose that shouldn't be repeated per tune.
+      const skip = new Set([
+        "begintext",
+        "endtext",
+        "text",
+        "center",
+        "vskip",
+        "textfont",
+        "titleformat",
+        "subtitleformat",
+        // File-level %%newpage would force a page break before every tune in Print All / Set List.
+        "newpage",
       ]);
       if (!skip.has(directive)) out.push(line);
       continue;
@@ -20061,7 +20139,9 @@ function getPlaybackPayload() {
 function getRenderPayload() {
   const tuneText = getEditorValue();
   const entry = getActiveFileEntry();
-  const prefixPayload = buildHeaderPrefix(entry ? getHeaderEditorValue() : "", true, tuneText);
+  const headerTextRaw = entry ? getHeaderEditorValue() : "";
+  const headerText = sanitizeFileHeaderForInteractiveRender(headerTextRaw);
+  const prefixPayload = buildHeaderPrefix(headerText, true, tuneText);
   if (!prefixPayload.text) return { text: tuneText, offset: 0 };
   const out = { text: `${prefixPayload.text}${tuneText}`, offset: prefixPayload.offset };
   assertCleanAbcText(out.text, "render payload");

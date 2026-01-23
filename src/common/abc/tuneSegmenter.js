@@ -9,7 +9,8 @@ function findLineStart(text, index) {
 function segmentTunes(fullText) {
   const text = String(fullText || "");
   const tunes = [];
-  const xLineRe = /^X:\s*(.*)$/gm;
+  // Allow indentation, but do not let `\s` consume newlines (which would shift the start into blank lines).
+  const xLineRe = /^[\t ]*X:\s*(.*)$/gm;
   let match;
 
   while ((match = xLineRe.exec(text)) !== null) {
@@ -32,4 +33,3 @@ function segmentTunes(fullText) {
 module.exports = {
   segmentTunes,
 };
-
