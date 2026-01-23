@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Intonation Explorer: show Perde names (EDO-53) and expand Perde coverage for the SymbTr makam corpus.
+
 
 
 ## [0.22.12] - 2026-01-23
