@@ -4294,6 +4294,9 @@ function getActiveFileEntry() {
 
 function updateFileHeaderPanel() {
   if (!$fileHeaderPanel || !$fileHeaderEditor) return;
+  // Ensure the CodeMirror instance exists before we attempt to sync text into it.
+  // Otherwise, `setHeaderEditorValue()` is a no-op and we can end up with a blank header until Reload.
+  initHeaderEditor();
   const entry = getActiveFileEntry();
   if (!entry) {
     $fileHeaderPanel.classList.remove("active");
@@ -4320,7 +4323,8 @@ function updateFileHeaderPanel() {
 }
 
 function findHeaderEndOffset(content) {
-  const match = String(content || "").match(/^\s*X:/m);
+  // Avoid `\s*` which can consume newlines and shift the boundary into blank lines.
+  const match = String(content || "").match(/^[\t ]*X:/m);
   if (!match) return String(content || "").length;
   return Number.isFinite(match.index) ? match.index : 0;
 }

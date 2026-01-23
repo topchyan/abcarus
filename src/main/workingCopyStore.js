@@ -368,12 +368,13 @@ function applyHeaderText(headerText) {
   const nextHeader = String(headerText == null ? "" : headerText);
   return mutateWorkingCopy((draft) => {
     const fullText = String(draft.text || "");
-    const match = fullText.match(/^\s*X:/m);
+    // Do not use `\s*` here: it can consume newlines and shift the boundary into blank lines.
+    const match = fullText.match(/^[\t ]*X:/m);
     const headerEnd = match && Number.isFinite(match.index) ? match.index : fullText.length;
     const suffix = fullText.slice(headerEnd);
 
     let header = nextHeader;
-    if (header && !/[\r\n]$/.test(header) && /^\s*X:/.test(suffix)) header += "\n";
+    if (header && !/[\r\n]$/.test(header) && /^[\t ]*X:/.test(suffix)) header += "\n";
     draft.text = `${header}${suffix}`;
     return { text: draft.text };
   }, { kind: "applyHeaderText" });

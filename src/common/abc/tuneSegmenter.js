@@ -9,8 +9,8 @@ function findLineStart(text, index) {
 function segmentTunes(fullText) {
   const text = String(fullText || "");
   const tunes = [];
-  // Allow leading whitespace: other parsers in the app accept `^\s*X:`.
-  const xLineRe = /^\s*X:\s*(.*)$/gm;
+  // Allow indentation, but do not let `\s` consume newlines (which would shift the start into blank lines).
+  const xLineRe = /^[\t ]*X:\s*(.*)$/gm;
   let match;
 
   while ((match = xLineRe.exec(text)) !== null) {
