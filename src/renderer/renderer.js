@@ -4063,7 +4063,12 @@ function renderIntonationExplorerRows(rows) {
     pcAbs.className = "subtle";
     pc.append(pcRel, pcAbs);
     const perde = document.createElement("td");
-    perde.textContent = resolvePerdeName({ pc53: row.absStep, octave: row.octave }) || "";
+    const perdeName = resolvePerdeName({ pc53: row.absStep, octave: row.octave }) || "";
+    perde.textContent = perdeName || "—";
+    if (!perdeName) {
+      perde.title = `No Perde label yet for pc53=${formatAeuLabel(row.absStep)} at this register.`;
+      perde.classList.add("subtle");
+    }
     const abc = document.createElement("td");
     abc.textContent = row.abcSpelling || "";
     const weight = document.createElement("td");

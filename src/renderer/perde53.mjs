@@ -42,9 +42,22 @@ export const PERDE_BY_PC53 = Object.freeze({
 
 function pickRegisterName(names, register) {
   if (!names) return "";
-  if (register === "high") return names.high || names.mid || names.low || "";
-  if (register === "mid") return names.mid || names.low || names.high || "";
-  return names.low || names.mid || names.high || "";
+  if (register === "high") {
+    if (names.high) return names.high;
+    // Some sources already encode register via "Tiz ..." in mid; prefer that over guessing.
+    if (names.mid && /^Tiz\b/i.test(names.mid)) return names.mid;
+    return "";
+  }
+  if (register === "mid") {
+    if (names.mid) return names.mid;
+    // Some sources only provide the low-register name; don't auto-prefix here.
+    if (names.low && !/^Kaba\b/i.test(names.low)) return names.low;
+    return names.low || "";
+  }
+  if (names.low) return names.low;
+  // Some sources only provide the mid name; don't auto-prefix here.
+  if (names.mid && /^Kaba\b/i.test(names.mid)) return names.mid;
+  return names.mid || "";
 }
 
 export function resolvePerdeName({ pc53, octave } = {}) {
@@ -57,4 +70,3 @@ export function resolvePerdeName({ pc53, octave } = {}) {
   const register = Number.isFinite(oct) ? (oct <= 4 ? "low" : (oct === 5 ? "mid" : "high")) : "mid";
   return pickRegisterName(names, register);
 }
-
