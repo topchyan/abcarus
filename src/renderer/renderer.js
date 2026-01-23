@@ -3852,7 +3852,7 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 	        // - key-signature microtones are visible (even when the token is written natural), and
 	        // - plain ^/_ accidentals are normalized to numeric micro steps for EDO-53 labeling.
 	        const effectivePrefix = formatEffectiveAccPrefix53(letterPc, appliedMicro);
-		      const spelling = `${effectivePrefix}${String(note.letter || "")}`;
+		      const spelling = `${effectivePrefix}${String(note.letter || "")}${String(note.octaveMarks || "")}`;
 		      if (spelling) entry.spellings.set(spelling, (Number(entry.spellings.get(spelling)) || 0) + 1);
 		    } catch {}
 	    entry.ranges.push({
