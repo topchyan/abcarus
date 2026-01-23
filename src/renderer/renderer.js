@@ -13631,7 +13631,11 @@ async function saveFileHeaderText(filePath, headerText) {
       setFileContentInCache(p, snapshot.text);
       attachTuneUidsToLibraryFile(p, snapshot);
     }
-    const updatedFile = await refreshLibraryFile(p, { force: true });
+    // Prefer the working-copy snapshot as the source of truth for the active file.
+    // This avoids UI "snap-back" where stale `entry.headerText` overwrites the just-saved header.
+    const updatedFile = (snapshot && snapshot.path && pathsEqual(snapshot.path, p))
+      ? syncLibraryFileFromWorkingCopySnapshot(p, snapshot)
+      : await refreshLibraryFile(p, { force: true });
     try {
       // Keep the header editor aligned with the canonical post-save text so the user can trust Save Header.
       if (snapshot && snapshot.path && pathsEqual(snapshot.path, p) && headerEditorFilePath && pathsEqual(headerEditorFilePath, p)) {
