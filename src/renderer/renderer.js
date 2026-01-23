@@ -4310,6 +4310,7 @@ function updateFileHeaderPanel() {
   }
   $fileHeaderPanel.classList.add("active");
   const nextHeaderText = entry.headerText || "";
+  const currentHeaderText = getHeaderEditorValue();
   // Header editor is authoritative for the active file: once loaded, do not auto-overwrite it
   // (avoid "snap-back" and invisible edits). Reload is always explicit via the Reload button.
   if (headerEditorFilePath !== entry.path) {
@@ -4318,6 +4319,13 @@ function updateFileHeaderPanel() {
     suppressHeaderDirty = false;
     headerDirty = false;
     headerEditorFilePath = entry.path || null;
+  } else if (!headerDirty && !String(currentHeaderText || "").trim() && String(nextHeaderText || "").trim()) {
+    // Initial-load recovery: library scanning/parsing can populate `entry.headerText` after the panel first shows.
+    // If the header editor is still empty and not dirty, hydrate it once (without requiring a manual Reload).
+    suppressHeaderDirty = true;
+    setHeaderEditorValue(nextHeaderText);
+    suppressHeaderDirty = false;
+    headerDirty = false;
   }
   updateHeaderStateUI({ announce: true });
 }
