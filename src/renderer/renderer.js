@@ -25,10 +25,13 @@ import {
   transformTranspose,
   parseNoteTokenAt53,
   parseAccidentalPrefix53,
+  buildEffectiveKeyMicroMap53FromKBody,
   computeOctave,
   baseId53ForNaturalLetter,
   NOTE_BASES,
 } from "./transpose.mjs";
+import { resolvePerdeName } from "./perde53.mjs";
+import { resolvePerdeNamesFromAbcToken } from "./perde_by_abc.mjs";
 import { normalizeMeasuresLineBreaks, transformMeasuresPerLine } from "./measures.mjs";
 import {
   buildDefaultDrumVelocityMap,
@@ -3536,6 +3539,7 @@ let intonationExplorerBaseLabel = "pc53=0";
 let intonationExplorerBaseMode = "auto";
 let intonationExplorerSortMode = "count";
 let intonationExplorerSkipGraceNotes = true;
+let intonationExplorerIs53 = false;
 
 let lastSvgIntonationBarEls = [];
 let lastSvgIntonationNoteEls = [];
@@ -3633,19 +3637,54 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
   const fullText = String(snapshot.text || "");
   const body = fullText.slice(tune.start, tune.end);
 
+  let is53 = false;
+  try {
+    // Prefer tune-local detection; also allow file-level header directives to be picked up.
+    // This flag gates Perde naming (EDO-12 doesn't need Perde labels).
+    is53 = /%%\s*MIDI\s+temperamentequal\s+53\b/i.test(body) || /%%\s*MIDI\s+temperamentequal\s+53\b/i.test(fullText);
+  } catch { is53 = false; }
+
+  const formatEffectiveAccPrefix53 = (letterPc12, micro) => {
+    const m = Number(micro) || 0;
+    if (m === 0) return "";
+    try {
+      const sharp = parseAccidentalPrefix53("^", letterPc12);
+      if (sharp && sharp.explicit && sharp.micro === m) return "^";
+      const flat = parseAccidentalPrefix53("_", letterPc12);
+      if (flat && flat.explicit && flat.micro === m) return "_";
+      const halfSharp = parseAccidentalPrefix53("^/", letterPc12);
+      if (halfSharp && halfSharp.explicit && halfSharp.micro === m) return "^/";
+      const halfFlat = parseAccidentalPrefix53("_/", letterPc12);
+      if (halfFlat && halfFlat.explicit && halfFlat.micro === m) return "_/";
+    } catch {}
+    return m > 0 ? `^${m}` : `_${-m}`;
+  };
+
   // Avoid counting field headers / metadata as notes:
   // scan only after the first K: line (if present), and skip free-text blocks.
   let scanStart = 0;
+  let kLineBody = "";
   try {
-    const re = /(?:^|\n)K:[^\n]*\n?/i;
+    const re = /(?:^|\n)K:([^\r\n]*)(?:\r?\n)?/i;
     const m = re.exec(body);
-    if (m) scanStart = Math.max(0, Math.min(body.length, m.index + m[0].length));
+    if (m) {
+      kLineBody = String(m[1] || "");
+      scanStart = Math.max(0, Math.min(body.length, m.index + m[0].length));
+    }
   } catch {}
+
+  let keyMicroMap = {};
+  try {
+    keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(kLineBody);
+  } catch {
+    keyMicroMap = {};
+  }
 
 	  const seen = new Map();
 	  let idx = scanStart;
 	  let inTextBlock = false;
 	  let graceDepth = 0;
+    let barAccidentals = new Map();
 	  while (idx < body.length) {
 	    // Skip %%begintext … %%endtext blocks (often contain prose with A-G letters).
 	    if (!inTextBlock) {
@@ -3686,33 +3725,50 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 	      continue;
 	    }
 
-	    // Skip inline fields like [K:Dm], [M:6/8], [V:1], etc.
-	    // These can contain A–G letters and would be mis-counted as notes.
-	    if (body[idx] === "[" && idx + 2 < body.length && /[A-Za-z]/.test(body[idx + 1]) && body[idx + 2] === ":") {
-	      const close = body.indexOf("]", idx + 3);
-	      if (close >= 0) {
-	        idx = close + 1;
-	        continue;
-	      }
-	    }
+		    // Skip inline fields like [K:Dm], [M:6/8], [V:1], etc.
+		    // These can contain A–G letters and would be mis-counted as notes.
+		    if (body[idx] === "[" && idx + 2 < body.length && /[A-Za-z]/.test(body[idx + 1]) && body[idx + 2] === ":") {
+		      const close = body.indexOf("]", idx + 3);
+		      if (close >= 0) {
+            const tag = String(body[idx + 1] || "").toUpperCase();
+            if (tag === "K") {
+              try {
+                const tokenPart = body.slice(idx + 3, close);
+                keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(tokenPart);
+                barAccidentals = new Map();
+              } catch {}
+            }
+		        idx = close + 1;
+		        continue;
+		      }
+		    }
 
-	    // Skip mid-tune field lines like "K:Dm" / "M:6/8" / "V:1" (line-based fields).
-	    // This is separate from the inline [K:...] form above.
-	    {
-	      const prev = idx > 0 ? body[idx - 1] : "";
-	      const lineStart = idx === 0 || prev === "\n" || prev === "\r";
-	      if (lineStart) {
-	        let j = idx;
-	        while (j < body.length && (body[j] === " " || body[j] === "\t")) j += 1;
-	        if (j + 1 < body.length && /[A-Za-z]/.test(body[j]) && body[j + 1] === ":") {
-	          const nextNl = body.indexOf("\n", j + 2);
-	          const nextCr = body.indexOf("\r", j + 2);
-	          const next = (nextNl >= 0 && nextCr >= 0) ? Math.min(nextNl, nextCr) : (nextNl >= 0 ? nextNl : nextCr);
-	          idx = next >= 0 ? next + 1 : body.length;
-	          continue;
-	        }
-	      }
-	    }
+		    // Skip mid-tune field lines like "K:Dm" / "M:6/8" / "V:1" (line-based fields).
+		    // This is separate from the inline [K:...] form above.
+		    {
+		      const prev = idx > 0 ? body[idx - 1] : "";
+		      const lineStart = idx === 0 || prev === "\n" || prev === "\r";
+		      if (lineStart) {
+		        let j = idx;
+		        while (j < body.length && (body[j] === " " || body[j] === "\t")) j += 1;
+		        if (j + 1 < body.length && /[A-Za-z]/.test(body[j]) && body[j + 1] === ":") {
+              const tag = String(body[j] || "").toUpperCase();
+		          const nextNl = body.indexOf("\n", j + 2);
+		          const nextCr = body.indexOf("\r", j + 2);
+		          const next = (nextNl >= 0 && nextCr >= 0) ? Math.min(nextNl, nextCr) : (nextNl >= 0 ? nextNl : nextCr);
+              if (tag === "K") {
+                try {
+                  const lineEnd = next >= 0 ? next : body.length;
+                  const tokenPart = body.slice(j + 2, lineEnd);
+                  keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(tokenPart);
+                  barAccidentals = new Map();
+                } catch {}
+              }
+		          idx = next >= 0 ? next + 1 : body.length;
+		          continue;
+		        }
+		      }
+		    }
 
 	    // Skip quoted chord symbols / annotations: "Am" "G7" etc.
 	    if (body[idx] === "\"") {
@@ -3723,8 +3779,8 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
       }
     }
 
-    if (skipGraceNotes) {
-      const ch = body[idx];
+	    if (skipGraceNotes) {
+	      const ch = body[idx];
       if (ch === "{") {
         graceDepth += 1;
         idx += 1;
@@ -3739,60 +3795,89 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
         idx += 1;
         continue;
       }
-    }
+	    }
 
-    const note = parseNoteTokenAt53(body, idx);
-    if (!note) {
-      idx += 1;
-      continue;
-    }
+      // Reset bar-accidental memory at barlines.
+      if (body[idx] === "|") {
+        barAccidentals = new Map();
+        idx += 1;
+        continue;
+      }
+
+	    const note = parseNoteTokenAt53(body, idx);
+	    if (!note) {
+	      idx += 1;
+	      continue;
+	    }
     const letter = note.letter ? note.letter.toUpperCase() : "";
     if (!letter) {
       idx = note.end;
       continue;
     }
-    const letterPc = NOTE_BASES[letter] != null ? NOTE_BASES[letter] : 0;
-    const baseId = baseId53ForNaturalLetter(letter);
-    const accidental = parseAccidentalPrefix53(note.accPrefix, letterPc);
-    const micro = Number.isFinite(accidental.micro) ? accidental.micro : 0;
-    const octave = computeOctave(note.letter, note.octaveMarks);
-    const abs53 = octave * 53 + baseId + micro;
-    const step = mod53(abs53);
-    const entry = seen.get(step) || {
-      step,
-      count: 0,
-      ranges: [],
-      firstStart: null,
-      spellings: new Map(),
-    };
-    entry.count += 1;
-    if (entry.firstStart == null || note.start < entry.firstStart) entry.firstStart = note.start;
-    try {
-      const spelling = `${String(note.accPrefix || "")}${String(note.letter || "").toUpperCase()}`;
-      if (spelling) entry.spellings.set(spelling, (Number(entry.spellings.get(spelling)) || 0) + 1);
-    } catch {}
-    entry.ranges.push({
+	    const letterPc = NOTE_BASES[letter] != null ? NOTE_BASES[letter] : 0;
+	    const baseId = baseId53ForNaturalLetter(letter);
+	    const accidental = parseAccidentalPrefix53(note.accPrefix, letterPc);
+	    const octave = computeOctave(note.letter, note.octaveMarks);
+      const barKey = `${letter}:${octave}`;
+      let appliedMicro = 0;
+      if (accidental && accidental.explicit) {
+        appliedMicro = Number.isFinite(accidental.micro) ? accidental.micro : 0;
+        barAccidentals.set(barKey, appliedMicro);
+      } else if (barAccidentals.has(barKey)) {
+        appliedMicro = barAccidentals.get(barKey);
+      } else {
+        const keyMicro = keyMicroMap && Object.prototype.hasOwnProperty.call(keyMicroMap, letter)
+          ? keyMicroMap[letter]
+          : 0;
+        appliedMicro = Number.isFinite(keyMicro) ? keyMicro : 0;
+      }
+	    const abs53 = octave * 53 + baseId + appliedMicro;
+	    const pc53 = mod53(abs53);
+	    const entryKey = String(abs53);
+	    const entry = seen.get(entryKey) || {
+	      abs53,
+	      pc53,
+	      octave,
+	      letterUpper: letter,
+	      micro: appliedMicro,
+	      count: 0,
+	      ranges: [],
+	      firstStart: null,
+	      spellings: new Map(),
+	    };
+	    entry.count += 1;
+	    if (entry.firstStart == null || note.start < entry.firstStart) entry.firstStart = note.start;
+	    try {
+        const effectivePrefix = String(note.accPrefix || "")
+          || formatEffectiveAccPrefix53(letterPc, appliedMicro);
+	      const spelling = `${effectivePrefix}${String(note.letter || "")}`;
+	      if (spelling) entry.spellings.set(spelling, (Number(entry.spellings.get(spelling)) || 0) + 1);
+	    } catch {}
+	    entry.ranges.push({
       // NOTE: offsets are relative to the active tune text in the editor (not the full file).
       start: note.start,
       end: note.end,
     });
-    seen.set(step, entry);
-    idx = Math.max(idx + 1, note.end);
-  }
-  const entries = Array.from(seen.values());
-  return { tune, entries, error: entries.length ? null : "No musical notes found in the tune." };
+	    seen.set(entryKey, entry);
+	    idx = Math.max(idx + 1, note.end);
+	  }
+	  const entries = Array.from(seen.values());
+  return { tune, entries, is53, error: entries.length ? null : "No musical notes found in the tune." };
 }
 
 function buildIntonationRowsFromEntries(entries, baseStep, { sortMode = "count" } = {}) {
   const list = Array.isArray(entries) ? entries : [];
   const rows = list.map((entry) => ({
-    step: entry.step,
-    normalizedStep: mod53(entry.step - baseStep),
-    absStep: mod53(entry.step),
+    step: entry.abs53, // unique row id (octave-aware)
+    normalizedStep: mod53((entry.pc53 || 0) - baseStep),
+    absStep: mod53(entry.pc53 || 0),
     abcSpelling: pickDominantSpelling(entry.spellings),
     count: entry.count,
     ranges: entry.ranges,
     firstStart: entry.firstStart,
+    octave: entry.octave,
+    letterUpper: entry.letterUpper,
+    micro: entry.micro,
   }));
   rows.sort((a, b) => {
     if (sortMode === "first") {
@@ -3800,6 +3885,15 @@ function buildIntonationRowsFromEntries(entries, baseStep, { sortMode = "count" 
       const bFirst = Number.isFinite(Number(b.firstStart)) ? Number(b.firstStart) : Number.POSITIVE_INFINITY;
       if (aFirst !== bFirst) return aFirst - bFirst;
       return a.step - b.step;
+    }
+    if (sortMode === "pitch") {
+      const aAbs = Number(a.step);
+      const bAbs = Number(b.step);
+      if (aAbs !== bAbs) return aAbs - bAbs;
+      const aKey = String(a.abcSpelling || "").toLowerCase();
+      const bKey = String(b.abcSpelling || "").toLowerCase();
+      if (aKey !== bKey) return aKey.localeCompare(bKey);
+      return a.absStep - b.absStep;
     }
     if (sortMode === "rel") {
       if (a.normalizedStep !== b.normalizedStep) return a.normalizedStep - b.normalizedStep;
@@ -3957,14 +4051,14 @@ function highlightSvgIntonationNotesAtEditorOffsets(offsets) {
   return lastSvgIntonationNoteEls.length > 0;
 }
 
-function renderIntonationExplorerRows(rows) {
+function renderIntonationExplorerRows(rows, { is53 } = {}) {
   if (!$intonationExplorerTableBody) return;
   $intonationExplorerTableBody.innerHTML = "";
   const list = Array.isArray(rows) ? rows : [];
   if (!list.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 3;
+    td.colSpan = 4;
     td.textContent = "No pitch classes detected.";
     td.style.fontStyle = "italic";
     tr.appendChild(td);
@@ -3986,11 +4080,35 @@ function renderIntonationExplorerRows(rows) {
     pcAbs.textContent = ` (${formatAeuLabel(row.absStep)})`;
     pcAbs.className = "subtle";
     pc.append(pcRel, pcAbs);
+    const perde = document.createElement("td");
+    let perdeName = "";
+    if (is53) {
+      const fromToken = resolvePerdeNamesFromAbcToken(row.abcSpelling).filter(Boolean);
+      if (fromToken.length) {
+        perdeName = fromToken.join(" / ");
+      } else {
+        perdeName = resolvePerdeName({ pc53: row.absStep, octave: row.octave }) || "";
+      }
+    }
+    if (!is53) {
+      perde.textContent = "";
+      perde.title = "";
+      perde.classList.remove("subtle");
+    } else {
+      perde.textContent = perdeName || "??";
+      if (!perdeName) {
+        perde.title = `No Perde label yet for token=${String(row.abcSpelling || "")} (pc53=${formatAeuLabel(row.absStep)}).`;
+        perde.classList.add("subtle");
+      } else {
+        perde.title = "";
+        perde.classList.remove("subtle");
+      }
+    }
     const abc = document.createElement("td");
     abc.textContent = row.abcSpelling || "";
     const weight = document.createElement("td");
     weight.textContent = String(row.count || 0);
-    tr.append(pc, abc, weight);
+    tr.append(pc, perde, abc, weight);
     tr.addEventListener("click", () => {
       activateIntonationExplorerRow(row.step);
     });
@@ -4022,7 +4140,7 @@ function activateIntonationExplorerRow(step) {
   const target = (intonationExplorerRows || []).find((r) => String(r.step) === String(step));
   if (!target) return;
   intonationExplorerActiveStep = target.step;
-  renderIntonationExplorerRows(intonationExplorerRows);
+  renderIntonationExplorerRows(intonationExplorerRows, { is53: intonationExplorerIs53 });
   setIntonationHighlightRanges(target.ranges);
   const offsets = (target.ranges || []).map((r) => r && r.start);
   const noteOk = highlightSvgIntonationNotesAtEditorOffsets(offsets);
@@ -4040,29 +4158,32 @@ async function refreshIntonationExplorer() {
   }
   setIntonationExplorerStatus("Refreshing…");
   try {
-    const snapshot = await refreshWorkingCopySnapshot();
-    if (!snapshot || snapshot.text == null) {
-      intonationExplorerRows = [];
-      intonationExplorerActiveStep = null;
-    renderIntonationExplorerRows([]);
-    setIntonationHighlightRanges([]);
-    clearSvgIntonationBarHighlight();
-    clearSvgIntonationNoteHighlight();
-    setIntonationExplorerStatus("Unable to load working copy snapshot.", { error: true });
-    return;
-  }
-    const scanned = scanIntonationEntries(snapshot, { skipGraceNotes: intonationExplorerSkipGraceNotes });
-  if (scanned.error) {
-      intonationExplorerRows = [];
-      intonationExplorerActiveStep = null;
-    renderIntonationExplorerRows([]);
-    setIntonationHighlightRanges([]);
-    clearSvgIntonationBarHighlight();
-    clearSvgIntonationNoteHighlight();
-    setIntonationExplorerStatus(scanned.error, { error: true });
-    return;
-  }
-    updateIntonationBaseUi();
+	    const snapshot = await refreshWorkingCopySnapshot();
+	    if (!snapshot || snapshot.text == null) {
+	      intonationExplorerRows = [];
+	      intonationExplorerActiveStep = null;
+      intonationExplorerIs53 = false;
+	    renderIntonationExplorerRows([], { is53: false });
+	    setIntonationHighlightRanges([]);
+	    clearSvgIntonationBarHighlight();
+	    clearSvgIntonationNoteHighlight();
+	    setIntonationExplorerStatus("Unable to load working copy snapshot.", { error: true });
+	    return;
+	  }
+	    const scanned = scanIntonationEntries(snapshot, { skipGraceNotes: intonationExplorerSkipGraceNotes });
+	  if (scanned.error) {
+	      intonationExplorerRows = [];
+	      intonationExplorerActiveStep = null;
+      intonationExplorerIs53 = false;
+	    renderIntonationExplorerRows([], { is53: false });
+	    setIntonationHighlightRanges([]);
+	    clearSvgIntonationBarHighlight();
+	    clearSvgIntonationNoteHighlight();
+	    setIntonationExplorerStatus(scanned.error, { error: true });
+	    return;
+	  }
+      intonationExplorerIs53 = Boolean(scanned.is53);
+	    updateIntonationBaseUi();
     const mode = intonationExplorerBaseMode || "auto";
     let base = 0;
     let label = "pc53=0";
@@ -4091,21 +4212,22 @@ async function refreshIntonationExplorer() {
     }
     intonationExplorerBaseStep = base;
     intonationExplorerBaseLabel = label;
-    const rows = buildIntonationRowsFromEntries(scanned.entries, base, { sortMode: intonationExplorerSortMode });
-    intonationExplorerRows = rows;
-    intonationExplorerActiveStep = null;
-    renderIntonationExplorerRows(rows);
-    setIntonationHighlightRanges([]);
-    clearSvgIntonationBarHighlight();
-    clearSvgIntonationNoteHighlight();
-    const graceLabel = intonationExplorerSkipGraceNotes ? "grace off" : "grace on";
-    const sortLabel = `sort:${String(intonationExplorerSortMode || "count")}`;
-    setIntonationExplorerStatus(`Base ${intonationExplorerBaseLabel} (${rows.length} classes; ${sortLabel}; ${graceLabel})`);
-  } catch (err) {
-    const msg = (err && err.message) ? String(err.message) : String(err || "");
-    setIntonationExplorerStatus(msg ? `Unable to refresh the explorer: ${msg}` : "Unable to refresh the explorer.", { error: true });
-    logErr(err);
-  }
+	    const rows = buildIntonationRowsFromEntries(scanned.entries, base, { sortMode: intonationExplorerSortMode });
+	    intonationExplorerRows = rows;
+	    intonationExplorerActiveStep = null;
+	    renderIntonationExplorerRows(rows, { is53: intonationExplorerIs53 });
+	    setIntonationHighlightRanges([]);
+	    clearSvgIntonationBarHighlight();
+	    clearSvgIntonationNoteHighlight();
+	    const graceLabel = intonationExplorerSkipGraceNotes ? "grace off" : "grace on";
+	    const sortLabel = `sort:${String(intonationExplorerSortMode || "count")}`;
+      const modeLabel = intonationExplorerIs53 ? "EDO-53" : "EDO-12";
+	    setIntonationExplorerStatus(`Base ${intonationExplorerBaseLabel} (${rows.length} classes; ${sortLabel}; ${graceLabel}; ${modeLabel})`);
+	  } catch (err) {
+	    const msg = (err && err.message) ? String(err.message) : String(err || "");
+	    setIntonationExplorerStatus(msg ? `Unable to refresh the explorer: ${msg}` : "Unable to refresh the explorer.", { error: true });
+	    logErr(err);
+	  }
 }
 
 function showIntonationExplorerPanel() {

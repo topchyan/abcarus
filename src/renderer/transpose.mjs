@@ -475,6 +475,33 @@ function buildKeyMicroMapFromKBody53(body) {
   return map;
 }
 
+export function buildEffectiveKeyMicroMap53FromKBody(kBody) {
+  const { head } = splitComment(kBody);
+  const { firstToken } = parseKLineBodyForRewrite(head);
+  const keyInfo = parseKeyToken(firstToken) || { isNone: true, pref: "flat", accCount: 0 };
+
+  const out = {};
+  if (!keyInfo.isNone) {
+    const sig = buildKeySignature(keyInfo.accCount || 0, keyInfo.pref || "flat");
+    for (const [letter, semi] of Object.entries(sig)) {
+      if (!semi) continue;
+      const pc = PC_NAT_12[String(letter || "").toUpperCase()];
+      if (pc == null) continue;
+      out[String(letter || "").toUpperCase()] = semi > 0
+        ? semitoneUpCommasByPc12(pc)
+        : semitoneDownCommasByPc12(pc);
+    }
+  }
+
+  // Explicit accidentals listed in the K: line override the inferred key signature.
+  const explicit = buildKeyMicroMapFromKBody53(head);
+  for (const [letter, micro] of Object.entries(explicit)) {
+    out[String(letter || "").toUpperCase()] = micro;
+  }
+
+  return out;
+}
+
 function transposeKBody53(body, deltaSteps) {
   const { head, comment } = splitComment(body);
   const readTonicPc12 = parseKFirstTokenTonicPc12(head);
