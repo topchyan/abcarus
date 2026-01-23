@@ -497,8 +497,6 @@ let headerDirty = false;
 let suppressHeaderDirty = false;
 let lastHeaderToastFilePath = null;
 let headerEditorFilePath = null;
-let headerBaselineText = "";
-let headerBaselineFilePath = null;
 let lastErrors = [];
 let errorsPopoverOpen = false;
 let isNewTuneDraft = false;
@@ -4304,24 +4302,19 @@ function updateFileHeaderPanel() {
     suppressHeaderDirty = false;
     headerDirty = false;
     headerEditorFilePath = null;
-    headerBaselineText = "";
-    headerBaselineFilePath = null;
     updateHeaderStateUI();
     return;
   }
   $fileHeaderPanel.classList.add("active");
   const nextHeaderText = entry.headerText || "";
-  const currentHeaderText = getHeaderEditorValue();
-  const shouldReplace = headerEditorFilePath !== entry.path
-    || (!headerDirty && currentHeaderText !== nextHeaderText);
-  if (shouldReplace) {
+  // Header editor is authoritative for the active file: once loaded, do not auto-overwrite it
+  // (avoid "snap-back" and invisible edits). Reload is always explicit via the Reload button.
+  if (headerEditorFilePath !== entry.path) {
     suppressHeaderDirty = true;
     setHeaderEditorValue(nextHeaderText);
     suppressHeaderDirty = false;
     headerDirty = false;
     headerEditorFilePath = entry.path || null;
-    headerBaselineText = nextHeaderText;
-    headerBaselineFilePath = headerEditorFilePath;
   }
   updateHeaderStateUI({ announce: true });
 }
@@ -6605,11 +6598,7 @@ function initHeaderEditor() {
   const updateListener = EditorView.updateListener.of((update) => {
     if (!update.docChanged) return;
     if (suppressHeaderDirty) return;
-    const current = update.state.doc.toString();
-    const baseline = (headerBaselineFilePath && headerEditorFilePath && pathsEqual(headerBaselineFilePath, headerEditorFilePath))
-      ? headerBaselineText
-      : headerBaselineText;
-    headerDirty = current !== baseline;
+    headerDirty = true;
     updateHeaderStateUI();
     if (headerRenderTimer) clearTimeout(headerRenderTimer);
     headerRenderTimer = setTimeout(() => {
@@ -13646,14 +13635,10 @@ async function saveFileHeaderText(filePath, headerText) {
     // for UI, and avoids depending on WC segmentation heuristics for where the header ends.
     const updatedFile = await refreshLibraryFile(p, { force: true });
     try {
-      // Keep the header editor aligned with what the file parser sees after the save.
+      // Mark the header editor clean after successful save.
       if (updatedFile && updatedFile.path && pathsEqual(updatedFile.path, p) && headerEditorFilePath && pathsEqual(headerEditorFilePath, p)) {
-        const next = String(updatedFile.headerText || "");
-        suppressHeaderDirty = true;
-        setHeaderEditorValue(next);
-        suppressHeaderDirty = false;
-        headerBaselineText = next;
-        headerBaselineFilePath = p;
+        headerDirty = false;
+        updateHeaderStateUI();
       }
     } catch {}
     if (activeTuneMeta && pathsEqual(activeTuneMeta.path, p)) {
