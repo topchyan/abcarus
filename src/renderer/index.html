@@ -279,22 +279,34 @@
         <span class="tool-panel-title">Intonation Explorer</span>
         <button id="intonationExplorerClose" type="button" class="tool-panel-close" aria-label="Close Explorer">×</button>
       </div>
-      <div class="tool-panel-controls">
-        <label class="tool-panel-control">
-          <span>Tonal Base</span>
-          <div class="tool-panel-base-row">
-            <select id="intonationExplorerBaseMode" aria-label="Tonal base mode">
-              <option value="auto" selected>Auto</option>
-              <option value="manual">Manual</option>
-              <option value="fromK">From K:</option>
-            </select>
-            <input id="intonationExplorerBaseManual" type="text" placeholder="0–52 (e.g. 0 or pc53=0)" />
-          </div>
-        </label>
-        <label class="tool-panel-control">
-          <span>Sort</span>
-          <select id="intonationExplorerSort" aria-label="Sort mode">
-            <option value="count" selected>Count</option>
+	      <div class="tool-panel-controls">
+	        <label class="tool-panel-control">
+	          <span>Tonal Base</span>
+	          <div class="tool-panel-base-row">
+	            <select id="intonationExplorerBaseMode" aria-label="Tonal base mode">
+	              <option value="auto" selected>Auto</option>
+	              <option value="manual">Manual</option>
+	              <option value="fromK">From K:</option>
+	            </select>
+	            <input id="intonationExplorerBaseManual" type="text" placeholder="0–52 (e.g. 0 or pc53=0)" />
+	          </div>
+	        </label>
+	        <label class="tool-panel-control">
+	          <span>Declared makam (Aydemir)</span>
+	          <select id="intonationExplorerDeclaredMakam" aria-label="Declared makam">
+	            <option value="" selected>None</option>
+	          </select>
+	        </label>
+	        <label class="tool-panel-control">
+	          <span>Compare to (overlay)</span>
+	          <select id="intonationExplorerCompareMakam" aria-label="Compare makam">
+	            <option value="" selected>None</option>
+	          </select>
+	        </label>
+	        <label class="tool-panel-control">
+	          <span>Sort</span>
+	          <select id="intonationExplorerSort" aria-label="Sort mode">
+	            <option value="count" selected>Count</option>
             <option value="first">First appearance</option>
             <option value="pitch">Scale (low→high)</option>
             <option value="rel">pc53 (relative)</option>
@@ -324,6 +336,14 @@
 	          </thead>
 	          <tbody id="intonationExplorerTableBody"></tbody>
 	        </table>
+	      </div>
+	      <div class="tool-panel-plot" aria-label="Seyir plot">
+	        <svg id="intonationExplorerPlot" viewBox="0 0 360 120" preserveAspectRatio="none" role="img" aria-label="Pitch trajectory">
+	          <g id="intonationExplorerPlotOverlay"></g>
+	          <polyline id="intonationExplorerPlotLine" fill="none" stroke="rgba(0,0,0,0.55)" stroke-width="1.2" points=""></polyline>
+	          <g id="intonationExplorerPlotPoints"></g>
+	        </svg>
+	        <div id="intonationExplorerPlotLegend" class="tool-panel-plot-legend"></div>
 	      </div>
 	      <div class="tool-panel-dna" aria-label="Intonation DNA snapshot">
 	        <div class="tool-panel-dna-actions">

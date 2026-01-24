@@ -32,6 +32,7 @@ import {
 } from "./transpose.mjs";
 import { resolvePerdeName } from "./perde53.mjs";
 import { resolvePerdeNamesFromAbcToken } from "./perde_by_abc.mjs";
+import { AYDEMIR_MAKAM_DNA } from "./makam_dna/aydemir_makam_dna.mjs";
 import { normalizeMeasuresLineBreaks, transformMeasuresPerLine } from "./measures.mjs";
 import {
   buildDefaultDrumVelocityMap,
@@ -135,11 +136,18 @@ const $intonationExplorerPanel = document.getElementById("intonationExplorerPane
 const $intonationExplorerClose = document.getElementById("intonationExplorerClose");
 const $intonationExplorerBaseMode = document.getElementById("intonationExplorerBaseMode");
 const $intonationExplorerBaseManual = document.getElementById("intonationExplorerBaseManual");
+const $intonationExplorerDeclaredMakam = document.getElementById("intonationExplorerDeclaredMakam");
+const $intonationExplorerCompareMakam = document.getElementById("intonationExplorerCompareMakam");
 const $intonationExplorerSort = document.getElementById("intonationExplorerSort");
 const $intonationExplorerSkipGrace = document.getElementById("intonationExplorerSkipGrace");
 const $intonationExplorerRefresh = document.getElementById("intonationExplorerRefresh");
 const $intonationExplorerStatus = document.getElementById("intonationExplorerStatus");
 const $intonationExplorerTableBody = document.getElementById("intonationExplorerTableBody");
+const $intonationExplorerPlot = document.getElementById("intonationExplorerPlot");
+const $intonationExplorerPlotOverlay = document.getElementById("intonationExplorerPlotOverlay");
+const $intonationExplorerPlotLine = document.getElementById("intonationExplorerPlotLine");
+const $intonationExplorerPlotPoints = document.getElementById("intonationExplorerPlotPoints");
+const $intonationExplorerPlotLegend = document.getElementById("intonationExplorerPlotLegend");
 const $intonationExplorerDnaText = document.getElementById("intonationExplorerDnaText");
 const $intonationExplorerCopyDna = document.getElementById("intonationExplorerCopyDna");
 const $intonationExplorerCopyPitchSet = document.getElementById("intonationExplorerCopyPitchSet");
@@ -3543,6 +3551,8 @@ let intonationExplorerBaseMode = "auto";
 let intonationExplorerSortMode = "count";
 let intonationExplorerSkipGraceNotes = true;
 let intonationExplorerIs53 = false;
+let intonationExplorerDeclaredMakam = "";
+let intonationExplorerCompareMakam = "";
 let lastIntonationDnaLogText = "";
 let lastIntonationDnaUiText = "";
 let lastIntonationPitchSetText = "";
@@ -3555,6 +3565,292 @@ function setIntonationExplorerDnaUi({ dnaText, pitchSetText } = {}) {
   if ($intonationExplorerDnaText) $intonationExplorerDnaText.value = nextDna;
   if ($intonationExplorerCopyDna) $intonationExplorerCopyDna.disabled = !nextDna;
   if ($intonationExplorerCopyPitchSet) $intonationExplorerCopyPitchSet.disabled = !nextPitch;
+}
+
+function clearIntonationExplorerPlot() {
+  if ($intonationExplorerPlotLine) $intonationExplorerPlotLine.setAttribute("points", "");
+  if ($intonationExplorerPlotOverlay) $intonationExplorerPlotOverlay.innerHTML = "";
+  if ($intonationExplorerPlotPoints) $intonationExplorerPlotPoints.innerHTML = "";
+  if ($intonationExplorerPlotLegend) $intonationExplorerPlotLegend.textContent = "";
+}
+
+function populateIntonationExplorerMakams() {
+  const list = Array.isArray(AYDEMIR_MAKAM_DNA) ? AYDEMIR_MAKAM_DNA : [];
+  const names = list
+    .map((e) => String(e && e.makam ? e.makam : "").trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+
+  const fill = (selectEl) => {
+    if (!selectEl) return;
+    const current = String(selectEl.value || "");
+    selectEl.textContent = "";
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = "None";
+    selectEl.appendChild(none);
+    for (const name of names) {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      selectEl.appendChild(opt);
+    }
+    selectEl.value = current;
+  };
+
+  fill($intonationExplorerDeclaredMakam);
+  fill($intonationExplorerCompareMakam);
+}
+
+function normalizePerdeKey(name) {
+  const raw = String(name || "").trim();
+  if (!raw) return "";
+  const base = raw
+    .split("(")[0]
+    .trim()
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/\s+/g, " ");
+  const map = {
+    "ç": "c",
+    "ğ": "g",
+    "ı": "i",
+    "ş": "s",
+    "ö": "o",
+    "ü": "u",
+    "â": "a",
+    "î": "i",
+    "û": "u",
+  };
+  return base
+    .split("")
+    .map((ch) => (map[ch] ? map[ch] : ch))
+    .join("")
+    .replace(/[^a-z0-9 ]/g, "")
+    .trim();
+}
+
+function buildPerdeNameIndex() {
+  const idx = new Map();
+  for (let octave = 4; octave <= 8; octave += 1) {
+    for (let pc53 = 0; pc53 < 53; pc53 += 1) {
+      const name = resolvePerdeName({ pc53, octave });
+      if (!name) continue;
+      const key = normalizePerdeKey(name);
+      if (!key) continue;
+      const abs53 = octave * 53 + pc53;
+      if (!idx.has(key)) idx.set(key, []);
+      idx.get(key).push({ pc53, octave, abs53, name });
+    }
+  }
+  return idx;
+}
+
+const perdeNameIndex = buildPerdeNameIndex();
+
+function parseAydemirPerdeField(fieldText) {
+  const raw = String(fieldText || "");
+  const name = raw.split("(")[0].trim();
+  const lower = raw.toLowerCase();
+  const hint = lower.includes("low") ? "low" : (lower.includes("high") ? "high" : "");
+  return { name, hint };
+}
+
+function pickOverlayAbs53ForPerde(perdeName, { hint, observedMinAbs, observedMaxAbs } = {}) {
+  const key = normalizePerdeKey(perdeName);
+  const candidates = key ? (perdeNameIndex.get(key) || []) : [];
+  if (!candidates.length) return null;
+  const mid = (Number.isFinite(observedMinAbs) && Number.isFinite(observedMaxAbs))
+    ? (observedMinAbs + observedMaxAbs) / 2
+    : null;
+  const prefer = (cand) => {
+    if (!hint) return 0;
+    if (hint === "low") return cand.octave <= 5 ? 0 : 1;
+    if (hint === "high") return cand.octave >= 7 ? 0 : 1;
+    return cand.octave === 6 ? 0 : 1;
+  };
+  let best = null;
+  for (const cand of candidates) {
+    const inRangePenalty = (Number.isFinite(observedMinAbs) && Number.isFinite(observedMaxAbs))
+      ? ((cand.abs53 < observedMinAbs - 26 || cand.abs53 > observedMaxAbs + 26) ? 1 : 0)
+      : 0;
+    const dist = mid != null ? Math.abs(cand.abs53 - mid) : 0;
+    const score = [prefer(cand), inRangePenalty, dist];
+    if (!best) best = { cand, score };
+    else {
+      for (let i = 0; i < score.length; i += 1) {
+        if (score[i] < best.score[i]) { best = { cand, score }; break; }
+        if (score[i] > best.score[i]) break;
+      }
+    }
+  }
+  return best ? best.cand.abs53 : null;
+}
+
+function getAydemirMakamEntry(name) {
+  const target = String(name || "").trim().toLowerCase();
+  if (!target) return null;
+  return (AYDEMIR_MAKAM_DNA || []).find((e) => String(e.makam || "").trim().toLowerCase() === target) || null;
+}
+
+function renderIntonationSeyirPlot({ noteEvents, baseStep, overlayMakamName } = {}) {
+  if (!$intonationExplorerPlot || !$intonationExplorerPlotLine || !$intonationExplorerPlotPoints) return;
+  const events = Array.isArray(noteEvents) ? noteEvents : [];
+  if (!events.length) {
+    clearIntonationExplorerPlot();
+    return;
+  }
+  // Compress consecutive repeats (abs53) to reveal motion.
+  const compressed = [];
+  for (const e of events) {
+    const last = compressed.length ? compressed[compressed.length - 1] : null;
+    if (last && Number(last.abs53) === Number(e.abs53)) continue;
+    compressed.push(e);
+  }
+  if (compressed.length < 2) {
+    clearIntonationExplorerPlot();
+    return;
+  }
+
+  const absVals = compressed.map((e) => Number(e.abs53)).filter((n) => Number.isFinite(n));
+  const minAbs = absVals.length ? Math.min(...absVals) : null;
+  const maxAbs = absVals.length ? Math.max(...absVals) : null;
+  if (!Number.isFinite(minAbs) || !Number.isFinite(maxAbs) || maxAbs === minAbs) {
+    clearIntonationExplorerPlot();
+    return;
+  }
+
+  const vb = $intonationExplorerPlot.viewBox && $intonationExplorerPlot.viewBox.baseVal
+    ? $intonationExplorerPlot.viewBox.baseVal
+    : { width: 360, height: 120 };
+  const w = Number(vb.width) || 360;
+  const h = Number(vb.height) || 120;
+  const padX = 8;
+  const padY = 10;
+  const innerW = Math.max(1, w - padX * 2);
+  const innerH = Math.max(1, h - padY * 2);
+
+  const toX = (i) => padX + (i / (compressed.length - 1)) * innerW;
+  const toY = (abs53) => padY + ((maxAbs - abs53) / (maxAbs - minAbs)) * innerH;
+
+  const points = compressed.map((e, i) => `${toX(i).toFixed(2)},${toY(Number(e.abs53)).toFixed(2)}`).join(" ");
+  $intonationExplorerPlotLine.setAttribute("points", points);
+
+  // Overlay: durak / guclu / yeden as horizontal guides (manual compare mode).
+  if ($intonationExplorerPlotOverlay) $intonationExplorerPlotOverlay.innerHTML = "";
+  const overlayEntry = overlayMakamName ? getAydemirMakamEntry(overlayMakamName) : null;
+  if ($intonationExplorerPlotOverlay && overlayEntry) {
+    const mkLine = (y, color, dash, label) => {
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", String(padX));
+      line.setAttribute("x2", String(w - padX));
+      line.setAttribute("y1", String(y));
+      line.setAttribute("y2", String(y));
+      line.setAttribute("stroke", color);
+      line.setAttribute("stroke-width", "1.2");
+      if (dash) line.setAttribute("stroke-dasharray", dash);
+      line.setAttribute("opacity", "0.75");
+      if (label) line.setAttribute("data-label", label);
+      return line;
+    };
+
+    const durak = parseAydemirPerdeField(overlayEntry.durak);
+    const guclu = parseAydemirPerdeField(overlayEntry.guclu);
+    const yeden = parseAydemirPerdeField(overlayEntry.yeden);
+
+    const durakAbs = pickOverlayAbs53ForPerde(durak.name, { hint: durak.hint, observedMinAbs: minAbs, observedMaxAbs: maxAbs });
+    const gucluAbs = pickOverlayAbs53ForPerde(guclu.name, { hint: guclu.hint, observedMinAbs: minAbs, observedMaxAbs: maxAbs });
+    const yedenAbs = pickOverlayAbs53ForPerde(yeden.name, { hint: yeden.hint, observedMinAbs: minAbs, observedMaxAbs: maxAbs });
+
+    const overlayLabels = [];
+    if (Number.isFinite(durakAbs)) {
+      const y = toY(durakAbs);
+      $intonationExplorerPlotOverlay.appendChild(mkLine(y, "rgba(20,110,60,1)", "", `Durak: ${durak.name}`));
+      overlayLabels.push(`Durak: ${durak.name}`);
+    }
+    if (Number.isFinite(gucluAbs)) {
+      const y = toY(gucluAbs);
+      $intonationExplorerPlotOverlay.appendChild(mkLine(y, "rgba(60,120,210,1)", "5,4", `Güçlü: ${guclu.name}`));
+      overlayLabels.push(`Güçlü: ${guclu.name}`);
+    }
+    if (Number.isFinite(yedenAbs)) {
+      const y = toY(yedenAbs);
+      $intonationExplorerPlotOverlay.appendChild(mkLine(y, "rgba(210,120,60,1)", "2,4", `Yeden: ${yeden.name}`));
+      overlayLabels.push(`Yeden: ${yeden.name}`);
+    }
+    if ($intonationExplorerPlotLegend) {
+      const overlayName = String(overlayEntry.makam || "");
+      $intonationExplorerPlotLegend.textContent = overlayLabels.length
+        ? `Overlay: ${overlayName} (${overlayLabels.join(" · ")})`
+        : `Overlay: ${overlayName}`;
+    }
+  } else if ($intonationExplorerPlotLegend) {
+    const relBase = Number.isFinite(baseStep) ? formatAeuLabel(mod53(baseStep)) : "pc53=0";
+    $intonationExplorerPlotLegend.textContent = `Observed trajectory (base ${relBase})`;
+  }
+
+  // Turning points (cap to keep it readable).
+  if ($intonationExplorerPlotPoints) $intonationExplorerPlotPoints.innerHTML = "";
+  const turning = [];
+  for (let i = 1; i + 1 < compressed.length; i += 1) {
+    const a = Number(compressed[i - 1].abs53);
+    const b = Number(compressed[i].abs53);
+    const c = Number(compressed[i + 1].abs53);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c)) continue;
+    if (b > a && b > c) turning.push({ kind: "peak", idx: i, e: compressed[i] });
+    else if (b < a && b < c) turning.push({ kind: "trough", idx: i, e: compressed[i] });
+  }
+  const important = [
+    { kind: "start", idx: 0, e: compressed[0] },
+    ...turning.slice(0, 24),
+    { kind: "end", idx: compressed.length - 1, e: compressed[compressed.length - 1] },
+  ];
+
+  const mkPoint = (it) => {
+    const e = it.e || {};
+    const abs53 = Number(e.abs53);
+    if (!Number.isFinite(abs53)) return null;
+    const cx = toX(it.idx);
+    const cy = toY(abs53);
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", cx.toFixed(2));
+    c.setAttribute("cy", cy.toFixed(2));
+    c.setAttribute("r", it.kind === "start" || it.kind === "end" ? "3.2" : "2.6");
+    let fill = "rgba(0,0,0,0.5)";
+    if (it.kind === "peak") fill = "rgba(200,60,60,0.9)";
+    if (it.kind === "trough") fill = "rgba(60,110,210,0.9)";
+    if (it.kind === "start") fill = "rgba(30,140,70,0.95)";
+    if (it.kind === "end") fill = "rgba(0,0,0,0.8)";
+    c.setAttribute("fill", fill);
+    const pc = formatAeuLabel(mod53(e.pc53 || 0));
+    c.setAttribute("data-kind", it.kind);
+    c.setAttribute("data-start", String(e.start ?? ""));
+    c.setAttribute("data-end", String(e.end ?? ""));
+    c.setAttribute("title", `${it.kind}: ${String(e.spelling || "")} (pc53=${pc})`);
+    c.style.cursor = "pointer";
+    c.addEventListener("click", () => {
+      if (!Number.isFinite(Number(e.start))) return;
+      try {
+        setIntonationHighlightRanges([{ start: Number(e.start), end: Number(e.end) || Number(e.start) + 1 }]);
+        highlightSvgIntonationNotesByRanges([{ start: Number(e.start), end: Number(e.end) || Number(e.start) + 1 }]);
+      } catch {}
+      try {
+        const off = Number(e.start);
+        if (editorView && Number.isFinite(off)) {
+          const docLen = editorView.state && editorView.state.doc ? editorView.state.doc.length : 0;
+          const safeOff = Math.max(0, Math.min(docLen, off));
+          editorView.dispatch({ selection: { anchor: safeOff, head: safeOff }, scrollIntoView: true });
+          try { editorView.focus(); } catch {}
+        }
+      } catch {}
+    });
+    return c;
+  };
+
+  for (const it of important) {
+    const el = mkPoint(it);
+    if (el && $intonationExplorerPlotPoints) $intonationExplorerPlotPoints.appendChild(el);
+  }
 }
 
 let lastSvgIntonationBarEls = [];
@@ -4291,6 +4587,7 @@ async function refreshIntonationExplorer() {
 		    clearSvgIntonationBarHighlight();
 		    clearSvgIntonationNoteHighlight();
         setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
+        clearIntonationExplorerPlot();
 		    setIntonationExplorerStatus("Unable to load working copy snapshot.", { error: true });
 		    return;
 		  }
@@ -4304,6 +4601,7 @@ async function refreshIntonationExplorer() {
 		    clearSvgIntonationBarHighlight();
 		    clearSvgIntonationNoteHighlight();
         setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
+        clearIntonationExplorerPlot();
 		    setIntonationExplorerStatus(scanned.error, { error: true });
 		    return;
 		  }
@@ -4373,9 +4671,19 @@ async function refreshIntonationExplorer() {
           console.info(dnaText);
         }
       } catch {}
+
+      // Minimal "seyir" plot (observed trajectory + optional Aydemir overlay).
+      try {
+        renderIntonationSeyirPlot({
+          noteEvents: scanned.noteEvents,
+          baseStep: intonationExplorerBaseStep,
+          overlayMakamName: intonationExplorerCompareMakam,
+        });
+      } catch {}
 	  } catch (err) {
 	    const msg = (err && err.message) ? String(err.message) : String(err || "");
       setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
+      clearIntonationExplorerPlot();
 	    setIntonationExplorerStatus(msg ? `Unable to refresh the explorer: ${msg}` : "Unable to refresh the explorer.", { error: true });
 	    logErr(err);
 	  }
@@ -4388,6 +4696,8 @@ function showIntonationExplorerPanel() {
   $intonationExplorerPanel.classList.remove("hidden");
   $intonationExplorerPanel.setAttribute("aria-hidden", "false");
   setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
+  clearIntonationExplorerPlot();
+  populateIntonationExplorerMakams();
   if ($intonationExplorerBaseMode) $intonationExplorerBaseMode.value = "auto";
   if ($intonationExplorerBaseManual && !$intonationExplorerBaseManual.value) $intonationExplorerBaseManual.value = DEFAULT_INT_BASE;
   if ($intonationExplorerSort) $intonationExplorerSort.value = "count";
@@ -4408,6 +4718,7 @@ function hideIntonationExplorerPanel() {
   clearSvgIntonationBarHighlight();
   clearSvgIntonationNoteHighlight();
   setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
+  clearIntonationExplorerPlot();
 }
 
 function enableDraggableToolPanel(panelEl) {
@@ -15863,6 +16174,18 @@ if ($intonationExplorerClose) {
 }
 if ($intonationExplorerRefresh) {
   $intonationExplorerRefresh.addEventListener("click", () => {
+    refreshIntonationExplorer().catch(() => {});
+  });
+}
+if ($intonationExplorerDeclaredMakam) {
+  $intonationExplorerDeclaredMakam.addEventListener("change", () => {
+    intonationExplorerDeclaredMakam = ($intonationExplorerDeclaredMakam && $intonationExplorerDeclaredMakam.value) || "";
+    refreshIntonationExplorer().catch(() => {});
+  });
+}
+if ($intonationExplorerCompareMakam) {
+  $intonationExplorerCompareMakam.addEventListener("change", () => {
+    intonationExplorerCompareMakam = ($intonationExplorerCompareMakam && $intonationExplorerCompareMakam.value) || "";
     refreshIntonationExplorer().catch(() => {});
   });
 }
