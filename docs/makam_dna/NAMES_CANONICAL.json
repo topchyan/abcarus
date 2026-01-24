@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-01-24",
+  "purpose": "Manual canonicalization layer for naming variance across sources (makam / perde / cesni). This file is intentionally hand-curated and can be extended over time.",
+  "rules": {
+    "policy": "manual-aliases-only",
+    "notes": [
+      "Aliases should include common Latin transliterations, ASCII-fied forms, and optionally Russian spellings.",
+      "Do not add automatic token reordering or fuzzy matching rules here; keep normalization deterministic and auditable.",
+      "Prefer canonical names that match the spellings used in docs/makam_dna/AYDEMIR_MAKAM_DNA.json (Aydemir)."
+    ]
+  },
+  "categories": {
+    "perde": {
+      "Evç": ["Eviç", "Evc", "Evic", "Эвидж"],
+      "Çargâh": ["Cargah", "Çargah", "Chargah", "Чаргях"],
+      "Hüseynî": ["Huseyni", "Hüseyni", "Hüseynî", "Хюсейни"],
+      "Neva": ["Nevâ", "Neva", "Нева"],
+      "Yegâh": ["Yegah", "Yegâh", "Егах"]
+    },
+    "cesni": {
+      "Uşşak": ["Ussak", "Uşşak", "Uşşaq"],
+      "Hicaz": ["Hicaz", "Хиджаз"],
+      "Rast": ["Rast", "Раст"],
+      "Kürdî": ["Kurdi", "Kürdi", "Kürdî", "Кюрди"]
+    },
+    "makam": {
+      "Kürdili Hicazkâr": ["Hicazkâr Kürdili", "Kürdili Hicazkar", "Kurdili Hicazkar"]
+    }
+  }
+}
