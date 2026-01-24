@@ -5,6 +5,9 @@ const path = require("path");
 const { fileURLToPath } = require("url");
 
 contextBridge.exposeInMainWorld("api", {
+  // Dev-only startup profiling flag (used by renderer.js). Enable via:
+  // `ABCARUS_DEV_STARTUP_PERF=1 npm start`
+  startupPerfEnabled: process.env.ABCARUS_DEV_STARTUP_PERF === "1",
   readFileBase64: async (fileUrl) => {
     const p = fileURLToPath(fileUrl);
     const buf = await fs.promises.readFile(p);

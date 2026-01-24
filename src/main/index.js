@@ -11,6 +11,17 @@ const { encodePropertiesFromSchema, parseSettingsPatchFromProperties } = require
 
 let mainWindow = null;
 let isQuitting = false;
+
+const STARTUP_PERF_ENABLED = process.env.ABCARUS_DEV_STARTUP_PERF === "1";
+const STARTUP_T0_MS = Date.now();
+function logStartupPerf(label, data) {
+  if (!STARTUP_PERF_ENABLED) return;
+  try {
+    const ms = Date.now() - STARTUP_T0_MS;
+    // eslint-disable-next-line no-console
+    console.log(`[startup] +${ms}ms ${label}`, data || "");
+  } catch {}
+}
 const appState = {
   lastFolder: null,
   recentTunes: [],
@@ -1927,6 +1938,7 @@ async function scanLibrary(rootDir, sender, options = {}) {
 }
 
 function createWindow() {
+  logStartupPerf("createWindow()");
   // Default to following the OS theme (also used for picking a visible window icon on Linux).
   nativeTheme.themeSource = "system";
   const win = new BrowserWindow({
@@ -1952,7 +1964,13 @@ function createWindow() {
     });
   }
   try { win.setAlwaysOnTop(false); } catch {}
+  try {
+    win.webContents.once("did-finish-load", () => {
+      logStartupPerf("renderer did-finish-load");
+    });
+  } catch {}
   win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+  logStartupPerf("loadFile(index.html) queued");
   if (process.env.ABCARUS_DEV_NO_MAXIMIZE !== "1") {
     win.maximize();
   }
@@ -2055,18 +2073,25 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  logStartupPerf("app.whenReady()");
   app.setName("ABCarus");
   if (process.platform === "win32") {
     app.setAppUserModelId("com.abcarus.app");
   }
+  logStartupPerf("loadState() start");
   await loadState();
+  logStartupPerf("loadState() done");
   if (process.platform === "linux" && appState.settings && appState.settings.usePortalFileDialogs) {
     process.env.GTK_USE_PORTAL = "1";
   }
+  logStartupPerf("migrateStatePaths() start");
   await migrateStatePaths();
+  logStartupPerf("migrateStatePaths() done");
   cleanupTempPrintFiles().catch(() => {});
+  logStartupPerf("cleanupTempPrintFiles() queued");
   createWindow();
   refreshMenu();
+  logStartupPerf("refreshMenu() done");
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

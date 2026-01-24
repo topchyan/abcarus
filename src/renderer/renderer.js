@@ -1499,6 +1499,23 @@ function logIntonationPerf(label, data) {
   } catch {}
 }
 
+const STARTUP_PERF_T0_MS = perfNowMs();
+function isStartupPerfEnabled() {
+  try {
+    return (window.api && window.api.startupPerfEnabled === true) || window.__abcarusPerfStartup === true;
+  } catch {
+    return false;
+  }
+}
+function logStartupPerf(label, data) {
+  if (!isStartupPerfEnabled()) return;
+  try {
+    const ms = Math.round(perfNowMs() - STARTUP_PERF_T0_MS);
+    if (data !== undefined) console.log(`[startup:renderer] +${ms}ms ${label}`, data);
+    else console.log(`[startup:renderer] +${ms}ms ${label}`);
+  } catch {}
+}
+
 const devConfig = (() => {
   try {
     return (window.api && typeof window.api.getDevConfig === "function") ? (window.api.getDevConfig() || {}) : {};
@@ -2686,6 +2703,8 @@ function hasFullLibraryIndex() {
 }
 
 async function ensureFullLibraryIndex({ reason = "" } = {}) {
+  const perfOn = isStartupPerfEnabled();
+  const t0 = perfOn ? perfNowMs() : 0;
   if (!window.api || typeof window.api.scanLibrary !== "function") return false;
   if (!libraryIndex || !libraryIndex.root) return false;
   if (hasFullLibraryIndex()) return true;
@@ -2717,6 +2736,15 @@ async function ensureFullLibraryIndex({ reason = "" } = {}) {
     setScanStatus("Indexing failed.");
     return false;
   } finally {
+    if (perfOn) {
+      logStartupPerf("ensureFullLibraryIndex()", {
+        reason: String(reason || ""),
+        ms: Math.round(perfNowMs() - t0),
+        root: root ? safeBasename(root) : "",
+        ok: hasFullLibraryIndex(),
+        files: libraryIndex && libraryIndex.files ? libraryIndex.files.length : 0,
+      });
+    }
     if (libraryFullScanToken === scanToken) {
       libraryFullScanToken = "";
       libraryFullScanInFlight = false;
@@ -7915,6 +7943,8 @@ function markActiveTuneButton(tuneId) {
 }
 
 async function selectTune(tuneId, options = {}) {
+  const perfOn = isStartupPerfEnabled();
+  const t0 = perfOn ? perfNowMs() : 0;
   if (!libraryIndex || !tuneId) return;
   if (!options.skipConfirm) {
     const ok = await ensureSafeToAbandonCurrentDoc("switching tunes");
@@ -7937,8 +7967,10 @@ async function selectTune(tuneId, options = {}) {
   try {
     if (window.api && typeof window.api.openWorkingCopy === "function" && fileMeta.path) {
       if (!workingCopySnapshot || !workingCopySnapshot.path || !pathsEqual(workingCopySnapshot.path, fileMeta.path)) {
+        const tWc0 = perfOn ? perfNowMs() : 0;
         await window.api.openWorkingCopy(fileMeta.path);
         const snapshot = await refreshWorkingCopySnapshot();
+        if (perfOn) logStartupPerf("selectTune: openWorkingCopy", { ms: Math.round(perfNowMs() - tWc0), file: safeBasename(fileMeta.path) });
         if (snapshot && snapshot.path && pathsEqual(snapshot.path, fileMeta.path)) {
           attachTuneUidsToLibraryFile(fileMeta.path, snapshot);
           scheduleRenderLibraryTree();
@@ -8064,6 +8096,13 @@ async function selectTune(tuneId, options = {}) {
     endOffset: sliceEnd,
   }, { suppressRecent: options.suppressRecent || false });
   setDirtyIndicator(false);
+  if (perfOn) {
+    logStartupPerf("selectTune() done", {
+      ms: Math.round(perfNowMs() - t0),
+      file: fileMeta && fileMeta.path ? safeBasename(fileMeta.path) : "",
+      x: selected && selected.xNumber ? String(selected.xNumber) : "",
+    });
+  }
   return { ok: true };
 }
 
@@ -8271,6 +8310,9 @@ async function refreshLibraryIndex() {
 
 async function loadLibraryFromFolder(folder) {
   if (!window.api || !folder) return;
+  const perfOn = isStartupPerfEnabled();
+  const t0 = perfOn ? perfNowMs() : 0;
+  if (perfOn) logStartupPerf("loadLibraryFromFolder() start", { folder: abbreviatePath(folder, 3) });
   const scanToken = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   setScanStatus("Scanning…");
   fileContentCache.clear();
@@ -8290,7 +8332,9 @@ async function loadLibraryFromFolder(folder) {
 
   try {
     if (typeof window.api.scanLibraryDiscover === "function") {
+      const tDisc0 = perfOn ? perfNowMs() : 0;
       const discovered = await window.api.scanLibraryDiscover(folder, { token: scanToken, computeMeta: true });
+      if (perfOn) logStartupPerf("scanLibraryDiscover()", { ms: Math.round(perfNowMs() - tDisc0), files: discovered && discovered.files ? discovered.files.length : 0 });
       if (discovered && discovered.root && Array.isArray(discovered.files)) {
         if (!libraryIndex && folder !== discovered.root) {
           // proceed: first load
@@ -8343,10 +8387,13 @@ async function loadLibraryFromFolder(folder) {
         }
       }
       if (firstTuneId) {
+        const tSel0 = perfOn ? perfNowMs() : 0;
         await selectTune(firstTuneId);
+        if (perfOn) logStartupPerf("selectTune(first)", { ms: Math.round(perfNowMs() - tSel0) });
       }
     }
     updateLibraryStatus();
+    if (perfOn) logStartupPerf("loadLibraryFromFolder() done", { ms: Math.round(perfNowMs() - t0) });
 		  } catch (e) {
 		    setScanStatus("Scan failed");
 		    logErr((e && e.stack) ? e.stack : String(e));
@@ -16519,28 +16566,33 @@ if (window.api && typeof window.api.onAppRequestQuit === "function") {
 }
 
 settingsController = initSettings(window.api);
+logStartupPerf("initSettings() done");
 if (window.api && typeof window.api.getSettings === "function") {
+  logStartupPerf("getSettings() start");
   window.api.getSettings().then((settings) => {
-	      if (settings) {
-	      latestSettingsSnapshot = settings;
-	      setGlobalHeaderFromSettings(settings);
-	      setAbc2svgFontsFromSettings(settings);
-	      setSoundfontFromSettings(settings);
-	      setDrumVelocityFromSettings(settings);
-        setLayoutFromSettings(settings);
-	      setFollowFromSettings(settings);
-	      setLoopFromSettings(settings);
-	      setPlaybackAutoScrollFromSettings(settings);
-        setPrintAllFromSettings(settings);
-	      applyLibraryPrefsFromSettings(settings);
-	      updateGlobalHeaderToggle();
-      updateErrorsFeatureUI();
-      refreshHeaderLayers().catch(() => {});
-      showDisclaimerIfNeeded(settings);
-      scheduleStartupLayoutReset();
-    }
-    suppressLibraryPrefsWrite = false;
-  }).catch(() => { suppressLibraryPrefsWrite = false; });
+		      logStartupPerf("getSettings() done", { hasSettings: Boolean(settings) });
+		      if (settings) {
+		      latestSettingsSnapshot = settings;
+		      logStartupPerf("apply settings: begin");
+		      setGlobalHeaderFromSettings(settings);
+		      setAbc2svgFontsFromSettings(settings);
+		      setSoundfontFromSettings(settings);
+		      setDrumVelocityFromSettings(settings);
+	        setLayoutFromSettings(settings);
+		      setFollowFromSettings(settings);
+		      setLoopFromSettings(settings);
+		      setPlaybackAutoScrollFromSettings(settings);
+	        setPrintAllFromSettings(settings);
+		      applyLibraryPrefsFromSettings(settings);
+		      updateGlobalHeaderToggle();
+	      updateErrorsFeatureUI();
+	      refreshHeaderLayers().catch(() => {});
+	      showDisclaimerIfNeeded(settings);
+	      scheduleStartupLayoutReset();
+	      logStartupPerf("apply settings: end");
+	    }
+	    suppressLibraryPrefsWrite = false;
+	  }).catch(() => { suppressLibraryPrefsWrite = false; });
 }
 
 if (window.api && typeof window.api.getFontDirs === "function") {
