@@ -32,6 +32,7 @@ import {
 } from "./transpose.mjs";
 import { resolvePerdeName } from "./perde53.mjs";
 import { resolvePerdeNamesFromAbcToken } from "./perde_by_abc.mjs";
+import { BUILTIN_MAKAM_DNA } from "./makam_dna/makam_dna.mjs";
 import { normalizeMeasuresLineBreaks, transformMeasuresPerLine } from "./measures.mjs";
 import {
   buildDefaultDrumVelocityMap,
@@ -133,13 +134,26 @@ const $sidebarSplit = document.getElementById("sidebarSplit");
 const $toast = document.getElementById("toast");
 const $intonationExplorerPanel = document.getElementById("intonationExplorerPanel");
 const $intonationExplorerClose = document.getElementById("intonationExplorerClose");
+const $intonationExplorerMore = document.getElementById("intonationExplorerMore");
+const $intonationExplorerMenu = document.getElementById("intonationExplorerMenu");
 const $intonationExplorerBaseMode = document.getElementById("intonationExplorerBaseMode");
 const $intonationExplorerBaseManual = document.getElementById("intonationExplorerBaseManual");
+const $intonationExplorerDeclaredMakam = document.getElementById("intonationExplorerDeclaredMakam");
+const $intonationExplorerCompareMakam = document.getElementById("intonationExplorerCompareMakam");
 const $intonationExplorerSort = document.getElementById("intonationExplorerSort");
 const $intonationExplorerSkipGrace = document.getElementById("intonationExplorerSkipGrace");
 const $intonationExplorerRefresh = document.getElementById("intonationExplorerRefresh");
 const $intonationExplorerStatus = document.getElementById("intonationExplorerStatus");
 const $intonationExplorerTableBody = document.getElementById("intonationExplorerTableBody");
+const $intonationExplorerPlot = document.getElementById("intonationExplorerPlot");
+const $intonationExplorerPlotOverlay = document.getElementById("intonationExplorerPlotOverlay");
+const $intonationExplorerPlotLine = document.getElementById("intonationExplorerPlotLine");
+const $intonationExplorerPlotPoints = document.getElementById("intonationExplorerPlotPoints");
+const $intonationExplorerPlotLegend = document.getElementById("intonationExplorerPlotLegend");
+const $intonationExplorerDnaText = document.getElementById("intonationExplorerDnaText");
+const $intonationExplorerCopyDna = document.getElementById("intonationExplorerCopyDna");
+const $intonationExplorerCopyPitchSet = document.getElementById("intonationExplorerCopyPitchSet");
+const $intonationExplorerEditMakamDna = document.getElementById("intonationExplorerEditMakamDna");
 const $errorsIndicator = document.getElementById("errorsIndicator");
 const $errorsFocusMessage = document.getElementById("errorsFocusMessage");
 const $errorsPopover = document.getElementById("errorsPopover");
@@ -163,6 +177,13 @@ const $setListHeader = document.getElementById("setListHeader");
 const $setListClear = document.getElementById("setListClear");
 const $setListSaveAbc = document.getElementById("setListSaveAbc");
 const $setListExportPdf = document.getElementById("setListExportPdf");
+const $makamDnaModal = document.getElementById("makamDnaModal");
+const $makamDnaClose = document.getElementById("makamDnaClose");
+const $makamDnaEditor = document.getElementById("makamDnaEditor");
+const $makamDnaStatus = document.getElementById("makamDnaStatus");
+const $makamDnaResetBuiltin = document.getElementById("makamDnaResetBuiltin");
+const $makamDnaSave = document.getElementById("makamDnaSave");
+const $makamDnaCancel = document.getElementById("makamDnaCancel");
 
 const abcHighlightCompartment = new Compartment();
 const abcDiagnosticsCompartment = new Compartment();
@@ -1463,6 +1484,57 @@ function recordDebugLog(level, args, stackOverride) {
   if (debugLogBuffer.length > 300) debugLogBuffer.splice(0, debugLogBuffer.length - 300);
 }
 
+function perfNowMs() {
+  try {
+    return (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+  } catch {
+    return Date.now();
+  }
+}
+
+function isIntonationPerfEnabled() {
+  try {
+    // Enable via DevTools (no reload required): `window.__abcarusPerfIntonation = true`
+    return window.__abcarusPerfIntonation === true;
+  } catch {
+    return false;
+  }
+}
+
+function logIntonationPerf(label, data) {
+  if (!isIntonationPerfEnabled()) return;
+  try {
+    if (data !== undefined) console.log(`[perf:intonation] ${label}`, data);
+    else console.log(`[perf:intonation] ${label}`);
+  } catch {}
+}
+
+const STARTUP_PERF_T0_MS = perfNowMs();
+function isStartupPerfEnabled() {
+  try {
+    return (window.api && window.api.startupPerfEnabled === true) || window.__abcarusPerfStartup === true;
+  } catch {
+    return false;
+  }
+}
+function logStartupPerf(label, data) {
+  if (!isStartupPerfEnabled()) return;
+  try {
+    const ms = Math.round(perfNowMs() - STARTUP_PERF_T0_MS);
+    if (data !== undefined) console.log(`[startup:renderer] +${ms}ms ${label}`, data);
+    else console.log(`[startup:renderer] +${ms}ms ${label}`);
+  } catch {}
+}
+
+function abbreviatePathForLog(fullPath, tailSegments = 3) {
+  if (!fullPath) return "";
+  const raw = String(fullPath);
+  const sep = raw.includes("\\") ? "\\" : "/";
+  const parts = raw.split(/[\\/]+/).filter(Boolean);
+  if (parts.length <= tailSegments) return raw;
+  return ["…", ...parts.slice(-tailSegments)].join(sep);
+}
+
 const devConfig = (() => {
   try {
     return (window.api && typeof window.api.getDevConfig === "function") ? (window.api.getDevConfig() || {}) : {};
@@ -2650,6 +2722,8 @@ function hasFullLibraryIndex() {
 }
 
 async function ensureFullLibraryIndex({ reason = "" } = {}) {
+  const perfOn = isStartupPerfEnabled();
+  const t0 = perfOn ? perfNowMs() : 0;
   if (!window.api || typeof window.api.scanLibrary !== "function") return false;
   if (!libraryIndex || !libraryIndex.root) return false;
   if (hasFullLibraryIndex()) return true;
@@ -2681,6 +2755,15 @@ async function ensureFullLibraryIndex({ reason = "" } = {}) {
     setScanStatus("Indexing failed.");
     return false;
   } finally {
+    if (perfOn) {
+      logStartupPerf("ensureFullLibraryIndex()", {
+        reason: String(reason || ""),
+        ms: Math.round(perfNowMs() - t0),
+        root: root ? safeBasename(root) : "",
+        ok: hasFullLibraryIndex(),
+        files: libraryIndex && libraryIndex.files ? libraryIndex.files.length : 0,
+      });
+    }
     if (libraryFullScanToken === scanToken) {
       libraryFullScanToken = "";
       libraryFullScanInFlight = false;
@@ -3058,6 +3141,26 @@ let tuneBadgeText = "";
 let bufferStatusText = "";
 
 let appStatusText = "Ready";
+let startupUiLoading = true;
+let startupSettingsApplied = false;
+let startupAutoLoadStarted = false;
+let startupRecentOpenStarted = false;
+
+function markStartupUiReady() {
+  if (!startupUiLoading) return;
+  startupUiLoading = false;
+  renderUnifiedStatus();
+}
+
+function markStartupSettingsApplied() {
+  if (startupSettingsApplied) return;
+  startupSettingsApplied = true;
+  if (!startupRecentOpenStarted && !startupAutoLoadStarted) {
+    markStartupUiReady();
+  } else {
+    renderUnifiedStatus();
+  }
+}
 
 function computeWorkingCopyFileState() {
   const filePath = rawMode
@@ -3100,9 +3203,13 @@ function renderUnifiedStatus() {
 
   const fileState = computeWorkingCopyFileState();
 
-  const isReady = !displayNorm || /^ready\b/i.test(displayNorm);
-  const label = isReady ? fileState.label : display;
-  const kind = isReady ? fileState.kind : (fileState.kind === "conflict" ? "conflict" : (fileState.kind === "dirty" ? "dirty" : "ready"));
+  const isNeutral = !displayNorm || /^ready\b/i.test(displayNorm);
+  const label = startupUiLoading && isNeutral
+    ? "Loading…"
+    : (isNeutral ? "Ready" : display);
+  const kind = startupUiLoading && isNeutral
+    ? "loading"
+    : (isNeutral ? "ready" : (fileState.kind === "conflict" ? "conflict" : (fileState.kind === "dirty" ? "dirty" : "ready")));
 
   $status.textContent = label || "Ready";
 
@@ -3111,7 +3218,7 @@ function renderUnifiedStatus() {
   $status.classList.toggle("status-dirty", kind === "dirty");
   $status.classList.toggle("status-conflict", kind === "conflict");
 
-  const loading = String(label || "").toLowerCase().startsWith("loading the sound font");
+  const loading = kind === "loading" || String(label || "").toLowerCase().startsWith("loading the sound font");
   $status.classList.toggle("status-loading", loading);
 }
 
@@ -3537,9 +3644,459 @@ let intonationExplorerActiveStep = null;
 let intonationExplorerBaseStep = 0;
 let intonationExplorerBaseLabel = "pc53=0";
 let intonationExplorerBaseMode = "auto";
-let intonationExplorerSortMode = "count";
+let intonationExplorerSortMode = "first";
 let intonationExplorerSkipGraceNotes = true;
 let intonationExplorerIs53 = false;
+let intonationExplorerDeclaredMakam = "";
+let intonationExplorerCompareMakam = "";
+let intonationExplorerAutoMakamApplied = false;
+let intonationExplorerRoleAbs53Map = null;
+let lastIntonationDnaUiText = "";
+let lastIntonationPitchSetText = "";
+let lastIntonationDnaSource = null; // lazy-built on Copy (avoid heavy work on every refresh)
+
+function setIntonationExplorerDnaUi({ dnaText, pitchSetText } = {}) {
+  const nextDna = String(dnaText || "");
+  const nextPitch = String(pitchSetText || "");
+  const enableDna = nextDna === "ready" ? Boolean(lastIntonationDnaSource) : Boolean(nextDna);
+  const enablePitch = nextPitch === "ready" ? Boolean(lastIntonationDnaSource) : Boolean(nextPitch);
+  if (nextDna !== "ready") lastIntonationDnaUiText = nextDna;
+  if (nextPitch !== "ready") lastIntonationPitchSetText = nextPitch;
+  if ($intonationExplorerCopyDna) $intonationExplorerCopyDna.disabled = !enableDna;
+  if ($intonationExplorerCopyPitchSet) $intonationExplorerCopyPitchSet.disabled = !enablePitch;
+}
+
+function clearIntonationExplorerPlot() {
+  if ($intonationExplorerPlotLine) $intonationExplorerPlotLine.setAttribute("points", "");
+  if ($intonationExplorerPlotOverlay) $intonationExplorerPlotOverlay.innerHTML = "";
+  if ($intonationExplorerPlotPoints) $intonationExplorerPlotPoints.innerHTML = "";
+  if ($intonationExplorerPlotLegend) $intonationExplorerPlotLegend.textContent = "";
+}
+
+function populateIntonationExplorerMakams() {
+  const list = getMakamDnaEntries();
+  const names = list
+    .map((e) => String(e && e.makam ? e.makam : "").trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+
+  const fill = (selectEl) => {
+    if (!selectEl) return;
+    const current = String(selectEl.value || "");
+    selectEl.textContent = "";
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = "None";
+    selectEl.appendChild(none);
+    for (const name of names) {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      selectEl.appendChild(opt);
+    }
+    selectEl.value = current;
+  };
+
+  fill($intonationExplorerDeclaredMakam);
+  fill($intonationExplorerCompareMakam);
+}
+
+function normalizeMakamKey(name) {
+  const raw = String(name || "").trim();
+  if (!raw) return "";
+  const base = raw
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/\s+/g, " ");
+  const map = {
+    "ç": "c",
+    "ğ": "g",
+    "ı": "i",
+    "ş": "s",
+    "ö": "o",
+    "ü": "u",
+    "â": "a",
+    "î": "i",
+    "û": "u",
+  };
+  return base
+    .split("")
+    .map((ch) => (map[ch] ? map[ch] : ch))
+    .join("")
+    .replace(/[^a-z0-9 ]/g, "")
+    .trim();
+}
+
+let activeMakamDnaEntries = Array.isArray(BUILTIN_MAKAM_DNA) ? BUILTIN_MAKAM_DNA : [];
+let activeMakamDnaUserText = "";
+let makamDnaLoaded = false;
+
+function getMakamDnaEntries() {
+  return Array.isArray(activeMakamDnaEntries) ? activeMakamDnaEntries : [];
+}
+
+function extractEntriesFromMakamDnaPayload(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object") return null;
+  if (Array.isArray(payload.entries)) return payload.entries;
+  if (payload.rawTable && Array.isArray(payload.rawTable.entries)) return payload.rawTable.entries;
+  return null;
+}
+
+function parseMakamDnaText(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return { ok: false, error: "Empty JSON." };
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : "Invalid JSON." };
+  }
+  const entries = extractEntriesFromMakamDnaPayload(parsed);
+  if (!Array.isArray(entries)) return { ok: false, error: "Expected an array (or an object with entries/rawTable.entries)." };
+  const cleaned = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue;
+    const makam = String(entry.makam || "").trim();
+    if (!makam) continue;
+    cleaned.push(entry);
+  }
+  if (!cleaned.length) return { ok: false, error: "No valid entries (each entry must include a non-empty makam)." };
+  return { ok: true, entries: cleaned };
+}
+
+function formatMakamDnaForEditor(entries) {
+  const today = new Date();
+  const iso = Number.isFinite(today.getTime()) ? today.toISOString().slice(0, 10) : "";
+  const wrapper = {
+    schemaVersion: 1,
+    updatedAt: iso || "",
+    rawTable: {
+      note: "User-edited dataset (local). Entries are used by Intonation Explorer for makam overlays/labels.",
+      entries: Array.isArray(entries) ? entries : [],
+    },
+  };
+  return JSON.stringify(wrapper, null, 2);
+}
+
+async function ensureMakamDnaLoaded() {
+  if (makamDnaLoaded) return;
+  makamDnaLoaded = true;
+  if (!window.api || typeof window.api.getMakamDnaUser !== "function") return;
+  try {
+    const res = await window.api.getMakamDnaUser();
+    if (!res || !res.ok || !res.text) return;
+    const parsed = parseMakamDnaText(String(res.text || ""));
+    if (!parsed.ok) return;
+    activeMakamDnaEntries = parsed.entries;
+    activeMakamDnaUserText = String(res.text || "");
+  } catch (e) {
+    logErr(e && e.message ? e.message : String(e));
+  }
+}
+
+let makamDnaNameIndex = { idx: new Map(), sorted: [] };
+
+function rebuildMakamDnaNameIndex() {
+  const names = getMakamDnaEntries()
+    .map((e) => String(e && e.makam ? e.makam : "").trim())
+    .filter(Boolean);
+  const sorted = names
+    .slice()
+    .sort((a, b) => normalizeMakamKey(b).length - normalizeMakamKey(a).length);
+  const idx = new Map();
+  for (const name of sorted) {
+    const key = normalizeMakamKey(name);
+    if (!key) continue;
+    if (!idx.has(key)) idx.set(key, name);
+  }
+  makamDnaNameIndex = { idx, sorted };
+}
+
+rebuildMakamDnaNameIndex();
+
+function detectMakamFromTuneText(tuneText) {
+  const text = String(tuneText || "");
+  if (!text.trim()) return "";
+  const mT = text.match(/(?:^|\n)T:\s*([^\r\n]+)/);
+  const mR = text.match(/(?:^|\n)R:\s*([^\r\n]+)/);
+  const hay = normalizeMakamKey([mR ? mR[1] : "", mT ? mT[1] : ""].filter(Boolean).join(" "));
+  if (!hay) return "";
+  for (const name of makamDnaNameIndex.sorted) {
+    const key = normalizeMakamKey(name);
+    if (!key) continue;
+    if (hay.includes(key)) return name;
+  }
+  return "";
+}
+
+function normalizePerdeKey(name) {
+  const raw = String(name || "").trim();
+  if (!raw) return "";
+  const base = raw
+    .split("(")[0]
+    .trim()
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/\s+/g, " ");
+  const map = {
+    "ç": "c",
+    "ğ": "g",
+    "ı": "i",
+    "ş": "s",
+    "ö": "o",
+    "ü": "u",
+    "â": "a",
+    "î": "i",
+    "û": "u",
+  };
+  return base
+    .split("")
+    .map((ch) => (map[ch] ? map[ch] : ch))
+    .join("")
+    .replace(/[^a-z0-9 ]/g, "")
+    .trim();
+}
+
+function buildPerdeNameIndex() {
+  const idx = new Map();
+  for (let octave = 4; octave <= 8; octave += 1) {
+    for (let pc53 = 0; pc53 < 53; pc53 += 1) {
+      const name = resolvePerdeName({ pc53, octave });
+      if (!name) continue;
+      const key = normalizePerdeKey(name);
+      if (!key) continue;
+      const abs53 = octave * 53 + pc53;
+      if (!idx.has(key)) idx.set(key, []);
+      idx.get(key).push({ pc53, octave, abs53, name });
+    }
+  }
+  return idx;
+}
+
+const perdeNameIndex = buildPerdeNameIndex();
+
+function parseMakamDnaPerdeField(fieldText) {
+  const raw = String(fieldText || "");
+  const name = raw.split("(")[0].trim();
+  const lower = raw.toLowerCase();
+  const hint = lower.includes("low") ? "low" : (lower.includes("high") ? "high" : "");
+  return { name, hint };
+}
+
+function pickOverlayAbs53ForPerde(perdeName, { hint, observedMinAbs, observedMaxAbs } = {}) {
+  const key = normalizePerdeKey(perdeName);
+  const candidates = key ? (perdeNameIndex.get(key) || []) : [];
+  if (!candidates.length) return null;
+  const mid = (Number.isFinite(observedMinAbs) && Number.isFinite(observedMaxAbs))
+    ? (observedMinAbs + observedMaxAbs) / 2
+    : null;
+  const prefer = (cand) => {
+    if (!hint) return 0;
+    if (hint === "low") return cand.octave <= 5 ? 0 : 1;
+    if (hint === "high") return cand.octave >= 7 ? 0 : 1;
+    return cand.octave === 6 ? 0 : 1;
+  };
+  let best = null;
+  for (const cand of candidates) {
+    const inRangePenalty = (Number.isFinite(observedMinAbs) && Number.isFinite(observedMaxAbs))
+      ? ((cand.abs53 < observedMinAbs - 26 || cand.abs53 > observedMaxAbs + 26) ? 1 : 0)
+      : 0;
+    const dist = mid != null ? Math.abs(cand.abs53 - mid) : 0;
+    const score = [prefer(cand), inRangePenalty, dist];
+    if (!best) best = { cand, score };
+    else {
+      for (let i = 0; i < score.length; i += 1) {
+        if (score[i] < best.score[i]) { best = { cand, score }; break; }
+        if (score[i] > best.score[i]) break;
+      }
+    }
+  }
+  return best ? best.cand.abs53 : null;
+}
+
+function getMakamDnaEntry(name) {
+  const target = String(name || "").trim().toLowerCase();
+  if (!target) return null;
+  return getMakamDnaEntries().find((e) => String(e.makam || "").trim().toLowerCase() === target) || null;
+}
+
+function renderIntonationSeyirPlot({ noteEvents, baseStep, overlayMakamName } = {}) {
+  if (!$intonationExplorerPlot || !$intonationExplorerPlotLine || !$intonationExplorerPlotPoints) return;
+  const events = Array.isArray(noteEvents) ? noteEvents : [];
+  if (!events.length) {
+    clearIntonationExplorerPlot();
+    return;
+  }
+  // Compress consecutive repeats (abs53) to reveal motion.
+  const compressed = [];
+  for (const e of events) {
+    const last = compressed.length ? compressed[compressed.length - 1] : null;
+    if (last && Number(last.abs53) === Number(e.abs53)) continue;
+    compressed.push(e);
+  }
+  if (compressed.length < 2) {
+    clearIntonationExplorerPlot();
+    return;
+  }
+
+  const absVals = compressed.map((e) => Number(e.abs53)).filter((n) => Number.isFinite(n));
+  const minAbs = absVals.length ? Math.min(...absVals) : null;
+  const maxAbs = absVals.length ? Math.max(...absVals) : null;
+  if (!Number.isFinite(minAbs) || !Number.isFinite(maxAbs) || maxAbs === minAbs) {
+    clearIntonationExplorerPlot();
+    return;
+  }
+
+  const vb = $intonationExplorerPlot.viewBox && $intonationExplorerPlot.viewBox.baseVal
+    ? $intonationExplorerPlot.viewBox.baseVal
+    : { width: 360, height: 120 };
+  const w = Number(vb.width) || 360;
+  const h = Number(vb.height) || 120;
+  const padX = 8;
+  const padY = 10;
+  const innerW = Math.max(1, w - padX * 2);
+  const innerH = Math.max(1, h - padY * 2);
+
+  const toX = (i) => padX + (i / (compressed.length - 1)) * innerW;
+  const toY = (abs53) => padY + ((maxAbs - abs53) / (maxAbs - minAbs)) * innerH;
+
+  const points = compressed.map((e, i) => `${toX(i).toFixed(2)},${toY(Number(e.abs53)).toFixed(2)}`).join(" ");
+  $intonationExplorerPlotLine.setAttribute("points", points);
+
+  // Overlay: durak / guclu / yeden as horizontal guides (manual compare mode).
+  if ($intonationExplorerPlotOverlay) $intonationExplorerPlotOverlay.innerHTML = "";
+  const overlayEntry = overlayMakamName ? getMakamDnaEntry(overlayMakamName) : null;
+  if ($intonationExplorerPlotOverlay && overlayEntry) {
+    const mkLine = (y, color, dash, label) => {
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", String(padX));
+      line.setAttribute("x2", String(w - padX));
+      line.setAttribute("y1", String(y));
+      line.setAttribute("y2", String(y));
+      line.setAttribute("stroke", color);
+      line.setAttribute("stroke-width", "1.2");
+      if (dash) line.setAttribute("stroke-dasharray", dash);
+      line.setAttribute("opacity", "0.75");
+      if (label) line.setAttribute("data-label", label);
+      return line;
+    };
+
+    const durak = parseMakamDnaPerdeField(overlayEntry.durak);
+    const guclu = parseMakamDnaPerdeField(overlayEntry.guclu);
+    const yeden = parseMakamDnaPerdeField(overlayEntry.yeden);
+
+    const durakAbs = pickOverlayAbs53ForPerde(durak.name, { hint: durak.hint, observedMinAbs: minAbs, observedMaxAbs: maxAbs });
+    const gucluAbs = pickOverlayAbs53ForPerde(guclu.name, { hint: guclu.hint, observedMinAbs: minAbs, observedMaxAbs: maxAbs });
+    const yedenAbs = pickOverlayAbs53ForPerde(yeden.name, { hint: yeden.hint, observedMinAbs: minAbs, observedMaxAbs: maxAbs });
+
+    const overlayLabels = [];
+    if (Number.isFinite(durakAbs)) {
+      const y = toY(durakAbs);
+      $intonationExplorerPlotOverlay.appendChild(mkLine(y, "rgba(20,110,60,1)", "", `Durak: ${durak.name}`));
+      overlayLabels.push(`Durak: ${durak.name}`);
+    }
+    if (Number.isFinite(gucluAbs)) {
+      const y = toY(gucluAbs);
+      $intonationExplorerPlotOverlay.appendChild(mkLine(y, "rgba(60,120,210,1)", "5,4", `Güçlü: ${guclu.name}`));
+      overlayLabels.push(`Güçlü: ${guclu.name}`);
+    }
+    if (Number.isFinite(yedenAbs)) {
+      const y = toY(yedenAbs);
+      $intonationExplorerPlotOverlay.appendChild(mkLine(y, "rgba(210,120,60,1)", "2,4", `Yeden: ${yeden.name}`));
+      overlayLabels.push(`Yeden: ${yeden.name}`);
+    }
+    if ($intonationExplorerPlotLegend) {
+      const overlayName = String(overlayEntry.makam || "");
+      $intonationExplorerPlotLegend.textContent = overlayLabels.length
+        ? `Overlay: ${overlayName} (${overlayLabels.join(" · ")})`
+        : `Overlay: ${overlayName}`;
+    }
+  } else if ($intonationExplorerPlotLegend) {
+    const relBase = Number.isFinite(baseStep) ? formatAeuLabel(mod53(baseStep)) : "pc53=0";
+    $intonationExplorerPlotLegend.textContent = `Observed trajectory (base ${relBase})`;
+  }
+
+  // Turning points (cap to keep it readable).
+  if ($intonationExplorerPlotPoints) $intonationExplorerPlotPoints.innerHTML = "";
+  const turning = [];
+  for (let i = 1; i + 1 < compressed.length; i += 1) {
+    const a = Number(compressed[i - 1].abs53);
+    const b = Number(compressed[i].abs53);
+    const c = Number(compressed[i + 1].abs53);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c)) continue;
+    if (b > a && b > c) turning.push({ kind: "peak", idx: i, e: compressed[i] });
+    else if (b < a && b < c) turning.push({ kind: "trough", idx: i, e: compressed[i] });
+  }
+  const important = [
+    { kind: "start", idx: 0, e: compressed[0] },
+    ...turning.slice(0, 24),
+    { kind: "end", idx: compressed.length - 1, e: compressed[compressed.length - 1] },
+  ];
+
+  const mkPoint = (it) => {
+    const e = it.e || {};
+    const abs53 = Number(e.abs53);
+    if (!Number.isFinite(abs53)) return null;
+    const cx = toX(it.idx);
+    const cy = toY(abs53);
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", cx.toFixed(2));
+    c.setAttribute("cy", cy.toFixed(2));
+    c.setAttribute("r", it.kind === "start" || it.kind === "end" ? "5.2" : "4.4");
+    let fill = "rgba(0,0,0,0.5)";
+    if (it.kind === "peak") fill = "rgba(200,60,60,0.9)";
+    if (it.kind === "trough") fill = "rgba(60,110,210,0.9)";
+    if (it.kind === "start") fill = "rgba(30,140,70,0.95)";
+    if (it.kind === "end") fill = "rgba(0,0,0,0.8)";
+    c.setAttribute("fill", fill);
+    c.setAttribute("stroke", "rgba(255,255,255,0.9)");
+    c.setAttribute("stroke-width", "1.2");
+    const pc = formatAeuLabel(mod53(e.pc53 || 0));
+    c.setAttribute("data-kind", it.kind);
+    c.setAttribute("data-start", String(e.start ?? ""));
+    c.setAttribute("data-end", String(e.end ?? ""));
+    const perde = intonationExplorerIs53 ? (resolvePerdeName({ pc53: mod53(e.pc53 || 0), octave: e.octave }) || "") : "";
+    const role = (intonationExplorerRoleAbs53Map && intonationExplorerRoleAbs53Map.get(String(abs53))) ? intonationExplorerRoleAbs53Map.get(String(abs53)) : "";
+    const perdePart = perde ? `; perde=${perde}` : "";
+	    const rolePart = role ? `; role=${role}` : "";
+	    c.setAttribute("title", `${it.kind}: ${String(e.spelling || "")} (pc53=${pc})${perdePart}${rolePart}`);
+	    c.style.cursor = "pointer";
+	    c.addEventListener("mouseenter", () => {
+	      try {
+	        if (Number.isFinite(Number(abs53))) activateIntonationExplorerRow(abs53);
+	      } catch {}
+	    });
+	    c.addEventListener("click", () => {
+	      if (!Number.isFinite(Number(e.start))) return;
+	      try {
+	        // Sync table + multi-occurrence highlights for this pitch.
+        activateIntonationExplorerRow(abs53);
+      } catch {}
+      try {
+        // Also scroll to the exact note instance the turning point came from.
+        const off = Number(e.start);
+        const endOff = Number(e.end) || off + 1;
+        highlightSvgIntonationNotesByRanges([{ start: off, end: endOff }]);
+      } catch {}
+      try {
+        const off = Number(e.start);
+        if (editorView && Number.isFinite(off)) {
+          const docLen = editorView.state && editorView.state.doc ? editorView.state.doc.length : 0;
+          const safeOff = Math.max(0, Math.min(docLen, off));
+          editorView.dispatch({ selection: { anchor: safeOff, head: safeOff }, scrollIntoView: true });
+          try { editorView.focus(); } catch {}
+        }
+      } catch {}
+    });
+    return c;
+  };
+
+  for (const it of important) {
+    const el = mkPoint(it);
+    if (el && $intonationExplorerPlotPoints) $intonationExplorerPlotPoints.appendChild(el);
+  }
+}
 
 let lastSvgIntonationBarEls = [];
 let lastSvgIntonationNoteEls = [];
@@ -3628,6 +4185,8 @@ function resolveTonalBaseInput(rawValue) {
 
 function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
   if (!snapshot || !snapshot.text) return { tune: null, entries: [], error: "Unable to read working copy." };
+  const perfOn = isIntonationPerfEnabled();
+  const t0 = perfOn ? perfNowMs() : 0;
   const tune = resolveTuneEntryFromSnapshot(snapshot, {
     tuneUid: activeTuneUid,
     tuneIndex: activeTuneIndex,
@@ -3667,19 +4226,23 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
     }
   } catch {}
 
-  let keyMicroMap = {};
-  try {
-    keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(kLineBody);
-  } catch {
-    keyMicroMap = {};
-  }
+	  let keyMicroMap = {};
+	  try {
+	    keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(kLineBody, { allowMicro: is53 });
+	  } catch {
+	    keyMicroMap = {};
+	  }
 
-	  const seen = new Map();
-	  let idx = scanStart;
-	  let inTextBlock = false;
-	  let graceDepth = 0;
-    let barAccidentals = new Map();
-	  while (idx < body.length) {
+			  const seen = new Map();
+      const noteEvents = [];
+			  let idx = scanStart;
+			  let inTextBlock = false;
+			  let graceDepth = 0;
+		    let barAccidentals = new Map();
+        let perfParseAttempts = 0;
+        let perfParsedNotes = 0;
+        let perfSkippedFast = 0;
+			  while (idx < body.length) {
 	    // Skip %%begintext … %%endtext blocks (often contain prose with A-G letters).
 	    if (!inTextBlock) {
 	      const prev = idx > 0 ? body[idx - 1] : "";
@@ -3719,23 +4282,40 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 	      continue;
 	    }
 
+	    // Skip "%%" directive lines (except %%begintext/%%endtext handled above).
+	    {
+	      const prev = idx > 0 ? body[idx - 1] : "";
+	      const lineStart = idx === 0 || prev === "\n" || prev === "\r";
+	      if (lineStart) {
+	        let j = idx;
+	        while (j < body.length && (body[j] === " " || body[j] === "\t")) j += 1;
+	        if (body[j] === "%" && j + 1 < body.length && body[j + 1] === "%") {
+	          const nextNl = body.indexOf("\n", j + 2);
+	          const nextCr = body.indexOf("\r", j + 2);
+	          const next = (nextNl >= 0 && nextCr >= 0) ? Math.min(nextNl, nextCr) : (nextNl >= 0 ? nextNl : nextCr);
+	          idx = next >= 0 ? next + 1 : body.length;
+	          continue;
+	        }
+	      }
+	    }
+
 		    // Skip inline fields like [K:Dm], [M:6/8], [V:1], etc.
 		    // These can contain A–G letters and would be mis-counted as notes.
 		    if (body[idx] === "[" && idx + 2 < body.length && /[A-Za-z]/.test(body[idx + 1]) && body[idx + 2] === ":") {
 		      const close = body.indexOf("]", idx + 3);
 		      if (close >= 0) {
-            const tag = String(body[idx + 1] || "").toUpperCase();
-            if (tag === "K") {
-              try {
-                const tokenPart = body.slice(idx + 3, close);
-                keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(tokenPart);
-                barAccidentals = new Map();
-              } catch {}
-            }
-		        idx = close + 1;
-		        continue;
-		      }
-		    }
+	            const tag = String(body[idx + 1] || "").toUpperCase();
+	            if (tag === "K") {
+	              try {
+	                const tokenPart = body.slice(idx + 3, close);
+	                keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(tokenPart, { allowMicro: is53 });
+	                barAccidentals = new Map();
+	              } catch {}
+	            }
+			        idx = close + 1;
+			        continue;
+			      }
+			    }
 
 		    // Skip mid-tune field lines like "K:Dm" / "M:6/8" / "V:1" (line-based fields).
 		    // This is separate from the inline [K:...] form above.
@@ -3750,17 +4330,17 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 		          const nextNl = body.indexOf("\n", j + 2);
 		          const nextCr = body.indexOf("\r", j + 2);
 		          const next = (nextNl >= 0 && nextCr >= 0) ? Math.min(nextNl, nextCr) : (nextNl >= 0 ? nextNl : nextCr);
-              if (tag === "K") {
-                try {
-                  const lineEnd = next >= 0 ? next : body.length;
-                  const tokenPart = body.slice(j + 2, lineEnd);
-                  keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(tokenPart);
-                  barAccidentals = new Map();
-                } catch {}
-              }
-		          idx = next >= 0 ? next + 1 : body.length;
-		          continue;
-		        }
+	            if (tag === "K") {
+	                try {
+	                  const lineEnd = next >= 0 ? next : body.length;
+	                  const tokenPart = body.slice(j + 2, lineEnd);
+	                  keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(tokenPart, { allowMicro: is53 });
+	                  barAccidentals = new Map();
+	                } catch {}
+	              }
+			          idx = next >= 0 ? next + 1 : body.length;
+			          continue;
+			        }
 		      }
 		    }
 
@@ -3792,22 +4372,41 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 	    }
 
       // Reset bar-accidental memory at barlines.
-      if (body[idx] === "|") {
-        barAccidentals = new Map();
-        idx += 1;
-        continue;
-      }
+	      if (body[idx] === "|") {
+	        barAccidentals = new Map();
+	        idx += 1;
+	        continue;
+	      }
 
-	    const note = parseNoteTokenAt53(body, idx);
-	    if (!note) {
-	      idx += 1;
+	      // Perf: avoid running the full note parser at every character.
+	      // Only attempt parsing when the current char could plausibly start a note token.
+	      {
+	        const ch = body[idx];
+	        const couldStart =
+	          ch === "^"
+	          || ch === "_"
+	          || ch === "="
+	          || (ch >= "A" && ch <= "G")
+	          || (ch >= "a" && ch <= "g");
+	        if (!couldStart) {
+            if (perfOn) perfSkippedFast += 1;
+	          idx += 1;
+	          continue;
+	        }
+	      }
+
+        if (perfOn) perfParseAttempts += 1;
+		    const note = parseNoteTokenAt53(body, idx);
+		    if (!note) {
+		      idx += 1;
+		      continue;
+		    }
+        if (perfOn) perfParsedNotes += 1;
+	    const letter = note.letter ? note.letter.toUpperCase() : "";
+	    if (!letter) {
+	      idx = note.end;
 	      continue;
 	    }
-    const letter = note.letter ? note.letter.toUpperCase() : "";
-    if (!letter) {
-      idx = note.end;
-      continue;
-    }
 	    const letterPc = NOTE_BASES[letter] != null ? NOTE_BASES[letter] : 0;
 	    const baseId = baseId53ForNaturalLetter(letter);
 	    const accidental = parseAccidentalPrefix53(note.accPrefix, letterPc);
@@ -3825,10 +4424,10 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
           : 0;
         appliedMicro = Number.isFinite(keyMicro) ? keyMicro : 0;
       }
-	    const abs53 = octave * 53 + baseId + appliedMicro;
-	    const pc53 = mod53(abs53);
-	    const entryKey = String(abs53);
-	    const entry = seen.get(entryKey) || {
+		    const abs53 = octave * 53 + baseId + appliedMicro;
+		    const pc53 = mod53(abs53);
+		    const entryKey = String(abs53);
+		    const entry = seen.get(entryKey) || {
 	      abs53,
 	      pc53,
 	      octave,
@@ -3838,33 +4437,154 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 	      ranges: [],
 	      firstStart: null,
 	      spellings: new Map(),
-	    };
-		    entry.count += 1;
-		    if (entry.firstStart == null || note.start < entry.firstStart) entry.firstStart = note.start;
-		    try {
-	        // Always show the *effective* accidental in a stable, micro-aware spelling so that:
+		    };
+			    entry.count += 1;
+			    if (entry.firstStart == null || note.start < entry.firstStart) entry.firstStart = note.start;
+			    try {
+		        // Always show the *effective* accidental in a stable, micro-aware spelling so that:
 	        // - key-signature microtones are visible (even when the token is written natural), and
 	        // - plain ^/_ accidentals are normalized to numeric micro steps for EDO-53 labeling.
-	        const effectivePrefix = formatEffectiveAccPrefix53(letterPc, appliedMicro);
-		      const spelling = `${effectivePrefix}${String(note.letter || "")}${String(note.octaveMarks || "")}`;
-		      if (spelling) entry.spellings.set(spelling, (Number(entry.spellings.get(spelling)) || 0) + 1);
-		    } catch {}
-	    entry.ranges.push({
-      // NOTE: offsets are relative to the active tune text in the editor (not the full file).
-      start: note.start,
+		        const effectivePrefix = formatEffectiveAccPrefix53(letterPc, appliedMicro);
+			      const spelling = `${effectivePrefix}${String(note.letter || "")}${String(note.octaveMarks || "")}`;
+			      if (spelling) entry.spellings.set(spelling, (Number(entry.spellings.get(spelling)) || 0) + 1);
+            noteEvents.push({
+              abs53,
+              pc53,
+              octave,
+              letterUpper: letter,
+              micro: appliedMicro,
+              spelling,
+              start: note.start,
+              end: note.end,
+            });
+			    } catch {}
+		    entry.ranges.push({
+	      // NOTE: offsets are relative to the active tune text in the editor (not the full file).
+	      start: note.start,
       end: note.end,
     });
 	    seen.set(entryKey, entry);
-	    idx = Math.max(idx + 1, note.end);
-	  }
-	  const entries = Array.from(seen.values());
-  return { tune, entries, is53, error: entries.length ? null : "No musical notes found in the tune." };
-}
+		    idx = Math.max(idx + 1, note.end);
+		  }
+			  const entries = Array.from(seen.values());
+      if (perfOn) {
+        logIntonationPerf("scan.loop", {
+          ms: Math.round(perfNowMs() - t0),
+          chars: body.length,
+          parseAttempts: perfParseAttempts,
+          parsedNotes: perfParsedNotes,
+          skippedFast: perfSkippedFast,
+          entries: entries.length,
+          events: noteEvents.length,
+        });
+      }
+		  return {
+      tune,
+      entries,
+      noteEvents,
+      is53,
+      error: entries.length ? null : "No musical notes found in the tune.",
+    };
+	}
 
-function buildIntonationRowsFromEntries(entries, baseStep, { sortMode = "count" } = {}) {
-  const list = Array.isArray(entries) ? entries : [];
-  const rows = list.map((entry) => ({
-    step: entry.abs53, // unique row id (octave-aware)
+  function formatPerdeNameForIntonationRow(row, { is53 } = {}) {
+    if (!is53) return "";
+    const fromToken = resolvePerdeNamesFromAbcToken(row.abcSpelling).filter(Boolean);
+    if (fromToken.length) return fromToken.join(" / ");
+    return resolvePerdeName({ pc53: row.absStep, octave: row.octave }) || "";
+  }
+
+  function buildSeyirSnapshotText({ tuneText, rows, noteEvents, baseStep, baseLabel, is53 }) {
+    const events = Array.isArray(noteEvents) ? noteEvents : [];
+    const list = Array.isArray(rows) ? rows : [];
+    const text = String(tuneText || "");
+
+    const mX = text.match(/(?:^|\n)X:\s*([^\r\n]+)/);
+    const mT = text.match(/(?:^|\n)T:\s*([^\r\n]+)/);
+    const mK = text.match(/(?:^|\n)K:\s*([^\r\n]+)/i);
+    const meta = {
+      x: mX ? String(mX[1] || "").trim() : "",
+      title: mT ? String(mT[1] || "").trim() : "",
+      key: mK ? String(mK[1] || "").trim() : "",
+    };
+
+    const pitchSetPc53 = Array.from(new Set(events.map((e) => mod53(e.pc53 || 0))))
+      .sort((a, b) => a - b)
+      .map((n) => formatAeuLabel(n));
+
+    const compressed = [];
+    for (const e of events) {
+      const last = compressed.length ? compressed[compressed.length - 1] : null;
+      if (last && String(last.abs53) === String(e.abs53)) continue;
+      compressed.push(e);
+    }
+
+    const relTrace = compressed.map((e) => formatAeuLabel(mod53((e.pc53 || 0) - (baseStep || 0))));
+    const absTrace = compressed.map((e) => formatAeuLabel(mod53(e.pc53 || 0)));
+
+    const start = compressed.length ? compressed[0] : null;
+    const end = compressed.length ? compressed[compressed.length - 1] : null;
+    const absVals = compressed.map((e) => Number(e.abs53)).filter((n) => Number.isFinite(n));
+    const minAbs = absVals.length ? Math.min(...absVals) : null;
+    const maxAbs = absVals.length ? Math.max(...absVals) : null;
+
+    const turning = [];
+    for (let i = 1; i + 1 < compressed.length; i += 1) {
+      const a = Number(compressed[i - 1].abs53);
+      const b = Number(compressed[i].abs53);
+      const c = Number(compressed[i + 1].abs53);
+      if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c)) continue;
+      if (b > a && b > c) turning.push({ kind: "peak", idx: i, e: compressed[i] });
+      else if (b < a && b < c) turning.push({ kind: "trough", idx: i, e: compressed[i] });
+    }
+
+    const anchors = list
+      .slice()
+      .sort((a, b) => (Number(b.count) || 0) - (Number(a.count) || 0))
+      .slice(0, 12)
+      .map((row) => {
+        const perde = formatPerdeNameForIntonationRow(row, { is53 });
+        const perdePart = is53 ? `; perde=${perde || "??"}` : "";
+        return `- ${row.abcSpelling || ""} (pc53=${formatAeuLabel(row.absStep)}) count=${row.count || 0}${perdePart}`;
+      });
+
+    const turningLines = turning.slice(0, 12).map((tp) => {
+      const e = tp.e || {};
+      const label = e.spelling || "";
+      const pc = formatAeuLabel(mod53(e.pc53 || 0));
+      return `- ${tp.kind} #${tp.idx}: ${label} (pc53=${pc})`;
+    });
+
+    const header = [
+      "[ABCarus] Intonation DNA (read-only)",
+      meta.x || meta.title ? `X:${meta.x || "?"}  T:${meta.title || "?"}` : "",
+      meta.key ? `K:${meta.key}` : "",
+      `mode=${is53 ? "EDO-53" : "EDO-12"} base=${String(baseLabel || "")}`,
+      `events=${events.length} compressed=${compressed.length}`,
+      (minAbs != null && maxAbs != null) ? `range(abs53)=${maxAbs - minAbs} (min=${minAbs}, max=${maxAbs})` : "",
+      start ? `start=${start.spelling || ""} (pc53=${formatAeuLabel(mod53(start.pc53 || 0))})` : "",
+      end ? `end=${end.spelling || ""} (pc53=${formatAeuLabel(mod53(end.pc53 || 0))})` : "",
+      `pitchSetPc53=[${pitchSetPc53.join(", ")}]`,
+      "",
+      "Top anchors:",
+      ...(anchors.length ? anchors : ["- (none)"]),
+      "",
+      "Turning points (first 12):",
+      ...(turningLines.length ? turningLines : ["- (none)"]),
+      "",
+      `Trace rel(base) (first 80): ${relTrace.slice(0, 80).join(" ")}`,
+      `Trace abs(pc53) (first 80): ${absTrace.slice(0, 80).join(" ")}`,
+    ]
+      .filter((s) => String(s || "").trim() !== "")
+      .join("\n");
+
+    return header;
+  }
+
+	function buildIntonationRowsFromEntries(entries, baseStep, { sortMode = "count" } = {}) {
+	  const list = Array.isArray(entries) ? entries : [];
+	  const rows = list.map((entry) => ({
+	    step: entry.abs53, // unique row id (octave-aware)
     normalizedStep: mod53((entry.pc53 || 0) - baseStep),
     absStep: mod53(entry.pc53 || 0),
     abcSpelling: pickDominantSpelling(entry.spellings),
@@ -4047,7 +4767,7 @@ function highlightSvgIntonationNotesAtEditorOffsets(offsets) {
   return lastSvgIntonationNoteEls.length > 0;
 }
 
-function renderIntonationExplorerRows(rows, { is53 } = {}) {
+function renderIntonationExplorerRows(rows, { is53, roleAbs53Map } = {}) {
   if (!$intonationExplorerTableBody) return;
   $intonationExplorerTableBody.innerHTML = "";
   const list = Array.isArray(rows) ? rows : [];
@@ -4069,13 +4789,18 @@ function renderIntonationExplorerRows(rows, { is53 } = {}) {
     if (intonationExplorerActiveStep != null && String(row.step) === String(intonationExplorerActiveStep)) {
       tr.classList.add("active");
     }
-    const pc = document.createElement("td");
-    const pcRel = document.createElement("span");
-    pcRel.textContent = formatAeuLabel(row.normalizedStep);
-    const pcAbs = document.createElement("span");
-    pcAbs.textContent = ` (${formatAeuLabel(row.absStep)})`;
-    pcAbs.className = "subtle";
-    pc.append(pcRel, pcAbs);
+	    const pc = document.createElement("td");
+	    const pcRel = document.createElement("span");
+	    const relLabel = formatAeuLabel(row.normalizedStep);
+	    const absLabel = formatAeuLabel(row.absStep);
+	    pcRel.textContent = relLabel;
+	    pc.append(pcRel);
+	    if (relLabel !== absLabel) {
+	      const pcAbs = document.createElement("span");
+	      pcAbs.textContent = ` (${absLabel})`;
+	      pcAbs.className = "subtle";
+	      pc.appendChild(pcAbs);
+	    }
     const perde = document.createElement("td");
     let perdeName = "";
     if (is53) {
@@ -4086,16 +4811,23 @@ function renderIntonationExplorerRows(rows, { is53 } = {}) {
         perdeName = resolvePerdeName({ pc53: row.absStep, octave: row.octave }) || "";
       }
     }
-    if (!is53) {
-      perde.textContent = "";
-      perde.title = "";
-      perde.classList.remove("subtle");
-    } else {
-      perde.textContent = perdeName || "??";
-      if (!perdeName) {
-        perde.title = `No Perde label yet for token=${String(row.abcSpelling || "")} (pc53=${formatAeuLabel(row.absStep)}).`;
-        perde.classList.add("subtle");
-      } else {
+	    if (!is53) {
+	      perde.textContent = "";
+	      perde.title = "";
+	      perde.classList.remove("subtle");
+	    } else {
+	      const role = (roleAbs53Map && roleAbs53Map.get(String(row.step))) ? roleAbs53Map.get(String(row.step)) : "";
+	      perde.textContent = perdeName || "??";
+	      if (role) {
+	        const badge = document.createElement("span");
+	        badge.className = "intonation-role";
+	        badge.textContent = role;
+	        perde.appendChild(badge);
+	      }
+	      if (!perdeName) {
+	        perde.title = `No Perde label yet for token=${String(row.abcSpelling || "")} (pc53=${formatAeuLabel(row.absStep)}).`;
+	        perde.classList.add("subtle");
+	      } else {
         perde.title = "";
         perde.classList.remove("subtle");
       }
@@ -4136,7 +4868,13 @@ function activateIntonationExplorerRow(step) {
   const target = (intonationExplorerRows || []).find((r) => String(r.step) === String(step));
   if (!target) return;
   intonationExplorerActiveStep = target.step;
-  renderIntonationExplorerRows(intonationExplorerRows, { is53: intonationExplorerIs53 });
+  renderIntonationExplorerRows(intonationExplorerRows, { is53: intonationExplorerIs53, roleAbs53Map: intonationExplorerRoleAbs53Map });
+  try {
+    const tr = $intonationExplorerTableBody
+      ? $intonationExplorerTableBody.querySelector(`tr[data-step="${CSS.escape(String(target.step))}"]`)
+      : null;
+    if (tr && tr.scrollIntoView) tr.scrollIntoView({ block: "nearest" });
+  } catch {}
   setIntonationHighlightRanges(target.ranges);
   const offsets = (target.ranges || []).map((r) => r && r.start);
   const noteOk = highlightSvgIntonationNotesAtEditorOffsets(offsets);
@@ -4152,38 +4890,74 @@ async function refreshIntonationExplorer() {
     setIntonationExplorerStatus("Intonation Explorer is not available in Raw mode.", { error: true });
     return;
   }
+  const perfOn = isIntonationPerfEnabled();
+  const tAll0 = perfOn ? perfNowMs() : 0;
   setIntonationExplorerStatus("Refreshing…");
   try {
+	    const tSnap0 = perfOn ? perfNowMs() : 0;
 	    const snapshot = await refreshWorkingCopySnapshot();
+	    if (perfOn) logIntonationPerf("snapshot", { ms: Math.round(perfNowMs() - tSnap0) });
 	    if (!snapshot || snapshot.text == null) {
 	      intonationExplorerRows = [];
 	      intonationExplorerActiveStep = null;
       intonationExplorerIs53 = false;
-	    renderIntonationExplorerRows([], { is53: false });
-	    setIntonationHighlightRanges([]);
-	    clearSvgIntonationBarHighlight();
-	    clearSvgIntonationNoteHighlight();
-	    setIntonationExplorerStatus("Unable to load working copy snapshot.", { error: true });
-	    return;
-	  }
-	    const scanned = scanIntonationEntries(snapshot, { skipGraceNotes: intonationExplorerSkipGraceNotes });
-	  if (scanned.error) {
+		    renderIntonationExplorerRows([], { is53: false });
+		    setIntonationHighlightRanges([]);
+		    clearSvgIntonationBarHighlight();
+		    clearSvgIntonationNoteHighlight();
+        lastIntonationDnaSource = null;
+        setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
+        clearIntonationExplorerPlot();
+		    setIntonationExplorerStatus("Unable to load working copy snapshot.", { error: true });
+		    return;
+		  }
+		    const tScan0 = perfOn ? perfNowMs() : 0;
+		    const scanned = scanIntonationEntries(snapshot, { skipGraceNotes: intonationExplorerSkipGraceNotes });
+		    if (perfOn) {
+		      logIntonationPerf("scan", {
+		        ms: Math.round(perfNowMs() - tScan0),
+		        entries: scanned && scanned.entries ? scanned.entries.length : 0,
+		        notes: scanned && scanned.noteEvents ? scanned.noteEvents.length : 0,
+		        is53: Boolean(scanned && scanned.is53),
+		      });
+		    }
+		  if (scanned.error) {
 	      intonationExplorerRows = [];
 	      intonationExplorerActiveStep = null;
       intonationExplorerIs53 = false;
-	    renderIntonationExplorerRows([], { is53: false });
-	    setIntonationHighlightRanges([]);
-	    clearSvgIntonationBarHighlight();
-	    clearSvgIntonationNoteHighlight();
-	    setIntonationExplorerStatus(scanned.error, { error: true });
-	    return;
-	  }
-      intonationExplorerIs53 = Boolean(scanned.is53);
-	    updateIntonationBaseUi();
-    const mode = intonationExplorerBaseMode || "auto";
-    let base = 0;
-    let label = "pc53=0";
-    if (mode === "manual") {
+		    renderIntonationExplorerRows([], { is53: false });
+		    setIntonationHighlightRanges([]);
+		    clearSvgIntonationBarHighlight();
+		    clearSvgIntonationNoteHighlight();
+        lastIntonationDnaSource = null;
+        setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
+        clearIntonationExplorerPlot();
+		    setIntonationExplorerStatus(scanned.error, { error: true });
+		    return;
+		  }
+	      intonationExplorerIs53 = Boolean(scanned.is53);
+		    updateIntonationBaseUi();
+	    const fullText = String(snapshot.text || "");
+	    const tuneText = scanned.tune ? fullText.slice(scanned.tune.start, scanned.tune.end) : "";
+
+	    // Best-effort auto-fill: if the tune text contains a recognizable makam name,
+	    // preselect both dropdowns once (convenience only).
+	    try {
+	      if (!intonationExplorerAutoMakamApplied && !intonationExplorerDeclaredMakam && !intonationExplorerCompareMakam) {
+	        const detected = detectMakamFromTuneText(tuneText);
+	        if (detected) {
+	          intonationExplorerAutoMakamApplied = true;
+	          intonationExplorerDeclaredMakam = detected;
+	          intonationExplorerCompareMakam = detected;
+	          if ($intonationExplorerDeclaredMakam) $intonationExplorerDeclaredMakam.value = detected;
+	          if ($intonationExplorerCompareMakam) $intonationExplorerCompareMakam.value = detected;
+	        }
+	      }
+	    } catch {}
+	    const mode = intonationExplorerBaseMode || "auto";
+	    let base = 0;
+	    let label = "pc53=0";
+	    if (mode === "manual") {
       const rawManual = ($intonationExplorerBaseManual && $intonationExplorerBaseManual.value) || DEFAULT_INT_BASE;
       const resolved = resolveTonalBaseInput(rawManual);
       if (!resolved.ok) {
@@ -4192,35 +4966,86 @@ async function refreshIntonationExplorer() {
       }
       base = resolved.base;
       label = resolved.label;
-    } else if (mode === "fromK") {
-      const fullText = String(snapshot.text || "");
-      const tuneText = scanned.tune ? fullText.slice(scanned.tune.start, scanned.tune.end) : "";
-      const resolved = parseTonalBaseFromK(tuneText);
-      if (!resolved.ok) {
-        setIntonationExplorerStatus(resolved.error, { error: true });
-        return;
-      }
+	    } else if (mode === "fromK") {
+	      const resolved = parseTonalBaseFromK(tuneText);
+	      if (!resolved.ok) {
+	        setIntonationExplorerStatus(resolved.error, { error: true });
+	        return;
+	      }
       base = resolved.base;
       label = `K:${resolved.label}`;
     } else {
       base = pickAutoBaseStep(scanned.entries);
       label = `Auto pc53=${formatAeuLabel(base)}`;
-    }
-    intonationExplorerBaseStep = base;
-    intonationExplorerBaseLabel = label;
-	    const rows = buildIntonationRowsFromEntries(scanned.entries, base, { sortMode: intonationExplorerSortMode });
-	    intonationExplorerRows = rows;
-	    intonationExplorerActiveStep = null;
-	    renderIntonationExplorerRows(rows, { is53: intonationExplorerIs53 });
-	    setIntonationHighlightRanges([]);
-	    clearSvgIntonationBarHighlight();
-	    clearSvgIntonationNoteHighlight();
-	    const graceLabel = intonationExplorerSkipGraceNotes ? "grace off" : "grace on";
-	    const sortLabel = `sort:${String(intonationExplorerSortMode || "count")}`;
-      const modeLabel = intonationExplorerIs53 ? "EDO-53" : "EDO-12";
-	    setIntonationExplorerStatus(`Base ${intonationExplorerBaseLabel} (${rows.length} classes; ${sortLabel}; ${graceLabel}; ${modeLabel})`);
+	    }
+	    intonationExplorerBaseStep = base;
+	    intonationExplorerBaseLabel = label;
+		    const tRows0 = perfOn ? perfNowMs() : 0;
+		    const rows = buildIntonationRowsFromEntries(scanned.entries, base, { sortMode: intonationExplorerSortMode });
+		    if (perfOn) logIntonationPerf("rows", { ms: Math.round(perfNowMs() - tRows0), rows: rows.length });
+		    intonationExplorerRows = rows;
+		    intonationExplorerActiveStep = null;
+
+			    // Optional: tag observed steps that match the declared makam roles (durak/güçlü/yeden).
+			    const tRoles0 = perfOn ? perfNowMs() : 0;
+			    let roleAbs53Map = null;
+			    try {
+			      const entry = getMakamDnaEntry(intonationExplorerDeclaredMakam);
+		      const events = Array.isArray(scanned.noteEvents) ? scanned.noteEvents : [];
+		      const absVals = events.map((ev) => Number(ev.abs53)).filter((n) => Number.isFinite(n));
+		      const observedMinAbs = absVals.length ? Math.min(...absVals) : null;
+		      const observedMaxAbs = absVals.length ? Math.max(...absVals) : null;
+			      if (entry && (entry.durak || entry.guclu || entry.yeden)) {
+			        const durak = parseMakamDnaPerdeField(entry.durak);
+			        const guclu = parseMakamDnaPerdeField(entry.guclu);
+			        const yeden = parseMakamDnaPerdeField(entry.yeden);
+			        const durakAbs = durak && durak.name ? pickOverlayAbs53ForPerde(durak.name, { hint: durak.hint, observedMinAbs, observedMaxAbs }) : null;
+			        const gucluAbs = guclu && guclu.name ? pickOverlayAbs53ForPerde(guclu.name, { hint: guclu.hint, observedMinAbs, observedMaxAbs }) : null;
+			        const yedenAbs = yeden && yeden.name ? pickOverlayAbs53ForPerde(yeden.name, { hint: yeden.hint, observedMinAbs, observedMaxAbs }) : null;
+			        roleAbs53Map = new Map();
+			        if (Number.isFinite(durakAbs)) roleAbs53Map.set(String(durakAbs), "durak");
+			        if (Number.isFinite(gucluAbs)) roleAbs53Map.set(String(gucluAbs), "güçlü");
+			        if (Number.isFinite(yedenAbs)) roleAbs53Map.set(String(yedenAbs), "yeden");
+			      }
+			    } catch {}
+		    intonationExplorerRoleAbs53Map = roleAbs53Map;
+		    if (perfOn) logIntonationPerf("roles", { ms: Math.round(perfNowMs() - tRoles0), has: Boolean(roleAbs53Map && roleAbs53Map.size) });
+		    const tRender0 = perfOn ? perfNowMs() : 0;
+		    renderIntonationExplorerRows(rows, { is53: intonationExplorerIs53, roleAbs53Map: intonationExplorerRoleAbs53Map });
+		    if (perfOn) logIntonationPerf("renderTable", { ms: Math.round(perfNowMs() - tRender0) });
+		    setIntonationHighlightRanges([]);
+		    clearSvgIntonationBarHighlight();
+		    clearSvgIntonationNoteHighlight();
+		    const sortLabel = `sort:${String(intonationExplorerSortMode || "count")}`;
+	      const modeLabel = intonationExplorerIs53 ? "EDO-53" : "EDO-12";
+		    setIntonationExplorerStatus(`Base ${intonationExplorerBaseLabel} (${rows.length} classes; ${sortLabel}; ${modeLabel})`);
+
+      // Keep DNA/pitchSet generation lazy: only build it when the user clicks Copy.
+      lastIntonationDnaSource = {
+        tuneText,
+        rows,
+        noteEvents: scanned.noteEvents,
+        baseStep: intonationExplorerBaseStep,
+        baseLabel: intonationExplorerBaseLabel,
+        is53: intonationExplorerIs53,
+      };
+      setIntonationExplorerDnaUi({ dnaText: "ready", pitchSetText: "ready" });
+
+      // Minimal "seyir" plot (observed trajectory + optional DNA overlay).
+      try {
+        const tPlot0 = perfOn ? perfNowMs() : 0;
+        renderIntonationSeyirPlot({
+          noteEvents: scanned.noteEvents,
+          baseStep: intonationExplorerBaseStep,
+          overlayMakamName: intonationExplorerCompareMakam,
+        });
+        if (perfOn) logIntonationPerf("plot", { ms: Math.round(perfNowMs() - tPlot0) });
+      } catch {}
+      if (perfOn) logIntonationPerf("total", { ms: Math.round(perfNowMs() - tAll0) });
 	  } catch (err) {
 	    const msg = (err && err.message) ? String(err.message) : String(err || "");
+      setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
+      clearIntonationExplorerPlot();
 	    setIntonationExplorerStatus(msg ? `Unable to refresh the explorer: ${msg}` : "Unable to refresh the explorer.", { error: true });
 	    logErr(err);
 	  }
@@ -4232,14 +5057,52 @@ function showIntonationExplorerPanel() {
   intonationExplorerVisible = true;
   $intonationExplorerPanel.classList.remove("hidden");
   $intonationExplorerPanel.setAttribute("aria-hidden", "false");
+  ensureToolPanelDefaultLeftPosition($intonationExplorerPanel);
+  setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
+  clearIntonationExplorerPlot();
   if ($intonationExplorerBaseMode) $intonationExplorerBaseMode.value = "auto";
   if ($intonationExplorerBaseManual && !$intonationExplorerBaseManual.value) $intonationExplorerBaseManual.value = DEFAULT_INT_BASE;
-  if ($intonationExplorerSort) $intonationExplorerSort.value = "count";
+  if ($intonationExplorerSort) $intonationExplorerSort.value = "first";
   if ($intonationExplorerSkipGrace) $intonationExplorerSkipGrace.checked = true;
-  intonationExplorerSortMode = "count";
+  intonationExplorerSortMode = "first";
   intonationExplorerSkipGraceNotes = true;
-  updateIntonationBaseUi();
-  refreshIntonationExplorer().catch(() => {});
+  intonationExplorerAutoMakamApplied = false;
+  intonationExplorerRoleAbs53Map = null;
+  Promise.resolve()
+    .then(() => ensureMakamDnaLoaded())
+    .then(() => {
+      rebuildMakamDnaNameIndex();
+      populateIntonationExplorerMakams();
+    })
+    .finally(() => {
+      updateIntonationBaseUi();
+      refreshIntonationExplorer().catch(() => {});
+    });
+}
+
+function ensureToolPanelDefaultLeftPosition(panelEl) {
+  if (!panelEl || panelEl.__abcarusToolPanelDefaultLeftApplied) return;
+  const hasInlinePos = Boolean(panelEl.style.left || panelEl.style.top || panelEl.style.right || panelEl.style.bottom);
+  if (hasInlinePos) {
+    panelEl.__abcarusToolPanelDefaultLeftApplied = true;
+    return;
+  }
+  panelEl.__abcarusToolPanelDefaultLeftApplied = true;
+  requestAnimationFrame(() => {
+    try {
+      const rect = panelEl.getBoundingClientRect();
+      const margin = 24;
+      const defaultTop = 72;
+      const maxLeft = Math.max(0, window.innerWidth - rect.width);
+      const maxTop = Math.max(0, window.innerHeight - rect.height);
+      const left = Math.max(0, Math.min(maxLeft, margin));
+      const top = Math.max(0, Math.min(maxTop, defaultTop));
+      panelEl.style.left = `${left}px`;
+      panelEl.style.top = `${top}px`;
+      panelEl.style.right = "auto";
+      panelEl.style.bottom = "auto";
+    } catch {}
+  });
 }
 
 function hideIntonationExplorerPanel() {
@@ -4247,10 +5110,13 @@ function hideIntonationExplorerPanel() {
   intonationExplorerVisible = false;
   $intonationExplorerPanel.classList.add("hidden");
   $intonationExplorerPanel.setAttribute("aria-hidden", "true");
+  if ($intonationExplorerMenu) $intonationExplorerMenu.classList.add("hidden");
   setIntonationExplorerStatus("");
   setIntonationHighlightRanges([]);
   clearSvgIntonationBarHighlight();
   clearSvgIntonationNoteHighlight();
+  setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
+  clearIntonationExplorerPlot();
 }
 
 function enableDraggableToolPanel(panelEl) {
@@ -4835,14 +5701,25 @@ function refreshErrorsNow() {
 }
 
 async function loadLastRecentEntry() {
-  if (!window.api || typeof window.api.getLastRecent !== "function") return;
+  if (!window.api || typeof window.api.getLastRecent !== "function") return false;
   const res = await window.api.getLastRecent();
-  if (!res || !res.entry) return;
+  if (!res || !res.entry) return false;
   if (res.type === "tune") {
+    startupRecentOpenStarted = true;
     await openRecentTune(res.entry);
-  } else if (res.type === "file") {
-    await openRecentFile(res.entry);
+    return true;
   }
+  if (res.type === "file") {
+    startupRecentOpenStarted = true;
+    await openRecentFile(res.entry);
+    return true;
+  }
+  if (res.type === "folder") {
+    startupRecentOpenStarted = true;
+    await openRecentFolder(res.entry);
+    return true;
+  }
+  return false;
 }
 
 function setEditorValue(text) {
@@ -7206,6 +8083,8 @@ function markActiveTuneButton(tuneId) {
 }
 
 async function selectTune(tuneId, options = {}) {
+  const perfOn = isStartupPerfEnabled();
+  const t0 = perfOn ? perfNowMs() : 0;
   if (!libraryIndex || !tuneId) return;
   if (!options.skipConfirm) {
     const ok = await ensureSafeToAbandonCurrentDoc("switching tunes");
@@ -7228,8 +8107,10 @@ async function selectTune(tuneId, options = {}) {
   try {
     if (window.api && typeof window.api.openWorkingCopy === "function" && fileMeta.path) {
       if (!workingCopySnapshot || !workingCopySnapshot.path || !pathsEqual(workingCopySnapshot.path, fileMeta.path)) {
+        const tWc0 = perfOn ? perfNowMs() : 0;
         await window.api.openWorkingCopy(fileMeta.path);
         const snapshot = await refreshWorkingCopySnapshot();
+        if (perfOn) logStartupPerf("selectTune: openWorkingCopy", { ms: Math.round(perfNowMs() - tWc0), file: safeBasename(fileMeta.path) });
         if (snapshot && snapshot.path && pathsEqual(snapshot.path, fileMeta.path)) {
           attachTuneUidsToLibraryFile(fileMeta.path, snapshot);
           scheduleRenderLibraryTree();
@@ -7355,6 +8236,13 @@ async function selectTune(tuneId, options = {}) {
     endOffset: sliceEnd,
   }, { suppressRecent: options.suppressRecent || false });
   setDirtyIndicator(false);
+  if (perfOn) {
+    logStartupPerf("selectTune() done", {
+      ms: Math.round(perfNowMs() - t0),
+      file: fileMeta && fileMeta.path ? safeBasename(fileMeta.path) : "",
+      x: selected && selected.xNumber ? String(selected.xNumber) : "",
+    });
+  }
   return { ok: true };
 }
 
@@ -7562,6 +8450,11 @@ async function refreshLibraryIndex() {
 
 async function loadLibraryFromFolder(folder) {
   if (!window.api || !folder) return;
+  startupAutoLoadStarted = true;
+  renderUnifiedStatus();
+  const perfOn = isStartupPerfEnabled();
+  const t0 = perfOn ? perfNowMs() : 0;
+  if (perfOn) logStartupPerf("loadLibraryFromFolder() start", { folder: abbreviatePathForLog(folder, 3) });
   const scanToken = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   setScanStatus("Scanning…");
   fileContentCache.clear();
@@ -7581,7 +8474,9 @@ async function loadLibraryFromFolder(folder) {
 
   try {
     if (typeof window.api.scanLibraryDiscover === "function") {
+      const tDisc0 = perfOn ? perfNowMs() : 0;
       const discovered = await window.api.scanLibraryDiscover(folder, { token: scanToken, computeMeta: true });
+      if (perfOn) logStartupPerf("scanLibraryDiscover()", { ms: Math.round(perfNowMs() - tDisc0), files: discovered && discovered.files ? discovered.files.length : 0 });
       if (discovered && discovered.root && Array.isArray(discovered.files)) {
         if (!libraryIndex && folder !== discovered.root) {
           // proceed: first load
@@ -7634,13 +8529,18 @@ async function loadLibraryFromFolder(folder) {
         }
       }
       if (firstTuneId) {
+        const tSel0 = perfOn ? perfNowMs() : 0;
         await selectTune(firstTuneId);
+        if (perfOn) logStartupPerf("selectTune(first)", { ms: Math.round(perfNowMs() - tSel0) });
       }
     }
     updateLibraryStatus();
+    if (perfOn) logStartupPerf("loadLibraryFromFolder() done", { ms: Math.round(perfNowMs() - t0) });
+    markStartupUiReady();
 		  } catch (e) {
 		    setScanStatus("Scan failed");
 		    logErr((e && e.stack) ? e.stack : String(e));
+        markStartupUiReady();
 		  }
 }
 
@@ -15709,6 +16609,106 @@ if ($intonationExplorerRefresh) {
     refreshIntonationExplorer().catch(() => {});
   });
 }
+if ($intonationExplorerDeclaredMakam) {
+  $intonationExplorerDeclaredMakam.addEventListener("change", () => {
+    intonationExplorerDeclaredMakam = ($intonationExplorerDeclaredMakam && $intonationExplorerDeclaredMakam.value) || "";
+    refreshIntonationExplorer().catch(() => {});
+  });
+}
+if ($intonationExplorerCompareMakam) {
+  $intonationExplorerCompareMakam.addEventListener("change", () => {
+    intonationExplorerCompareMakam = ($intonationExplorerCompareMakam && $intonationExplorerCompareMakam.value) || "";
+    refreshIntonationExplorer().catch(() => {});
+  });
+}
+if ($intonationExplorerMore && $intonationExplorerMenu) {
+  const hideMenu = () => {
+    try { $intonationExplorerMenu.classList.add("hidden"); } catch {}
+  };
+  const toggleMenu = () => {
+    try { $intonationExplorerMenu.classList.toggle("hidden"); } catch {}
+  };
+  $intonationExplorerMore.addEventListener("click", (ev) => {
+    try { if (ev) ev.stopPropagation(); } catch {}
+    toggleMenu();
+  });
+  document.addEventListener("click", (ev) => {
+    if (!$intonationExplorerMenu || $intonationExplorerMenu.classList.contains("hidden")) return;
+    const t = ev && ev.target ? ev.target : null;
+    if (t && ($intonationExplorerMenu.contains(t) || $intonationExplorerMore.contains(t))) return;
+    hideMenu();
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (!$intonationExplorerMenu || $intonationExplorerMenu.classList.contains("hidden")) return;
+    if (!ev || ev.key !== "Escape") return;
+    try { ev.preventDefault(); } catch {}
+    hideMenu();
+  });
+}
+if ($intonationExplorerCopyDna) {
+  $intonationExplorerCopyDna.addEventListener("click", async () => {
+    try { if ($intonationExplorerMenu) $intonationExplorerMenu.classList.add("hidden"); } catch {}
+    let text = "";
+    try {
+      if (lastIntonationDnaSource) {
+        text = buildSeyirSnapshotText({
+          tuneText: lastIntonationDnaSource.tuneText,
+          rows: lastIntonationDnaSource.rows,
+          noteEvents: lastIntonationDnaSource.noteEvents,
+          baseStep: lastIntonationDnaSource.baseStep,
+          baseLabel: lastIntonationDnaSource.baseLabel,
+          is53: lastIntonationDnaSource.is53,
+        });
+        window.__abcarusLastIntonationDnaText = text;
+        lastIntonationDnaUiText = text;
+      } else {
+        text = (window.__abcarusLastIntonationDnaText ? String(window.__abcarusLastIntonationDnaText) : "");
+      }
+    } catch {}
+    if (!text) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        try { showToast("Copied DNA.", 1600); } catch {}
+      }
+    } catch (e) {
+      logErr(e && e.message ? e.message : String(e));
+      try { showToast("Copy failed.", 1800); } catch {}
+    }
+  });
+}
+if ($intonationExplorerCopyPitchSet) {
+  $intonationExplorerCopyPitchSet.addEventListener("click", async () => {
+    try { if ($intonationExplorerMenu) $intonationExplorerMenu.classList.add("hidden"); } catch {}
+    let text = "";
+    try {
+      const events = lastIntonationDnaSource && Array.isArray(lastIntonationDnaSource.noteEvents)
+        ? lastIntonationDnaSource.noteEvents
+        : [];
+      const pitchSetPc53 = Array.from(new Set(events.map((e) => mod53(e && e.pc53 ? e.pc53 : 0))))
+        .sort((a, b) => a - b)
+        .map((n) => formatAeuLabel(n));
+      text = pitchSetPc53.length ? `pitchSetPc53=[${pitchSetPc53.join(", ")}]` : "";
+      if (text) lastIntonationPitchSetText = text;
+    } catch {}
+    if (!text) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        try { showToast("Copied pitchSet.", 1600); } catch {}
+      }
+    } catch (e) {
+      logErr(e && e.message ? e.message : String(e));
+      try { showToast("Copy failed.", 1800); } catch {}
+    }
+  });
+}
+if ($intonationExplorerEditMakamDna) {
+  $intonationExplorerEditMakamDna.addEventListener("click", async () => {
+    try { if ($intonationExplorerMenu) $intonationExplorerMenu.classList.add("hidden"); } catch {}
+    await openMakamDnaModal();
+  });
+}
 if ($intonationExplorerBaseMode) {
   $intonationExplorerBaseMode.addEventListener("change", () => {
     updateIntonationBaseUi();
@@ -15742,28 +16742,38 @@ if (window.api && typeof window.api.onAppRequestQuit === "function") {
 }
 
 settingsController = initSettings(window.api);
+logStartupPerf("initSettings() done");
 if (window.api && typeof window.api.getSettings === "function") {
+  logStartupPerf("getSettings() start");
   window.api.getSettings().then((settings) => {
-	      if (settings) {
-	      latestSettingsSnapshot = settings;
-	      setGlobalHeaderFromSettings(settings);
-	      setAbc2svgFontsFromSettings(settings);
-	      setSoundfontFromSettings(settings);
-	      setDrumVelocityFromSettings(settings);
-        setLayoutFromSettings(settings);
-	      setFollowFromSettings(settings);
-	      setLoopFromSettings(settings);
-	      setPlaybackAutoScrollFromSettings(settings);
-        setPrintAllFromSettings(settings);
-	      applyLibraryPrefsFromSettings(settings);
-	      updateGlobalHeaderToggle();
-      updateErrorsFeatureUI();
-      refreshHeaderLayers().catch(() => {});
-      showDisclaimerIfNeeded(settings);
-      scheduleStartupLayoutReset();
-    }
-    suppressLibraryPrefsWrite = false;
-  }).catch(() => { suppressLibraryPrefsWrite = false; });
+		      logStartupPerf("getSettings() done", { hasSettings: Boolean(settings) });
+		      if (settings) {
+		      latestSettingsSnapshot = settings;
+		      logStartupPerf("apply settings: begin");
+		      setGlobalHeaderFromSettings(settings);
+		      setAbc2svgFontsFromSettings(settings);
+		      setSoundfontFromSettings(settings);
+		      setDrumVelocityFromSettings(settings);
+	        setLayoutFromSettings(settings);
+		      setFollowFromSettings(settings);
+		      setLoopFromSettings(settings);
+		      setPlaybackAutoScrollFromSettings(settings);
+	        setPrintAllFromSettings(settings);
+		      applyLibraryPrefsFromSettings(settings);
+		      updateGlobalHeaderToggle();
+	      updateErrorsFeatureUI();
+	      refreshHeaderLayers().catch(() => {});
+	      showDisclaimerIfNeeded(settings);
+	      scheduleStartupLayoutReset();
+	      logStartupPerf("apply settings: end");
+        markStartupSettingsApplied();
+	    }
+	    suppressLibraryPrefsWrite = false;
+      if (!settings) markStartupSettingsApplied();
+	  }).catch(() => {
+      suppressLibraryPrefsWrite = false;
+      markStartupSettingsApplied();
+    });
 }
 
 if (window.api && typeof window.api.getFontDirs === "function") {
@@ -15944,6 +16954,51 @@ function closeTemplatesModal() {
   if ($templatesPreviewText) $templatesPreviewText.textContent = "";
 }
 
+function isMakamDnaModalOpen() {
+  return Boolean($makamDnaModal && $makamDnaModal.classList.contains("open"));
+}
+
+function setMakamDnaModalStatus(message, { error = false } = {}) {
+  if (!$makamDnaStatus) return;
+  const text = String(message || "");
+  $makamDnaStatus.textContent = text;
+  $makamDnaStatus.classList.toggle("error", Boolean(error && text));
+}
+
+function closeMakamDnaModal() {
+  if (!$makamDnaModal) return;
+  $makamDnaModal.classList.remove("open");
+  $makamDnaModal.setAttribute("aria-hidden", "true");
+  setMakamDnaModalStatus("");
+}
+
+async function openMakamDnaModal() {
+  if (!$makamDnaModal || !$makamDnaEditor) return;
+  await ensureMakamDnaLoaded();
+  // If no user dataset exists, show a formatted wrapper around the current in-memory entries.
+  const text = activeMakamDnaUserText && activeMakamDnaUserText.trim()
+    ? activeMakamDnaUserText
+    : formatMakamDnaForEditor(getMakamDnaEntries());
+  $makamDnaEditor.value = text;
+  setMakamDnaModalStatus("");
+  $makamDnaModal.classList.add("open");
+  $makamDnaModal.setAttribute("aria-hidden", "false");
+  try { $makamDnaEditor.focus(); } catch {}
+}
+
+async function applyUserMakamDnaTextAndRefresh(text) {
+  const parsed = parseMakamDnaText(text);
+  if (!parsed.ok) return { ok: false, error: parsed.error || "Invalid Makam DNA." };
+  activeMakamDnaEntries = parsed.entries;
+  activeMakamDnaUserText = String(text || "");
+  rebuildMakamDnaNameIndex();
+  populateIntonationExplorerMakams();
+  if (intonationExplorerVisible) {
+    try { await refreshIntonationExplorer(); } catch {}
+  }
+  return { ok: true };
+}
+
 function renderTemplatesList() {
   if (!$templatesList) return;
   const q = $templatesSearch ? String($templatesSearch.value || "").trim().toLowerCase() : "";
@@ -16120,7 +17175,21 @@ requestAnimationFrame(() => {
   try { applyRightSplitSizesFromRatio(); } catch {}
 });
 
-loadLastRecentEntry();
+loadLastRecentEntry()
+  .then((didStart) => {
+    // Do not mark Ready here: settings may auto-load a library folder.
+    // If settings are unavailable, fall back to Ready only when there was no recent to open.
+    if (!didStart && !(window.api && typeof window.api.getSettings === "function")) {
+      markStartupUiReady();
+    } else {
+      renderUnifiedStatus();
+    }
+  })
+  .catch(() => {
+    // Keep loading until settings apply decides, unless settings are unavailable.
+    if (!(window.api && typeof window.api.getSettings === "function")) markStartupUiReady();
+    else renderUnifiedStatus();
+  });
 
 if ($errorList) {
   $errorList.addEventListener("click", async (e) => {
@@ -16318,6 +17387,100 @@ if ($templatesModal) {
       e.preventDefault();
       e.stopPropagation();
       $templatesInsert.click();
+    }
+  });
+}
+
+if ($makamDnaClose) {
+  $makamDnaClose.addEventListener("click", () => {
+    closeMakamDnaModal();
+  });
+}
+
+if ($makamDnaCancel) {
+  $makamDnaCancel.addEventListener("click", () => {
+    closeMakamDnaModal();
+  });
+}
+
+if ($makamDnaResetBuiltin) {
+  $makamDnaResetBuiltin.addEventListener("click", async () => {
+    setMakamDnaModalStatus("");
+    if (!window.api || typeof window.api.clearMakamDnaUser !== "function") {
+      setMakamDnaModalStatus("Not available in this build.", { error: true });
+      return;
+    }
+    try {
+      const res = await window.api.clearMakamDnaUser();
+      if (!res || !res.ok) {
+        setMakamDnaModalStatus(res && res.error ? String(res.error) : "Reset failed.", { error: true });
+        return;
+      }
+      activeMakamDnaEntries = Array.isArray(BUILTIN_MAKAM_DNA) ? BUILTIN_MAKAM_DNA : [];
+      activeMakamDnaUserText = "";
+      rebuildMakamDnaNameIndex();
+      populateIntonationExplorerMakams();
+      if ($makamDnaEditor) $makamDnaEditor.value = formatMakamDnaForEditor(getMakamDnaEntries());
+      if (intonationExplorerVisible) refreshIntonationExplorer().catch(() => {});
+      setMakamDnaModalStatus("Reset to built-in.");
+    } catch (e) {
+      logErr(e && e.message ? e.message : String(e));
+      setMakamDnaModalStatus("Reset failed.", { error: true });
+    }
+  });
+}
+
+if ($makamDnaSave) {
+  $makamDnaSave.addEventListener("click", async () => {
+    setMakamDnaModalStatus("");
+    if (!$makamDnaEditor) return;
+    const text = String($makamDnaEditor.value || "");
+    const parsed = parseMakamDnaText(text);
+    if (!parsed.ok) {
+      setMakamDnaModalStatus(parsed.error || "Invalid Makam DNA.", { error: true });
+      return;
+    }
+    if (!window.api || typeof window.api.saveMakamDnaUser !== "function") {
+      setMakamDnaModalStatus("Not available in this build.", { error: true });
+      return;
+    }
+    try {
+      const res = await window.api.saveMakamDnaUser(text);
+      if (!res || !res.ok) {
+        setMakamDnaModalStatus(res && res.error ? String(res.error) : "Save failed.", { error: true });
+        return;
+      }
+      const applied = await applyUserMakamDnaTextAndRefresh(text);
+      if (!applied.ok) {
+        setMakamDnaModalStatus(applied.error || "Save failed.", { error: true });
+        return;
+      }
+      closeMakamDnaModal();
+      try { showToast("Saved Makam DNA.", 1800); } catch {}
+    } catch (e) {
+      logErr(e && e.message ? e.message : String(e));
+      setMakamDnaModalStatus("Save failed.", { error: true });
+    }
+  });
+}
+
+if ($makamDnaModal) {
+  $makamDnaModal.addEventListener("click", (e) => {
+    if (e.target === $makamDnaModal) closeMakamDnaModal();
+  });
+  $makamDnaModal.addEventListener("keydown", (e) => {
+    if (!e) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeMakamDnaModal();
+      return;
+    }
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key === "Enter" && $makamDnaSave) {
+      e.preventDefault();
+      e.stopPropagation();
+      $makamDnaSave.click();
     }
   });
 }

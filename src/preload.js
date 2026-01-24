@@ -5,6 +5,9 @@ const path = require("path");
 const { fileURLToPath } = require("url");
 
 contextBridge.exposeInMainWorld("api", {
+  // Dev-only startup profiling flag (used by renderer.js). Enable via:
+  // `ABCARUS_DEV_STARTUP_PERF=1 npm start`
+  startupPerfEnabled: process.env.ABCARUS_DEV_STARTUP_PERF === "1",
   readFileBase64: async (fileUrl) => {
     const p = fileURLToPath(fileUrl);
     const buf = await fs.promises.readFile(p);
@@ -34,6 +37,9 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("dialog:confirm-reload-from-disk", filePath || ""),
   confirmMissingOnDisk: async (filePath) =>
     ipcRenderer.invoke("dialog:confirm-missing-on-disk", filePath || ""),
+  getMakamDnaUser: async () => ipcRenderer.invoke("makam-dna:user:get"),
+  saveMakamDnaUser: async (text) => ipcRenderer.invoke("makam-dna:user:save", { text: text == null ? "" : String(text) }),
+  clearMakamDnaUser: async () => ipcRenderer.invoke("makam-dna:user:clear"),
   openWorkingCopy: async (filePath) => ipcRenderer.invoke("workingcopy:open", filePath),
   closeWorkingCopy: async () => ipcRenderer.invoke("workingcopy:close"),
   getWorkingCopySnapshot: async () => ipcRenderer.invoke("workingcopy:get"),

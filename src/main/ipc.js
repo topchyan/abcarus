@@ -1108,6 +1108,77 @@ function registerIpcHandlers(ctx) {
     }
   });
 
+  function resolveMakamDnaUserPath() {
+    if (!app || typeof app.getPath !== "function") return "";
+    const userData = app.getPath("userData");
+    if (!userData) return "";
+    return path.join(String(userData), "makam_dna_user.json");
+  }
+
+  function extractMakamDnaEntriesFromParsed(parsed) {
+    if (Array.isArray(parsed)) return parsed;
+    if (!parsed || typeof parsed !== "object") return null;
+    if (Array.isArray(parsed.entries)) return parsed.entries;
+    if (parsed.rawTable && Array.isArray(parsed.rawTable.entries)) return parsed.rawTable.entries;
+    return null;
+  }
+
+  ipcMain.handle("makam-dna:user:get", async () => {
+    try {
+      const filePath = resolveMakamDnaUserPath();
+      if (!filePath) return { ok: false, error: "Unavailable." };
+      try {
+        const text = await fs.promises.readFile(filePath, "utf8");
+        return { ok: true, exists: true, text: String(text || "") };
+      } catch (e) {
+        const code = e && e.code ? String(e.code) : "";
+        if (code === "ENOENT") return { ok: true, exists: false, text: "" };
+        return { ok: false, error: e && e.message ? e.message : String(e) };
+      }
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("makam-dna:user:save", async (_event, payload) => {
+    try {
+      const filePath = resolveMakamDnaUserPath();
+      if (!filePath) return { ok: false, error: "Unavailable." };
+      const text = payload && payload.text != null ? String(payload.text) : "";
+      if (!text.trim()) return { ok: false, error: "Empty JSON." };
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch (e) {
+        return { ok: false, error: e && e.message ? e.message : "Invalid JSON." };
+      }
+      const entries = extractMakamDnaEntriesFromParsed(parsed);
+      if (!Array.isArray(entries)) return { ok: false, error: "Expected an array (or an object with entries/rawTable.entries)." };
+      const hasMakam = entries.some((e) => e && typeof e === "object" && String(e.makam || "").trim());
+      if (!hasMakam) return { ok: false, error: "No valid entries (each entry must include a non-empty makam)." };
+      await atomicWriteFileWithRetry(fs, path, filePath, text);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
+  ipcMain.handle("makam-dna:user:clear", async () => {
+    try {
+      const filePath = resolveMakamDnaUserPath();
+      if (!filePath) return { ok: false, error: "Unavailable." };
+      try {
+        await fs.promises.unlink(filePath);
+      } catch (e) {
+        const code = e && e.code ? String(e.code) : "";
+        if (code !== "ENOENT") throw e;
+      }
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
   // Note: we intentionally do not expose attach/detach/reload controls in the UI.
   // The file-backed mode is activated by Export/Import and silently falls back to internal if the file disappears.
   ipcMain.handle("recent:last", async () => getLastRecent());

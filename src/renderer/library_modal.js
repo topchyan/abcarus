@@ -9,6 +9,9 @@
   const $modal = $overlay ? $overlay.querySelector(".lib-modal") : null;
   let $addToSetList = null;
 
+  const TABULATOR_SCRIPT_SRC = "../../third_party/tabulator/tabulator.min.js";
+  const TABULATOR_CSS_HREF = "../../third_party/tabulator/tabulator.min.css";
+
   const STORAGE_TABLE_STATE_KEY = "abcarus.libraryModal.tableState.v1";
   const STORAGE_FILTER_KEY = "abcarus.libraryModal.filter.v1";
   const SAVE_DEBOUNCE_MS = 250;
@@ -23,6 +26,7 @@
   let currentRowsCache = [];
   let lastModalRect = null;
   let redrawTimer = null;
+  let tabulatorLoadPromise = null;
 
   const DEFAULT_SORT = [{ column: "modified", dir: "desc" }];
   const DEFAULT_COLUMNS = [
@@ -39,6 +43,41 @@
     { title: "Modified", field: "modified", width: 110 },
   ];
   const KNOWN_FIELDS = new Set(DEFAULT_COLUMNS.map((col) => col.field).filter(Boolean));
+
+  function ensureTabulatorAssetsLoaded() {
+    if (window.Tabulator) return Promise.resolve(true);
+    if (tabulatorLoadPromise) return tabulatorLoadPromise;
+
+    tabulatorLoadPromise = new Promise((resolve) => {
+      try {
+        const hasCss = Boolean(document.querySelector(`link[rel="stylesheet"][href="${TABULATOR_CSS_HREF}"]`));
+        if (!hasCss) {
+          const link = document.createElement("link");
+          link.rel = "stylesheet";
+          link.href = TABULATOR_CSS_HREF;
+          document.head.appendChild(link);
+        }
+
+        const existingScript = document.querySelector(`script[src="${TABULATOR_SCRIPT_SRC}"]`);
+        if (existingScript) {
+          existingScript.addEventListener("load", () => resolve(Boolean(window.Tabulator)), { once: true });
+          existingScript.addEventListener("error", () => resolve(false), { once: true });
+          return;
+        }
+
+        const script = document.createElement("script");
+        script.src = TABULATOR_SCRIPT_SRC;
+        script.async = true;
+        script.onload = () => resolve(Boolean(window.Tabulator));
+        script.onerror = () => resolve(false);
+        document.head.appendChild(script);
+      } catch (_e) {
+        resolve(false);
+      }
+    });
+
+    return tabulatorLoadPromise;
+  }
 
   function setStatusMessage(text, { isError = false, timeoutMs = 0 } = {}) {
     if (!$status) return;
@@ -559,7 +598,7 @@
     clearStorage(STORAGE_FILTER_KEY);
   }
 
-  function openLibraryModal(rows) {
+  async function openLibraryModal(rows) {
     if (!$overlay) return;
 
     setSelectedRowData(null);
@@ -568,6 +607,12 @@
     ensureResizeHandles();
     if (lastModalRect) applyModalRect(clampModalRect(lastModalRect));
     document.dispatchEvent(new CustomEvent("library-modal:opened"));
+
+    const loaded = await ensureTabulatorAssetsLoaded();
+    if (!loaded) {
+      setStatusMessage("Unable to load grid.", { isError: true, timeoutMs: 0 });
+      return;
+    }
 
     requestAnimationFrame(() => {
       const providedRows = Array.isArray(rows) ? rows : null;
@@ -638,6 +683,10 @@
       if (!$overlay || $overlay.hidden) return;
       const rows = ev && ev.detail && Array.isArray(ev.detail.rows) ? ev.detail.rows : null;
       if (!rows) return;
+      if (!window.Tabulator) {
+        currentRowsCache = rows;
+        return;
+      }
       const table = ensureTabulator(currentRowsCache || []);
       if (!table) return;
       if (currentRowsCache === rows) return;

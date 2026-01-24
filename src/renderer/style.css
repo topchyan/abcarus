@@ -1726,7 +1726,9 @@ svg {
   top: 72px;
   right: 24px;
   width: min(520px, calc(100vw - 48px));
-  max-height: min(70vh, calc(100vh - 96px));
+  height: calc(100vh - 96px);
+  max-height: calc(100vh - 96px);
+  max-width: calc(100vw - 48px);
   background: var(--panel-bg);
   border-radius: var(--radius-2);
   border: 1px solid var(--border-color);
@@ -1734,8 +1736,10 @@ svg {
   display: flex;
   flex-direction: column;
   z-index: 50;
-  overflow: hidden;
+  overflow: auto;
   resize: both;
+  min-width: 420px;
+  min-height: 280px;
 }
 
 .tool-panel.hidden {
@@ -1764,6 +1768,64 @@ svg {
   font-size: 14px;
 }
 
+.tool-panel-header-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool-panel-more {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--muted-text);
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.tool-panel-more:hover {
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.tool-panel-menu {
+  position: absolute;
+  top: 32px;
+  right: 36px;
+  min-width: 160px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-2);
+  box-shadow: var(--shadow-md);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 60;
+}
+
+.tool-panel-menu.hidden {
+  display: none;
+}
+
+.tool-panel-menu button {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--button-border);
+  background: var(--button-bg);
+  border-radius: var(--radius-1);
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.tool-panel-menu button:hover {
+  background: var(--button-bg-hover);
+}
+
 .tool-panel-close {
   background: transparent;
   border: none;
@@ -1778,41 +1840,36 @@ svg {
 }
 
 .tool-panel-controls {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 10px 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  padding: 8px 12px;
 }
 
 .tool-panel-control {
   display: flex;
   flex-direction: column;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted-text);
-  width: 100%;
-}
-
-.tool-panel-control-inline {
   width: auto;
-  min-width: 160px;
+  min-width: 0;
 }
 
 .tool-panel-control input {
-  margin-top: 6px;
+  margin-top: 4px;
   width: 100%;
   border-radius: var(--radius-1);
   border: 1px solid var(--border-color);
-  padding: 6px 8px;
-  font-size: 13px;
+  padding: 5px 7px;
+  font-size: 12px;
   background: #fff;
 }
 
 .tool-panel-base-row {
-  margin-top: 6px;
+  margin-top: 4px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .tool-panel-base-row select,
@@ -1821,25 +1878,30 @@ svg {
   margin-top: 0;
 }
 
+.tool-panel-base-row select {
+  flex: 0 0 96px;
+}
+
 .tool-panel-control select {
-  margin-top: 6px;
+  margin-top: 4px;
   border-radius: var(--radius-1);
   border: 1px solid var(--border-color);
-  padding: 6px 8px;
-  font-size: 13px;
+  padding: 5px 7px;
+  font-size: 12px;
   background: #fff;
 }
 
 .tool-panel-base-row select {
   border-radius: var(--radius-1);
   border: 1px solid var(--border-color);
-  padding: 6px 8px;
-  font-size: 13px;
+  padding: 5px 7px;
+  font-size: 12px;
   background: #fff;
 }
 
 .tool-panel-base-row input {
-  flex: 1;
+  flex: 0 1 78px;
+  min-width: 64px;
 }
 
 .tool-panel-base-row input[disabled] {
@@ -1847,11 +1909,11 @@ svg {
 }
 
 .tool-panel-checkbox {
-  margin-top: 8px;
+  margin-top: 4px;
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text);
 }
 
@@ -1894,10 +1956,50 @@ svg {
   padding: 0 16px 12px;
 }
 
+.tool-panel-dna {
+  margin-top: 8px;
+  padding: 6px 16px 10px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tool-panel-dna-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .tool-panel-table table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+}
+
+.tool-panel-plot {
+  padding: 0 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#intonationExplorerPlot {
+  width: 100%;
+  height: 150px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-1);
+  background: rgba(0, 0, 0, 0.015);
+}
+
+#intonationExplorerPlotPoints circle:hover {
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 2.2;
+}
+
+.tool-panel-plot-legend {
+  font-size: 12px;
+  color: var(--muted-text);
 }
 
 .tool-panel-table th {
@@ -1908,6 +2010,11 @@ svg {
   letter-spacing: 0.04em;
   padding-bottom: 6px;
   color: var(--muted-text);
+}
+
+.tool-panel-table th:last-child {
+  text-align: right;
+  padding-right: 8px;
 }
 
 .tool-panel-table td {
@@ -1928,6 +2035,18 @@ svg {
   text-align: right;
   font-size: 12px;
   color: var(--accent);
+  padding-right: 8px;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.intonation-role {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--muted-text);
+  font-variant: normal;
+  text-transform: none;
+  white-space: nowrap;
 }
 
 .tool-panel-highlight-label {
@@ -1992,6 +2111,42 @@ svg {
   overflow: hidden;
   padding: 0;
   display: block;
+}
+
+.modal-card.makam-dna-card {
+  width: min(980px, 96vw);
+  height: min(720px, 92vh);
+  min-width: 680px;
+  min-height: 420px;
+  max-width: 96vw;
+  max-height: 92vh;
+}
+
+.makam-dna-hint {
+  font-size: 12px;
+  color: var(--muted-text);
+  line-height: 1.35;
+}
+
+#makamDnaEditor {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 10px;
+}
+
+.modal-status {
+  font-size: 12px;
+  color: var(--muted-text);
+  min-height: 1.2em;
+}
+
+.modal-status.error {
+  color: #b71c1c;
 }
 
 .settings-header-controls {
