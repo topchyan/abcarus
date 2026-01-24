@@ -590,7 +590,7 @@ body.resizing * {
 .tree {
   padding: 6px 6px 8px;
   overflow: auto;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-ui);
   min-height: 0;
   height: 100%;
 }
