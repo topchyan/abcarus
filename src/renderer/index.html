@@ -272,13 +272,20 @@
 </section>
 </main>
 
-  <div id="intonationExplorerPanel" class="tool-panel hidden" role="dialog" aria-label="Intonation Explorer" aria-hidden="true">
-    <div class="tool-panel-card">
-      <div class="tool-panel-header">
-        <span class="tool-panel-title">Intonation Explorer</span>
-        <button id="intonationExplorerClose" type="button" class="tool-panel-close" aria-label="Close Explorer">×</button>
-      </div>
-		      <div class="tool-panel-controls">
+	  <div id="intonationExplorerPanel" class="tool-panel hidden" role="dialog" aria-label="Intonation Explorer" aria-hidden="true">
+	    <div class="tool-panel-card">
+	      <div class="tool-panel-header">
+	        <span class="tool-panel-title">Intonation Explorer</span>
+	        <div class="tool-panel-header-actions">
+	          <button id="intonationExplorerMore" type="button" class="tool-panel-more" aria-label="More">⋯</button>
+	          <div id="intonationExplorerMenu" class="tool-panel-menu hidden" role="menu" aria-label="Intonation Explorer actions">
+	            <button id="intonationExplorerCopyDna" type="button" role="menuitem">Copy DNA</button>
+	            <button id="intonationExplorerCopyPitchSet" type="button" role="menuitem">Copy pitchSet</button>
+	          </div>
+	          <button id="intonationExplorerClose" type="button" class="tool-panel-close" aria-label="Close Explorer">×</button>
+	        </div>
+	      </div>
+			      <div class="tool-panel-controls">
 		        <label class="tool-panel-control">
 		          <span>Tonal Base</span>
 		          <div class="tool-panel-base-row">
@@ -328,22 +335,16 @@
 	          <tbody id="intonationExplorerTableBody"></tbody>
 	        </table>
 	      </div>
-	      <div class="tool-panel-plot" aria-label="Seyir plot">
-	        <svg id="intonationExplorerPlot" viewBox="0 0 360 120" preserveAspectRatio="none" role="img" aria-label="Pitch trajectory">
-	          <g id="intonationExplorerPlotOverlay"></g>
-	          <polyline id="intonationExplorerPlotLine" fill="none" stroke="rgba(0,0,0,0.55)" stroke-width="1.2" points=""></polyline>
-	          <g id="intonationExplorerPlotPoints"></g>
-	        </svg>
-	        <div id="intonationExplorerPlotLegend" class="tool-panel-plot-legend"></div>
-	      </div>
-		      <div class="tool-panel-dna" aria-label="Intonation DNA snapshot">
-		        <div class="tool-panel-dna-actions">
-		          <button id="intonationExplorerCopyDna" type="button">Copy DNA</button>
-		          <button id="intonationExplorerCopyPitchSet" type="button">Copy pitchSet</button>
-		        </div>
+		      <div class="tool-panel-plot" aria-label="Seyir plot">
+		        <svg id="intonationExplorerPlot" viewBox="0 0 360 120" preserveAspectRatio="none" role="img" aria-label="Pitch trajectory">
+		          <g id="intonationExplorerPlotOverlay"></g>
+		          <polyline id="intonationExplorerPlotLine" fill="none" stroke="rgba(0,0,0,0.55)" stroke-width="1.2" points=""></polyline>
+		          <g id="intonationExplorerPlotPoints"></g>
+		        </svg>
+		        <div id="intonationExplorerPlotLegend" class="tool-panel-plot-legend"></div>
 		      </div>
-	    </div>
-	  </div>
+		    </div>
+		  </div>
 
   <footer class="taskbar">
 		    <div class="taskbar-left">

@@ -134,6 +134,8 @@ const $sidebarSplit = document.getElementById("sidebarSplit");
 const $toast = document.getElementById("toast");
 const $intonationExplorerPanel = document.getElementById("intonationExplorerPanel");
 const $intonationExplorerClose = document.getElementById("intonationExplorerClose");
+const $intonationExplorerMore = document.getElementById("intonationExplorerMore");
+const $intonationExplorerMenu = document.getElementById("intonationExplorerMenu");
 const $intonationExplorerBaseMode = document.getElementById("intonationExplorerBaseMode");
 const $intonationExplorerBaseManual = document.getElementById("intonationExplorerBaseManual");
 const $intonationExplorerDeclaredMakam = document.getElementById("intonationExplorerDeclaredMakam");
@@ -4998,6 +5000,7 @@ function hideIntonationExplorerPanel() {
   intonationExplorerVisible = false;
   $intonationExplorerPanel.classList.add("hidden");
   $intonationExplorerPanel.setAttribute("aria-hidden", "true");
+  if ($intonationExplorerMenu) $intonationExplorerMenu.classList.add("hidden");
   setIntonationExplorerStatus("");
   setIntonationHighlightRanges([]);
   clearSvgIntonationBarHighlight();
@@ -16493,8 +16496,33 @@ if ($intonationExplorerCompareMakam) {
     refreshIntonationExplorer().catch(() => {});
   });
 }
+if ($intonationExplorerMore && $intonationExplorerMenu) {
+  const hideMenu = () => {
+    try { $intonationExplorerMenu.classList.add("hidden"); } catch {}
+  };
+  const toggleMenu = () => {
+    try { $intonationExplorerMenu.classList.toggle("hidden"); } catch {}
+  };
+  $intonationExplorerMore.addEventListener("click", (ev) => {
+    try { if (ev) ev.stopPropagation(); } catch {}
+    toggleMenu();
+  });
+  document.addEventListener("click", (ev) => {
+    if (!$intonationExplorerMenu || $intonationExplorerMenu.classList.contains("hidden")) return;
+    const t = ev && ev.target ? ev.target : null;
+    if (t && ($intonationExplorerMenu.contains(t) || $intonationExplorerMore.contains(t))) return;
+    hideMenu();
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (!$intonationExplorerMenu || $intonationExplorerMenu.classList.contains("hidden")) return;
+    if (!ev || ev.key !== "Escape") return;
+    try { ev.preventDefault(); } catch {}
+    hideMenu();
+  });
+}
 if ($intonationExplorerCopyDna) {
   $intonationExplorerCopyDna.addEventListener("click", async () => {
+    try { if ($intonationExplorerMenu) $intonationExplorerMenu.classList.add("hidden"); } catch {}
     let text = "";
     try {
       if (lastIntonationDnaSource) {
@@ -16526,6 +16554,7 @@ if ($intonationExplorerCopyDna) {
 }
 if ($intonationExplorerCopyPitchSet) {
   $intonationExplorerCopyPitchSet.addEventListener("click", async () => {
+    try { if ($intonationExplorerMenu) $intonationExplorerMenu.classList.add("hidden"); } catch {}
     let text = "";
     try {
       const events = lastIntonationDnaSource && Array.isArray(lastIntonationDnaSource.noteEvents)

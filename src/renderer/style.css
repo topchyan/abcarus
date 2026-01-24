@@ -1768,6 +1768,64 @@ svg {
   font-size: 14px;
 }
 
+.tool-panel-header-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool-panel-more {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--muted-text);
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.tool-panel-more:hover {
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.tool-panel-menu {
+  position: absolute;
+  top: 32px;
+  right: 36px;
+  min-width: 160px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-2);
+  box-shadow: var(--shadow-md);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 60;
+}
+
+.tool-panel-menu.hidden {
+  display: none;
+}
+
+.tool-panel-menu button {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--button-border);
+  background: var(--button-bg);
+  border-radius: var(--radius-1);
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.tool-panel-menu button:hover {
+  background: var(--button-bg-hover);
+}
+
 .tool-panel-close {
   background: transparent;
   border: none;
