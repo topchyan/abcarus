@@ -979,6 +979,8 @@ function applySettingsPatch(patch, { persistToSettingsFile = true } = {}) {
     else next.layoutRenderZoomVertical = next.renderZoom;
   }
   next.editorFontSize = Math.min(32, Math.max(8, Number(next.editorFontSize) || 13));
+  next.uiFontSize = Math.min(28, Math.max(10, Number(next.uiFontSize) || 13));
+  next.uiFontFamily = String(next.uiFontFamily || "").trim();
   next.editorNotesBold = Boolean(next.editorNotesBold);
   next.editorLyricsBold = Boolean(next.editorLyricsBold);
   next.confirmAppendToActiveFile = Boolean(next.confirmAppendToActiveFile);

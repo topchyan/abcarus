@@ -1535,6 +1535,21 @@ function abbreviatePathForLog(fullPath, tailSegments = 3) {
   return ["…", ...parts.slice(-tailSegments)].join(sep);
 }
 
+function setUiFontsFromSettings(settings) {
+  const root = document && document.documentElement ? document.documentElement : null;
+  if (!root) return;
+  const family = settings && typeof settings.uiFontFamily === "string" ? settings.uiFontFamily.trim() : "";
+  const size = settings && Number.isFinite(Number(settings.uiFontSize)) ? Number(settings.uiFontSize) : NaN;
+  try {
+    if (family) root.style.setProperty("--font-family-ui", family);
+    else root.style.removeProperty("--font-family-ui");
+  } catch {}
+  try {
+    if (Number.isFinite(size) && size > 0) root.style.setProperty("--font-size-ui", `${Math.round(size)}px`);
+    else root.style.removeProperty("--font-size-ui");
+  } catch {}
+}
+
 const devConfig = (() => {
   try {
     return (window.api && typeof window.api.getDevConfig === "function") ? (window.api.getDevConfig() || {}) : {};
@@ -16750,6 +16765,7 @@ if (window.api && typeof window.api.getSettings === "function") {
 		      if (settings) {
 		      latestSettingsSnapshot = settings;
 		      logStartupPerf("apply settings: begin");
+		      setUiFontsFromSettings(settings);
 		      setGlobalHeaderFromSettings(settings);
 		      setAbc2svgFontsFromSettings(settings);
 		      setSoundfontFromSettings(settings);
@@ -16788,6 +16804,7 @@ if (window.api && typeof window.api.onSettingsChanged === "function") {
     latestSettingsSnapshot = settings || null;
     const prevHeader = `${globalHeaderEnabled}|${globalHeaderText}|${abc2svgNotationFontFile}|${abc2svgTextFontFile}`;
     const prevSoundfont = soundfontName;
+    setUiFontsFromSettings(settings);
     setGlobalHeaderFromSettings(settings);
     setAbc2svgFontsFromSettings(settings);
 	    setSoundfontFromSettings(settings);

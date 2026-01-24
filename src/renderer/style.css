@@ -29,8 +29,8 @@
   --editor-zoom: 1;
 
   --font-size-ui: 13px;
-  --font-size-sm: 12px;
-  --font-size-xs: 11px;
+  --font-size-sm: calc(var(--font-size-ui) - 1px);
+  --font-size-xs: calc(var(--font-size-ui) - 2px);
   --line-height-ui: 1.28;
   --space-1: 4px;
   --space-2: 8px;
@@ -2724,15 +2724,26 @@ textarea {
   box-sizing: border-box;
 }
 
+.settings-row input[type="number"] {
+  width: 8em;
+  justify-self: start;
+}
+
+.settings-row input[type="text"] {
+  max-width: 360px;
+  justify-self: start;
+}
+
 .settings-row select {
   width: 100%;
-  max-width: none;
+  max-width: 360px;
   padding: 6px 8px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-1);
   background: #fff;
   color: var(--text);
   box-sizing: border-box;
+  justify-self: start;
 }
 
 .settings-select-row {
