@@ -3667,19 +3667,20 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
     }
   } catch {}
 
-  let keyMicroMap = {};
-  try {
-    keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(kLineBody);
-  } catch {
-    keyMicroMap = {};
-  }
+	  let keyMicroMap = {};
+	  try {
+	    keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(kLineBody, { allowMicro: is53 });
+	  } catch {
+	    keyMicroMap = {};
+	  }
 
-	  const seen = new Map();
-	  let idx = scanStart;
-	  let inTextBlock = false;
-	  let graceDepth = 0;
-    let barAccidentals = new Map();
-	  while (idx < body.length) {
+		  const seen = new Map();
+      const noteEvents = [];
+		  let idx = scanStart;
+		  let inTextBlock = false;
+		  let graceDepth = 0;
+	    let barAccidentals = new Map();
+		  while (idx < body.length) {
 	    // Skip %%begintext … %%endtext blocks (often contain prose with A-G letters).
 	    if (!inTextBlock) {
 	      const prev = idx > 0 ? body[idx - 1] : "";
@@ -3724,18 +3725,18 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 		    if (body[idx] === "[" && idx + 2 < body.length && /[A-Za-z]/.test(body[idx + 1]) && body[idx + 2] === ":") {
 		      const close = body.indexOf("]", idx + 3);
 		      if (close >= 0) {
-            const tag = String(body[idx + 1] || "").toUpperCase();
-            if (tag === "K") {
-              try {
-                const tokenPart = body.slice(idx + 3, close);
-                keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(tokenPart);
-                barAccidentals = new Map();
-              } catch {}
-            }
-		        idx = close + 1;
-		        continue;
-		      }
-		    }
+	            const tag = String(body[idx + 1] || "").toUpperCase();
+	            if (tag === "K") {
+	              try {
+	                const tokenPart = body.slice(idx + 3, close);
+	                keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(tokenPart, { allowMicro: is53 });
+	                barAccidentals = new Map();
+	              } catch {}
+	            }
+			        idx = close + 1;
+			        continue;
+			      }
+			    }
 
 		    // Skip mid-tune field lines like "K:Dm" / "M:6/8" / "V:1" (line-based fields).
 		    // This is separate from the inline [K:...] form above.
@@ -3750,17 +3751,17 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 		          const nextNl = body.indexOf("\n", j + 2);
 		          const nextCr = body.indexOf("\r", j + 2);
 		          const next = (nextNl >= 0 && nextCr >= 0) ? Math.min(nextNl, nextCr) : (nextNl >= 0 ? nextNl : nextCr);
-              if (tag === "K") {
-                try {
-                  const lineEnd = next >= 0 ? next : body.length;
-                  const tokenPart = body.slice(j + 2, lineEnd);
-                  keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(tokenPart);
-                  barAccidentals = new Map();
-                } catch {}
-              }
-		          idx = next >= 0 ? next + 1 : body.length;
-		          continue;
-		        }
+	            if (tag === "K") {
+	                try {
+	                  const lineEnd = next >= 0 ? next : body.length;
+	                  const tokenPart = body.slice(j + 2, lineEnd);
+	                  keyMicroMap = buildEffectiveKeyMicroMap53FromKBody(tokenPart, { allowMicro: is53 });
+	                  barAccidentals = new Map();
+	                } catch {}
+	              }
+			          idx = next >= 0 ? next + 1 : body.length;
+			          continue;
+			        }
 		      }
 		    }
 
@@ -3825,10 +3826,10 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
           : 0;
         appliedMicro = Number.isFinite(keyMicro) ? keyMicro : 0;
       }
-	    const abs53 = octave * 53 + baseId + appliedMicro;
-	    const pc53 = mod53(abs53);
-	    const entryKey = String(abs53);
-	    const entry = seen.get(entryKey) || {
+		    const abs53 = octave * 53 + baseId + appliedMicro;
+		    const pc53 = mod53(abs53);
+		    const entryKey = String(abs53);
+		    const entry = seen.get(entryKey) || {
 	      abs53,
 	      pc53,
 	      octave,
@@ -3838,33 +3839,143 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 	      ranges: [],
 	      firstStart: null,
 	      spellings: new Map(),
-	    };
-		    entry.count += 1;
-		    if (entry.firstStart == null || note.start < entry.firstStart) entry.firstStart = note.start;
-		    try {
-	        // Always show the *effective* accidental in a stable, micro-aware spelling so that:
+		    };
+			    entry.count += 1;
+			    if (entry.firstStart == null || note.start < entry.firstStart) entry.firstStart = note.start;
+			    try {
+		        // Always show the *effective* accidental in a stable, micro-aware spelling so that:
 	        // - key-signature microtones are visible (even when the token is written natural), and
 	        // - plain ^/_ accidentals are normalized to numeric micro steps for EDO-53 labeling.
-	        const effectivePrefix = formatEffectiveAccPrefix53(letterPc, appliedMicro);
-		      const spelling = `${effectivePrefix}${String(note.letter || "")}${String(note.octaveMarks || "")}`;
-		      if (spelling) entry.spellings.set(spelling, (Number(entry.spellings.get(spelling)) || 0) + 1);
-		    } catch {}
-	    entry.ranges.push({
-      // NOTE: offsets are relative to the active tune text in the editor (not the full file).
-      start: note.start,
+		        const effectivePrefix = formatEffectiveAccPrefix53(letterPc, appliedMicro);
+			      const spelling = `${effectivePrefix}${String(note.letter || "")}${String(note.octaveMarks || "")}`;
+			      if (spelling) entry.spellings.set(spelling, (Number(entry.spellings.get(spelling)) || 0) + 1);
+            noteEvents.push({
+              abs53,
+              pc53,
+              octave,
+              letterUpper: letter,
+              micro: appliedMicro,
+              spelling,
+              start: note.start,
+              end: note.end,
+            });
+			    } catch {}
+		    entry.ranges.push({
+	      // NOTE: offsets are relative to the active tune text in the editor (not the full file).
+	      start: note.start,
       end: note.end,
     });
 	    seen.set(entryKey, entry);
-	    idx = Math.max(idx + 1, note.end);
-	  }
-	  const entries = Array.from(seen.values());
-  return { tune, entries, is53, error: entries.length ? null : "No musical notes found in the tune." };
-}
+		    idx = Math.max(idx + 1, note.end);
+		  }
+		  const entries = Array.from(seen.values());
+	  return {
+      tune,
+      entries,
+      noteEvents,
+      is53,
+      error: entries.length ? null : "No musical notes found in the tune.",
+    };
+	}
 
-function buildIntonationRowsFromEntries(entries, baseStep, { sortMode = "count" } = {}) {
-  const list = Array.isArray(entries) ? entries : [];
-  const rows = list.map((entry) => ({
-    step: entry.abs53, // unique row id (octave-aware)
+  function formatPerdeNameForIntonationRow(row, { is53 } = {}) {
+    if (!is53) return "";
+    const fromToken = resolvePerdeNamesFromAbcToken(row.abcSpelling).filter(Boolean);
+    if (fromToken.length) return fromToken.join(" / ");
+    return resolvePerdeName({ pc53: row.absStep, octave: row.octave }) || "";
+  }
+
+  function buildSeyirSnapshotText({ tuneText, rows, noteEvents, baseStep, baseLabel, is53 }) {
+    const events = Array.isArray(noteEvents) ? noteEvents : [];
+    const list = Array.isArray(rows) ? rows : [];
+    const text = String(tuneText || "");
+
+    const mX = text.match(/(?:^|\n)X:\s*([^\r\n]+)/);
+    const mT = text.match(/(?:^|\n)T:\s*([^\r\n]+)/);
+    const mK = text.match(/(?:^|\n)K:\s*([^\r\n]+)/i);
+    const meta = {
+      x: mX ? String(mX[1] || "").trim() : "",
+      title: mT ? String(mT[1] || "").trim() : "",
+      key: mK ? String(mK[1] || "").trim() : "",
+    };
+
+    const pitchSetPc53 = Array.from(new Set(events.map((e) => mod53(e.pc53 || 0))))
+      .sort((a, b) => a - b)
+      .map((n) => formatAeuLabel(n));
+
+    const compressed = [];
+    for (const e of events) {
+      const last = compressed.length ? compressed[compressed.length - 1] : null;
+      if (last && String(last.abs53) === String(e.abs53)) continue;
+      compressed.push(e);
+    }
+
+    const relTrace = compressed.map((e) => formatAeuLabel(mod53((e.pc53 || 0) - (baseStep || 0))));
+    const absTrace = compressed.map((e) => formatAeuLabel(mod53(e.pc53 || 0)));
+
+    const start = compressed.length ? compressed[0] : null;
+    const end = compressed.length ? compressed[compressed.length - 1] : null;
+    const absVals = compressed.map((e) => Number(e.abs53)).filter((n) => Number.isFinite(n));
+    const minAbs = absVals.length ? Math.min(...absVals) : null;
+    const maxAbs = absVals.length ? Math.max(...absVals) : null;
+
+    const turning = [];
+    for (let i = 1; i + 1 < compressed.length; i += 1) {
+      const a = Number(compressed[i - 1].abs53);
+      const b = Number(compressed[i].abs53);
+      const c = Number(compressed[i + 1].abs53);
+      if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c)) continue;
+      if (b > a && b > c) turning.push({ kind: "peak", idx: i, e: compressed[i] });
+      else if (b < a && b < c) turning.push({ kind: "trough", idx: i, e: compressed[i] });
+    }
+
+    const anchors = list
+      .slice()
+      .sort((a, b) => (Number(b.count) || 0) - (Number(a.count) || 0))
+      .slice(0, 12)
+      .map((row) => {
+        const perde = formatPerdeNameForIntonationRow(row, { is53 });
+        const perdePart = is53 ? `; perde=${perde || "??"}` : "";
+        return `- ${row.abcSpelling || ""} (pc53=${formatAeuLabel(row.absStep)}) count=${row.count || 0}${perdePart}`;
+      });
+
+    const turningLines = turning.slice(0, 12).map((tp) => {
+      const e = tp.e || {};
+      const label = e.spelling || "";
+      const pc = formatAeuLabel(mod53(e.pc53 || 0));
+      return `- ${tp.kind} #${tp.idx}: ${label} (pc53=${pc})`;
+    });
+
+    const header = [
+      "[ABCarus] Intonation DNA (read-only)",
+      meta.x || meta.title ? `X:${meta.x || "?"}  T:${meta.title || "?"}` : "",
+      meta.key ? `K:${meta.key}` : "",
+      `mode=${is53 ? "EDO-53" : "EDO-12"} base=${String(baseLabel || "")}`,
+      `events=${events.length} compressed=${compressed.length}`,
+      (minAbs != null && maxAbs != null) ? `range(abs53)=${maxAbs - minAbs} (min=${minAbs}, max=${maxAbs})` : "",
+      start ? `start=${start.spelling || ""} (pc53=${formatAeuLabel(mod53(start.pc53 || 0))})` : "",
+      end ? `end=${end.spelling || ""} (pc53=${formatAeuLabel(mod53(end.pc53 || 0))})` : "",
+      `pitchSetPc53=[${pitchSetPc53.join(", ")}]`,
+      "",
+      "Top anchors:",
+      ...(anchors.length ? anchors : ["- (none)"]),
+      "",
+      "Turning points (first 12):",
+      ...(turningLines.length ? turningLines : ["- (none)"]),
+      "",
+      `Trace rel(base) (first 80): ${relTrace.slice(0, 80).join(" ")}`,
+      `Trace abs(pc53) (first 80): ${absTrace.slice(0, 80).join(" ")}`,
+    ]
+      .filter((s) => String(s || "").trim() !== "")
+      .join("\n");
+
+    return header;
+  }
+
+	function buildIntonationRowsFromEntries(entries, baseStep, { sortMode = "count" } = {}) {
+	  const list = Array.isArray(entries) ? entries : [];
+	  const rows = list.map((entry) => ({
+	    step: entry.abs53, // unique row id (octave-aware)
     normalizedStep: mod53((entry.pc53 || 0) - baseStep),
     absStep: mod53(entry.pc53 || 0),
     abcSpelling: pickDominantSpelling(entry.spellings),
@@ -4219,6 +4330,23 @@ async function refreshIntonationExplorer() {
 	    const sortLabel = `sort:${String(intonationExplorerSortMode || "count")}`;
       const modeLabel = intonationExplorerIs53 ? "EDO-53" : "EDO-12";
 	    setIntonationExplorerStatus(`Base ${intonationExplorerBaseLabel} (${rows.length} classes; ${sortLabel}; ${graceLabel}; ${modeLabel})`);
+
+      // Proof-of-concept "DNA / Seyir snapshot" (no UI changes): print to console for copy/paste.
+      try {
+        const fullText = String(snapshot.text || "");
+        const tuneText = scanned.tune ? fullText.slice(scanned.tune.start, scanned.tune.end) : "";
+        const dnaText = buildSeyirSnapshotText({
+          tuneText,
+          rows,
+          noteEvents: scanned.noteEvents,
+          baseStep: intonationExplorerBaseStep,
+          baseLabel: intonationExplorerBaseLabel,
+          is53: intonationExplorerIs53,
+        });
+        window.__abcarusLastIntonationDnaText = dnaText;
+        // Keep it readable in DevTools and easy to copy.
+        console.info(dnaText);
+      } catch {}
 	  } catch (err) {
 	    const msg = (err && err.message) ? String(err.message) : String(err || "");
 	    setIntonationExplorerStatus(msg ? `Unable to refresh the explorer: ${msg}` : "Unable to refresh the explorer.", { error: true });

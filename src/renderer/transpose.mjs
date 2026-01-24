@@ -462,9 +462,23 @@ function parseExplicitKeyAccTokens53(body) {
   return tokens;
 }
 
-function buildKeyMicroMapFromKBody53(body) {
+function buildKeyMicroMapFromKBody53(body, { allowMicro = true } = {}) {
   const map = {};
   for (const tok of parseExplicitKeyAccTokens53(body)) {
+    // In EDO-12 mode, treat numeric/fractional micro-accidentals in K: as out-of-scope.
+    // (They are meaningful only when the tune explicitly opts into EDO-53.)
+    if (!allowMicro) {
+      const acc = String(tok.acc || "");
+      const isMicro = (
+        acc === "^/" ||
+        acc === "_/" ||
+        /^\^[-]?\d+\/\d+$/.test(acc) ||
+        /^_[-]?\d+\/\d+$/.test(acc) ||
+        /^\^[-]?\d+$/.test(acc) ||
+        /^_[-]?\d+$/.test(acc)
+      );
+      if (isMicro) continue;
+    }
     const upper = tok.letter.toUpperCase();
     const pc = PC_NAT_12[upper];
     if (pc == null) continue;
@@ -475,7 +489,7 @@ function buildKeyMicroMapFromKBody53(body) {
   return map;
 }
 
-export function buildEffectiveKeyMicroMap53FromKBody(kBody) {
+export function buildEffectiveKeyMicroMap53FromKBody(kBody, { allowMicro = true } = {}) {
   const { head } = splitComment(kBody);
   const { firstToken } = parseKLineBodyForRewrite(head);
   const keyInfo = parseKeyToken(firstToken) || { isNone: true, pref: "flat", accCount: 0 };
@@ -494,7 +508,7 @@ export function buildEffectiveKeyMicroMap53FromKBody(kBody) {
   }
 
   // Explicit accidentals listed in the K: line override the inferred key signature.
-  const explicit = buildKeyMicroMapFromKBody53(head);
+  const explicit = buildKeyMicroMapFromKBody53(head, { allowMicro });
   for (const [letter, micro] of Object.entries(explicit)) {
     out[String(letter || "").toUpperCase()] = micro;
   }
