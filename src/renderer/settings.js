@@ -1232,7 +1232,9 @@ export function initSettings(api) {
           const fontsGroupHelp = isFontsSection
             ? (g.title === "UI"
               ? "App UI only (not the OS menu bar)."
-              : (g.title === "Editor" ? "ABC editor text." : (g.title === "Score" ? "Rendered score + playback." : "")))
+              : (g.title === "Library"
+                ? "Library tree list."
+                : (g.title === "Editor" ? "ABC editor text." : (g.title === "Score" ? "Rendered score + playback." : ""))))
             : "";
 
           if (isFontsSection && fontsGroupHelp) {
@@ -1333,6 +1335,9 @@ export function initSettings(api) {
 
           if (isFontsSection && g.title === "UI") {
             const pair = createCompactPairBlock("", "uiFontFamily", "uiFontSize");
+            if (pair) group.appendChild(pair);
+          } else if (isFontsSection && g.title === "Library") {
+            const pair = createCompactPairBlock("", "libraryUiFontFamily", "libraryUiFontSize");
             if (pair) group.appendChild(pair);
           } else if (isFontsSection && g.title === "Editor") {
             const pair = createCompactPairBlock("", "editorFontFamily", "editorFontSize");

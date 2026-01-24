@@ -1540,6 +1540,8 @@ function setUiFontsFromSettings(settings) {
   if (!root) return;
   const family = settings && typeof settings.uiFontFamily === "string" ? settings.uiFontFamily.trim() : "";
   const size = settings && Number.isFinite(Number(settings.uiFontSize)) ? Number(settings.uiFontSize) : NaN;
+  const libraryFamily = settings && typeof settings.libraryUiFontFamily === "string" ? settings.libraryUiFontFamily.trim() : "";
+  const librarySize = settings && Number.isFinite(Number(settings.libraryUiFontSize)) ? Number(settings.libraryUiFontSize) : NaN;
   try {
     if (family) root.style.setProperty("--font-family-ui", family);
     else root.style.removeProperty("--font-family-ui");
@@ -1547,6 +1549,14 @@ function setUiFontsFromSettings(settings) {
   try {
     if (Number.isFinite(size) && size > 0) root.style.setProperty("--font-size-ui", `${Math.round(size)}px`);
     else root.style.removeProperty("--font-size-ui");
+  } catch {}
+  try {
+    if (libraryFamily) root.style.setProperty("--library-font-family", libraryFamily);
+    else root.style.removeProperty("--library-font-family");
+  } catch {}
+  try {
+    if (Number.isFinite(librarySize) && librarySize > 0) root.style.setProperty("--library-font-size", `${Math.round(librarySize)}px`);
+    else root.style.removeProperty("--library-font-size");
   } catch {}
 }
 
