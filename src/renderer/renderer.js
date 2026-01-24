@@ -3644,21 +3644,15 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
     is53 = /%%\s*MIDI\s+temperamentequal\s+53\b/i.test(body) || /%%\s*MIDI\s+temperamentequal\s+53\b/i.test(fullText);
   } catch { is53 = false; }
 
-  const formatEffectiveAccPrefix53 = (letterPc12, micro) => {
-    const m = Number(micro) || 0;
-    if (m === 0) return "";
-    try {
-      const sharp = parseAccidentalPrefix53("^", letterPc12);
-      if (sharp && sharp.explicit && sharp.micro === m) return "^";
-      const flat = parseAccidentalPrefix53("_", letterPc12);
-      if (flat && flat.explicit && flat.micro === m) return "_";
-      const halfSharp = parseAccidentalPrefix53("^/", letterPc12);
-      if (halfSharp && halfSharp.explicit && halfSharp.micro === m) return "^/";
-      const halfFlat = parseAccidentalPrefix53("_/", letterPc12);
-      if (halfFlat && halfFlat.explicit && halfFlat.micro === m) return "_/";
-    } catch {}
-    return m > 0 ? `^${m}` : `_${-m}`;
-  };
+	  const formatEffectiveAccPrefix53 = (letterPc12, micro) => {
+	    const m = Number(micro) || 0;
+	    if (m === 0) return "";
+	    // Always use explicit numeric micro-accidentals for EDO-53 so that:
+	    // - octave/register spellings remain distinct and unambiguous,
+	    // - key-signature-derived microtones are visible,
+	    // - we can map tokens to Perde names deterministically (e.g. ^4f vs ^5f).
+	    return m > 0 ? `^${m}` : `_${-m}`;
+	  };
 
   // Avoid counting field headers / metadata as notes:
   // scan only after the first K: line (if present), and skip free-text blocks.
