@@ -4,6 +4,19 @@ const fs = require("fs");
 const path = require("path");
 const { fileURLToPath } = require("url");
 
+// Renderer health reporting (startup watchdog).
+// Note: this runs in the renderer thread; if JS locks up, heartbeats stop.
+try {
+  window.addEventListener("DOMContentLoaded", () => {
+    try { ipcRenderer.send("app:renderer-ready", { at: Date.now() }); } catch {}
+    try {
+      setInterval(() => {
+        try { ipcRenderer.send("app:renderer-heartbeat", { at: Date.now() }); } catch {}
+      }, 2000);
+    } catch {}
+  });
+} catch {}
+
 contextBridge.exposeInMainWorld("api", {
   readFileBase64: async (fileUrl) => {
     const p = fileURLToPath(fileUrl);

@@ -11,6 +11,10 @@ const { encodePropertiesFromSchema, parseSettingsPatchFromProperties } = require
 
 let mainWindow = null;
 let isQuitting = false;
+const STARTUP_SAFE_MODE = process.env.ABCARUS_SAFE_MODE === "1" || process.argv.includes("--safe-mode");
+
+const rendererHealth = new Map(); // webContents.id -> { win, createdAt, lastHeartbeatAt, readyAt, safeMode, prompting }
+let rendererWatchdogTimer = null;
 const appState = {
   lastFolder: null,
   recentTunes: [],
@@ -1926,12 +1930,18 @@ async function scanLibrary(rootDir, sender, options = {}) {
   };
 }
 
-function createWindow() {
+function createWindow({ safeMode = false, inheritBoundsFrom = null } = {}) {
   // Default to following the OS theme (also used for picking a visible window icon on Linux).
   nativeTheme.themeSource = "system";
+  const inheritedBounds = inheritBoundsFrom && typeof inheritBoundsFrom.getBounds === "function"
+    ? inheritBoundsFrom.getBounds()
+    : null;
+  const inheritedMax = inheritBoundsFrom && typeof inheritBoundsFrom.isMaximized === "function"
+    ? inheritBoundsFrom.isMaximized()
+    : false;
   const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: (inheritedBounds && Number.isFinite(inheritedBounds.width)) ? inheritedBounds.width : 1200,
+    height: (inheritedBounds && Number.isFinite(inheritedBounds.height)) ? inheritedBounds.height : 800,
     icon: resolveWindowIconPath(),
     webPreferences: {
       contextIsolation: true,
@@ -1942,6 +1952,7 @@ function createWindow() {
   });
 
   mainWindow = win;
+  win.__abcarusSafeMode = Boolean(safeMode);
   if (process.platform === "linux") {
     // Best-effort: update the window icon if the OS theme flips light/dark.
     // Not all Linux desktops propagate this to Electron consistently.
@@ -1952,9 +1963,10 @@ function createWindow() {
     });
   }
   try { win.setAlwaysOnTop(false); } catch {}
-  win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+  win.loadFile(path.join(__dirname, "..", "renderer", "index.html"), { query: { safeMode: safeMode ? "1" : "0" } });
   if (process.env.ABCARUS_DEV_NO_MAXIMIZE !== "1") {
-    win.maximize();
+    if (inheritedMax) win.maximize();
+    else win.maximize();
   }
   if (process.env.ABCARUS_DEV_FORWARD_CONSOLE === "1") {
     win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
@@ -2015,10 +2027,50 @@ function createWindow() {
       sendMenuAction("alignBars");
     }
   });
+  // Renderer watchdog tracking.
+  try {
+    const wcId = win.webContents && Number.isFinite(Number(win.webContents.id)) ? Number(win.webContents.id) : null;
+    if (wcId != null) {
+      rendererHealth.set(wcId, {
+        win,
+        safeMode: Boolean(safeMode),
+        createdAt: Date.now(),
+        lastHeartbeatAt: Date.now(),
+        readyAt: null,
+        prompting: false,
+      });
+    }
+  } catch {}
+
   win.on("close", (e) => {
     if (isQuitting) return;
     e.preventDefault();
     win.webContents.send("app:request-quit");
+
+    // Fallback: if renderer is hung and doesn't ack quit, offer a force-quit path (no xkill required).
+    try {
+      if (win.__abcarusQuitPromptTimer) return;
+      win.__abcarusQuitPromptTimer = setTimeout(async () => {
+        win.__abcarusQuitPromptTimer = null;
+        if (isQuitting) return;
+        if (win.isDestroyed && win.isDestroyed()) return;
+        try {
+          const res = await dialog.showMessageBox(win, {
+            type: "warning",
+            buttons: ["Force Quit", "Wait"],
+            defaultId: 1,
+            cancelId: 1,
+            message: "ABCarus is not responding.",
+            detail: "The window did not respond to the quit request. You can force quit (unsaved changes may be lost) or wait.",
+          });
+          if (res && res.response === 0) {
+            isQuitting = true;
+            try { win.destroy(); } catch {}
+            try { app.exit(0); } catch { process.exit(0); }
+          }
+        } catch {}
+      }, 1500);
+    } catch {}
   });
   win.on("focus", () => {
     // Best-effort: if the canonical settings file was edited externally, reload it when the app regains focus.
@@ -2026,7 +2078,75 @@ function createWindow() {
   });
   win.on("closed", () => {
     if (mainWindow === win) mainWindow = null;
+    try {
+      const wcId = win.webContents && Number.isFinite(Number(win.webContents.id)) ? Number(win.webContents.id) : null;
+      if (wcId != null) rendererHealth.delete(wcId);
+    } catch {}
   });
+
+  // Native signal when renderer becomes unresponsive.
+  win.on("unresponsive", () => {
+    promptRendererRecovery(win, { reason: "unresponsive" }).catch(() => {});
+  });
+  win.webContents.on("render-process-gone", (_evt, details) => {
+    const reason = details && details.reason ? String(details.reason) : "render-process-gone";
+    promptRendererRecovery(win, { reason }).catch(() => {});
+  });
+}
+
+async function promptRendererRecovery(win, { reason } = {}) {
+  if (!win || (win.isDestroyed && win.isDestroyed())) return;
+  const wcId = win.webContents && Number.isFinite(Number(win.webContents.id)) ? Number(win.webContents.id) : null;
+  const state = wcId != null ? rendererHealth.get(wcId) : null;
+  if (!state) return;
+  if (state.prompting) return;
+  state.prompting = true;
+  try {
+    const safeLabel = state.safeMode ? "Reload" : "Reload (Safe Mode)";
+    const res = await dialog.showMessageBox(win, {
+      type: "warning",
+      buttons: [safeLabel, "Wait", "Quit"],
+      defaultId: 0,
+      cancelId: 1,
+      message: "ABCarus is not responding.",
+      detail: `Renderer status: ${reason || "unknown"}. You can reload (Safe Mode disables startup auto-open/scan), wait, or quit. Unsaved changes may be lost.`,
+    });
+    if (!res) return;
+    if (res.response === 0) {
+      // Reload in safe mode to avoid re-triggering the heavy startup path.
+      const prev = win;
+      try { prev.destroy(); } catch {}
+      createWindow({ safeMode: true, inheritBoundsFrom: prev });
+      refreshMenu();
+      return;
+    }
+    if (res.response === 2) {
+      isQuitting = true;
+      try { app.exit(0); } catch { process.exit(0); }
+    }
+  } catch {
+    // If dialogs fail, prefer safety: allow quitting.
+  } finally {
+    state.prompting = false;
+  }
+}
+
+function ensureRendererWatchdogRunning() {
+  if (rendererWatchdogTimer) return;
+  rendererWatchdogTimer = setInterval(() => {
+    const now = Date.now();
+    for (const st of rendererHealth.values()) {
+      const win = st && st.win;
+      if (!win || (win.isDestroyed && win.isDestroyed())) continue;
+      const sinceBeat = now - (Number(st.lastHeartbeatAt) || 0);
+      const sinceCreate = now - (Number(st.createdAt) || 0);
+      const ready = Number.isFinite(Number(st.readyAt));
+      const stuck = (!ready && sinceCreate > 10000) || (ready && sinceBeat > 8000);
+      if (!stuck) continue;
+      promptRendererRecovery(win, { reason: !ready ? "startup-timeout" : "heartbeat-timeout" }).catch(() => {});
+    }
+  }, 2000);
+  try { rendererWatchdogTimer.unref(); } catch {}
 }
 
 app.whenReady().then(async () => {
@@ -2040,10 +2160,11 @@ app.whenReady().then(async () => {
   }
   await migrateStatePaths();
   cleanupTempPrintFiles().catch(() => {});
-  createWindow();
+  ensureRendererWatchdogRunning();
+  createWindow({ safeMode: STARTUP_SAFE_MODE });
   refreshMenu();
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createWindow({ safeMode: STARTUP_SAFE_MODE });
   });
 });
 
@@ -2103,4 +2224,28 @@ registerIpcHandlers({
     isQuitting = true;
     app.quit();
   },
+});
+
+// Renderer health signals (preload emits them; used for startup watchdog).
+ipcMain.on("app:renderer-ready", (evt, payload) => {
+  try {
+    const win = BrowserWindow.fromWebContents(evt.sender);
+    if (!win) return;
+    const wcId = evt.sender && Number.isFinite(Number(evt.sender.id)) ? Number(evt.sender.id) : null;
+    if (wcId == null) return;
+    const st = rendererHealth.get(wcId);
+    if (!st) return;
+    st.lastHeartbeatAt = Date.now();
+    st.readyAt = Date.now();
+  } catch {}
+});
+
+ipcMain.on("app:renderer-heartbeat", (evt, payload) => {
+  try {
+    const wcId = evt.sender && Number.isFinite(Number(evt.sender.id)) ? Number(evt.sender.id) : null;
+    if (wcId == null) return;
+    const st = rendererHealth.get(wcId);
+    if (!st) return;
+    st.lastHeartbeatAt = Date.now();
+  } catch {}
 });

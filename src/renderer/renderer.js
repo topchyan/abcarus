@@ -44,6 +44,15 @@ import { createLibraryActions } from "./library/actions.js";
 import { normalizeLibraryPath, pathsEqual } from "./library/path_utils.js";
 import { fileExists, mkdirp, readFile, renameFile, safeBasename, safeDirname, writeFile } from "./io/file_ops.js";
 
+const STARTUP_SAFE_MODE = (() => {
+  try {
+    const params = new URLSearchParams(window.location && window.location.search ? window.location.search : "");
+    return params.get("safeMode") === "1";
+  } catch {
+    return false;
+  }
+})();
+
 const $editorHost = document.getElementById("abc-editor");
 const $out = document.getElementById("out");
 const $status = document.getElementById("status");
@@ -16120,7 +16129,14 @@ requestAnimationFrame(() => {
   try { applyRightSplitSizesFromRatio(); } catch {}
 });
 
-loadLastRecentEntry();
+if (STARTUP_SAFE_MODE) {
+  try { setStatus("Safe Mode"); } catch {}
+  try { showToast("Safe Mode: startup auto-open is disabled. Use File → Open…", 4200); } catch {}
+} else {
+  loadLastRecentEntry().catch((e) => {
+    try { logErr(e && e.message ? e.message : String(e)); } catch {}
+  });
+}
 
 if ($errorList) {
   $errorList.addEventListener("click", async (e) => {
