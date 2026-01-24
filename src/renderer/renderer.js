@@ -1474,6 +1474,31 @@ function recordDebugLog(level, args, stackOverride) {
   if (debugLogBuffer.length > 300) debugLogBuffer.splice(0, debugLogBuffer.length - 300);
 }
 
+function perfNowMs() {
+  try {
+    return (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+  } catch {
+    return Date.now();
+  }
+}
+
+function isIntonationPerfEnabled() {
+  try {
+    // Enable via DevTools (no reload required): `window.__abcarusPerfIntonation = true`
+    return window.__abcarusPerfIntonation === true;
+  } catch {
+    return false;
+  }
+}
+
+function logIntonationPerf(label, data) {
+  if (!isIntonationPerfEnabled()) return;
+  try {
+    if (data !== undefined) console.log(`[perf:intonation] ${label}`, data);
+    else console.log(`[perf:intonation] ${label}`);
+  } catch {}
+}
+
 const devConfig = (() => {
   try {
     return (window.api && typeof window.api.getDevConfig === "function") ? (window.api.getDevConfig() || {}) : {};
@@ -4013,6 +4038,8 @@ function resolveTonalBaseInput(rawValue) {
 
 function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
   if (!snapshot || !snapshot.text) return { tune: null, entries: [], error: "Unable to read working copy." };
+  const perfOn = isIntonationPerfEnabled();
+  const t0 = perfOn ? perfNowMs() : 0;
   const tune = resolveTuneEntryFromSnapshot(snapshot, {
     tuneUid: activeTuneUid,
     tuneIndex: activeTuneIndex,
@@ -4059,13 +4086,16 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 	    keyMicroMap = {};
 	  }
 
-		  const seen = new Map();
+			  const seen = new Map();
       const noteEvents = [];
-		  let idx = scanStart;
-		  let inTextBlock = false;
-		  let graceDepth = 0;
-	    let barAccidentals = new Map();
-		  while (idx < body.length) {
+			  let idx = scanStart;
+			  let inTextBlock = false;
+			  let graceDepth = 0;
+		    let barAccidentals = new Map();
+        let perfParseAttempts = 0;
+        let perfParsedNotes = 0;
+        let perfSkippedFast = 0;
+			  while (idx < body.length) {
 	    // Skip %%begintext … %%endtext blocks (often contain prose with A-G letters).
 	    if (!inTextBlock) {
 	      const prev = idx > 0 ? body[idx - 1] : "";
@@ -4212,21 +4242,24 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 	          || (ch >= "A" && ch <= "G")
 	          || (ch >= "a" && ch <= "g");
 	        if (!couldStart) {
+            if (perfOn) perfSkippedFast += 1;
 	          idx += 1;
 	          continue;
 	        }
 	      }
 
+        if (perfOn) perfParseAttempts += 1;
 		    const note = parseNoteTokenAt53(body, idx);
 		    if (!note) {
 		      idx += 1;
 		      continue;
 		    }
-    const letter = note.letter ? note.letter.toUpperCase() : "";
-    if (!letter) {
-      idx = note.end;
-      continue;
-    }
+        if (perfOn) perfParsedNotes += 1;
+	    const letter = note.letter ? note.letter.toUpperCase() : "";
+	    if (!letter) {
+	      idx = note.end;
+	      continue;
+	    }
 	    const letterPc = NOTE_BASES[letter] != null ? NOTE_BASES[letter] : 0;
 	    const baseId = baseId53ForNaturalLetter(letter);
 	    const accidental = parseAccidentalPrefix53(note.accPrefix, letterPc);
@@ -4286,8 +4319,19 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 	    seen.set(entryKey, entry);
 		    idx = Math.max(idx + 1, note.end);
 		  }
-		  const entries = Array.from(seen.values());
-	  return {
+			  const entries = Array.from(seen.values());
+      if (perfOn) {
+        logIntonationPerf("scan.loop", {
+          ms: Math.round(perfNowMs() - t0),
+          chars: body.length,
+          parseAttempts: perfParseAttempts,
+          parsedNotes: perfParsedNotes,
+          skippedFast: perfSkippedFast,
+          entries: entries.length,
+          events: noteEvents.length,
+        });
+      }
+		  return {
       tune,
       entries,
       noteEvents,
@@ -4697,9 +4741,13 @@ async function refreshIntonationExplorer() {
     setIntonationExplorerStatus("Intonation Explorer is not available in Raw mode.", { error: true });
     return;
   }
+  const perfOn = isIntonationPerfEnabled();
+  const tAll0 = perfOn ? perfNowMs() : 0;
   setIntonationExplorerStatus("Refreshing…");
   try {
+	    const tSnap0 = perfOn ? perfNowMs() : 0;
 	    const snapshot = await refreshWorkingCopySnapshot();
+	    if (perfOn) logIntonationPerf("snapshot", { ms: Math.round(perfNowMs() - tSnap0) });
 	    if (!snapshot || snapshot.text == null) {
 	      intonationExplorerRows = [];
 	      intonationExplorerActiveStep = null;
@@ -4714,7 +4762,16 @@ async function refreshIntonationExplorer() {
 		    setIntonationExplorerStatus("Unable to load working copy snapshot.", { error: true });
 		    return;
 		  }
+		    const tScan0 = perfOn ? perfNowMs() : 0;
 		    const scanned = scanIntonationEntries(snapshot, { skipGraceNotes: intonationExplorerSkipGraceNotes });
+		    if (perfOn) {
+		      logIntonationPerf("scan", {
+		        ms: Math.round(perfNowMs() - tScan0),
+		        entries: scanned && scanned.entries ? scanned.entries.length : 0,
+		        notes: scanned && scanned.noteEvents ? scanned.noteEvents.length : 0,
+		        is53: Boolean(scanned && scanned.is53),
+		      });
+		    }
 		  if (scanned.error) {
 	      intonationExplorerRows = [];
 	      intonationExplorerActiveStep = null;
@@ -4729,7 +4786,7 @@ async function refreshIntonationExplorer() {
 		    setIntonationExplorerStatus(scanned.error, { error: true });
 		    return;
 		  }
-      intonationExplorerIs53 = Boolean(scanned.is53);
+	      intonationExplorerIs53 = Boolean(scanned.is53);
 		    updateIntonationBaseUi();
 	    const fullText = String(snapshot.text || "");
 	    const tuneText = scanned.tune ? fullText.slice(scanned.tune.start, scanned.tune.end) : "";
@@ -4774,13 +4831,16 @@ async function refreshIntonationExplorer() {
 	    }
 	    intonationExplorerBaseStep = base;
 	    intonationExplorerBaseLabel = label;
+		    const tRows0 = perfOn ? perfNowMs() : 0;
 		    const rows = buildIntonationRowsFromEntries(scanned.entries, base, { sortMode: intonationExplorerSortMode });
+		    if (perfOn) logIntonationPerf("rows", { ms: Math.round(perfNowMs() - tRows0), rows: rows.length });
 		    intonationExplorerRows = rows;
 		    intonationExplorerActiveStep = null;
 
-			    // Optional: tag observed steps that match the declared makam roles (durak/güçlü/yeden).
-			    let roleAbs53Map = null;
-			    try {
+		    // Optional: tag observed steps that match the declared makam roles (durak/güçlü/yeden).
+		    const tRoles0 = perfOn ? perfNowMs() : 0;
+		    let roleAbs53Map = null;
+		    try {
 		      const entry = getAydemirMakamEntry(intonationExplorerDeclaredMakam);
 		      const events = Array.isArray(scanned.noteEvents) ? scanned.noteEvents : [];
 		      const absVals = events.map((ev) => Number(ev.abs53)).filter((n) => Number.isFinite(n));
@@ -4800,7 +4860,10 @@ async function refreshIntonationExplorer() {
 		      }
 		    } catch {}
 		    intonationExplorerRoleAbs53Map = roleAbs53Map;
+		    if (perfOn) logIntonationPerf("roles", { ms: Math.round(perfNowMs() - tRoles0), has: Boolean(roleAbs53Map && roleAbs53Map.size) });
+		    const tRender0 = perfOn ? perfNowMs() : 0;
 		    renderIntonationExplorerRows(rows, { is53: intonationExplorerIs53, roleAbs53Map: intonationExplorerRoleAbs53Map });
+		    if (perfOn) logIntonationPerf("renderTable", { ms: Math.round(perfNowMs() - tRender0) });
 		    setIntonationHighlightRanges([]);
 		    clearSvgIntonationBarHighlight();
 		    clearSvgIntonationNoteHighlight();
@@ -4821,12 +4884,15 @@ async function refreshIntonationExplorer() {
 
       // Minimal "seyir" plot (observed trajectory + optional Aydemir overlay).
       try {
+        const tPlot0 = perfOn ? perfNowMs() : 0;
         renderIntonationSeyirPlot({
           noteEvents: scanned.noteEvents,
           baseStep: intonationExplorerBaseStep,
           overlayMakamName: intonationExplorerCompareMakam,
         });
+        if (perfOn) logIntonationPerf("plot", { ms: Math.round(perfNowMs() - tPlot0) });
       } catch {}
+      if (perfOn) logIntonationPerf("total", { ms: Math.round(perfNowMs() - tAll0) });
 	  } catch (err) {
 	    const msg = (err && err.message) ? String(err.message) : String(err || "");
       setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
