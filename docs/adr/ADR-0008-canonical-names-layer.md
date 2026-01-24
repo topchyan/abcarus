@@ -12,8 +12,8 @@ ABCarus uses multiple historical and modern sources for Turkish makam theory and
 - ordering sometimes varies in prose (e.g., `Kürdili Hicazkâr` vs `Hicazkâr Kürdili`).
 
 We need to compare and aggregate information across:
-- Aydemir DNA tables (`docs/makam_dna/AYDEMIR_MAKAM_DNA.json`),
-- scale/interval tables (`docs/makam_dna/AYDEMIR_SCALE_INTERVALS.json`),
+- Makam DNA tables (`docs/makam_dna/MAKAM_DNA.json`),
+- scale/interval tables (`docs/makam_dna/MAKAM_SCALE_INTERVALS.json`),
 - user repertoire files and external datasets.
 
 If we do not normalize names, comparisons become brittle and UI/analysis gets noisy and confusing.
@@ -44,7 +44,7 @@ All matches must be explainable via explicit alias entries.
 ### 3) Canonical spellings
 
 Canonical spellings should, by default, align with the spellings used in:
-- `docs/makam_dna/AYDEMIR_MAKAM_DNA.json`
+- `docs/makam_dna/MAKAM_DNA.json`
 
 If a canonical spelling changes, it must be updated in:
 - the canonical dictionary,
@@ -67,4 +67,3 @@ When used in code, canonicalization should:
 - normalize input for lookup (lowercase + strip diacritics + collapse whitespace/punctuation),
 - resolve to canonical name only if an explicit alias matches,
 - otherwise return the original input (or a structured “unknown” result) without guessing.
-

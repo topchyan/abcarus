@@ -32,7 +32,7 @@ import {
 } from "./transpose.mjs";
 import { resolvePerdeName } from "./perde53.mjs";
 import { resolvePerdeNamesFromAbcToken } from "./perde_by_abc.mjs";
-import { AYDEMIR_MAKAM_DNA } from "./makam_dna/aydemir_makam_dna.mjs";
+import { BUILTIN_MAKAM_DNA } from "./makam_dna/makam_dna.mjs";
 import { normalizeMeasuresLineBreaks, transformMeasuresPerLine } from "./measures.mjs";
 import {
   buildDefaultDrumVelocityMap,
@@ -153,6 +153,7 @@ const $intonationExplorerPlotLegend = document.getElementById("intonationExplore
 const $intonationExplorerDnaText = document.getElementById("intonationExplorerDnaText");
 const $intonationExplorerCopyDna = document.getElementById("intonationExplorerCopyDna");
 const $intonationExplorerCopyPitchSet = document.getElementById("intonationExplorerCopyPitchSet");
+const $intonationExplorerEditMakamDna = document.getElementById("intonationExplorerEditMakamDna");
 const $errorsIndicator = document.getElementById("errorsIndicator");
 const $errorsFocusMessage = document.getElementById("errorsFocusMessage");
 const $errorsPopover = document.getElementById("errorsPopover");
@@ -176,6 +177,13 @@ const $setListHeader = document.getElementById("setListHeader");
 const $setListClear = document.getElementById("setListClear");
 const $setListSaveAbc = document.getElementById("setListSaveAbc");
 const $setListExportPdf = document.getElementById("setListExportPdf");
+const $makamDnaModal = document.getElementById("makamDnaModal");
+const $makamDnaClose = document.getElementById("makamDnaClose");
+const $makamDnaEditor = document.getElementById("makamDnaEditor");
+const $makamDnaStatus = document.getElementById("makamDnaStatus");
+const $makamDnaResetBuiltin = document.getElementById("makamDnaResetBuiltin");
+const $makamDnaSave = document.getElementById("makamDnaSave");
+const $makamDnaCancel = document.getElementById("makamDnaCancel");
 
 const abcHighlightCompartment = new Compartment();
 const abcDiagnosticsCompartment = new Compartment();
@@ -3133,6 +3141,26 @@ let tuneBadgeText = "";
 let bufferStatusText = "";
 
 let appStatusText = "Ready";
+let startupUiLoading = true;
+let startupSettingsApplied = false;
+let startupAutoLoadStarted = false;
+let startupRecentOpenStarted = false;
+
+function markStartupUiReady() {
+  if (!startupUiLoading) return;
+  startupUiLoading = false;
+  renderUnifiedStatus();
+}
+
+function markStartupSettingsApplied() {
+  if (startupSettingsApplied) return;
+  startupSettingsApplied = true;
+  if (!startupRecentOpenStarted && !startupAutoLoadStarted) {
+    markStartupUiReady();
+  } else {
+    renderUnifiedStatus();
+  }
+}
 
 function computeWorkingCopyFileState() {
   const filePath = rawMode
@@ -3175,9 +3203,13 @@ function renderUnifiedStatus() {
 
   const fileState = computeWorkingCopyFileState();
 
-  const isReady = !displayNorm || /^ready\b/i.test(displayNorm);
-  const label = isReady ? fileState.label : display;
-  const kind = isReady ? fileState.kind : (fileState.kind === "conflict" ? "conflict" : (fileState.kind === "dirty" ? "dirty" : "ready"));
+  const isNeutral = !displayNorm || /^ready\b/i.test(displayNorm);
+  const label = startupUiLoading && isNeutral
+    ? "Loading…"
+    : (isNeutral ? "Ready" : display);
+  const kind = startupUiLoading && isNeutral
+    ? "loading"
+    : (isNeutral ? "ready" : (fileState.kind === "conflict" ? "conflict" : (fileState.kind === "dirty" ? "dirty" : "ready")));
 
   $status.textContent = label || "Ready";
 
@@ -3186,7 +3218,7 @@ function renderUnifiedStatus() {
   $status.classList.toggle("status-dirty", kind === "dirty");
   $status.classList.toggle("status-conflict", kind === "conflict");
 
-  const loading = String(label || "").toLowerCase().startsWith("loading the sound font");
+  const loading = kind === "loading" || String(label || "").toLowerCase().startsWith("loading the sound font");
   $status.classList.toggle("status-loading", loading);
 }
 
@@ -3642,7 +3674,7 @@ function clearIntonationExplorerPlot() {
 }
 
 function populateIntonationExplorerMakams() {
-  const list = Array.isArray(AYDEMIR_MAKAM_DNA) ? AYDEMIR_MAKAM_DNA : [];
+  const list = getMakamDnaEntries();
   const names = list
     .map((e) => String(e && e.makam ? e.makam : "").trim())
     .filter(Boolean)
@@ -3695,9 +3727,78 @@ function normalizeMakamKey(name) {
     .trim();
 }
 
-const aydemirMakamNameIndex = (() => {
-  const list = Array.isArray(AYDEMIR_MAKAM_DNA) ? AYDEMIR_MAKAM_DNA : [];
-  const names = list
+let activeMakamDnaEntries = Array.isArray(BUILTIN_MAKAM_DNA) ? BUILTIN_MAKAM_DNA : [];
+let activeMakamDnaUserText = "";
+let makamDnaLoaded = false;
+
+function getMakamDnaEntries() {
+  return Array.isArray(activeMakamDnaEntries) ? activeMakamDnaEntries : [];
+}
+
+function extractEntriesFromMakamDnaPayload(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object") return null;
+  if (Array.isArray(payload.entries)) return payload.entries;
+  if (payload.rawTable && Array.isArray(payload.rawTable.entries)) return payload.rawTable.entries;
+  return null;
+}
+
+function parseMakamDnaText(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return { ok: false, error: "Empty JSON." };
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : "Invalid JSON." };
+  }
+  const entries = extractEntriesFromMakamDnaPayload(parsed);
+  if (!Array.isArray(entries)) return { ok: false, error: "Expected an array (or an object with entries/rawTable.entries)." };
+  const cleaned = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue;
+    const makam = String(entry.makam || "").trim();
+    if (!makam) continue;
+    cleaned.push(entry);
+  }
+  if (!cleaned.length) return { ok: false, error: "No valid entries (each entry must include a non-empty makam)." };
+  return { ok: true, entries: cleaned };
+}
+
+function formatMakamDnaForEditor(entries) {
+  const today = new Date();
+  const iso = Number.isFinite(today.getTime()) ? today.toISOString().slice(0, 10) : "";
+  const wrapper = {
+    schemaVersion: 1,
+    updatedAt: iso || "",
+    rawTable: {
+      note: "User-edited dataset (local). Entries are used by Intonation Explorer for makam overlays/labels.",
+      entries: Array.isArray(entries) ? entries : [],
+    },
+  };
+  return JSON.stringify(wrapper, null, 2);
+}
+
+async function ensureMakamDnaLoaded() {
+  if (makamDnaLoaded) return;
+  makamDnaLoaded = true;
+  if (!window.api || typeof window.api.getMakamDnaUser !== "function") return;
+  try {
+    const res = await window.api.getMakamDnaUser();
+    if (!res || !res.ok || !res.text) return;
+    const parsed = parseMakamDnaText(String(res.text || ""));
+    if (!parsed.ok) return;
+    activeMakamDnaEntries = parsed.entries;
+    activeMakamDnaUserText = String(res.text || "");
+  } catch (e) {
+    logErr(e && e.message ? e.message : String(e));
+  }
+}
+
+let makamDnaNameIndex = { idx: new Map(), sorted: [] };
+
+function rebuildMakamDnaNameIndex() {
+  const names = getMakamDnaEntries()
     .map((e) => String(e && e.makam ? e.makam : "").trim())
     .filter(Boolean);
   const sorted = names
@@ -3709,17 +3810,19 @@ const aydemirMakamNameIndex = (() => {
     if (!key) continue;
     if (!idx.has(key)) idx.set(key, name);
   }
-  return { idx, sorted };
-})();
+  makamDnaNameIndex = { idx, sorted };
+}
 
-function detectAydemirMakamFromTuneText(tuneText) {
+rebuildMakamDnaNameIndex();
+
+function detectMakamFromTuneText(tuneText) {
   const text = String(tuneText || "");
   if (!text.trim()) return "";
   const mT = text.match(/(?:^|\n)T:\s*([^\r\n]+)/);
   const mR = text.match(/(?:^|\n)R:\s*([^\r\n]+)/);
   const hay = normalizeMakamKey([mR ? mR[1] : "", mT ? mT[1] : ""].filter(Boolean).join(" "));
   if (!hay) return "";
-  for (const name of aydemirMakamNameIndex.sorted) {
+  for (const name of makamDnaNameIndex.sorted) {
     const key = normalizeMakamKey(name);
     if (!key) continue;
     if (hay.includes(key)) return name;
@@ -3773,7 +3876,7 @@ function buildPerdeNameIndex() {
 
 const perdeNameIndex = buildPerdeNameIndex();
 
-function parseAydemirPerdeField(fieldText) {
+function parseMakamDnaPerdeField(fieldText) {
   const raw = String(fieldText || "");
   const name = raw.split("(")[0].trim();
   const lower = raw.toLowerCase();
@@ -3812,10 +3915,10 @@ function pickOverlayAbs53ForPerde(perdeName, { hint, observedMinAbs, observedMax
   return best ? best.cand.abs53 : null;
 }
 
-function getAydemirMakamEntry(name) {
+function getMakamDnaEntry(name) {
   const target = String(name || "").trim().toLowerCase();
   if (!target) return null;
-  return (AYDEMIR_MAKAM_DNA || []).find((e) => String(e.makam || "").trim().toLowerCase() === target) || null;
+  return getMakamDnaEntries().find((e) => String(e.makam || "").trim().toLowerCase() === target) || null;
 }
 
 function renderIntonationSeyirPlot({ noteEvents, baseStep, overlayMakamName } = {}) {
@@ -3863,7 +3966,7 @@ function renderIntonationSeyirPlot({ noteEvents, baseStep, overlayMakamName } = 
 
   // Overlay: durak / guclu / yeden as horizontal guides (manual compare mode).
   if ($intonationExplorerPlotOverlay) $intonationExplorerPlotOverlay.innerHTML = "";
-  const overlayEntry = overlayMakamName ? getAydemirMakamEntry(overlayMakamName) : null;
+  const overlayEntry = overlayMakamName ? getMakamDnaEntry(overlayMakamName) : null;
   if ($intonationExplorerPlotOverlay && overlayEntry) {
     const mkLine = (y, color, dash, label) => {
       const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
@@ -3879,9 +3982,9 @@ function renderIntonationSeyirPlot({ noteEvents, baseStep, overlayMakamName } = 
       return line;
     };
 
-    const durak = parseAydemirPerdeField(overlayEntry.durak);
-    const guclu = parseAydemirPerdeField(overlayEntry.guclu);
-    const yeden = parseAydemirPerdeField(overlayEntry.yeden);
+    const durak = parseMakamDnaPerdeField(overlayEntry.durak);
+    const guclu = parseMakamDnaPerdeField(overlayEntry.guclu);
+    const yeden = parseMakamDnaPerdeField(overlayEntry.yeden);
 
     const durakAbs = pickOverlayAbs53ForPerde(durak.name, { hint: durak.hint, observedMinAbs: minAbs, observedMaxAbs: maxAbs });
     const gucluAbs = pickOverlayAbs53ForPerde(guclu.name, { hint: guclu.hint, observedMinAbs: minAbs, observedMaxAbs: maxAbs });
@@ -4841,7 +4944,7 @@ async function refreshIntonationExplorer() {
 	    // preselect both dropdowns once (convenience only).
 	    try {
 	      if (!intonationExplorerAutoMakamApplied && !intonationExplorerDeclaredMakam && !intonationExplorerCompareMakam) {
-	        const detected = detectAydemirMakamFromTuneText(tuneText);
+	        const detected = detectMakamFromTuneText(tuneText);
 	        if (detected) {
 	          intonationExplorerAutoMakamApplied = true;
 	          intonationExplorerDeclaredMakam = detected;
@@ -4887,15 +4990,15 @@ async function refreshIntonationExplorer() {
 			    const tRoles0 = perfOn ? perfNowMs() : 0;
 			    let roleAbs53Map = null;
 			    try {
-			      const entry = getAydemirMakamEntry(intonationExplorerDeclaredMakam);
+			      const entry = getMakamDnaEntry(intonationExplorerDeclaredMakam);
 		      const events = Array.isArray(scanned.noteEvents) ? scanned.noteEvents : [];
 		      const absVals = events.map((ev) => Number(ev.abs53)).filter((n) => Number.isFinite(n));
 		      const observedMinAbs = absVals.length ? Math.min(...absVals) : null;
 		      const observedMaxAbs = absVals.length ? Math.max(...absVals) : null;
 			      if (entry && (entry.durak || entry.guclu || entry.yeden)) {
-			        const durak = parseAydemirPerdeField(entry.durak);
-			        const guclu = parseAydemirPerdeField(entry.guclu);
-			        const yeden = parseAydemirPerdeField(entry.yeden);
+			        const durak = parseMakamDnaPerdeField(entry.durak);
+			        const guclu = parseMakamDnaPerdeField(entry.guclu);
+			        const yeden = parseMakamDnaPerdeField(entry.yeden);
 			        const durakAbs = durak && durak.name ? pickOverlayAbs53ForPerde(durak.name, { hint: durak.hint, observedMinAbs, observedMaxAbs }) : null;
 			        const gucluAbs = guclu && guclu.name ? pickOverlayAbs53ForPerde(guclu.name, { hint: guclu.hint, observedMinAbs, observedMaxAbs }) : null;
 			        const yedenAbs = yeden && yeden.name ? pickOverlayAbs53ForPerde(yeden.name, { hint: yeden.hint, observedMinAbs, observedMaxAbs }) : null;
@@ -4928,7 +5031,7 @@ async function refreshIntonationExplorer() {
       };
       setIntonationExplorerDnaUi({ dnaText: "ready", pitchSetText: "ready" });
 
-      // Minimal "seyir" plot (observed trajectory + optional Aydemir overlay).
+      // Minimal "seyir" plot (observed trajectory + optional DNA overlay).
       try {
         const tPlot0 = perfOn ? perfNowMs() : 0;
         renderIntonationSeyirPlot({
@@ -4957,7 +5060,6 @@ function showIntonationExplorerPanel() {
   ensureToolPanelDefaultLeftPosition($intonationExplorerPanel);
   setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
   clearIntonationExplorerPlot();
-  populateIntonationExplorerMakams();
   if ($intonationExplorerBaseMode) $intonationExplorerBaseMode.value = "auto";
   if ($intonationExplorerBaseManual && !$intonationExplorerBaseManual.value) $intonationExplorerBaseManual.value = DEFAULT_INT_BASE;
   if ($intonationExplorerSort) $intonationExplorerSort.value = "first";
@@ -4966,8 +5068,16 @@ function showIntonationExplorerPanel() {
   intonationExplorerSkipGraceNotes = true;
   intonationExplorerAutoMakamApplied = false;
   intonationExplorerRoleAbs53Map = null;
-  updateIntonationBaseUi();
-  refreshIntonationExplorer().catch(() => {});
+  Promise.resolve()
+    .then(() => ensureMakamDnaLoaded())
+    .then(() => {
+      rebuildMakamDnaNameIndex();
+      populateIntonationExplorerMakams();
+    })
+    .finally(() => {
+      updateIntonationBaseUi();
+      refreshIntonationExplorer().catch(() => {});
+    });
 }
 
 function ensureToolPanelDefaultLeftPosition(panelEl) {
@@ -5591,14 +5701,25 @@ function refreshErrorsNow() {
 }
 
 async function loadLastRecentEntry() {
-  if (!window.api || typeof window.api.getLastRecent !== "function") return;
+  if (!window.api || typeof window.api.getLastRecent !== "function") return false;
   const res = await window.api.getLastRecent();
-  if (!res || !res.entry) return;
+  if (!res || !res.entry) return false;
   if (res.type === "tune") {
+    startupRecentOpenStarted = true;
     await openRecentTune(res.entry);
-  } else if (res.type === "file") {
-    await openRecentFile(res.entry);
+    return true;
   }
+  if (res.type === "file") {
+    startupRecentOpenStarted = true;
+    await openRecentFile(res.entry);
+    return true;
+  }
+  if (res.type === "folder") {
+    startupRecentOpenStarted = true;
+    await openRecentFolder(res.entry);
+    return true;
+  }
+  return false;
 }
 
 function setEditorValue(text) {
@@ -8329,6 +8450,8 @@ async function refreshLibraryIndex() {
 
 async function loadLibraryFromFolder(folder) {
   if (!window.api || !folder) return;
+  startupAutoLoadStarted = true;
+  renderUnifiedStatus();
   const perfOn = isStartupPerfEnabled();
   const t0 = perfOn ? perfNowMs() : 0;
   if (perfOn) logStartupPerf("loadLibraryFromFolder() start", { folder: abbreviatePathForLog(folder, 3) });
@@ -8413,9 +8536,11 @@ async function loadLibraryFromFolder(folder) {
     }
     updateLibraryStatus();
     if (perfOn) logStartupPerf("loadLibraryFromFolder() done", { ms: Math.round(perfNowMs() - t0) });
+    markStartupUiReady();
 		  } catch (e) {
 		    setScanStatus("Scan failed");
 		    logErr((e && e.stack) ? e.stack : String(e));
+        markStartupUiReady();
 		  }
 }
 
@@ -16578,6 +16703,12 @@ if ($intonationExplorerCopyPitchSet) {
     }
   });
 }
+if ($intonationExplorerEditMakamDna) {
+  $intonationExplorerEditMakamDna.addEventListener("click", async () => {
+    try { if ($intonationExplorerMenu) $intonationExplorerMenu.classList.add("hidden"); } catch {}
+    await openMakamDnaModal();
+  });
+}
 if ($intonationExplorerBaseMode) {
   $intonationExplorerBaseMode.addEventListener("change", () => {
     updateIntonationBaseUi();
@@ -16635,9 +16766,14 @@ if (window.api && typeof window.api.getSettings === "function") {
 	      showDisclaimerIfNeeded(settings);
 	      scheduleStartupLayoutReset();
 	      logStartupPerf("apply settings: end");
+        markStartupSettingsApplied();
 	    }
 	    suppressLibraryPrefsWrite = false;
-	  }).catch(() => { suppressLibraryPrefsWrite = false; });
+      if (!settings) markStartupSettingsApplied();
+	  }).catch(() => {
+      suppressLibraryPrefsWrite = false;
+      markStartupSettingsApplied();
+    });
 }
 
 if (window.api && typeof window.api.getFontDirs === "function") {
@@ -16818,6 +16954,51 @@ function closeTemplatesModal() {
   if ($templatesPreviewText) $templatesPreviewText.textContent = "";
 }
 
+function isMakamDnaModalOpen() {
+  return Boolean($makamDnaModal && $makamDnaModal.classList.contains("open"));
+}
+
+function setMakamDnaModalStatus(message, { error = false } = {}) {
+  if (!$makamDnaStatus) return;
+  const text = String(message || "");
+  $makamDnaStatus.textContent = text;
+  $makamDnaStatus.classList.toggle("error", Boolean(error && text));
+}
+
+function closeMakamDnaModal() {
+  if (!$makamDnaModal) return;
+  $makamDnaModal.classList.remove("open");
+  $makamDnaModal.setAttribute("aria-hidden", "true");
+  setMakamDnaModalStatus("");
+}
+
+async function openMakamDnaModal() {
+  if (!$makamDnaModal || !$makamDnaEditor) return;
+  await ensureMakamDnaLoaded();
+  // If no user dataset exists, show a formatted wrapper around the current in-memory entries.
+  const text = activeMakamDnaUserText && activeMakamDnaUserText.trim()
+    ? activeMakamDnaUserText
+    : formatMakamDnaForEditor(getMakamDnaEntries());
+  $makamDnaEditor.value = text;
+  setMakamDnaModalStatus("");
+  $makamDnaModal.classList.add("open");
+  $makamDnaModal.setAttribute("aria-hidden", "false");
+  try { $makamDnaEditor.focus(); } catch {}
+}
+
+async function applyUserMakamDnaTextAndRefresh(text) {
+  const parsed = parseMakamDnaText(text);
+  if (!parsed.ok) return { ok: false, error: parsed.error || "Invalid Makam DNA." };
+  activeMakamDnaEntries = parsed.entries;
+  activeMakamDnaUserText = String(text || "");
+  rebuildMakamDnaNameIndex();
+  populateIntonationExplorerMakams();
+  if (intonationExplorerVisible) {
+    try { await refreshIntonationExplorer(); } catch {}
+  }
+  return { ok: true };
+}
+
 function renderTemplatesList() {
   if (!$templatesList) return;
   const q = $templatesSearch ? String($templatesSearch.value || "").trim().toLowerCase() : "";
@@ -16994,7 +17175,21 @@ requestAnimationFrame(() => {
   try { applyRightSplitSizesFromRatio(); } catch {}
 });
 
-loadLastRecentEntry();
+loadLastRecentEntry()
+  .then((didStart) => {
+    // Do not mark Ready here: settings may auto-load a library folder.
+    // If settings are unavailable, fall back to Ready only when there was no recent to open.
+    if (!didStart && !(window.api && typeof window.api.getSettings === "function")) {
+      markStartupUiReady();
+    } else {
+      renderUnifiedStatus();
+    }
+  })
+  .catch(() => {
+    // Keep loading until settings apply decides, unless settings are unavailable.
+    if (!(window.api && typeof window.api.getSettings === "function")) markStartupUiReady();
+    else renderUnifiedStatus();
+  });
 
 if ($errorList) {
   $errorList.addEventListener("click", async (e) => {
@@ -17192,6 +17387,100 @@ if ($templatesModal) {
       e.preventDefault();
       e.stopPropagation();
       $templatesInsert.click();
+    }
+  });
+}
+
+if ($makamDnaClose) {
+  $makamDnaClose.addEventListener("click", () => {
+    closeMakamDnaModal();
+  });
+}
+
+if ($makamDnaCancel) {
+  $makamDnaCancel.addEventListener("click", () => {
+    closeMakamDnaModal();
+  });
+}
+
+if ($makamDnaResetBuiltin) {
+  $makamDnaResetBuiltin.addEventListener("click", async () => {
+    setMakamDnaModalStatus("");
+    if (!window.api || typeof window.api.clearMakamDnaUser !== "function") {
+      setMakamDnaModalStatus("Not available in this build.", { error: true });
+      return;
+    }
+    try {
+      const res = await window.api.clearMakamDnaUser();
+      if (!res || !res.ok) {
+        setMakamDnaModalStatus(res && res.error ? String(res.error) : "Reset failed.", { error: true });
+        return;
+      }
+      activeMakamDnaEntries = Array.isArray(BUILTIN_MAKAM_DNA) ? BUILTIN_MAKAM_DNA : [];
+      activeMakamDnaUserText = "";
+      rebuildMakamDnaNameIndex();
+      populateIntonationExplorerMakams();
+      if ($makamDnaEditor) $makamDnaEditor.value = formatMakamDnaForEditor(getMakamDnaEntries());
+      if (intonationExplorerVisible) refreshIntonationExplorer().catch(() => {});
+      setMakamDnaModalStatus("Reset to built-in.");
+    } catch (e) {
+      logErr(e && e.message ? e.message : String(e));
+      setMakamDnaModalStatus("Reset failed.", { error: true });
+    }
+  });
+}
+
+if ($makamDnaSave) {
+  $makamDnaSave.addEventListener("click", async () => {
+    setMakamDnaModalStatus("");
+    if (!$makamDnaEditor) return;
+    const text = String($makamDnaEditor.value || "");
+    const parsed = parseMakamDnaText(text);
+    if (!parsed.ok) {
+      setMakamDnaModalStatus(parsed.error || "Invalid Makam DNA.", { error: true });
+      return;
+    }
+    if (!window.api || typeof window.api.saveMakamDnaUser !== "function") {
+      setMakamDnaModalStatus("Not available in this build.", { error: true });
+      return;
+    }
+    try {
+      const res = await window.api.saveMakamDnaUser(text);
+      if (!res || !res.ok) {
+        setMakamDnaModalStatus(res && res.error ? String(res.error) : "Save failed.", { error: true });
+        return;
+      }
+      const applied = await applyUserMakamDnaTextAndRefresh(text);
+      if (!applied.ok) {
+        setMakamDnaModalStatus(applied.error || "Save failed.", { error: true });
+        return;
+      }
+      closeMakamDnaModal();
+      try { showToast("Saved Makam DNA.", 1800); } catch {}
+    } catch (e) {
+      logErr(e && e.message ? e.message : String(e));
+      setMakamDnaModalStatus("Save failed.", { error: true });
+    }
+  });
+}
+
+if ($makamDnaModal) {
+  $makamDnaModal.addEventListener("click", (e) => {
+    if (e.target === $makamDnaModal) closeMakamDnaModal();
+  });
+  $makamDnaModal.addEventListener("keydown", (e) => {
+    if (!e) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeMakamDnaModal();
+      return;
+    }
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key === "Enter" && $makamDnaSave) {
+      e.preventDefault();
+      e.stopPropagation();
+      $makamDnaSave.click();
     }
   });
 }

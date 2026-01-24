@@ -2113,6 +2113,42 @@ svg {
   display: block;
 }
 
+.modal-card.makam-dna-card {
+  width: min(980px, 96vw);
+  height: min(720px, 92vh);
+  min-width: 680px;
+  min-height: 420px;
+  max-width: 96vw;
+  max-height: 92vh;
+}
+
+.makam-dna-hint {
+  font-size: 12px;
+  color: var(--muted-text);
+  line-height: 1.35;
+}
+
+#makamDnaEditor {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 10px;
+}
+
+.modal-status {
+  font-size: 12px;
+  color: var(--muted-text);
+  min-height: 1.2em;
+}
+
+.modal-status.error {
+  color: #b71c1c;
+}
+
 .settings-header-controls {
   margin-left: auto;
   display: inline-flex;

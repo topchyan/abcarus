@@ -281,6 +281,7 @@
 	          <div id="intonationExplorerMenu" class="tool-panel-menu hidden" role="menu" aria-label="Intonation Explorer actions">
 	            <button id="intonationExplorerCopyDna" type="button" role="menuitem">Copy DNA</button>
 	            <button id="intonationExplorerCopyPitchSet" type="button" role="menuitem">Copy pitchSet</button>
+	            <button id="intonationExplorerEditMakamDna" type="button" role="menuitem">Edit Makam DNA…</button>
 	          </div>
 	          <button id="intonationExplorerClose" type="button" class="tool-panel-close" aria-label="Close Explorer">×</button>
 	        </div>
@@ -308,10 +309,10 @@
 	            <option value="abc">ABC spelling</option>
 	          </select>
 	        </label>
-		        <label class="tool-panel-control">
-		          <span>Declared makam (Aydemir)</span>
-		          <select id="intonationExplorerDeclaredMakam" aria-label="Declared makam">
-		            <option value="" selected>None</option>
+	        <label class="tool-panel-control">
+	          <span>Declared makam (DNA)</span>
+	          <select id="intonationExplorerDeclaredMakam" aria-label="Declared makam">
+	            <option value="" selected>None</option>
 	          </select>
 	        </label>
 	        <label class="tool-panel-control">
@@ -348,7 +349,7 @@
 
   <footer class="taskbar">
 		    <div class="taskbar-left">
-		      <div id="status">Ready</div>
+		      <div id="status" class="status-loading">Loading…</div>
 		      <div id="hoverStatus" class="hover-status" aria-live="polite"></div>
 		      <div id="toolStatus" class="tool-status" aria-live="polite"></div>
 		    </div>
@@ -387,6 +388,29 @@
       <div class="templates-actions">
         <button id="templatesInsert" type="button" disabled>Insert</button>
         <button id="templatesCancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="makamDnaModal" aria-hidden="true">
+    <div class="modal-card makam-dna-card" role="dialog" aria-label="Makam DNA">
+      <div class="modal-header">
+        <div class="modal-title">Makam DNA</div>
+        <button id="makamDnaClose" class="modal-close" type="button" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="makam-dna-hint">
+          Edit the Makam DNA dataset as JSON. This affects only your local userData and does not modify tunes.
+        </div>
+        <textarea id="makamDnaEditor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+        <div id="makamDnaStatus" class="modal-status" aria-live="polite"></div>
+      </div>
+      <div class="modal-footer">
+        <div class="modal-footer-left">
+          <button id="makamDnaResetBuiltin" type="button">Reset to built-in</button>
+        </div>
+        <button id="makamDnaSave" type="button" class="primary">Save</button>
+        <button id="makamDnaCancel" type="button">Cancel</button>
       </div>
     </div>
   </div>
