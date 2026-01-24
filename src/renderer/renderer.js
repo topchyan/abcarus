@@ -3540,6 +3540,7 @@ let intonationExplorerBaseMode = "auto";
 let intonationExplorerSortMode = "count";
 let intonationExplorerSkipGraceNotes = true;
 let intonationExplorerIs53 = false;
+let lastIntonationDnaLogText = "";
 
 let lastSvgIntonationBarEls = [];
 let lastSvgIntonationNoteEls = [];
@@ -4344,8 +4345,11 @@ async function refreshIntonationExplorer() {
           is53: intonationExplorerIs53,
         });
         window.__abcarusLastIntonationDnaText = dnaText;
-        // Keep it readable in DevTools and easy to copy.
-        console.info(dnaText);
+        // Keep it readable in DevTools and easy to copy, but avoid spamming on repeated Refresh.
+        if (dnaText && dnaText !== lastIntonationDnaLogText) {
+          lastIntonationDnaLogText = dnaText;
+          console.info(dnaText);
+        }
       } catch {}
 	  } catch (err) {
 	    const msg = (err && err.message) ? String(err.message) : String(err || "");
