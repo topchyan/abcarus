@@ -3938,7 +3938,7 @@ function renderIntonationSeyirPlot({ noteEvents, baseStep, overlayMakamName } = 
     const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     c.setAttribute("cx", cx.toFixed(2));
     c.setAttribute("cy", cy.toFixed(2));
-    c.setAttribute("r", it.kind === "start" || it.kind === "end" ? "4.2" : "3.6");
+    c.setAttribute("r", it.kind === "start" || it.kind === "end" ? "5.2" : "4.4");
     let fill = "rgba(0,0,0,0.5)";
     if (it.kind === "peak") fill = "rgba(200,60,60,0.9)";
     if (it.kind === "trough") fill = "rgba(60,110,210,0.9)";
@@ -3954,13 +3954,18 @@ function renderIntonationSeyirPlot({ noteEvents, baseStep, overlayMakamName } = 
     const perde = intonationExplorerIs53 ? (resolvePerdeName({ pc53: mod53(e.pc53 || 0), octave: e.octave }) || "") : "";
     const role = (intonationExplorerRoleAbs53Map && intonationExplorerRoleAbs53Map.get(String(abs53))) ? intonationExplorerRoleAbs53Map.get(String(abs53)) : "";
     const perdePart = perde ? `; perde=${perde}` : "";
-    const rolePart = role ? `; role=${role}` : "";
-    c.setAttribute("title", `${it.kind}: ${String(e.spelling || "")} (pc53=${pc})${perdePart}${rolePart}`);
-    c.style.cursor = "pointer";
-    c.addEventListener("click", () => {
-      if (!Number.isFinite(Number(e.start))) return;
-      try {
-        // Sync table + multi-occurrence highlights for this pitch.
+	    const rolePart = role ? `; role=${role}` : "";
+	    c.setAttribute("title", `${it.kind}: ${String(e.spelling || "")} (pc53=${pc})${perdePart}${rolePart}`);
+	    c.style.cursor = "pointer";
+	    c.addEventListener("mouseenter", () => {
+	      try {
+	        if (Number.isFinite(Number(abs53))) activateIntonationExplorerRow(abs53);
+	      } catch {}
+	    });
+	    c.addEventListener("click", () => {
+	      if (!Number.isFinite(Number(e.start))) return;
+	      try {
+	        // Sync table + multi-occurrence highlights for this pitch.
         activateIntonationExplorerRow(abs53);
       } catch {}
       try {
@@ -4679,16 +4684,18 @@ function renderIntonationExplorerRows(rows, { is53, roleAbs53Map } = {}) {
     if (intonationExplorerActiveStep != null && String(row.step) === String(intonationExplorerActiveStep)) {
       tr.classList.add("active");
     }
-    const pc = document.createElement("td");
-    const pcRel = document.createElement("span");
-    pcRel.textContent = formatAeuLabel(row.normalizedStep);
-    pc.append(pcRel);
-    if (Number(row.normalizedStep) !== Number(row.absStep)) {
-      const pcAbs = document.createElement("span");
-      pcAbs.textContent = ` (${formatAeuLabel(row.absStep)})`;
-      pcAbs.className = "subtle";
-      pc.appendChild(pcAbs);
-    }
+	    const pc = document.createElement("td");
+	    const pcRel = document.createElement("span");
+	    const relLabel = formatAeuLabel(row.normalizedStep);
+	    const absLabel = formatAeuLabel(row.absStep);
+	    pcRel.textContent = relLabel;
+	    pc.append(pcRel);
+	    if (relLabel !== absLabel) {
+	      const pcAbs = document.createElement("span");
+	      pcAbs.textContent = ` (${absLabel})`;
+	      pcAbs.className = "subtle";
+	      pc.appendChild(pcAbs);
+	    }
     const perde = document.createElement("td");
     let perdeName = "";
     if (is53) {
@@ -4874,28 +4881,28 @@ async function refreshIntonationExplorer() {
 		    intonationExplorerRows = rows;
 		    intonationExplorerActiveStep = null;
 
-		    // Optional: tag observed steps that match the declared makam roles (durak/güçlü/yeden).
-		    const tRoles0 = perfOn ? perfNowMs() : 0;
-		    let roleAbs53Map = null;
-		    try {
-		      const entry = getAydemirMakamEntry(intonationExplorerDeclaredMakam);
+			    // Optional: tag observed steps that match the declared makam roles (durak/güçlü/yeden).
+			    const tRoles0 = perfOn ? perfNowMs() : 0;
+			    let roleAbs53Map = null;
+			    try {
+			      const entry = getAydemirMakamEntry(intonationExplorerDeclaredMakam);
 		      const events = Array.isArray(scanned.noteEvents) ? scanned.noteEvents : [];
 		      const absVals = events.map((ev) => Number(ev.abs53)).filter((n) => Number.isFinite(n));
 		      const observedMinAbs = absVals.length ? Math.min(...absVals) : null;
 		      const observedMaxAbs = absVals.length ? Math.max(...absVals) : null;
-		      if (entry && (entry.tonic || entry.dominant || entry.leading_tone)) {
-		        const durak = parseAydemirPerdeField(entry.tonic);
-		        const guclu = parseAydemirPerdeField(entry.dominant);
-		        const yeden = parseAydemirPerdeField(entry.leading_tone);
-		        const durakAbs = durak && durak.name ? pickOverlayAbs53ForPerde(durak.name, { hint: durak.hint, observedMinAbs, observedMaxAbs }) : null;
-		        const gucluAbs = guclu && guclu.name ? pickOverlayAbs53ForPerde(guclu.name, { hint: guclu.hint, observedMinAbs, observedMaxAbs }) : null;
-		        const yedenAbs = yeden && yeden.name ? pickOverlayAbs53ForPerde(yeden.name, { hint: yeden.hint, observedMinAbs, observedMaxAbs }) : null;
-		        roleAbs53Map = new Map();
-		        if (Number.isFinite(durakAbs)) roleAbs53Map.set(String(durakAbs), "durak");
-		        if (Number.isFinite(gucluAbs)) roleAbs53Map.set(String(gucluAbs), "güçlü");
-		        if (Number.isFinite(yedenAbs)) roleAbs53Map.set(String(yedenAbs), "yeden");
-		      }
-		    } catch {}
+			      if (entry && (entry.durak || entry.guclu || entry.yeden)) {
+			        const durak = parseAydemirPerdeField(entry.durak);
+			        const guclu = parseAydemirPerdeField(entry.guclu);
+			        const yeden = parseAydemirPerdeField(entry.yeden);
+			        const durakAbs = durak && durak.name ? pickOverlayAbs53ForPerde(durak.name, { hint: durak.hint, observedMinAbs, observedMaxAbs }) : null;
+			        const gucluAbs = guclu && guclu.name ? pickOverlayAbs53ForPerde(guclu.name, { hint: guclu.hint, observedMinAbs, observedMaxAbs }) : null;
+			        const yedenAbs = yeden && yeden.name ? pickOverlayAbs53ForPerde(yeden.name, { hint: yeden.hint, observedMinAbs, observedMaxAbs }) : null;
+			        roleAbs53Map = new Map();
+			        if (Number.isFinite(durakAbs)) roleAbs53Map.set(String(durakAbs), "durak");
+			        if (Number.isFinite(gucluAbs)) roleAbs53Map.set(String(gucluAbs), "güçlü");
+			        if (Number.isFinite(yedenAbs)) roleAbs53Map.set(String(yedenAbs), "yeden");
+			      }
+			    } catch {}
 		    intonationExplorerRoleAbs53Map = roleAbs53Map;
 		    if (perfOn) logIntonationPerf("roles", { ms: Math.round(perfNowMs() - tRoles0), has: Boolean(roleAbs53Map && roleAbs53Map.size) });
 		    const tRender0 = perfOn ? perfNowMs() : 0;

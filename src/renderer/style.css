@@ -1842,7 +1842,7 @@ svg {
 }
 
 .tool-panel-base-row input {
-  flex: 0 0 120px;
+  flex: 0 0 92px;
 }
 
 .tool-panel-base-row input[disabled] {
@@ -1933,6 +1933,11 @@ svg {
   background: rgba(0, 0, 0, 0.015);
 }
 
+#intonationExplorerPlotPoints circle:hover {
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 2.2;
+}
+
 .tool-panel-plot-legend {
   font-size: 12px;
   color: var(--muted-text);
@@ -1946,6 +1951,11 @@ svg {
   letter-spacing: 0.04em;
   padding-bottom: 6px;
   color: var(--muted-text);
+}
+
+.tool-panel-table th:last-child {
+  text-align: right;
+  padding-right: 8px;
 }
 
 .tool-panel-table td {
