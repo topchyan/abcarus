@@ -4195,17 +4195,33 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 	    }
 
       // Reset bar-accidental memory at barlines.
-      if (body[idx] === "|") {
-        barAccidentals = new Map();
-        idx += 1;
-        continue;
-      }
+	      if (body[idx] === "|") {
+	        barAccidentals = new Map();
+	        idx += 1;
+	        continue;
+	      }
 
-	    const note = parseNoteTokenAt53(body, idx);
-	    if (!note) {
-	      idx += 1;
-	      continue;
-	    }
+	      // Perf: avoid running the full note parser at every character.
+	      // Only attempt parsing when the current char could plausibly start a note token.
+	      {
+	        const ch = body[idx];
+	        const couldStart =
+	          ch === "^"
+	          || ch === "_"
+	          || ch === "="
+	          || (ch >= "A" && ch <= "G")
+	          || (ch >= "a" && ch <= "g");
+	        if (!couldStart) {
+	          idx += 1;
+	          continue;
+	        }
+	      }
+
+		    const note = parseNoteTokenAt53(body, idx);
+		    if (!note) {
+		      idx += 1;
+		      continue;
+		    }
     const letter = note.letter ? note.letter.toUpperCase() : "";
     if (!letter) {
       idx = note.end;
@@ -4585,10 +4601,13 @@ function renderIntonationExplorerRows(rows, { is53, roleAbs53Map } = {}) {
     const pc = document.createElement("td");
     const pcRel = document.createElement("span");
     pcRel.textContent = formatAeuLabel(row.normalizedStep);
-    const pcAbs = document.createElement("span");
-    pcAbs.textContent = ` (${formatAeuLabel(row.absStep)})`;
-    pcAbs.className = "subtle";
-    pc.append(pcRel, pcAbs);
+    pc.append(pcRel);
+    if (Number(row.normalizedStep) !== Number(row.absStep)) {
+      const pcAbs = document.createElement("span");
+      pcAbs.textContent = ` (${formatAeuLabel(row.absStep)})`;
+      pcAbs.className = "subtle";
+      pc.appendChild(pcAbs);
+    }
     const perde = document.createElement("td");
     let perdeName = "";
     if (is53) {
