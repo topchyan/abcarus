@@ -279,20 +279,20 @@
         <span class="tool-panel-title">Intonation Explorer</span>
         <button id="intonationExplorerClose" type="button" class="tool-panel-close" aria-label="Close Explorer">×</button>
       </div>
-	      <div class="tool-panel-controls">
-	        <label class="tool-panel-control">
-	          <span>Tonal Base</span>
-	          <div class="tool-panel-base-row">
-	            <select id="intonationExplorerBaseMode" aria-label="Tonal base mode">
-	              <option value="auto" selected>Auto</option>
-	              <option value="manual">Manual</option>
-	              <option value="fromK">From K:</option>
-	            </select>
-	            <input id="intonationExplorerBaseManual" type="text" placeholder="0–52 (e.g. 0 or pc53=0)" />
-	          </div>
-	        </label>
-	        <label class="tool-panel-control">
-	          <span>Declared makam (Aydemir)</span>
+		      <div class="tool-panel-controls">
+		        <label class="tool-panel-control tool-panel-span-2">
+		          <span>Tonal Base</span>
+		          <div class="tool-panel-base-row">
+		            <select id="intonationExplorerBaseMode" aria-label="Tonal base mode">
+		              <option value="auto" selected>Auto</option>
+		              <option value="manual">Manual</option>
+		              <option value="fromK">From K:</option>
+		            </select>
+		            <input id="intonationExplorerBaseManual" type="text" placeholder="0–52 (e.g. 0 or pc53=0)" />
+		          </div>
+		        </label>
+		        <label class="tool-panel-control">
+		          <span>Declared makam (Aydemir)</span>
 	          <select id="intonationExplorerDeclaredMakam" aria-label="Declared makam">
 	            <option value="" selected>None</option>
 	          </select>
@@ -303,26 +303,25 @@
 	            <option value="" selected>None</option>
 	          </select>
 	        </label>
-	        <label class="tool-panel-control">
-	          <span>Sort</span>
-	          <select id="intonationExplorerSort" aria-label="Sort mode">
-	            <option value="count" selected>Count</option>
-            <option value="first">First appearance</option>
-            <option value="pitch">Scale (low→high)</option>
-            <option value="rel">pc53 (relative)</option>
-            <option value="abs">pc53 (absolute)</option>
-            <option value="abc">ABC spelling</option>
-          </select>
-        </label>
-        <label class="tool-panel-control tool-panel-control-inline">
-          <span>Options</span>
-          <label class="tool-panel-checkbox">
-            <input id="intonationExplorerSkipGrace" type="checkbox" checked />
-            <span>Ignore grace notes</span>
-          </label>
-        </label>
-        <button id="intonationExplorerRefresh" type="button">Refresh</button>
-      </div>
+		        <label class="tool-panel-control">
+		          <span>Sort</span>
+		          <select id="intonationExplorerSort" aria-label="Sort mode">
+		            <option value="count" selected>Count</option>
+	            <option value="first">First appearance</option>
+	            <option value="pitch">Scale (low→high)</option>
+	            <option value="rel">pc53 (relative)</option>
+	            <option value="abs">pc53 (absolute)</option>
+	            <option value="abc">ABC spelling</option>
+	          </select>
+	        </label>
+	        <div class="tool-panel-options-row">
+	          <label class="tool-panel-checkbox">
+	            <input id="intonationExplorerSkipGrace" type="checkbox" checked />
+	            <span>Ignore grace notes</span>
+	          </label>
+	          <button id="intonationExplorerRefresh" type="button">Refresh</button>
+	        </div>
+	      </div>
       <div id="intonationExplorerStatus" class="tool-panel-status" aria-live="polite"></div>
 	      <div class="tool-panel-table">
 	        <table>

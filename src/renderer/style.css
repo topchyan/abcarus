@@ -1782,10 +1782,9 @@ svg {
 }
 
 .tool-panel-controls {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
   padding: 8px 12px;
 }
 
@@ -1794,12 +1793,12 @@ svg {
   flex-direction: column;
   font-size: 10px;
   color: var(--muted-text);
-  width: 100%;
+  width: auto;
+  min-width: 0;
 }
 
-.tool-panel-control-inline {
-  width: auto;
-  min-width: 160px;
+.tool-panel-span-2 {
+  grid-column: 1 / -1;
 }
 
 .tool-panel-control input {
@@ -1816,13 +1815,17 @@ svg {
   margin-top: 4px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .tool-panel-base-row select,
 .tool-panel-base-row input {
   width: auto;
   margin-top: 0;
+}
+
+.tool-panel-base-row select {
+  flex: 0 0 110px;
 }
 
 .tool-panel-control select {
@@ -1843,11 +1846,18 @@ svg {
 }
 
 .tool-panel-base-row input {
-  flex: 1;
+  flex: 0 0 160px;
 }
 
 .tool-panel-base-row input[disabled] {
   opacity: 0.6;
+}
+
+.tool-panel-options-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .tool-panel-checkbox {
