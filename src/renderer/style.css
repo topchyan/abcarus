@@ -1726,7 +1726,9 @@ svg {
   top: 72px;
   right: 24px;
   width: min(520px, calc(100vw - 48px));
-  max-height: min(70vh, calc(100vh - 96px));
+  height: min(70vh, calc(100vh - 96px));
+  max-height: calc(100vh - 96px);
+  max-width: calc(100vw - 48px);
   background: var(--panel-bg);
   border-radius: var(--radius-2);
   border: 1px solid var(--border-color);
@@ -1734,8 +1736,10 @@ svg {
   display: flex;
   flex-direction: column;
   z-index: 50;
-  overflow: hidden;
+  overflow: auto;
   resize: both;
+  min-width: 420px;
+  min-height: 280px;
 }
 
 .tool-panel.hidden {

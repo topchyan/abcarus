@@ -4032,6 +4032,23 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 	      continue;
 	    }
 
+	    // Skip "%%" directive lines (except %%begintext/%%endtext handled above).
+	    {
+	      const prev = idx > 0 ? body[idx - 1] : "";
+	      const lineStart = idx === 0 || prev === "\n" || prev === "\r";
+	      if (lineStart) {
+	        let j = idx;
+	        while (j < body.length && (body[j] === " " || body[j] === "\t")) j += 1;
+	        if (body[j] === "%" && j + 1 < body.length && body[j + 1] === "%") {
+	          const nextNl = body.indexOf("\n", j + 2);
+	          const nextCr = body.indexOf("\r", j + 2);
+	          const next = (nextNl >= 0 && nextCr >= 0) ? Math.min(nextNl, nextCr) : (nextNl >= 0 ? nextNl : nextCr);
+	          idx = next >= 0 ? next + 1 : body.length;
+	          continue;
+	        }
+	      }
+	    }
+
 		    // Skip inline fields like [K:Dm], [M:6/8], [V:1], etc.
 		    // These can contain A–G letters and would be mis-counted as notes.
 		    if (body[idx] === "[" && idx + 2 < body.length && /[A-Za-z]/.test(body[idx + 1]) && body[idx + 2] === ":") {
@@ -4695,6 +4712,7 @@ function showIntonationExplorerPanel() {
   intonationExplorerVisible = true;
   $intonationExplorerPanel.classList.remove("hidden");
   $intonationExplorerPanel.setAttribute("aria-hidden", "false");
+  ensureToolPanelDefaultLeftPosition($intonationExplorerPanel);
   setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
   clearIntonationExplorerPlot();
   populateIntonationExplorerMakams();
@@ -4706,6 +4724,31 @@ function showIntonationExplorerPanel() {
   intonationExplorerSkipGraceNotes = true;
   updateIntonationBaseUi();
   refreshIntonationExplorer().catch(() => {});
+}
+
+function ensureToolPanelDefaultLeftPosition(panelEl) {
+  if (!panelEl || panelEl.__abcarusToolPanelDefaultLeftApplied) return;
+  const hasInlinePos = Boolean(panelEl.style.left || panelEl.style.top || panelEl.style.right || panelEl.style.bottom);
+  if (hasInlinePos) {
+    panelEl.__abcarusToolPanelDefaultLeftApplied = true;
+    return;
+  }
+  panelEl.__abcarusToolPanelDefaultLeftApplied = true;
+  requestAnimationFrame(() => {
+    try {
+      const rect = panelEl.getBoundingClientRect();
+      const margin = 24;
+      const defaultTop = 72;
+      const maxLeft = Math.max(0, window.innerWidth - rect.width);
+      const maxTop = Math.max(0, window.innerHeight - rect.height);
+      const left = Math.max(0, Math.min(maxLeft, margin));
+      const top = Math.max(0, Math.min(maxTop, defaultTop));
+      panelEl.style.left = `${left}px`;
+      panelEl.style.top = `${top}px`;
+      panelEl.style.right = "auto";
+      panelEl.style.bottom = "auto";
+    } catch {}
+  });
 }
 
 function hideIntonationExplorerPanel() {
