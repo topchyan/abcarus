@@ -232,7 +232,7 @@ header {
   border: 1px solid var(--button-border);
   background: var(--button-bg);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   padding: 4px 10px;
   border-radius: var(--button-radius);
   min-height: var(--button-height);
@@ -543,7 +543,7 @@ body.library-hidden .divider {
   padding: 6px 10px;
   border-radius: var(--button-radius);
   min-height: var(--button-height);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -638,7 +638,7 @@ body.resizing * {
 }
 
 .error-header {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 6px 8px;
@@ -651,7 +651,7 @@ body.resizing * {
 .error-list {
   overflow: auto;
   padding: 6px 8px 10px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: #7a2a2a;
   display: flex;
   flex-direction: column;
@@ -773,7 +773,7 @@ body.resizing * {
 }
 
 .tree-count {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: var(--muted-text);
   background: rgba(0, 0, 0, 0.06);
   border-radius: 999px;
@@ -798,7 +798,7 @@ body.resizing * {
   background: #fff;
   padding: 4px 6px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: #222;
 }
 
@@ -808,7 +808,7 @@ body.resizing * {
 }
 
 .dirty-indicator {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: #fff;
   background: #d9480f;
   padding: 2px 8px;
@@ -833,7 +833,7 @@ body.resizing * {
   padding: 2px 6px;
   border-radius: 999px;
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   border: 1px solid #d0d0d0;
   background: #fff;
   color: #333;
@@ -885,7 +885,7 @@ body.resizing * {
 
 .file-header-title {
   text-align: left;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
@@ -902,7 +902,7 @@ body.resizing * {
   justify-content: flex-end;
   gap: 10px;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: #444;
 }
 
