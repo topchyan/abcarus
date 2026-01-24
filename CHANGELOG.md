@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Intonation Explorer: show Perde names (EDO-53) and expand Perde coverage for the SymbTr makam corpus.
 
+### Fixed
+- Intonation Explorer: always show numeric micro-accidentals (EDO-53) in the table to avoid ambiguous `^`/`_` spellings.
+- Intonation Explorer: include octave marks in `ABC (effective)` so octave variants don’t collapse into one row.
+- Perde mapping: align register selection with ABC octave/case (e.g., `^f` = Evç vs `^F` = Irâk).
+
 
 
 ## [0.22.12] - 2026-01-23
