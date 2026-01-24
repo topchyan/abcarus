@@ -1965,6 +1965,15 @@ function createWindow() {
   }
   try { win.setAlwaysOnTop(false); } catch {}
   try {
+    if (STARTUP_PERF_ENABLED) {
+      win.once("ready-to-show", () => logStartupPerf("window ready-to-show"));
+      win.webContents.once("did-start-loading", () => logStartupPerf("renderer did-start-loading"));
+      win.webContents.once("dom-ready", () => logStartupPerf("renderer dom-ready"));
+      win.webContents.once("did-stop-loading", () => logStartupPerf("renderer did-stop-loading"));
+      win.webContents.once("render-process-gone", (_event, details) => {
+        logStartupPerf("renderer render-process-gone", details || "");
+      });
+    }
     win.webContents.once("did-finish-load", () => {
       logStartupPerf("renderer did-finish-load");
     });
