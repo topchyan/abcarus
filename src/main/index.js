@@ -1980,8 +1980,12 @@ function createWindow() {
   } catch {}
   win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
   logStartupPerf("loadFile(index.html) queued");
-  if (process.env.ABCARUS_DEV_NO_MAXIMIZE !== "1") {
-    win.maximize();
+  // Avoid maximizing before the renderer is ready: it can make the initial window paint feel sluggish.
+  const shouldMaximize = process.env.ABCARUS_DEV_NO_MAXIMIZE !== "1";
+  if (shouldMaximize) {
+    win.once("ready-to-show", () => {
+      try { win.maximize(); } catch {}
+    });
   }
   const shouldForwardConsole = (process.env.ABCARUS_DEV_FORWARD_CONSOLE === "1")
     || (process.env.NODE_ENV !== "production" && !app.isPackaged);
