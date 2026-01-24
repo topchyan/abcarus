@@ -1879,7 +1879,7 @@ svg {
 }
 
 .tool-panel-base-row select {
-  flex: 0 0 110px;
+  flex: 0 0 96px;
 }
 
 .tool-panel-control select {
@@ -1900,7 +1900,8 @@ svg {
 }
 
 .tool-panel-base-row input {
-  flex: 0 0 92px;
+  flex: 0 1 78px;
+  min-width: 64px;
 }
 
 .tool-panel-base-row input[disabled] {
