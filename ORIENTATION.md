@@ -36,6 +36,52 @@ If something behaves “impossibly” (e.g. Electron commands acting like Node),
 
 ## Debugging workflow (preferred)
 
+## Startup triage (do this early)
+
+If startup suddenly becomes very slow (blank/white window for seconds), do **not** assume it is a code regression first.
+Electron/Chromium can get stuck on corrupted or locked browser-storage databases under `userData` and stall startup.
+
+### 1) Confirm where `userData` lives (Linux)
+
+Preferred (non-technical): use the app menu:
+- `Help → Open Settings Folder`
+
+Alternative (terminal): while the app is running, find `--user-data-dir=...`:
+- `pgrep -af electron | head -n 50`
+
+In dev, this repo’s Electron profile commonly ends up at:
+- `~/.config/abc-electron-proto`
+
+### 2) Symptom to recognize
+
+You may see a Chromium log line like:
+- `Failed to delete the database: Database IO error`
+
+If this appears and correlates with multi-second startup delays, treat it as a **profile storage issue** first.
+
+### 3) Safe repair (keep app data; reset Chromium caches)
+
+**Goal:** clear only regeneratable Chromium caches (Service Worker storage and code cache), without touching ABCarus state/settings.
+
+1) Quit the app.
+2) Back up the important ABCarus files from `userData`:
+   - `state.json`
+   - `user_settings.abc`
+   - `abcarus.properties` (if present)
+   - `fonts/` (if present)
+   - `templates/` (if present)
+3) Delete only these folders (they are safe to regenerate):
+   - `Service Worker/Database`
+   - `Service Worker/CacheStorage`
+   - `Service Worker/ScriptCache`
+   - `Code Cache`
+
+After that, launch again. If startup returns to normal and the DB error disappears, the cause was the corrupted/locked Chromium storage.
+
+If the error keeps coming back after cleaning, escalate:
+- check filesystem permissions on `userData`
+- check OS logs (`dmesg`) for I/O errors
+
 ### Debug dumps (preferred over live console logs)
 
 - Manual dump: `Ctrl+Shift+D` → saves `abcarus-debug-*.json`.
