@@ -92,20 +92,21 @@ const ZOOM_STEP = 0.1;
 const SETTINGS_UI_STATE_KEY = "abcarus.settings.uiState.v1";
 const SETTINGS_SECTION_HINTS = {
   general: "General application settings.",
-  editor: "Editor appearance and behavior.",
   playback: "Playback behavior and visuals.",
   options: "App options (tools, library, dialogs).",
-  fonts: "Fonts and soundfonts used for rendering and playback.",
+  fonts: "Fonts and soundfonts used for UI, editor, rendering, and playback.",
   header: "Global ABC directives prepended during render/playback.",
 };
 
 const FALLBACK_SCHEMA = [
   { key: "renderZoom", type: "number", default: 1, section: "General", label: "Score zoom (%)", ui: { input: "percent", min: 50, max: 800, step: 5 } },
   { key: "editorZoom", type: "number", default: 1, section: "General", label: "Editor zoom (%)", ui: { input: "percent", min: 50, max: 800, step: 5 } },
-  { key: "editorFontFamily", type: "string", default: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", section: "Editor", label: "Font family", ui: { input: "text" } },
-  { key: "editorFontSize", type: "number", default: 13, section: "Editor", label: "Font size", ui: { input: "number", min: 8, max: 32, step: 1 } },
-  { key: "editorNotesBold", type: "boolean", default: true, section: "Editor", label: "Bold notes", ui: { input: "checkbox" } },
-  { key: "editorLyricsBold", type: "boolean", default: true, section: "Editor", label: "Bold inline lyrics", ui: { input: "checkbox" } },
+  { key: "uiFontFamily", type: "string", default: "", section: "Fonts", group: "UI", label: "UI font family", ui: { input: "text" } },
+  { key: "uiFontSize", type: "number", default: 13, section: "Fonts", group: "UI", label: "UI font size", ui: { input: "number", min: 10, max: 28, step: 1 } },
+  { key: "editorFontFamily", type: "string", default: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", section: "Fonts", group: "Editor", label: "Font family", ui: { input: "text" } },
+  { key: "editorFontSize", type: "number", default: 13, section: "Fonts", group: "Editor", label: "Font size", ui: { input: "number", min: 8, max: 32, step: 1 } },
+  { key: "editorNotesBold", type: "boolean", default: true, section: "Fonts", group: "Editor", label: "Notes", ui: { input: "checkbox" } },
+  { key: "editorLyricsBold", type: "boolean", default: true, section: "Fonts", group: "Editor", label: "Lyrics", ui: { input: "checkbox" } },
   { key: "useNativeTranspose", type: "boolean", default: true, section: "Tools", label: "Use native transpose", ui: { input: "checkbox" } },
   { key: "autoAlignBarsAfterTransforms", type: "boolean", default: false, section: "Tools", label: "Auto-align bars after transforms", ui: { input: "checkbox" }, advanced: true },
   { key: "abc2xmlArgs", type: "string", default: "", section: "Tools", group: "Import/Export", groupOrder: 20, label: "abc2xml flags", ui: { input: "text", placeholder: "-x -y=value" }, advanced: true },
@@ -223,7 +224,7 @@ export function initSettings(api) {
   let cachedFontLists = { notation: [], text: [] };
   let cachedFontDirs = { bundledDir: "", userDir: "" };
   let cachedSoundfonts = [];
-  const knownTabs = new Set(["general", "editor", "fonts", "playback", "options", "header"]);
+  const knownTabs = new Set(["general", "fonts", "playback", "options", "header"]);
   let dragState = null;
   let draftPatch = {};
   let isSettingsOpen = false;
@@ -1119,7 +1120,6 @@ export function initSettings(api) {
 
     const panels = [
       { key: "general", label: "General", sections: ["General"] },
-      { key: "editor", label: "Editor", sections: ["Editor"] },
       { key: "fonts", label: "Fonts", sections: ["Fonts"] },
       { key: "playback", label: "Playback", sections: ["Playback"] },
       { key: "options", label: "Options", sections: ["Tools", "Library", "Dialogs"] },
@@ -1219,7 +1219,7 @@ export function initSettings(api) {
             block.className = "settings-entry";
             block.dataset.settingsSearch = `${entry.key} ${entry.label || ""} ${entry.help || ""} ${sectionName} ${g.title}`.toLowerCase();
             block.appendChild(row);
-            if (entry.help) {
+            if (entry.help && sectionName !== "Fonts") {
               const help = document.createElement("div");
               help.className = "settings-help";
               help.textContent = String(entry.help);
@@ -1228,7 +1228,120 @@ export function initSettings(api) {
             host.appendChild(block);
           };
 
-          for (const entry of normal) appendEntryBlock(entry, group);
+          const isFontsSection = sectionName === "Fonts";
+          const fontsGroupHelp = isFontsSection
+            ? (g.title === "UI"
+              ? "App UI only (not the OS menu bar)."
+              : (g.title === "Editor" ? "ABC editor text." : (g.title === "Score" ? "Rendered score + playback." : "")))
+            : "";
+
+          if (isFontsSection && fontsGroupHelp) {
+            const help = document.createElement("div");
+            help.className = "settings-help";
+            help.textContent = fontsGroupHelp;
+            group.appendChild(help);
+          }
+
+          const createCompactPairBlock = (labelText, familyKey, sizeKey) => {
+            const familyEntry = groupEntries.find((e) => e && e.key === familyKey);
+            const sizeEntry = groupEntries.find((e) => e && e.key === sizeKey);
+            if (!familyEntry || !sizeEntry) return null;
+
+            const familyRow = createRow(familyEntry);
+            const sizeRow = createRow(sizeEntry);
+            const familyControl = familyRow ? familyRow.querySelector("input, select, textarea") : null;
+            const sizeControl = sizeRow ? sizeRow.querySelector("input, select, textarea") : null;
+            if (!familyControl || !sizeControl) return null;
+
+            const block = document.createElement("div");
+            block.className = "settings-entry settings-entry--compact-pair";
+            block.dataset.settingsSearch =
+              `${familyEntry.key} ${familyEntry.label || ""} ${familyEntry.help || ""} ${sizeEntry.key} ${sizeEntry.label || ""} ${sizeEntry.help || ""} ${sectionName} ${g.title}`.toLowerCase();
+
+            const label = document.createElement("span");
+            label.textContent = labelText;
+            block.appendChild(label);
+
+            const pair = document.createElement("div");
+            pair.className = "settings-fontpair";
+
+            const familyField = document.createElement("div");
+            familyField.className = "settings-fontpair-field";
+            const familyLabel = document.createElement("div");
+            familyLabel.className = "settings-fontpair-label";
+            familyLabel.textContent = "Family";
+            familyField.appendChild(familyLabel);
+            familyField.appendChild(familyControl);
+
+            const sizeField = document.createElement("div");
+            sizeField.className = "settings-fontpair-field";
+            const sizeLabel = document.createElement("div");
+            sizeLabel.className = "settings-fontpair-label";
+            sizeLabel.textContent = "Size";
+            sizeField.appendChild(sizeLabel);
+            sizeField.appendChild(sizeControl);
+
+            pair.appendChild(familyField);
+            pair.appendChild(sizeField);
+
+            block.appendChild(pair);
+            return block;
+          };
+
+          const createCompactTogglesBlock = (labelText, keyA, keyB) => {
+            const aEntry = groupEntries.find((e) => e && e.key === keyA);
+            const bEntry = groupEntries.find((e) => e && e.key === keyB);
+            if (!aEntry || !bEntry) return null;
+            const aRow = createRow(aEntry);
+            const bRow = createRow(bEntry);
+            const aInput = aRow ? aRow.querySelector("input[type=\"checkbox\"]") : null;
+            const bInput = bRow ? bRow.querySelector("input[type=\"checkbox\"]") : null;
+            if (!aInput || !bInput) return null;
+
+            const block = document.createElement("div");
+            block.className = "settings-entry settings-entry--compact-toggles";
+            block.dataset.settingsSearch =
+              `${aEntry.key} ${aEntry.label || ""} ${aEntry.help || ""} ${bEntry.key} ${bEntry.label || ""} ${bEntry.help || ""} ${sectionName} ${g.title}`.toLowerCase();
+
+            const label = document.createElement("span");
+            label.textContent = labelText;
+            block.appendChild(label);
+
+            const row = document.createElement("div");
+            row.className = "settings-fonttoggles";
+
+            const aLabel = document.createElement("label");
+            aLabel.className = "settings-toggle";
+            aLabel.appendChild(aInput);
+            const aText = document.createElement("span");
+            aText.textContent = String(aEntry.label || "");
+            aLabel.appendChild(aText);
+
+            const bLabel = document.createElement("label");
+            bLabel.className = "settings-toggle";
+            bLabel.appendChild(bInput);
+            const bText = document.createElement("span");
+            bText.textContent = String(bEntry.label || "");
+            bLabel.appendChild(bText);
+
+            row.appendChild(aLabel);
+            row.appendChild(bLabel);
+
+            block.appendChild(row);
+            return block;
+          };
+
+          if (isFontsSection && g.title === "UI") {
+            const pair = createCompactPairBlock("", "uiFontFamily", "uiFontSize");
+            if (pair) group.appendChild(pair);
+          } else if (isFontsSection && g.title === "Editor") {
+            const pair = createCompactPairBlock("", "editorFontFamily", "editorFontSize");
+            if (pair) group.appendChild(pair);
+            const toggles = createCompactTogglesBlock("Bold", "editorNotesBold", "editorLyricsBold");
+            if (toggles) group.appendChild(toggles);
+          } else {
+            for (const entry of normal) appendEntryBlock(entry, group);
+          }
 
           if (codeEntry) {
             const editorBlock = document.createElement("div");
@@ -1487,6 +1600,7 @@ export function initSettings(api) {
     const key = String(raw || "").trim().toLowerCase();
     if (!key) return "general";
     if (key === "main") return "general";
+    if (key === "editor") return "fonts";
     if (key === "import" || key === "importexport" || key === "import/export" || key === "xml") return "options";
     if (key === "tools" || key === "library" || key === "dialogs") return "options";
     if (knownTabs.has(key)) return key;

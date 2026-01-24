@@ -2091,6 +2091,7 @@ svg {
   min-height: 520px;
   max-width: 96vw;
   max-height: 92vh;
+  resize: both;
 }
 
 .modal-card.settings-card .modal-header {
@@ -2744,6 +2745,58 @@ textarea {
   color: var(--text);
   box-sizing: border-box;
   justify-self: start;
+}
+
+.settings-entry--compact-pair {
+  grid-template-columns: 0px 1fr;
+}
+
+.settings-entry--compact-pair > span:first-child {
+  width: 0;
+  overflow: hidden;
+}
+
+.settings-fontpair {
+  display: grid;
+  grid-template-columns: minmax(220px, 360px) 90px;
+  gap: 10px;
+  align-items: end;
+}
+
+.settings-fontpair-field {
+  min-width: 0;
+}
+
+.settings-fontpair-label {
+  font-size: var(--font-size-xs);
+  color: var(--muted-text);
+  margin-bottom: 4px;
+}
+
+.settings-fontpair-field input[type="text"],
+.settings-fontpair-field input[type="number"],
+.settings-fontpair-field select {
+  width: 100%;
+  max-width: none;
+}
+
+.settings-entry--compact-toggles {
+  grid-template-columns: minmax(120px, 160px) 1fr;
+}
+
+.settings-fonttoggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.settings-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+  user-select: none;
 }
 
 .settings-select-row {
