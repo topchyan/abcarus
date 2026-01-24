@@ -1,0 +1,120 @@
+[
+  {
+    "name": "Çargâh",
+    "tetrachord": {
+      "notes": ["C/Çargâh", "D/Neva", "E/Hüseyni", "F/Acem"],
+      "intervals": ["T", "T", "B"],
+      "komas": null
+    },
+    "pentachord": {
+      "notes": ["C/Çargâh", "D/Neva", "E/Hüseyni", "F/Acem", "G/Gerdaniye"],
+      "intervals": ["T", "T", "B", "T"],
+      "komas": null
+    },
+    "citation": ""
+  },
+  {
+    "name": "Buselik",
+    "tetrachord": {
+      "notes": ["A/Dügâh", "B/Buselik", "C/Çargâh", "D/Neva"],
+      "intervals": ["T", "B", "T"],
+      "komas": null
+    },
+    "pentachord": {
+      "notes": ["A/Dügâh", "B/Buselik", "C/Çargâh", "D/Neva", "E/Hüseyni"],
+      "intervals": ["T", "B", "T", "T"],
+      "komas": null
+    },
+    "citation": ""
+  },
+  {
+    "name": "Kürdi",
+    "tetrachord": {
+      "notes": ["A/Dügâh", "Bb/Kürdi", "C/Çargâh", "D/Neva"],
+      "intervals": ["B", "T", "T"],
+      "komas": null
+    },
+    "pentachord": {
+      "notes": ["A/Dügâh", "Bb/Kürdi", "C/Çargâh", "D/Neva", "E/Hüseyni"],
+      "intervals": ["B", "T", "T", "T"],
+      "komas": null
+    },
+    "citation": ""
+  },
+  {
+    "name": "Rast",
+    "tetrachord": {
+      "notes": ["G/Rast", "A/Dügâh", "B1b/Segâh", "C/Çargâh"],
+      "intervals": ["T", "K", "S"],
+      "komas": null
+    },
+    "pentachord": {
+      "notes": ["G/Rast", "A/Dügâh", "B1b/Segâh", "C/Çargâh", "D/Neva"],
+      "intervals": ["T", "K", "S", "T"],
+      "komas": null
+    },
+    "citation": ""
+  },
+  {
+    "name": "Uşşak / Hüseyni",
+    "note": "Тетрахорд традиционно зовется Uşşak, пентахорд — Hüseyni",
+    "tetrachord": {
+      "notes": ["A/Dügâh", "B1b/Segâh", "C/Çargâh", "D/Neva"],
+      "intervals": ["K", "S", "T"],
+      "komas": null
+    },
+    "pentachord": {
+      "notes": ["A/Dügâh", "B1b/Segâh", "C/Çargâh", "D/Neva", "E/Hüseyni"],
+      "intervals": ["K", "S", "T", "T"],
+      "komas": null
+    },
+    "citation": ""
+  },
+  {
+    "name": "Hicaz",
+    "tetrachord": {
+      "notes": ["A/Dügâh", "Bb4b/Dik Kürdi", "C#/Nim Hicaz", "D/Neva"],
+      "intervals": ["S", "A", "S"],
+      "komas": null
+    },
+    "pentachord": {
+      "notes": ["A/Dügâh", "Bb4b/Dik Kürdi", "C#/Nim Hicaz", "D/Neva", "E/Hüseyni"],
+      "intervals": ["S", "A", "S", "T"],
+      "komas": null
+    },
+    "citation": ""
+  },
+  {
+    "name": "Nikriz",
+    "type": "Pentachord",
+    "notes": ["G/Rast", "A/Dügâh", "B4b/Dik Kürdi", "C#/Nim Hicaz", "D/Neva"],
+    "intervals": ["T", "S", "A", "S"],
+    "komas": null,
+    "citation": ""
+  },
+  {
+    "name": "Saba",
+    "type": "Tetrachord",
+    "notes": ["A/Dügâh", "B1b/Segâh", "C/Çargâh", "Db4b/Hicaz"],
+    "intervals": ["K", "S", "S"],
+    "komas": null,
+    "note": "Четвертая нота Saba (Db 4 koma flat) ниже, чем в обычном тетрахорде",
+    "citation": ""
+  },
+  {
+    "name": "Segâh",
+    "type": "Pentachord",
+    "notes": ["B1b/Segâh", "C/Çargâh", "D/Neva", "E1b/Dik Hisar", "F#/Evç"],
+    "intervals": ["S", "T", "K", "T"],
+    "komas": null,
+    "citation": ""
+  },
+  {
+    "name": "Hüzzam",
+    "type": "Pentachord",
+    "notes": ["B1b/Segâh", "C/Çargâh", "D/Neva", "E4b/Hisar", "F#/Evç"],
+    "intervals": ["S", "T", "S", "A"],
+    "komas": null,
+    "citation": ""
+  }
+]
