@@ -1956,13 +1956,27 @@ function createWindow() {
   if (process.env.ABCARUS_DEV_NO_MAXIMIZE !== "1") {
     win.maximize();
   }
-  if (process.env.ABCARUS_DEV_FORWARD_CONSOLE === "1") {
+  const shouldForwardConsole = (process.env.ABCARUS_DEV_FORWARD_CONSOLE === "1")
+    || (process.env.NODE_ENV !== "production" && !app.isPackaged);
+  if (shouldForwardConsole) {
     win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
       try {
         const lvl = Number(level);
         const tag = Number.isFinite(lvl) ? String(lvl) : "?";
         // eslint-disable-next-line no-console
         console.log(`[renderer:${tag}] ${message} (${sourceId}:${line})`);
+      } catch {}
+    });
+    win.webContents.on("render-process-gone", (_event, details) => {
+      try {
+        // eslint-disable-next-line no-console
+        console.error("[renderer] render-process-gone:", details);
+      } catch {}
+    });
+    win.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+      try {
+        // eslint-disable-next-line no-console
+        console.error("[renderer] did-fail-load:", { errorCode, errorDescription, validatedURL });
       } catch {}
     });
   }
@@ -2019,6 +2033,17 @@ function createWindow() {
     if (isQuitting) return;
     e.preventDefault();
     win.webContents.send("app:request-quit");
+    // If the renderer is hung/crashed, it won't ack quit via IPC.
+    // Avoid forcing users to `xkill`: fall back to quitting after a short grace period.
+    try {
+      if (win.__abcarusForceQuitTimer) return;
+      win.__abcarusForceQuitTimer = setTimeout(() => {
+        win.__abcarusForceQuitTimer = null;
+        if (isQuitting) return;
+        isQuitting = true;
+        try { app.quit(); } catch { process.exit(0); }
+      }, 1500);
+    } catch {}
   });
   win.on("focus", () => {
     // Best-effort: if the canonical settings file was edited externally, reload it when the app regains focus.
