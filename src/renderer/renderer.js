@@ -3554,6 +3554,7 @@ let intonationExplorerIs53 = false;
 let intonationExplorerDeclaredMakam = "";
 let intonationExplorerCompareMakam = "";
 let intonationExplorerAutoMakamApplied = false;
+let intonationExplorerRoleAbs53Map = null;
 let lastIntonationDnaLogText = "";
 let lastIntonationDnaUiText = "";
 let lastIntonationPitchSetText = "";
@@ -3874,24 +3875,36 @@ function renderIntonationSeyirPlot({ noteEvents, baseStep, overlayMakamName } = 
     const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     c.setAttribute("cx", cx.toFixed(2));
     c.setAttribute("cy", cy.toFixed(2));
-    c.setAttribute("r", it.kind === "start" || it.kind === "end" ? "3.2" : "2.6");
+    c.setAttribute("r", it.kind === "start" || it.kind === "end" ? "4.2" : "3.6");
     let fill = "rgba(0,0,0,0.5)";
     if (it.kind === "peak") fill = "rgba(200,60,60,0.9)";
     if (it.kind === "trough") fill = "rgba(60,110,210,0.9)";
     if (it.kind === "start") fill = "rgba(30,140,70,0.95)";
     if (it.kind === "end") fill = "rgba(0,0,0,0.8)";
     c.setAttribute("fill", fill);
+    c.setAttribute("stroke", "rgba(255,255,255,0.9)");
+    c.setAttribute("stroke-width", "1.2");
     const pc = formatAeuLabel(mod53(e.pc53 || 0));
     c.setAttribute("data-kind", it.kind);
     c.setAttribute("data-start", String(e.start ?? ""));
     c.setAttribute("data-end", String(e.end ?? ""));
-    c.setAttribute("title", `${it.kind}: ${String(e.spelling || "")} (pc53=${pc})`);
+    const perde = intonationExplorerIs53 ? (resolvePerdeName({ pc53: mod53(e.pc53 || 0), octave: e.octave }) || "") : "";
+    const role = (intonationExplorerRoleAbs53Map && intonationExplorerRoleAbs53Map.get(String(abs53))) ? intonationExplorerRoleAbs53Map.get(String(abs53)) : "";
+    const perdePart = perde ? `; perde=${perde}` : "";
+    const rolePart = role ? `; role=${role}` : "";
+    c.setAttribute("title", `${it.kind}: ${String(e.spelling || "")} (pc53=${pc})${perdePart}${rolePart}`);
     c.style.cursor = "pointer";
     c.addEventListener("click", () => {
       if (!Number.isFinite(Number(e.start))) return;
       try {
-        setIntonationHighlightRanges([{ start: Number(e.start), end: Number(e.end) || Number(e.start) + 1 }]);
-        highlightSvgIntonationNotesByRanges([{ start: Number(e.start), end: Number(e.end) || Number(e.start) + 1 }]);
+        // Sync table + multi-occurrence highlights for this pitch.
+        activateIntonationExplorerRow(abs53);
+      } catch {}
+      try {
+        // Also scroll to the exact note instance the turning point came from.
+        const off = Number(e.start);
+        const endOff = Number(e.end) || off + 1;
+        highlightSvgIntonationNotesByRanges([{ start: off, end: endOff }]);
       } catch {}
       try {
         const off = Number(e.start);
@@ -4591,7 +4604,13 @@ function renderIntonationExplorerRows(rows, { is53, roleAbs53Map } = {}) {
 	      perde.classList.remove("subtle");
 	    } else {
 	      const role = (roleAbs53Map && roleAbs53Map.get(String(row.step))) ? roleAbs53Map.get(String(row.step)) : "";
-	      perde.textContent = (perdeName || "??") + (role ? ` · ${role}` : "");
+	      perde.textContent = perdeName || "??";
+	      if (role) {
+	        const badge = document.createElement("span");
+	        badge.className = "intonation-role";
+	        badge.textContent = role;
+	        perde.appendChild(badge);
+	      }
 	      if (!perdeName) {
 	        perde.title = `No Perde label yet for token=${String(row.abcSpelling || "")} (pc53=${formatAeuLabel(row.absStep)}).`;
 	        perde.classList.add("subtle");
@@ -4636,7 +4655,13 @@ function activateIntonationExplorerRow(step) {
   const target = (intonationExplorerRows || []).find((r) => String(r.step) === String(step));
   if (!target) return;
   intonationExplorerActiveStep = target.step;
-  renderIntonationExplorerRows(intonationExplorerRows, { is53: intonationExplorerIs53 });
+  renderIntonationExplorerRows(intonationExplorerRows, { is53: intonationExplorerIs53, roleAbs53Map: intonationExplorerRoleAbs53Map });
+  try {
+    const tr = $intonationExplorerTableBody
+      ? $intonationExplorerTableBody.querySelector(`tr[data-step="${CSS.escape(String(target.step))}"]`)
+      : null;
+    if (tr && tr.scrollIntoView) tr.scrollIntoView({ block: "nearest" });
+  } catch {}
   setIntonationHighlightRanges(target.ranges);
   const offsets = (target.ranges || []).map((r) => r && r.start);
   const noteOk = highlightSvgIntonationNotesAtEditorOffsets(offsets);
@@ -4731,9 +4756,9 @@ async function refreshIntonationExplorer() {
 		    intonationExplorerRows = rows;
 		    intonationExplorerActiveStep = null;
 
-		    // Optional: tag observed steps that match the declared makam roles (durak/güçlü/yeden).
-		    let roleAbs53Map = null;
-		    try {
+			    // Optional: tag observed steps that match the declared makam roles (durak/güçlü/yeden).
+			    let roleAbs53Map = null;
+			    try {
 		      const entry = getAydemirMakamEntry(intonationExplorerDeclaredMakam);
 		      const events = Array.isArray(scanned.noteEvents) ? scanned.noteEvents : [];
 		      const absVals = events.map((ev) => Number(ev.abs53)).filter((n) => Number.isFinite(n));
@@ -4752,7 +4777,8 @@ async function refreshIntonationExplorer() {
 		        if (Number.isFinite(yedenAbs)) roleAbs53Map.set(String(yedenAbs), "yeden");
 		      }
 		    } catch {}
-		    renderIntonationExplorerRows(rows, { is53: intonationExplorerIs53, roleAbs53Map });
+		    intonationExplorerRoleAbs53Map = roleAbs53Map;
+		    renderIntonationExplorerRows(rows, { is53: intonationExplorerIs53, roleAbs53Map: intonationExplorerRoleAbs53Map });
 		    setIntonationHighlightRanges([]);
 		    clearSvgIntonationBarHighlight();
 		    clearSvgIntonationNoteHighlight();
@@ -4817,6 +4843,7 @@ function showIntonationExplorerPanel() {
   intonationExplorerSortMode = "first";
   intonationExplorerSkipGraceNotes = true;
   intonationExplorerAutoMakamApplied = false;
+  intonationExplorerRoleAbs53Map = null;
   updateIntonationBaseUi();
   refreshIntonationExplorer().catch(() => {});
 }
