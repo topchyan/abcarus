@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [0.22.14] - 2026-01-24
 ### Added
 - Makam DNA: ship a generic built-in dataset (`docs/makam_dna/MAKAM_DNA.json`) and allow editing it in-app from Intonation Explorer (saved locally under userData; does not modify tunes).
 - Docs: ADR-0009 startup diagnostics playbook for Chromium `userData` storage corruption and safe repair.
@@ -13,8 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Status chip: show `Loading…` during startup until the app finishes initialization and the library/tune is ready.
-
-
 
 ## [0.22.13] - 2026-01-24
 ### Added
