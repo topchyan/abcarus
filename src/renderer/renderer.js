@@ -1516,6 +1516,15 @@ function logStartupPerf(label, data) {
   } catch {}
 }
 
+function abbreviatePathForLog(fullPath, tailSegments = 3) {
+  if (!fullPath) return "";
+  const raw = String(fullPath);
+  const sep = raw.includes("\\") ? "\\" : "/";
+  const parts = raw.split(/[\\/]+/).filter(Boolean);
+  if (parts.length <= tailSegments) return raw;
+  return ["…", ...parts.slice(-tailSegments)].join(sep);
+}
+
 const devConfig = (() => {
   try {
     return (window.api && typeof window.api.getDevConfig === "function") ? (window.api.getDevConfig() || {}) : {};
@@ -8312,7 +8321,7 @@ async function loadLibraryFromFolder(folder) {
   if (!window.api || !folder) return;
   const perfOn = isStartupPerfEnabled();
   const t0 = perfOn ? perfNowMs() : 0;
-  if (perfOn) logStartupPerf("loadLibraryFromFolder() start", { folder: abbreviatePath(folder, 3) });
+  if (perfOn) logStartupPerf("loadLibraryFromFolder() start", { folder: abbreviatePathForLog(folder, 3) });
   const scanToken = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   setScanStatus("Scanning…");
   fileContentCache.clear();
