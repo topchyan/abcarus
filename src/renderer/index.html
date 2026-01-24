@@ -312,21 +312,28 @@
         <button id="intonationExplorerRefresh" type="button">Refresh</button>
       </div>
       <div id="intonationExplorerStatus" class="tool-panel-status" aria-live="polite"></div>
-      <div class="tool-panel-table">
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">pc53</th>
-              <th scope="col">Perde</th>
-              <th scope="col">ABC (effective)</th>
-              <th scope="col">Weight</th>
-            </tr>
-          </thead>
-          <tbody id="intonationExplorerTableBody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+	      <div class="tool-panel-table">
+	        <table>
+	          <thead>
+	            <tr>
+	              <th scope="col">pc53</th>
+	              <th scope="col">Perde</th>
+	              <th scope="col">ABC (effective)</th>
+	              <th scope="col">Weight</th>
+	            </tr>
+	          </thead>
+	          <tbody id="intonationExplorerTableBody"></tbody>
+	        </table>
+	      </div>
+	      <div class="tool-panel-dna" aria-label="Intonation DNA snapshot">
+	        <div class="tool-panel-dna-actions">
+	          <button id="intonationExplorerCopyDna" type="button">Copy DNA</button>
+	          <button id="intonationExplorerCopyPitchSet" type="button">Copy pitchSet</button>
+	        </div>
+	        <textarea id="intonationExplorerDnaText" readonly rows="7" spellcheck="false"></textarea>
+	      </div>
+	    </div>
+	  </div>
 
   <footer class="taskbar">
 		    <div class="taskbar-left">

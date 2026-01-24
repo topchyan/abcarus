@@ -140,6 +140,9 @@ const $intonationExplorerSkipGrace = document.getElementById("intonationExplorer
 const $intonationExplorerRefresh = document.getElementById("intonationExplorerRefresh");
 const $intonationExplorerStatus = document.getElementById("intonationExplorerStatus");
 const $intonationExplorerTableBody = document.getElementById("intonationExplorerTableBody");
+const $intonationExplorerDnaText = document.getElementById("intonationExplorerDnaText");
+const $intonationExplorerCopyDna = document.getElementById("intonationExplorerCopyDna");
+const $intonationExplorerCopyPitchSet = document.getElementById("intonationExplorerCopyPitchSet");
 const $errorsIndicator = document.getElementById("errorsIndicator");
 const $errorsFocusMessage = document.getElementById("errorsFocusMessage");
 const $errorsPopover = document.getElementById("errorsPopover");
@@ -3541,6 +3544,18 @@ let intonationExplorerSortMode = "count";
 let intonationExplorerSkipGraceNotes = true;
 let intonationExplorerIs53 = false;
 let lastIntonationDnaLogText = "";
+let lastIntonationDnaUiText = "";
+let lastIntonationPitchSetText = "";
+
+function setIntonationExplorerDnaUi({ dnaText, pitchSetText } = {}) {
+  const nextDna = String(dnaText || "");
+  const nextPitch = String(pitchSetText || "");
+  lastIntonationDnaUiText = nextDna;
+  lastIntonationPitchSetText = nextPitch;
+  if ($intonationExplorerDnaText) $intonationExplorerDnaText.value = nextDna;
+  if ($intonationExplorerCopyDna) $intonationExplorerCopyDna.disabled = !nextDna;
+  if ($intonationExplorerCopyPitchSet) $intonationExplorerCopyPitchSet.disabled = !nextPitch;
+}
 
 let lastSvgIntonationBarEls = [];
 let lastSvgIntonationNoteEls = [];
@@ -4271,25 +4286,27 @@ async function refreshIntonationExplorer() {
 	      intonationExplorerRows = [];
 	      intonationExplorerActiveStep = null;
       intonationExplorerIs53 = false;
-	    renderIntonationExplorerRows([], { is53: false });
-	    setIntonationHighlightRanges([]);
-	    clearSvgIntonationBarHighlight();
-	    clearSvgIntonationNoteHighlight();
-	    setIntonationExplorerStatus("Unable to load working copy snapshot.", { error: true });
-	    return;
-	  }
-	    const scanned = scanIntonationEntries(snapshot, { skipGraceNotes: intonationExplorerSkipGraceNotes });
-	  if (scanned.error) {
+		    renderIntonationExplorerRows([], { is53: false });
+		    setIntonationHighlightRanges([]);
+		    clearSvgIntonationBarHighlight();
+		    clearSvgIntonationNoteHighlight();
+        setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
+		    setIntonationExplorerStatus("Unable to load working copy snapshot.", { error: true });
+		    return;
+		  }
+		    const scanned = scanIntonationEntries(snapshot, { skipGraceNotes: intonationExplorerSkipGraceNotes });
+		  if (scanned.error) {
 	      intonationExplorerRows = [];
 	      intonationExplorerActiveStep = null;
       intonationExplorerIs53 = false;
-	    renderIntonationExplorerRows([], { is53: false });
-	    setIntonationHighlightRanges([]);
-	    clearSvgIntonationBarHighlight();
-	    clearSvgIntonationNoteHighlight();
-	    setIntonationExplorerStatus(scanned.error, { error: true });
-	    return;
-	  }
+		    renderIntonationExplorerRows([], { is53: false });
+		    setIntonationHighlightRanges([]);
+		    clearSvgIntonationBarHighlight();
+		    clearSvgIntonationNoteHighlight();
+        setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
+		    setIntonationExplorerStatus(scanned.error, { error: true });
+		    return;
+		  }
       intonationExplorerIs53 = Boolean(scanned.is53);
 	    updateIntonationBaseUi();
     const mode = intonationExplorerBaseMode || "auto";
@@ -4336,6 +4353,10 @@ async function refreshIntonationExplorer() {
       try {
         const fullText = String(snapshot.text || "");
         const tuneText = scanned.tune ? fullText.slice(scanned.tune.start, scanned.tune.end) : "";
+        const pitchSetPc53 = Array.from(new Set((scanned.noteEvents || []).map((e) => mod53(e && e.pc53 ? e.pc53 : 0))))
+          .sort((a, b) => a - b)
+          .map((n) => formatAeuLabel(n));
+        const pitchSetText = `pitchSetPc53=[${pitchSetPc53.join(", ")}]`;
         const dnaText = buildSeyirSnapshotText({
           tuneText,
           rows,
@@ -4345,6 +4366,7 @@ async function refreshIntonationExplorer() {
           is53: intonationExplorerIs53,
         });
         window.__abcarusLastIntonationDnaText = dnaText;
+        setIntonationExplorerDnaUi({ dnaText, pitchSetText });
         // Keep it readable in DevTools and easy to copy, but avoid spamming on repeated Refresh.
         if (dnaText && dnaText !== lastIntonationDnaLogText) {
           lastIntonationDnaLogText = dnaText;
@@ -4353,6 +4375,7 @@ async function refreshIntonationExplorer() {
       } catch {}
 	  } catch (err) {
 	    const msg = (err && err.message) ? String(err.message) : String(err || "");
+      setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
 	    setIntonationExplorerStatus(msg ? `Unable to refresh the explorer: ${msg}` : "Unable to refresh the explorer.", { error: true });
 	    logErr(err);
 	  }
@@ -4364,6 +4387,7 @@ function showIntonationExplorerPanel() {
   intonationExplorerVisible = true;
   $intonationExplorerPanel.classList.remove("hidden");
   $intonationExplorerPanel.setAttribute("aria-hidden", "false");
+  setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
   if ($intonationExplorerBaseMode) $intonationExplorerBaseMode.value = "auto";
   if ($intonationExplorerBaseManual && !$intonationExplorerBaseManual.value) $intonationExplorerBaseManual.value = DEFAULT_INT_BASE;
   if ($intonationExplorerSort) $intonationExplorerSort.value = "count";
@@ -4383,6 +4407,7 @@ function hideIntonationExplorerPanel() {
   setIntonationHighlightRanges([]);
   clearSvgIntonationBarHighlight();
   clearSvgIntonationNoteHighlight();
+  setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
 }
 
 function enableDraggableToolPanel(panelEl) {
@@ -15839,6 +15864,36 @@ if ($intonationExplorerClose) {
 if ($intonationExplorerRefresh) {
   $intonationExplorerRefresh.addEventListener("click", () => {
     refreshIntonationExplorer().catch(() => {});
+  });
+}
+if ($intonationExplorerCopyDna) {
+  $intonationExplorerCopyDna.addEventListener("click", async () => {
+    const text = lastIntonationDnaUiText || (window.__abcarusLastIntonationDnaText ? String(window.__abcarusLastIntonationDnaText) : "");
+    if (!text) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        try { showToast("Copied DNA.", 1600); } catch {}
+      }
+    } catch (e) {
+      logErr(e && e.message ? e.message : String(e));
+      try { showToast("Copy failed.", 1800); } catch {}
+    }
+  });
+}
+if ($intonationExplorerCopyPitchSet) {
+  $intonationExplorerCopyPitchSet.addEventListener("click", async () => {
+    const text = lastIntonationPitchSetText || "";
+    if (!text) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        try { showToast("Copied pitchSet.", 1600); } catch {}
+      }
+    } catch (e) {
+      logErr(e && e.message ? e.message : String(e));
+      try { showToast("Copy failed.", 1800); } catch {}
+    }
   });
 }
 if ($intonationExplorerBaseMode) {

@@ -1894,6 +1894,33 @@ svg {
   padding: 0 16px 12px;
 }
 
+.tool-panel-dna {
+  margin-top: 12px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tool-panel-dna-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+#intonationExplorerDnaText {
+  width: 100%;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.25;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-1);
+  background: rgba(0, 0, 0, 0.02);
+}
+
 .tool-panel-table table {
   width: 100%;
   border-collapse: collapse;
