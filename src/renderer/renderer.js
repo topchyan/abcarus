@@ -3555,18 +3555,19 @@ let intonationExplorerDeclaredMakam = "";
 let intonationExplorerCompareMakam = "";
 let intonationExplorerAutoMakamApplied = false;
 let intonationExplorerRoleAbs53Map = null;
-let lastIntonationDnaLogText = "";
 let lastIntonationDnaUiText = "";
 let lastIntonationPitchSetText = "";
+let lastIntonationDnaSource = null; // lazy-built on Copy (avoid heavy work on every refresh)
 
 function setIntonationExplorerDnaUi({ dnaText, pitchSetText } = {}) {
   const nextDna = String(dnaText || "");
   const nextPitch = String(pitchSetText || "");
-  lastIntonationDnaUiText = nextDna;
-  lastIntonationPitchSetText = nextPitch;
-  if ($intonationExplorerDnaText) $intonationExplorerDnaText.value = nextDna;
-  if ($intonationExplorerCopyDna) $intonationExplorerCopyDna.disabled = !nextDna;
-  if ($intonationExplorerCopyPitchSet) $intonationExplorerCopyPitchSet.disabled = !nextPitch;
+  const enableDna = nextDna === "ready" ? Boolean(lastIntonationDnaSource) : Boolean(nextDna);
+  const enablePitch = nextPitch === "ready" ? Boolean(lastIntonationDnaSource) : Boolean(nextPitch);
+  if (nextDna !== "ready") lastIntonationDnaUiText = nextDna;
+  if (nextPitch !== "ready") lastIntonationPitchSetText = nextPitch;
+  if ($intonationExplorerCopyDna) $intonationExplorerCopyDna.disabled = !enableDna;
+  if ($intonationExplorerCopyPitchSet) $intonationExplorerCopyPitchSet.disabled = !enablePitch;
 }
 
 function clearIntonationExplorerPlot() {
@@ -4688,13 +4689,14 @@ async function refreshIntonationExplorer() {
 		    setIntonationHighlightRanges([]);
 		    clearSvgIntonationBarHighlight();
 		    clearSvgIntonationNoteHighlight();
+        lastIntonationDnaSource = null;
         setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
         clearIntonationExplorerPlot();
 		    setIntonationExplorerStatus("Unable to load working copy snapshot.", { error: true });
 		    return;
 		  }
 		    const scanned = scanIntonationEntries(snapshot, { skipGraceNotes: intonationExplorerSkipGraceNotes });
-			  if (scanned.error) {
+		  if (scanned.error) {
 	      intonationExplorerRows = [];
 	      intonationExplorerActiveStep = null;
       intonationExplorerIs53 = false;
@@ -4702,12 +4704,13 @@ async function refreshIntonationExplorer() {
 		    setIntonationHighlightRanges([]);
 		    clearSvgIntonationBarHighlight();
 		    clearSvgIntonationNoteHighlight();
+        lastIntonationDnaSource = null;
         setIntonationExplorerDnaUi({ dnaText: "", pitchSetText: "" });
         clearIntonationExplorerPlot();
 		    setIntonationExplorerStatus(scanned.error, { error: true });
 		    return;
-			  }
-	      intonationExplorerIs53 = Boolean(scanned.is53);
+		  }
+      intonationExplorerIs53 = Boolean(scanned.is53);
 		    updateIntonationBaseUi();
 	    const fullText = String(snapshot.text || "");
 	    const tuneText = scanned.tune ? fullText.slice(scanned.tune.start, scanned.tune.end) : "";
@@ -4786,28 +4789,16 @@ async function refreshIntonationExplorer() {
 	      const modeLabel = intonationExplorerIs53 ? "EDO-53" : "EDO-12";
 		    setIntonationExplorerStatus(`Base ${intonationExplorerBaseLabel} (${rows.length} classes; ${sortLabel}; ${modeLabel})`);
 
-      // Proof-of-concept "DNA / Seyir snapshot" (no UI changes): print to console for copy/paste.
-      try {
-	        const pitchSetPc53 = Array.from(new Set((scanned.noteEvents || []).map((e) => mod53(e && e.pc53 ? e.pc53 : 0))))
-	          .sort((a, b) => a - b)
-	          .map((n) => formatAeuLabel(n));
-        const pitchSetText = `pitchSetPc53=[${pitchSetPc53.join(", ")}]`;
-        const dnaText = buildSeyirSnapshotText({
-          tuneText,
-          rows,
-          noteEvents: scanned.noteEvents,
-          baseStep: intonationExplorerBaseStep,
-          baseLabel: intonationExplorerBaseLabel,
-          is53: intonationExplorerIs53,
-        });
-        window.__abcarusLastIntonationDnaText = dnaText;
-        setIntonationExplorerDnaUi({ dnaText, pitchSetText });
-        // Keep it readable in DevTools and easy to copy, but avoid spamming on repeated Refresh.
-        if (dnaText && dnaText !== lastIntonationDnaLogText) {
-          lastIntonationDnaLogText = dnaText;
-          console.info(dnaText);
-        }
-      } catch {}
+      // Keep DNA/pitchSet generation lazy: only build it when the user clicks Copy.
+      lastIntonationDnaSource = {
+        tuneText,
+        rows,
+        noteEvents: scanned.noteEvents,
+        baseStep: intonationExplorerBaseStep,
+        baseLabel: intonationExplorerBaseLabel,
+        is53: intonationExplorerIs53,
+      };
+      setIntonationExplorerDnaUi({ dnaText: "ready", pitchSetText: "ready" });
 
       // Minimal "seyir" plot (observed trajectory + optional Aydemir overlay).
       try {
@@ -16356,7 +16347,23 @@ if ($intonationExplorerCompareMakam) {
 }
 if ($intonationExplorerCopyDna) {
   $intonationExplorerCopyDna.addEventListener("click", async () => {
-    const text = lastIntonationDnaUiText || (window.__abcarusLastIntonationDnaText ? String(window.__abcarusLastIntonationDnaText) : "");
+    let text = "";
+    try {
+      if (lastIntonationDnaSource) {
+        text = buildSeyirSnapshotText({
+          tuneText: lastIntonationDnaSource.tuneText,
+          rows: lastIntonationDnaSource.rows,
+          noteEvents: lastIntonationDnaSource.noteEvents,
+          baseStep: lastIntonationDnaSource.baseStep,
+          baseLabel: lastIntonationDnaSource.baseLabel,
+          is53: lastIntonationDnaSource.is53,
+        });
+        window.__abcarusLastIntonationDnaText = text;
+        lastIntonationDnaUiText = text;
+      } else {
+        text = (window.__abcarusLastIntonationDnaText ? String(window.__abcarusLastIntonationDnaText) : "");
+      }
+    } catch {}
     if (!text) return;
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -16371,7 +16378,17 @@ if ($intonationExplorerCopyDna) {
 }
 if ($intonationExplorerCopyPitchSet) {
   $intonationExplorerCopyPitchSet.addEventListener("click", async () => {
-    const text = lastIntonationPitchSetText || "";
+    let text = "";
+    try {
+      const events = lastIntonationDnaSource && Array.isArray(lastIntonationDnaSource.noteEvents)
+        ? lastIntonationDnaSource.noteEvents
+        : [];
+      const pitchSetPc53 = Array.from(new Set(events.map((e) => mod53(e && e.pc53 ? e.pc53 : 0))))
+        .sort((a, b) => a - b)
+        .map((n) => formatAeuLabel(n));
+      text = pitchSetPc53.length ? `pitchSetPc53=[${pitchSetPc53.join(", ")}]` : "";
+      if (text) lastIntonationPitchSetText = text;
+    } catch {}
     if (!text) return;
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
