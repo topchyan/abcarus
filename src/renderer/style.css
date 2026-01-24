@@ -1797,10 +1797,6 @@ svg {
   min-width: 0;
 }
 
-.tool-panel-span-2 {
-  grid-column: 1 / -1;
-}
-
 .tool-panel-control input {
   margin-top: 4px;
   width: 100%;
@@ -1853,13 +1849,6 @@ svg {
   opacity: 0.6;
 }
 
-.tool-panel-options-row {
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
 .tool-panel-checkbox {
   margin-top: 4px;
   display: flex;
@@ -1909,8 +1898,8 @@ svg {
 }
 
 .tool-panel-dna {
-  margin-top: 12px;
-  padding: 10px 16px 14px;
+  margin-top: 8px;
+  padding: 6px 16px 10px;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
@@ -1921,18 +1910,6 @@ svg {
   display: flex;
   gap: 8px;
   align-items: center;
-}
-
-#intonationExplorerDnaText {
-  width: 100%;
-  resize: vertical;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 12px;
-  line-height: 1.25;
-  padding: 8px 10px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-1);
-  background: rgba(0, 0, 0, 0.02);
 }
 
 .tool-panel-table table {
@@ -1950,7 +1927,7 @@ svg {
 
 #intonationExplorerPlot {
   width: 100%;
-  height: 120px;
+  height: 150px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-1);
   background: rgba(0, 0, 0, 0.015);

@@ -280,7 +280,7 @@
         <button id="intonationExplorerClose" type="button" class="tool-panel-close" aria-label="Close Explorer">×</button>
       </div>
 		      <div class="tool-panel-controls">
-		        <label class="tool-panel-control tool-panel-span-2">
+		        <label class="tool-panel-control">
 		          <span>Tonal Base</span>
 		          <div class="tool-panel-base-row">
 		            <select id="intonationExplorerBaseMode" aria-label="Tonal base mode">
@@ -292,18 +292,6 @@
 		          </div>
 		        </label>
 		        <label class="tool-panel-control">
-		          <span>Declared makam (Aydemir)</span>
-	          <select id="intonationExplorerDeclaredMakam" aria-label="Declared makam">
-	            <option value="" selected>None</option>
-	          </select>
-	        </label>
-	        <label class="tool-panel-control">
-	          <span>Compare to (overlay)</span>
-	          <select id="intonationExplorerCompareMakam" aria-label="Compare makam">
-	            <option value="" selected>None</option>
-	          </select>
-	        </label>
-		        <label class="tool-panel-control">
 		          <span>Sort</span>
 		          <select id="intonationExplorerSort" aria-label="Sort mode">
 		            <option value="count" selected>Count</option>
@@ -314,13 +302,18 @@
 	            <option value="abc">ABC spelling</option>
 	          </select>
 	        </label>
-	        <div class="tool-panel-options-row">
-	          <label class="tool-panel-checkbox">
-	            <input id="intonationExplorerSkipGrace" type="checkbox" checked />
-	            <span>Ignore grace notes</span>
-	          </label>
-	          <button id="intonationExplorerRefresh" type="button">Refresh</button>
-	        </div>
+		        <label class="tool-panel-control">
+		          <span>Declared makam (Aydemir)</span>
+		          <select id="intonationExplorerDeclaredMakam" aria-label="Declared makam">
+		            <option value="" selected>None</option>
+	          </select>
+	        </label>
+	        <label class="tool-panel-control">
+	          <span>Compare to (overlay)</span>
+		          <select id="intonationExplorerCompareMakam" aria-label="Compare makam">
+		            <option value="" selected>None</option>
+		          </select>
+		        </label>
 	      </div>
       <div id="intonationExplorerStatus" class="tool-panel-status" aria-live="polite"></div>
 	      <div class="tool-panel-table">
@@ -344,13 +337,12 @@
 	        </svg>
 	        <div id="intonationExplorerPlotLegend" class="tool-panel-plot-legend"></div>
 	      </div>
-	      <div class="tool-panel-dna" aria-label="Intonation DNA snapshot">
-	        <div class="tool-panel-dna-actions">
-	          <button id="intonationExplorerCopyDna" type="button">Copy DNA</button>
-	          <button id="intonationExplorerCopyPitchSet" type="button">Copy pitchSet</button>
-	        </div>
-	        <textarea id="intonationExplorerDnaText" readonly rows="7" spellcheck="false"></textarea>
-	      </div>
+		      <div class="tool-panel-dna" aria-label="Intonation DNA snapshot">
+		        <div class="tool-panel-dna-actions">
+		          <button id="intonationExplorerCopyDna" type="button">Copy DNA</button>
+		          <button id="intonationExplorerCopyPitchSet" type="button">Copy pitchSet</button>
+		        </div>
+		      </div>
 	    </div>
 	  </div>
 

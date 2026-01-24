@@ -3548,11 +3548,12 @@ let intonationExplorerActiveStep = null;
 let intonationExplorerBaseStep = 0;
 let intonationExplorerBaseLabel = "pc53=0";
 let intonationExplorerBaseMode = "auto";
-let intonationExplorerSortMode = "count";
+let intonationExplorerSortMode = "first";
 let intonationExplorerSkipGraceNotes = true;
 let intonationExplorerIs53 = false;
 let intonationExplorerDeclaredMakam = "";
 let intonationExplorerCompareMakam = "";
+let intonationExplorerAutoMakamApplied = false;
 let lastIntonationDnaLogText = "";
 let lastIntonationDnaUiText = "";
 let lastIntonationPitchSetText = "";
@@ -3600,6 +3601,64 @@ function populateIntonationExplorerMakams() {
 
   fill($intonationExplorerDeclaredMakam);
   fill($intonationExplorerCompareMakam);
+}
+
+function normalizeMakamKey(name) {
+  const raw = String(name || "").trim();
+  if (!raw) return "";
+  const base = raw
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/\s+/g, " ");
+  const map = {
+    "ç": "c",
+    "ğ": "g",
+    "ı": "i",
+    "ş": "s",
+    "ö": "o",
+    "ü": "u",
+    "â": "a",
+    "î": "i",
+    "û": "u",
+  };
+  return base
+    .split("")
+    .map((ch) => (map[ch] ? map[ch] : ch))
+    .join("")
+    .replace(/[^a-z0-9 ]/g, "")
+    .trim();
+}
+
+const aydemirMakamNameIndex = (() => {
+  const list = Array.isArray(AYDEMIR_MAKAM_DNA) ? AYDEMIR_MAKAM_DNA : [];
+  const names = list
+    .map((e) => String(e && e.makam ? e.makam : "").trim())
+    .filter(Boolean);
+  const sorted = names
+    .slice()
+    .sort((a, b) => normalizeMakamKey(b).length - normalizeMakamKey(a).length);
+  const idx = new Map();
+  for (const name of sorted) {
+    const key = normalizeMakamKey(name);
+    if (!key) continue;
+    if (!idx.has(key)) idx.set(key, name);
+  }
+  return { idx, sorted };
+})();
+
+function detectAydemirMakamFromTuneText(tuneText) {
+  const text = String(tuneText || "");
+  if (!text.trim()) return "";
+  const mT = text.match(/(?:^|\n)T:\s*([^\r\n]+)/);
+  const mR = text.match(/(?:^|\n)R:\s*([^\r\n]+)/);
+  const hay = normalizeMakamKey([mR ? mR[1] : "", mT ? mT[1] : ""].filter(Boolean).join(" "));
+  if (!hay) return "";
+  for (const name of aydemirMakamNameIndex.sorted) {
+    const key = normalizeMakamKey(name);
+    if (!key) continue;
+    if (hay.includes(key)) return name;
+  }
+  return "";
 }
 
 function normalizePerdeKey(name) {
@@ -4487,7 +4546,7 @@ function highlightSvgIntonationNotesAtEditorOffsets(offsets) {
   return lastSvgIntonationNoteEls.length > 0;
 }
 
-function renderIntonationExplorerRows(rows, { is53 } = {}) {
+function renderIntonationExplorerRows(rows, { is53, roleAbs53Map } = {}) {
   if (!$intonationExplorerTableBody) return;
   $intonationExplorerTableBody.innerHTML = "";
   const list = Array.isArray(rows) ? rows : [];
@@ -4526,16 +4585,17 @@ function renderIntonationExplorerRows(rows, { is53 } = {}) {
         perdeName = resolvePerdeName({ pc53: row.absStep, octave: row.octave }) || "";
       }
     }
-    if (!is53) {
-      perde.textContent = "";
-      perde.title = "";
-      perde.classList.remove("subtle");
-    } else {
-      perde.textContent = perdeName || "??";
-      if (!perdeName) {
-        perde.title = `No Perde label yet for token=${String(row.abcSpelling || "")} (pc53=${formatAeuLabel(row.absStep)}).`;
-        perde.classList.add("subtle");
-      } else {
+	    if (!is53) {
+	      perde.textContent = "";
+	      perde.title = "";
+	      perde.classList.remove("subtle");
+	    } else {
+	      const role = (roleAbs53Map && roleAbs53Map.get(String(row.step))) ? roleAbs53Map.get(String(row.step)) : "";
+	      perde.textContent = (perdeName || "??") + (role ? ` · ${role}` : "");
+	      if (!perdeName) {
+	        perde.title = `No Perde label yet for token=${String(row.abcSpelling || "")} (pc53=${formatAeuLabel(row.absStep)}).`;
+	        perde.classList.add("subtle");
+	      } else {
         perde.title = "";
         perde.classList.remove("subtle");
       }
@@ -4609,7 +4669,7 @@ async function refreshIntonationExplorer() {
 		    return;
 		  }
 		    const scanned = scanIntonationEntries(snapshot, { skipGraceNotes: intonationExplorerSkipGraceNotes });
-		  if (scanned.error) {
+			  if (scanned.error) {
 	      intonationExplorerRows = [];
 	      intonationExplorerActiveStep = null;
       intonationExplorerIs53 = false;
@@ -4621,13 +4681,30 @@ async function refreshIntonationExplorer() {
         clearIntonationExplorerPlot();
 		    setIntonationExplorerStatus(scanned.error, { error: true });
 		    return;
-		  }
-      intonationExplorerIs53 = Boolean(scanned.is53);
-	    updateIntonationBaseUi();
-    const mode = intonationExplorerBaseMode || "auto";
-    let base = 0;
-    let label = "pc53=0";
-    if (mode === "manual") {
+			  }
+	      intonationExplorerIs53 = Boolean(scanned.is53);
+		    updateIntonationBaseUi();
+	    const fullText = String(snapshot.text || "");
+	    const tuneText = scanned.tune ? fullText.slice(scanned.tune.start, scanned.tune.end) : "";
+
+	    // Best-effort auto-fill: if the tune text contains a recognizable makam name,
+	    // preselect both dropdowns once (convenience only).
+	    try {
+	      if (!intonationExplorerAutoMakamApplied && !intonationExplorerDeclaredMakam && !intonationExplorerCompareMakam) {
+	        const detected = detectAydemirMakamFromTuneText(tuneText);
+	        if (detected) {
+	          intonationExplorerAutoMakamApplied = true;
+	          intonationExplorerDeclaredMakam = detected;
+	          intonationExplorerCompareMakam = detected;
+	          if ($intonationExplorerDeclaredMakam) $intonationExplorerDeclaredMakam.value = detected;
+	          if ($intonationExplorerCompareMakam) $intonationExplorerCompareMakam.value = detected;
+	        }
+	      }
+	    } catch {}
+	    const mode = intonationExplorerBaseMode || "auto";
+	    let base = 0;
+	    let label = "pc53=0";
+	    if (mode === "manual") {
       const rawManual = ($intonationExplorerBaseManual && $intonationExplorerBaseManual.value) || DEFAULT_INT_BASE;
       const resolved = resolveTonalBaseInput(rawManual);
       if (!resolved.ok) {
@@ -4636,41 +4713,58 @@ async function refreshIntonationExplorer() {
       }
       base = resolved.base;
       label = resolved.label;
-    } else if (mode === "fromK") {
-      const fullText = String(snapshot.text || "");
-      const tuneText = scanned.tune ? fullText.slice(scanned.tune.start, scanned.tune.end) : "";
-      const resolved = parseTonalBaseFromK(tuneText);
-      if (!resolved.ok) {
-        setIntonationExplorerStatus(resolved.error, { error: true });
-        return;
-      }
+	    } else if (mode === "fromK") {
+	      const resolved = parseTonalBaseFromK(tuneText);
+	      if (!resolved.ok) {
+	        setIntonationExplorerStatus(resolved.error, { error: true });
+	        return;
+	      }
       base = resolved.base;
       label = `K:${resolved.label}`;
     } else {
       base = pickAutoBaseStep(scanned.entries);
       label = `Auto pc53=${formatAeuLabel(base)}`;
-    }
-    intonationExplorerBaseStep = base;
-    intonationExplorerBaseLabel = label;
-	    const rows = buildIntonationRowsFromEntries(scanned.entries, base, { sortMode: intonationExplorerSortMode });
-	    intonationExplorerRows = rows;
-	    intonationExplorerActiveStep = null;
-	    renderIntonationExplorerRows(rows, { is53: intonationExplorerIs53 });
-	    setIntonationHighlightRanges([]);
-	    clearSvgIntonationBarHighlight();
-	    clearSvgIntonationNoteHighlight();
-	    const graceLabel = intonationExplorerSkipGraceNotes ? "grace off" : "grace on";
-	    const sortLabel = `sort:${String(intonationExplorerSortMode || "count")}`;
-      const modeLabel = intonationExplorerIs53 ? "EDO-53" : "EDO-12";
-	    setIntonationExplorerStatus(`Base ${intonationExplorerBaseLabel} (${rows.length} classes; ${sortLabel}; ${graceLabel}; ${modeLabel})`);
+	    }
+	    intonationExplorerBaseStep = base;
+	    intonationExplorerBaseLabel = label;
+		    const rows = buildIntonationRowsFromEntries(scanned.entries, base, { sortMode: intonationExplorerSortMode });
+		    intonationExplorerRows = rows;
+		    intonationExplorerActiveStep = null;
+
+		    // Optional: tag observed steps that match the declared makam roles (durak/güçlü/yeden).
+		    let roleAbs53Map = null;
+		    try {
+		      const entry = getAydemirMakamEntry(intonationExplorerDeclaredMakam);
+		      const events = Array.isArray(scanned.noteEvents) ? scanned.noteEvents : [];
+		      const absVals = events.map((ev) => Number(ev.abs53)).filter((n) => Number.isFinite(n));
+		      const observedMinAbs = absVals.length ? Math.min(...absVals) : null;
+		      const observedMaxAbs = absVals.length ? Math.max(...absVals) : null;
+		      if (entry && (entry.tonic || entry.dominant || entry.leading_tone)) {
+		        const durak = parseAydemirPerdeField(entry.tonic);
+		        const guclu = parseAydemirPerdeField(entry.dominant);
+		        const yeden = parseAydemirPerdeField(entry.leading_tone);
+		        const durakAbs = durak && durak.name ? pickOverlayAbs53ForPerde(durak.name, { hint: durak.hint, observedMinAbs, observedMaxAbs }) : null;
+		        const gucluAbs = guclu && guclu.name ? pickOverlayAbs53ForPerde(guclu.name, { hint: guclu.hint, observedMinAbs, observedMaxAbs }) : null;
+		        const yedenAbs = yeden && yeden.name ? pickOverlayAbs53ForPerde(yeden.name, { hint: yeden.hint, observedMinAbs, observedMaxAbs }) : null;
+		        roleAbs53Map = new Map();
+		        if (Number.isFinite(durakAbs)) roleAbs53Map.set(String(durakAbs), "durak");
+		        if (Number.isFinite(gucluAbs)) roleAbs53Map.set(String(gucluAbs), "güçlü");
+		        if (Number.isFinite(yedenAbs)) roleAbs53Map.set(String(yedenAbs), "yeden");
+		      }
+		    } catch {}
+		    renderIntonationExplorerRows(rows, { is53: intonationExplorerIs53, roleAbs53Map });
+		    setIntonationHighlightRanges([]);
+		    clearSvgIntonationBarHighlight();
+		    clearSvgIntonationNoteHighlight();
+		    const sortLabel = `sort:${String(intonationExplorerSortMode || "count")}`;
+	      const modeLabel = intonationExplorerIs53 ? "EDO-53" : "EDO-12";
+		    setIntonationExplorerStatus(`Base ${intonationExplorerBaseLabel} (${rows.length} classes; ${sortLabel}; ${modeLabel})`);
 
       // Proof-of-concept "DNA / Seyir snapshot" (no UI changes): print to console for copy/paste.
       try {
-        const fullText = String(snapshot.text || "");
-        const tuneText = scanned.tune ? fullText.slice(scanned.tune.start, scanned.tune.end) : "";
-        const pitchSetPc53 = Array.from(new Set((scanned.noteEvents || []).map((e) => mod53(e && e.pc53 ? e.pc53 : 0))))
-          .sort((a, b) => a - b)
-          .map((n) => formatAeuLabel(n));
+	        const pitchSetPc53 = Array.from(new Set((scanned.noteEvents || []).map((e) => mod53(e && e.pc53 ? e.pc53 : 0))))
+	          .sort((a, b) => a - b)
+	          .map((n) => formatAeuLabel(n));
         const pitchSetText = `pitchSetPc53=[${pitchSetPc53.join(", ")}]`;
         const dnaText = buildSeyirSnapshotText({
           tuneText,
@@ -4718,10 +4812,11 @@ function showIntonationExplorerPanel() {
   populateIntonationExplorerMakams();
   if ($intonationExplorerBaseMode) $intonationExplorerBaseMode.value = "auto";
   if ($intonationExplorerBaseManual && !$intonationExplorerBaseManual.value) $intonationExplorerBaseManual.value = DEFAULT_INT_BASE;
-  if ($intonationExplorerSort) $intonationExplorerSort.value = "count";
+  if ($intonationExplorerSort) $intonationExplorerSort.value = "first";
   if ($intonationExplorerSkipGrace) $intonationExplorerSkipGrace.checked = true;
-  intonationExplorerSortMode = "count";
+  intonationExplorerSortMode = "first";
   intonationExplorerSkipGraceNotes = true;
+  intonationExplorerAutoMakamApplied = false;
   updateIntonationBaseUi();
   refreshIntonationExplorer().catch(() => {});
 }
