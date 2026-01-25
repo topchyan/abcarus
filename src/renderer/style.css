@@ -742,6 +742,8 @@ body.resizing * {
   text-align: left;
   border: 0;
   background: none;
+  font-family: inherit;
+  font-size: inherit;
   padding: 3px 6px;
   cursor: pointer;
   color: var(--text);
@@ -801,7 +803,8 @@ body.resizing * {
   background: #fff;
   padding: 4px 6px;
   border-radius: 6px;
-  font-size: var(--font-size-sm);
+  font-family: inherit;
+  font-size: inherit;
   color: #222;
 }
 
@@ -2622,6 +2625,11 @@ select,
 textarea {
   font-family: inherit;
   font-size: var(--font-size-ui);
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
 }
 
 .settings-advanced > summary {
