@@ -211,7 +211,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
       },
       { type: "separator" },
       {
-        label: "Diagnostics",
+        label: "Study",
         submenu: [
           {
             label: "Intonation Explorer…",
