@@ -14302,9 +14302,10 @@ async function applyAbc2abcTransform(options) {
     const preferNative = !latestSettingsSnapshot || latestSettingsSnapshot.useNativeTranspose !== false;
     if (preferNative) {
       try {
-        const entry = getActiveFileEntry();
-        const headerText = buildHeaderPrefix(entry ? entry.headerText : "", false, abcText).text;
-        const transformed = transformTranspose(abcText, Number(options.transposeSemitones), { headerText });
+        // NOTE: Detect temperament from the tune text only.
+        // File-level headers may include %%MIDI temperamentequal 53 for unrelated tunes; using them here
+        // can force microtonal respelling (e.g. ^4C) when the user expects standard semitone transpose.
+        const transformed = transformTranspose(abcText, Number(options.transposeSemitones), { headerText: "" });
         const aligned = (latestSettingsSnapshot && latestSettingsSnapshot.autoAlignBarsAfterTransforms)
           ? alignBarsInText(transformed)
           : transformed;
