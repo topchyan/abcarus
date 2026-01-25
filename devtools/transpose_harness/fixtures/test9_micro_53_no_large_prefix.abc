@@ -1,0 +1,8 @@
+%%MIDI temperamentequal 53
+X:1
+T:Micro large-prefix regression (should not emit _10B)
+L:1/8
+M:4/4
+K:C
+_6B B _6B B | _6B z2 B2 |
+

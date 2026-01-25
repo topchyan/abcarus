@@ -278,9 +278,27 @@ function pairRank53(micro) {
   return 2;
 }
 
+// For EDO-53, constrain spelling to the “human” accidental set we actually use in this project.
+// This prevents nonsense outputs like ^13G / _22B that are technically representable in 53-EDO,
+// but are not part of our intended ABC spelling vocabulary.
+const ALLOWED_MICRO_STEPS_53 = new Set([
+  -8, -6, -5, -4, -3, -2, -1,
+  0,
+  1, 2, 3, 4, 5, 6, 8,
+]);
+
+function isAllowedMicro53(micro) {
+  const m = Number(micro);
+  if (!Number.isFinite(m)) return false;
+  return ALLOWED_MICRO_STEPS_53.has(Math.trunc(m));
+}
+
 function microPrefixFor53(micro, { explicit } = {}) {
   const m = Number(micro) || 0;
   if (m === 0) return explicit ? "=" : "";
+  // Prefer slash notation for +/-2, since it is widely used in existing corpora.
+  if (m === 2) return "^/";
+  if (m === -2) return "_/";
   return m > 0 ? `^${m}` : `_${-m}`;
 }
 
@@ -292,6 +310,7 @@ function chooseSpelling53ForId({ id53, preferFlats, preferSharps }) {
     const base = baseId53ForNaturalLetter(L);
     // Keep micro offsets small ([-26..+26]) and adjust octave during note serialization if needed.
     const micro = normalizeSigned53(Number(id53) - base);
+    if (!isAllowedMicro53(micro)) continue;
     const sideScore = preferFlats ? (micro < 0 ? 0 : 1) : (preferSharps ? (micro > 0 ? 0 : 1) : 0);
     const score = [pairRank53(micro), sideScore, Math.abs(micro), idx];
     if (!best) best = { letterUpper: L, micro, score };
@@ -566,6 +585,11 @@ function transposeKBody53(body, deltaSteps) {
       writeKeyMicroMap[mEq[1].toUpperCase()] = 0;
       continue;
     }
+    const mSlash = tok.match(/^(\^\/|_\/)([A-Ga-g])$/);
+    if (mSlash) {
+      writeKeyMicroMap[mSlash[2].toUpperCase()] = mSlash[1] === "^/" ? 2 : -2;
+      continue;
+    }
     const m2 = tok.match(/^(\^|_)(\d+)([A-Ga-g])$/);
     if (!m2) continue;
     const dir = m2[1] === "^" ? 1 : -1;
@@ -714,6 +738,7 @@ function transposeMusicLine53Western(line, deltaSteps, ctx, preferDefault) {
       const toCandidate = (letterUpperCand) => {
         const b = baseId53ForNaturalLetter(letterUpperCand);
         const microNorm = normalizeSigned53(Number(id2) - b);
+        if (!isAllowedMicro53(microNorm)) return null;
         const absCand = oct2 * 53 + b + microNorm;
         const deltaOct = (abs53New - absCand) / 53;
         if (!Number.isFinite(deltaOct) || !Number.isInteger(deltaOct)) return null;
@@ -735,7 +760,9 @@ function transposeMusicLine53Western(line, deltaSteps, ctx, preferDefault) {
         const sideScore = preferFlats ? (cand.micro < 0 ? 0 : 1) : (preferSharps ? (cand.micro > 0 ? 0 : 1) : 0);
         const letterChange = cand.letterUpper === upper ? 0 : 1;
         const octaveShift = Math.abs((cand.octave ?? oct2) - oct2);
-        const score = [needsExplicit ? 1 : 0, octaveShift, letterChange, pairRank53(cand.micro), sideScore, Math.abs(cand.micro)];
+        // Prefer “readable” micro spellings over preserving the original letter.
+        // This avoids outputs like `_10B` when `_1A` (same pitch) exists.
+        const score = [needsExplicit ? 1 : 0, octaveShift, pairRank53(cand.micro), Math.abs(cand.micro), letterChange, sideScore];
         const prefix = needsExplicit ? microPrefixFor53(cand.micro, { explicit: explicit.explicit }) : "";
         if (!chosen) chosen = { ...cand, needsExplicit, prefix, score };
         else {

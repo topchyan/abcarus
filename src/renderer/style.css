@@ -21,6 +21,7 @@
 
 :root {
   --font-family-ui: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans", sans-serif;
+  --library-font-family: var(--font-family-ui);
   --editor-font-family: "ABCarus Noto Sans Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --editor-font-size: 13px;
   --editor-notes-weight: 600;
@@ -29,8 +30,9 @@
   --editor-zoom: 1;
 
   --font-size-ui: 13px;
-  --font-size-sm: 12px;
-  --font-size-xs: 11px;
+  --font-size-sm: calc(var(--font-size-ui) - 1px);
+  --font-size-xs: calc(var(--font-size-ui) - 2px);
+  --library-font-size: var(--font-size-sm);
   --line-height-ui: 1.28;
   --space-1: 4px;
   --space-2: 8px;
@@ -232,7 +234,7 @@ header {
   border: 1px solid var(--button-border);
   background: var(--button-bg);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   padding: 4px 10px;
   border-radius: var(--button-radius);
   min-height: var(--button-height);
@@ -543,7 +545,7 @@ body.library-hidden .divider {
   padding: 6px 10px;
   border-radius: var(--button-radius);
   min-height: var(--button-height);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -590,7 +592,8 @@ body.resizing * {
 .tree {
   padding: 6px 6px 8px;
   overflow: auto;
-  font-size: var(--font-size-sm);
+  font-size: var(--library-font-size);
+  font-family: var(--library-font-family);
   min-height: 0;
   height: 100%;
 }
@@ -638,7 +641,7 @@ body.resizing * {
 }
 
 .error-header {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 6px 8px;
@@ -651,7 +654,7 @@ body.resizing * {
 .error-list {
   overflow: auto;
   padding: 6px 8px 10px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: #7a2a2a;
   display: flex;
   flex-direction: column;
@@ -739,6 +742,8 @@ body.resizing * {
   text-align: left;
   border: 0;
   background: none;
+  font-family: inherit;
+  font-size: inherit;
   padding: 3px 6px;
   cursor: pointer;
   color: var(--text);
@@ -773,7 +778,7 @@ body.resizing * {
 }
 
 .tree-count {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: var(--muted-text);
   background: rgba(0, 0, 0, 0.06);
   border-radius: 999px;
@@ -798,7 +803,8 @@ body.resizing * {
   background: #fff;
   padding: 4px 6px;
   border-radius: 6px;
-  font-size: 12px;
+  font-family: inherit;
+  font-size: inherit;
   color: #222;
 }
 
@@ -808,7 +814,7 @@ body.resizing * {
 }
 
 .dirty-indicator {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: #fff;
   background: #d9480f;
   padding: 2px 8px;
@@ -833,7 +839,7 @@ body.resizing * {
   padding: 2px 6px;
   border-radius: 999px;
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   border: 1px solid #d0d0d0;
   background: #fff;
   color: #333;
@@ -885,7 +891,7 @@ body.resizing * {
 
 .file-header-title {
   text-align: left;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
@@ -902,7 +908,7 @@ body.resizing * {
   justify-content: flex-end;
   gap: 10px;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: #444;
 }
 
@@ -2065,7 +2071,8 @@ svg {
   align-items: center;
   justify-content: center;
   background: var(--overlay-bg);
-  z-index: 20;
+  /* Must stay above tool panels (e.g. Intonation Explorer). */
+  z-index: 120;
 }
 
 .modal.open {
@@ -2081,6 +2088,10 @@ svg {
   box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  resize: both;
+  min-width: 360px;
+  min-height: 220px;
 }
 
 .modal-card.settings-card {
@@ -2091,6 +2102,7 @@ svg {
   min-height: 520px;
   max-width: 96vw;
   max-height: 92vh;
+  resize: both;
 }
 
 .modal-card.settings-card .modal-header {
@@ -2195,6 +2207,15 @@ svg {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.modal-header {
+  cursor: move;
+  user-select: none;
+}
+
+.modal-card.dragging .modal-header {
+  cursor: grabbing;
 }
 
 .modal-footer {
@@ -2620,6 +2641,11 @@ textarea {
   font-size: var(--font-size-ui);
 }
 
+button {
+  font-family: inherit;
+  font-size: inherit;
+}
+
 .settings-advanced > summary {
   cursor: pointer;
   user-select: none;
@@ -2724,15 +2750,117 @@ textarea {
   box-sizing: border-box;
 }
 
+.settings-row input[type="number"] {
+  width: 8em;
+  justify-self: start;
+}
+
+.settings-row input[type="text"] {
+  max-width: 360px;
+  justify-self: start;
+}
+
 .settings-row select {
   width: 100%;
-  max-width: none;
+  max-width: 360px;
   padding: 6px 8px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-1);
   background: #fff;
   color: var(--text);
   box-sizing: border-box;
+  justify-self: start;
+}
+
+.settings-entry--compact-pair {
+  grid-template-columns: 0px 1fr;
+}
+
+.settings-entry--compact-pair > span:first-child {
+  width: 0;
+  overflow: hidden;
+}
+
+.settings-fontpair {
+  display: grid;
+  grid-template-columns: minmax(220px, 360px) 90px;
+  gap: 10px;
+  align-items: end;
+}
+
+.settings-fontpair-field {
+  min-width: 0;
+}
+
+.settings-fontpair-label {
+  font-size: var(--font-size-xs);
+  color: var(--muted-text);
+  margin-bottom: 4px;
+}
+
+.settings-fontpair-field input[type="text"],
+.settings-fontpair-field input[type="number"],
+.settings-fontpair-field select {
+  width: 100%;
+  max-width: none;
+}
+
+.settings-entry--fonttable {
+  grid-template-columns: 0px 1fr;
+}
+
+.settings-entry--fonttable > span:first-child {
+  width: 0;
+  overflow: hidden;
+}
+
+.settings-fonttable {
+  display: grid;
+  grid-template-columns: 90px minmax(220px, 360px) 90px;
+  gap: 8px 10px;
+  align-items: center;
+}
+
+.settings-fonttable-head {
+  font-size: var(--font-size-xs);
+  color: var(--muted-text);
+  font-weight: 600;
+}
+
+.settings-fonttable-rowlabel {
+  font-size: var(--font-size-sm);
+  color: var(--muted-text);
+  font-weight: 600;
+}
+
+.settings-fonttable-cell {
+  min-width: 0;
+}
+
+.settings-fonttable-cell input[type="text"],
+.settings-fonttable-cell input[type="number"],
+.settings-fonttable-cell select {
+  width: 100%;
+  max-width: none;
+}
+
+.settings-entry--compact-toggles {
+  grid-template-columns: minmax(120px, 160px) 1fr;
+}
+
+.settings-fonttoggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.settings-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+  user-select: none;
 }
 
 .settings-select-row {

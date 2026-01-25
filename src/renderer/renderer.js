@@ -1535,6 +1535,41 @@ function abbreviatePathForLog(fullPath, tailSegments = 3) {
   return ["…", ...parts.slice(-tailSegments)].join(sep);
 }
 
+function setUiFontsFromSettings(settings) {
+  const root = document && document.documentElement ? document.documentElement : null;
+  if (!root) return;
+  const family = settings && typeof settings.uiFontFamily === "string" ? settings.uiFontFamily.trim() : "";
+  const size = settings && Number.isFinite(Number(settings.uiFontSize)) ? Number(settings.uiFontSize) : NaN;
+  const libraryFamily = settings && typeof settings.libraryUiFontFamily === "string" ? settings.libraryUiFontFamily.trim() : "";
+  const librarySize = settings && Number.isFinite(Number(settings.libraryUiFontSize)) ? Number(settings.libraryUiFontSize) : NaN;
+  try {
+    if (family) root.style.setProperty("--font-family-ui", family);
+    else root.style.removeProperty("--font-family-ui");
+  } catch {}
+  try {
+    if (Number.isFinite(size) && size > 0) root.style.setProperty("--font-size-ui", `${Math.round(size)}px`);
+    else root.style.removeProperty("--font-size-ui");
+  } catch {}
+  try {
+    if (libraryFamily) root.style.setProperty("--library-font-family", libraryFamily);
+    else root.style.removeProperty("--library-font-family");
+  } catch {}
+  try {
+    if (Number.isFinite(librarySize) && librarySize > 0) root.style.setProperty("--library-font-size", `${Math.round(librarySize)}px`);
+    else root.style.removeProperty("--library-font-size");
+  } catch {}
+
+  // Belt-and-suspenders: apply directly to the Library Tree element too.
+  // This avoids “it didn't change” reports if CSS vars are overridden elsewhere.
+  try {
+    const tree = document.getElementById("libraryTree");
+    if (tree) {
+      tree.style.fontFamily = libraryFamily || "";
+      tree.style.fontSize = (Number.isFinite(librarySize) && librarySize > 0) ? `${Math.round(librarySize)}px` : "";
+    }
+  } catch {}
+}
+
 const devConfig = (() => {
   try {
     return (window.api && typeof window.api.getDevConfig === "function") ? (window.api.getDevConfig() || {}) : {};
@@ -4028,9 +4063,24 @@ function renderIntonationSeyirPlot({ noteEvents, baseStep, overlayMakamName } = 
     if (b > a && b > c) turning.push({ kind: "peak", idx: i, e: compressed[i] });
     else if (b < a && b < c) turning.push({ kind: "trough", idx: i, e: compressed[i] });
   }
+  // Sample turning points across the whole tune (avoid clustering at the start).
+  const TURN_CAP = 24;
+  let sampledTurning = turning;
+  if (turning.length > TURN_CAP) {
+    const picked = [];
+    const used = new Set();
+    for (let i = 0; i < TURN_CAP; i += 1) {
+      const t = TURN_CAP === 1 ? 0 : (i / (TURN_CAP - 1));
+      const j = Math.round(t * (turning.length - 1));
+      if (used.has(j)) continue;
+      used.add(j);
+      picked.push(turning[j]);
+    }
+    sampledTurning = picked;
+  }
   const important = [
     { kind: "start", idx: 0, e: compressed[0] },
-    ...turning.slice(0, 24),
+    ...sampledTurning,
     { kind: "end", idx: compressed.length - 1, e: compressed[compressed.length - 1] },
   ];
 
@@ -5190,6 +5240,84 @@ function enableDraggableToolPanel(panelEl) {
       window.addEventListener("pointercancel", stopDrag);
     } catch {}
     ev.preventDefault();
+  });
+}
+
+function enableDraggableModal(modalEl) {
+  if (!modalEl || modalEl.__abcarusDraggableModal) return;
+  // Settings + Print All already have their own drag logic (and persistence).
+  if (modalEl.id === "settingsModal" || modalEl.id === "printAllOptionsModal") return;
+  const card = modalEl.querySelector(".modal-card");
+  const header = modalEl.querySelector(".modal-header");
+  if (!card || !header) return;
+  modalEl.__abcarusDraggableModal = true;
+
+  let dragState = null;
+  let dragBaseRect = null;
+
+  const clampTranslate = (pos) => {
+    if (!dragBaseRect) return pos;
+    const margin = 12;
+    const base = dragBaseRect;
+    const minX = margin - base.left;
+    const maxX = (window.innerWidth - margin) - base.right;
+    const minY = margin - base.top;
+    const maxY = (window.innerHeight - margin) - base.bottom;
+    return {
+      x: Math.min(maxX, Math.max(minX, pos.x)),
+      y: Math.min(maxY, Math.max(minY, pos.y)),
+    };
+  };
+
+  const applyTranslate = (pos) => {
+    const p = clampTranslate(pos);
+    card.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
+  };
+
+  header.addEventListener("pointerdown", (event) => {
+    if (!event || event.button !== 0) return;
+    const target = event.target;
+    if (target && (target.closest("button") || target.closest("input") || target.closest("select") || target.closest("textarea"))) {
+      return;
+    }
+    if (!modalEl.classList.contains("open")) return;
+    dragBaseRect = card.getBoundingClientRect();
+    const start = readTranslateXY(card.style.transform);
+    dragState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: start.x,
+      originY: start.y,
+    };
+    card.classList.add("dragging");
+    try { header.setPointerCapture(event.pointerId); } catch {}
+    event.preventDefault();
+  });
+
+  header.addEventListener("pointermove", (event) => {
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+    const dx = event.clientX - dragState.startX;
+    const dy = event.clientY - dragState.startY;
+    applyTranslate({ x: dragState.originX + dx, y: dragState.originY + dy });
+  });
+
+  const endDrag = (event) => {
+    if (!dragState) return;
+    if (event && dragState.pointerId != null && event.pointerId !== dragState.pointerId) return;
+    dragState = null;
+    dragBaseRect = null;
+    card.classList.remove("dragging");
+    try { if (event) header.releasePointerCapture(event.pointerId); } catch {}
+  };
+
+  header.addEventListener("pointerup", endDrag);
+  header.addEventListener("pointercancel", endDrag);
+
+  window.addEventListener("resize", () => {
+    if (!modalEl.classList.contains("open")) return;
+    dragBaseRect = card.getBoundingClientRect();
+    applyTranslate(readTranslateXY(card.style.transform));
   });
 }
 
@@ -13844,6 +13972,7 @@ if ($xIssuesModal) {
     e.stopPropagation();
     closeXIssuesModal();
   });
+  enableDraggableModal($xIssuesModal);
 }
 
 if ($printAllOptionsModal) {
@@ -14173,9 +14302,10 @@ async function applyAbc2abcTransform(options) {
     const preferNative = !latestSettingsSnapshot || latestSettingsSnapshot.useNativeTranspose !== false;
     if (preferNative) {
       try {
-        const entry = getActiveFileEntry();
-        const headerText = buildHeaderPrefix(entry ? entry.headerText : "", false, abcText).text;
-        const transformed = transformTranspose(abcText, Number(options.transposeSemitones), { headerText });
+        // NOTE: Detect temperament from the tune text only.
+        // File-level headers may include %%MIDI temperamentequal 53 for unrelated tunes; using them here
+        // can force microtonal respelling (e.g. ^4C) when the user expects standard semitone transpose.
+        const transformed = transformTranspose(abcText, Number(options.transposeSemitones), { headerText: "" });
         const aligned = (latestSettingsSnapshot && latestSettingsSnapshot.autoAlignBarsAfterTransforms)
           ? alignBarsInText(transformed)
           : transformed;
@@ -16750,6 +16880,7 @@ if (window.api && typeof window.api.getSettings === "function") {
 		      if (settings) {
 		      latestSettingsSnapshot = settings;
 		      logStartupPerf("apply settings: begin");
+		      setUiFontsFromSettings(settings);
 		      setGlobalHeaderFromSettings(settings);
 		      setAbc2svgFontsFromSettings(settings);
 		      setSoundfontFromSettings(settings);
@@ -16788,6 +16919,7 @@ if (window.api && typeof window.api.onSettingsChanged === "function") {
     latestSettingsSnapshot = settings || null;
     const prevHeader = `${globalHeaderEnabled}|${globalHeaderText}|${abc2svgNotationFontFile}|${abc2svgTextFontFile}`;
     const prevSoundfont = soundfontName;
+    setUiFontsFromSettings(settings);
     setGlobalHeaderFromSettings(settings);
     setAbc2svgFontsFromSettings(settings);
 	    setSoundfontFromSettings(settings);
@@ -17277,6 +17409,7 @@ if ($moveTuneModal) {
       $moveTuneApply.click();
     }
   });
+  enableDraggableModal($moveTuneModal);
 }
 
 if ($aboutClose) {
@@ -17296,6 +17429,7 @@ if ($aboutModal) {
     e.stopPropagation();
     closeAbout();
   });
+  enableDraggableModal($aboutModal);
 }
 
 if ($aboutCopy) {
@@ -17389,6 +17523,7 @@ if ($templatesModal) {
       $templatesInsert.click();
     }
   });
+  enableDraggableModal($templatesModal);
 }
 
 if ($makamDnaClose) {
@@ -17483,6 +17618,7 @@ if ($makamDnaModal) {
       $makamDnaSave.click();
     }
   });
+  enableDraggableModal($makamDnaModal);
 }
 
 if ($setListClose) {
@@ -17608,6 +17744,7 @@ if ($setListModal) {
     e.stopPropagation();
     closeSetList();
   });
+  enableDraggableModal($setListModal);
 }
 
 if ($setListHeaderClose) {
@@ -17627,6 +17764,7 @@ if ($setListHeaderModal) {
     e.stopPropagation();
     closeSetListHeaderEditor();
   });
+  enableDraggableModal($setListHeaderModal);
 }
 
 if ($setListHeaderReset) {
@@ -17710,6 +17848,7 @@ if ($disclaimerModal) {
       dismissDisclaimer();
     }
   });
+  enableDraggableModal($disclaimerModal);
 }
 
 if ($fileHeaderSave) {

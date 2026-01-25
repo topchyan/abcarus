@@ -979,6 +979,11 @@ function applySettingsPatch(patch, { persistToSettingsFile = true } = {}) {
     else next.layoutRenderZoomVertical = next.renderZoom;
   }
   next.editorFontSize = Math.min(32, Math.max(8, Number(next.editorFontSize) || 13));
+  next.uiFontSize = Math.min(28, Math.max(10, Number(next.uiFontSize) || 13));
+  const defaultUiFontFamily = "system-ui, -apple-system, \"Segoe UI\", Roboto, Ubuntu, Cantarell, \"Noto Sans\", sans-serif";
+  next.uiFontFamily = String(next.uiFontFamily || "").trim() || defaultUiFontFamily;
+  next.libraryUiFontSize = Math.min(40, Math.max(10, Number(next.libraryUiFontSize) || (Math.max(10, Math.round(next.uiFontSize) - 1))));
+  next.libraryUiFontFamily = String(next.libraryUiFontFamily || "").trim() || next.uiFontFamily;
   next.editorNotesBold = Boolean(next.editorNotesBold);
   next.editorLyricsBold = Boolean(next.editorLyricsBold);
   next.confirmAppendToActiveFile = Boolean(next.confirmAppendToActiveFile);
