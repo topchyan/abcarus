@@ -6,6 +6,7 @@ const {
 const { resolvePythonExecutable, pythonEnvForExecutable } = require("./conversion/utils");
 const { getSettingsSchema } = require("./settings_schema");
 const { encodePropertiesFromSchema, parseSettingsPatchFromProperties } = require("./properties");
+const { decodeAbcTextFromBuffer, encodeAbcTextToBuffer } = require("./abcCharset");
 
 const os = require("os");
 const { execFile } = require("child_process");
@@ -71,7 +72,7 @@ async function atomicWriteFileWithRetry(fs, path, filePath, data, { attempts = 5
     path.dirname(absPath),
     `.${path.basename(absPath)}.${process.pid}.${Date.now()}.tmp`
   );
-  await fs.promises.writeFile(tmpPath, data, "utf8");
+  await fs.promises.writeFile(tmpPath, data);
   let lastErr = null;
   for (let i = 0; i < attempts; i += 1) {
     try {
@@ -692,15 +693,27 @@ function registerIpcHandlers(ctx) {
   });
   ipcMain.handle("file:read", async (_e, filePath) => {
     try {
-      const data = await fs.promises.readFile(filePath, "utf8");
-      return { ok: true, data };
+      const p = filePath ? String(filePath) : "";
+      if (!p) return { ok: false, error: "Missing file path." };
+      const raw = await fs.promises.readFile(p);
+      if (p.toLowerCase().endsWith(".abc")) {
+        return { ok: true, data: decodeAbcTextFromBuffer(raw).text };
+      }
+      return { ok: true, data: raw.toString("utf8") };
     } catch (e) {
       return { ok: false, error: e && e.message ? e.message : String(e) };
     }
   });
   ipcMain.handle("file:write", async (_e, filePath, data) => {
     try {
-      await atomicWriteFileWithRetry(fs, path, filePath, data);
+      const p = filePath ? String(filePath) : "";
+      if (!p) return { ok: false, error: "Missing file path." };
+      if (p.toLowerCase().endsWith(".abc")) {
+        const encoded = encodeAbcTextToBuffer(String(data == null ? "" : data));
+        await atomicWriteFileWithRetry(fs, path, p, encoded.buffer);
+      } else {
+        await atomicWriteFileWithRetry(fs, path, p, String(data == null ? "" : data));
+      }
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e && e.message ? e.message : String(e) };

@@ -3,6 +3,7 @@ const fs = require("fs");
 const { EventEmitter } = require("events");
 const { statFingerprint } = require("./fsFingerprint");
 const { segmentTunes } = require("../common/abc/tuneSegmenter");
+const { decodeAbcTextFromBuffer, encodeAbcTextToBuffer } = require("./abcCharset");
 
 const emitter = new EventEmitter();
 
@@ -46,6 +47,7 @@ function getWorkingCopySnapshot() {
   return freezeSnapshot({
     path: state.path,
     text: state.text,
+    encoding: state.encoding || "utf8",
     version: state.version,
     dirty: state.dirty,
     diskFingerprintOnOpen: state.diskFingerprintOnOpen ? { ...state.diskFingerprintOnOpen } : null,
@@ -75,7 +77,8 @@ async function atomicWriteFileWithRetry(filePath, data, { attempts = 5 } = {}) {
   const absPath = String(filePath || "");
   if (!absPath) throw new Error("Missing file path.");
   const tmpPath = `${absPath}.${process.pid}.${Date.now()}.tmp`;
-  await fs.promises.writeFile(tmpPath, data, "utf8");
+  // `data` may be a string or a Buffer.
+  await fs.promises.writeFile(tmpPath, data);
   let lastErr = null;
   for (let i = 0; i < attempts; i += 1) {
     try {
@@ -109,7 +112,9 @@ async function openWorkingCopyFromPath(filePath) {
   if (!p) throw new Error("Missing file path.");
   if (state && state.path === p) return getWorkingCopyMetaSnapshot();
 
-  const text = await fs.promises.readFile(p, "utf8");
+  const raw = await fs.promises.readFile(p);
+  const decoded = decodeAbcTextFromBuffer(raw);
+  const text = decoded.text;
   const fp = await statFingerprint(p);
   const seg = segmentTunes(text);
   const tunes = [];
@@ -128,6 +133,7 @@ async function openWorkingCopyFromPath(filePath) {
   state = {
     path: p,
     text,
+    encoding: decoded.encoding || "utf8",
     version: 0,
     dirty: false,
     diskFingerprintOnOpen: fp,
@@ -149,7 +155,9 @@ async function closeWorkingCopy() {
 async function reloadWorkingCopyFromDisk() {
   if (!state || !state.path) throw new Error("No working copy open.");
   const p = String(state.path || "");
-  const text = await fs.promises.readFile(p, "utf8");
+  const raw = await fs.promises.readFile(p);
+  const decoded = decodeAbcTextFromBuffer(raw);
+  const text = decoded.text;
   const fp = await statFingerprint(p);
   const seg = segmentTunes(text);
 
@@ -170,6 +178,7 @@ async function reloadWorkingCopyFromDisk() {
   }
 
   state.text = text;
+  state.encoding = decoded.encoding || state.encoding || "utf8";
   state.version += 1;
   state.dirty = false;
   state.diskFingerprintOnOpen = fp;
@@ -213,7 +222,9 @@ async function commitWorkingCopyToDisk({ force = false } = {}) {
 
   const text = String(state.text || "");
   try {
-    await atomicWriteFileWithRetry(p, text);
+    const encoded = encodeAbcTextToBuffer(text);
+    state.encoding = encoded.encoding || state.encoding || "utf8";
+    await atomicWriteFileWithRetry(p, encoded.buffer);
   } catch (err) {
     if (isMissingFileError(err) && !force) {
       return { ok: false, missingOnDisk: true, diskFingerprintOnOpen: fpOnOpen };

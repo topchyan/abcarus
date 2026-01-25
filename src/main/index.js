@@ -8,6 +8,7 @@ const { registerIpcHandlers } = require("./ipc");
 const { resolveThirdPartyRoot } = require("./conversion");
 const { getSettingsSchema, getDefaultSettings: getDefaultSettingsFromSchema } = require("./settings_schema");
 const { encodePropertiesFromSchema, parseSettingsPatchFromProperties } = require("./properties");
+const { decodeAbcTextFromBuffer } = require("./abcCharset");
 
 let mainWindow = null;
 let isQuitting = false;
@@ -1665,7 +1666,8 @@ async function parseSingleFile(filePath, sender, options = {}) {
         };
       }
     }
-    content = await fs.promises.readFile(filePath, "utf8");
+    const raw = await fs.promises.readFile(filePath);
+    content = decodeAbcTextFromBuffer(raw).text;
   } catch (e) {
     progress.finish({
       phase: "parse",
@@ -1753,7 +1755,8 @@ async function scanLibraryDiscover(rootDir, sender, options = {}) {
       const allowMetaRefresh = options && options.computeMeta === true;
       if (tuneCount == null && allowMetaRefresh) {
         // New or changed file: compute minimal metadata without full parse.
-        const content = await fs.promises.readFile(filePath, "utf8");
+        const raw = await fs.promises.readFile(filePath);
+        const content = decodeAbcTextFromBuffer(raw).text;
         const discovered = computeDiscoverFromContent(content);
         tuneCount = discovered.tuneCount;
         xIssues = discovered.xIssues || undefined;
