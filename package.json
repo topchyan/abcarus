@@ -26,6 +26,7 @@
     "test:transpose": "node devtools/transpose_harness/run_tests.js",
     "test:settings": "node devtools/settings_harness/run_tests.js",
     "test:truth-scale": "node devtools/truth_scale_53_harness/run_tests.js",
+    "test:playback-sanitize": "node devtools/playback_sanitize_harness/run_tests.mjs",
     "test:charset": "node devtools/charset_harness/run_tests.js",
     "test:fileops": "node scripts/check_no_raw_fileops.mjs",
     "test:renderer-build": "node scripts/check_renderer_build.mjs",
