@@ -21060,6 +21060,7 @@ function extractDrumPlaybackBars(text) {
   let inTextBlock = false;
   const bars = [];
   const patterns = [];
+  const lineIndents = new Map();
   function applyMidiDirective(directiveLine) {
     const line = String(directiveLine || "").trim();
     if (!line) return;
@@ -21175,7 +21176,8 @@ function extractDrumPlaybackBars(text) {
     const match = line.match(re);
     return match ? match[1] : null;
   };
-  for (const rawLine of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const rawLine = lines[lineIndex];
     const trimmed = rawLine.trim();
     if (!trimmed) continue;
     // Compatibility feature (ABCarus): allow `+:` continuation lines for long directives.
@@ -21247,6 +21249,10 @@ function extractDrumPlaybackBars(text) {
     if (/^[A-Za-z]:/.test(trimmed) && !/^V:/.test(trimmed)) continue;
     if (!primaryVoice && currentVoice) primaryVoice = currentVoice;
     if (primaryVoice && currentVoice && currentVoice !== primaryVoice) continue;
+    if (!lineIndents.has(lineIndex)) {
+      const indent = String(rawLine || "").match(/^[\t ]*/)?.[0] ?? "";
+      lineIndents.set(lineIndex, indent);
+    }
     let line = rawLine;
     if (!trimmed.startsWith("%%")) {
       const idx = line.indexOf("%");
@@ -21285,6 +21291,7 @@ function extractDrumPlaybackBars(text) {
               pattern: currentPattern,
               startToken: pendingStartToken,
               endToken: token.token,
+              srcLineIndex: lineIndex,
             });
             pendingStartToken = null;
             hasContent = false;
@@ -21302,7 +21309,7 @@ function extractDrumPlaybackBars(text) {
       i += 1;
     }
   }
-  return { bars, patterns, leadingToken };
+  return { bars, patterns, leadingToken, lineIndents };
 }
 
 function buildDrumVoiceText(info) {
@@ -21334,17 +21341,19 @@ function buildDrumVoiceText(info) {
   let patternKey = null;
   let patternBarIndex = 0;
   let wasOn = false;
-  let barInLine = 0;
   let lineBuffer = "";
   let sep = info.leadingToken || "";
+  const lineIndents = (info && info.lineIndents instanceof Map) ? info.lineIndents : null;
+  let currentLineIndex = null;
 
   const flushLine = () => {
     if (lineBuffer) out.push(lineBuffer);
     lineBuffer = "";
-    barInLine = 0;
+    currentLineIndex = null;
   };
 
-  for (const bar of bars) {
+  for (let barIndex = 0; barIndex < bars.length; barIndex += 1) {
+    const bar = bars[barIndex];
     const meter = normalizeFraction(bar.meter) || { num: 4, den: 4 };
     const unit = normalizeFraction(bar.unit) || { num: 1, den: 8 };
     const barUnits = fractionDiv(meter, unit);
@@ -21395,10 +21404,24 @@ function buildDrumVoiceText(info) {
     }
 
     if (bar.startToken) sep = bar.startToken;
+    if (!lineBuffer) {
+      const lineKey = Number.isFinite(bar.srcLineIndex) ? bar.srcLineIndex : null;
+      currentLineIndex = lineKey;
+      const indent = (lineIndents && lineKey != null) ? (lineIndents.get(lineKey) || "") : "";
+      lineBuffer = indent;
+    }
     lineBuffer += `${sep}${barText}`;
     sep = bar.endToken || "|";
-    barInLine += 1;
-    if (barInLine >= 4) flushLine();
+
+    const nextBar = bars[barIndex + 1] || null;
+    const nextLineKey = nextBar && Number.isFinite(nextBar.srcLineIndex) ? nextBar.srcLineIndex : null;
+    if (currentLineIndex != null && nextLineKey != null && nextLineKey !== currentLineIndex) {
+      // Preserve the original V:1 wrapping by ending the line at the same bar boundary.
+      // Emit the separator at end-of-line so the next line can start directly with bar content.
+      lineBuffer += sep;
+      sep = "";
+      flushLine();
+    }
   }
   if (lineBuffer) {
     lineBuffer += sep;
