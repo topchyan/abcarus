@@ -4063,9 +4063,24 @@ function renderIntonationSeyirPlot({ noteEvents, baseStep, overlayMakamName } = 
     if (b > a && b > c) turning.push({ kind: "peak", idx: i, e: compressed[i] });
     else if (b < a && b < c) turning.push({ kind: "trough", idx: i, e: compressed[i] });
   }
+  // Sample turning points across the whole tune (avoid clustering at the start).
+  const TURN_CAP = 24;
+  let sampledTurning = turning;
+  if (turning.length > TURN_CAP) {
+    const picked = [];
+    const used = new Set();
+    for (let i = 0; i < TURN_CAP; i += 1) {
+      const t = TURN_CAP === 1 ? 0 : (i / (TURN_CAP - 1));
+      const j = Math.round(t * (turning.length - 1));
+      if (used.has(j)) continue;
+      used.add(j);
+      picked.push(turning[j]);
+    }
+    sampledTurning = picked;
+  }
   const important = [
     { kind: "start", idx: 0, e: compressed[0] },
-    ...turning.slice(0, 24),
+    ...sampledTurning,
     { kind: "end", idx: compressed.length - 1, e: compressed[compressed.length - 1] },
   ];
 
