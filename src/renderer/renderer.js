@@ -21202,6 +21202,9 @@ function extractDrumPlaybackBars(text) {
         if (!firstVoice) firstVoice = v;
         if (inBody && !primaryVoice) primaryVoice = v;
       }
+      // Voice declaration lines are not musical content. Do not scan them for barlines or note letters,
+      // otherwise tokens like "treble" can be mis-read as notes and shift the repeat/bar skeleton.
+      continue;
     }
     if (!inBody) {
       const kValue = parseFieldValue(trimmed, "K");
