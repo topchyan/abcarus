@@ -101,8 +101,10 @@ const SETTINGS_SECTION_HINTS = {
 const FALLBACK_SCHEMA = [
   { key: "renderZoom", type: "number", default: 1, section: "General", label: "Score zoom (%)", ui: { input: "percent", min: 50, max: 800, step: 5 } },
   { key: "editorZoom", type: "number", default: 1, section: "General", label: "Editor zoom (%)", ui: { input: "percent", min: 50, max: 800, step: 5 } },
-  { key: "uiFontFamily", type: "string", default: "", section: "Fonts", group: "UI", label: "UI font family", ui: { input: "text" } },
-  { key: "uiFontSize", type: "number", default: 13, section: "Fonts", group: "UI", label: "UI font size", ui: { input: "number", min: 10, max: 28, step: 1 } },
+  { key: "uiFontFamily", type: "string", default: "system-ui, -apple-system, \"Segoe UI\", Roboto, Ubuntu, Cantarell, \"Noto Sans\", sans-serif", section: "Fonts", group: "Interface", label: "Font family", ui: { input: "text" } },
+  { key: "uiFontSize", type: "number", default: 13, section: "Fonts", group: "Interface", label: "Font size", ui: { input: "number", min: 10, max: 28, step: 1 } },
+  { key: "libraryUiFontFamily", type: "string", default: "system-ui, -apple-system, \"Segoe UI\", Roboto, Ubuntu, Cantarell, \"Noto Sans\", sans-serif", section: "Fonts", group: "Interface", label: "Library font family", ui: { input: "text" } },
+  { key: "libraryUiFontSize", type: "number", default: 12, section: "Fonts", group: "Interface", label: "Library font size", ui: { input: "number", min: 10, max: 40, step: 1 } },
   { key: "editorFontFamily", type: "string", default: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", section: "Fonts", group: "Editor", label: "Font family", ui: { input: "text" } },
   { key: "editorFontSize", type: "number", default: 13, section: "Fonts", group: "Editor", label: "Font size", ui: { input: "number", min: 8, max: 32, step: 1 } },
   { key: "editorNotesBold", type: "boolean", default: true, section: "Fonts", group: "Editor", label: "Notes", ui: { input: "checkbox" } },
@@ -1229,11 +1231,7 @@ export function initSettings(api) {
           };
 
           const isFontsSection = sectionName === "Fonts";
-          const fontsGroupHelp = isFontsSection
-            ? (g.title === "UI"
-              ? "App UI only (not the OS menu bar). Library can override."
-              : (g.title === "Editor" ? "ABC editor text." : (g.title === "Score" ? "Rendered score + playback." : "")))
-            : "";
+          const fontsGroupHelp = isFontsSection ? "" : "";
 
           if (isFontsSection && fontsGroupHelp) {
             const help = document.createElement("div");
@@ -1401,9 +1399,9 @@ export function initSettings(api) {
             return block;
           };
 
-          if (isFontsSection && g.title === "UI") {
+          if (isFontsSection && g.title === "Interface") {
             const table = createCompactFontTableBlock([
-              { label: "UI", familyKey: "uiFontFamily", sizeKey: "uiFontSize" },
+              { label: "Interface", familyKey: "uiFontFamily", sizeKey: "uiFontSize" },
               { label: "Library", familyKey: "libraryUiFontFamily", sizeKey: "libraryUiFontSize" },
             ]);
             if (table) group.appendChild(table);
