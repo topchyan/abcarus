@@ -21027,11 +21027,14 @@ function buildPitchMap(pitches) {
     seen.add(pitch);
     unique.push(pitch);
   }
+  // For percussion (%%MIDI drummap), the ABC "note" token is only a stable key.
+  // The actual sound comes from the MIDI pitch mapping, so we prefer visually clear tokens
+  // that sit in the middle of the staff (c/d/...) over ledger-line-heavy low tokens (C,/D,).
   const palette = [
-    "C,", "D,", "E,", "F,", "G,", "A,", "B,",
-    "C", "D", "E", "F", "G", "A", "B",
     "c", "d", "e", "f", "g", "a", "b",
+    "C", "D", "E", "F", "G", "A", "B",
     "c'", "d'", "e'", "f'", "g'", "a'", "b'",
+    "C,", "D,", "E,", "F,", "G,", "A,", "B,",
   ];
   const map = new Map();
   let idx = 0;
