@@ -1558,6 +1558,16 @@ function setUiFontsFromSettings(settings) {
     if (Number.isFinite(librarySize) && librarySize > 0) root.style.setProperty("--library-font-size", `${Math.round(librarySize)}px`);
     else root.style.removeProperty("--library-font-size");
   } catch {}
+
+  // Belt-and-suspenders: apply directly to the Library Tree element too.
+  // This avoids “it didn't change” reports if CSS vars are overridden elsewhere.
+  try {
+    const tree = document.getElementById("libraryTree");
+    if (tree) {
+      tree.style.fontFamily = libraryFamily || "";
+      tree.style.fontSize = (Number.isFinite(librarySize) && librarySize > 0) ? `${Math.round(librarySize)}px` : "";
+    }
+  } catch {}
 }
 
 const devConfig = (() => {
