@@ -47,6 +47,10 @@ import { fileExists, mkdirp, readFile, renameFile, safeBasename, safeDirname, wr
 
 const $editorHost = document.getElementById("abc-editor");
 const $out = document.getElementById("out");
+const $payloadModeBar = document.getElementById("payloadModeBar");
+const $payloadModeShowLayers = document.getElementById("payloadModeShowLayers");
+const $payloadModeCopy = document.getElementById("payloadModeCopy");
+const $payloadModeExit = document.getElementById("payloadModeExit");
 const $status = document.getElementById("status");
 const $cursorStatus = document.getElementById("cursorStatus");
 const $bufferStatus = document.getElementById("bufferStatus");
@@ -528,6 +532,11 @@ let rawMode = false;
 let rawModeFilePath = null;
 let rawModeHeaderEndOffset = 0;
 let rawModeOriginalTuneId = null;
+
+let payloadMode = false;
+let payloadModeSource = null;
+let payloadModeLayerSpans = [];
+let payloadModeShowLayers = true;
 
 let setListItems = [];
 let setListPageBreaks = "perTune"; // perTune | none | auto
@@ -2387,6 +2396,7 @@ const WORKING_COPY_TUNE_SYNC_DEBOUNCE_MS = 450;
 
 function scheduleWorkingCopyTuneSync() {
   if (rawMode) return;
+  if (payloadMode) return;
   if (!activeTuneUid) return;
   if (!activeTuneMeta || !activeTuneMeta.path) return;
   if (!window.api || typeof window.api.applyWorkingCopyTuneText !== "function") return;
@@ -2404,6 +2414,7 @@ async function flushWorkingCopyTuneSync() {
     return;
   }
   if (rawMode) return;
+  if (payloadMode) return;
   if (!activeTuneUid) return;
   if (!activeTuneMeta || !activeTuneMeta.path) return;
   if (!window.api || typeof window.api.applyWorkingCopyTuneText !== "function") return;
@@ -3665,6 +3676,51 @@ const intonationHighlightPlugin = ViewPlugin.fromClass(class {
 function setIntonationHighlightRanges(ranges) {
   intonationHighlightRanges = Array.isArray(ranges) ? ranges : [];
   intonationHighlightVersion += 1;
+  if (!editorView) return;
+  editorView.dispatch({
+    selection: editorView.state.selection,
+    scrollIntoView: false,
+  });
+}
+
+let payloadLayerVersion = 0;
+function buildPayloadLayerDecorations(state) {
+  if (!state || !state.doc) return Decoration.none;
+  if (!payloadMode || !payloadModeShowLayers) return Decoration.none;
+  if (!Array.isArray(payloadModeLayerSpans) || !payloadModeLayerSpans.length) return Decoration.none;
+  const builder = new RangeSetBuilder();
+  const maxLine = state.doc.lines;
+  for (const span of payloadModeLayerSpans) {
+    if (!span) continue;
+    const cls = span.className ? String(span.className) : "";
+    if (!cls) continue;
+    const fromLine = Math.max(1, Math.min(maxLine, Number(span.fromLine) || 1));
+    const toLine = Math.max(fromLine, Math.min(maxLine, Number(span.toLine) || fromLine));
+    for (let lineNo = fromLine; lineNo <= toLine; lineNo += 1) {
+      const line = state.doc.line(lineNo);
+      builder.add(line.from, line.from, Decoration.line({ class: cls }));
+    }
+  }
+  return builder.finish();
+}
+
+const payloadLayerPlugin = ViewPlugin.fromClass(class {
+  constructor(view) {
+    this.version = payloadLayerVersion;
+    this.decorations = buildPayloadLayerDecorations(view.state);
+  }
+  update(update) {
+    if (update.docChanged || this.version !== payloadLayerVersion) {
+      this.version = payloadLayerVersion;
+      this.decorations = buildPayloadLayerDecorations(update.state);
+    }
+  }
+}, {
+  decorations: (v) => v.decorations,
+});
+
+function refreshPayloadLayerDecorations() {
+  payloadLayerVersion += 1;
   if (!editorView) return;
   editorView.dispatch({
     selection: editorView.state.selection,
@@ -5877,6 +5933,49 @@ function setRawModeUI(enabled) {
   if ($errorsIndicator) $errorsIndicator.disabled = rawMode;
 }
 
+function updatePayloadModeInteractionLock() {
+  const locked = payloadMode;
+  const disable = (el) => { if (el) el.disabled = locked; };
+
+  // Allow transport controls; block file/library/tool actions to avoid confusing authority.
+  disable($btnToggleLibrary);
+  disable($btnLibraryRefresh);
+  disable($btnLibraryClearFilter);
+  disable($groupBy);
+  disable($sortBy);
+  disable($librarySearch);
+  disable($fileTuneSelect);
+
+  disable($btnFileNew);
+  disable($btnNewTune);
+  disable($btnTemplates);
+  disable($btnFileOpen);
+  disable($btnFileSave);
+  disable($btnFileClose);
+  disable($btnToggleRaw);
+
+  disable($btnToggleErrors);
+  disable($btnToggleFollow);
+  disable($btnToggleGlobals);
+  disable($fileHeaderToggle);
+  disable($fileHeaderSave);
+  disable($fileHeaderReload);
+
+  disable($xIssuesAutoFix);
+  disable($xIssuesJump);
+  disable($xIssuesCopy);
+}
+
+function setPayloadModeUI(enabled) {
+  payloadMode = Boolean(enabled);
+  document.body.classList.toggle("payload-mode", payloadMode);
+  if ($payloadModeBar) $payloadModeBar.classList.toggle("hidden", !payloadMode);
+  updatePayloadModeInteractionLock();
+  refreshPayloadLayerDecorations();
+  // Ensure the library tree reflects locked state (disables tune/file buttons).
+  try { scheduleRenderLibraryTree(sourceFiles); } catch {}
+}
+
 function buildRawFileText({ headerText, bodyText }) {
   let header = String(headerText || "");
   const body = String(bodyText || "");
@@ -6161,6 +6260,85 @@ async function leaveRawModeForAction(contextLabel) {
   rawModeHeaderEndOffset = 0;
   rawModeOriginalTuneId = null;
   return true;
+}
+
+function computePayloadTuneOffset(text) {
+  const src = String(text || "");
+  const m = src.match(/^[\t ]*X:/m);
+  if (!m || !Number.isFinite(m.index)) return 0;
+  return Math.max(0, Number(m.index) || 0);
+}
+
+async function enterPayloadMode() {
+  if (payloadMode) return;
+  if (rawMode || focusModeEnabled) {
+    showToast("Payload Mode is available only in normal mode (exit Raw/Focus first).", 3600);
+    return;
+  }
+  if (!editorView) return;
+  if (!activeTuneUid) {
+    showToast("No active tune.", 2200);
+    return;
+  }
+
+  try { stopPlaybackTransport(); } catch {}
+  resetPlaybackState();
+
+  const sourceText = getEditorValue();
+  const sourceSelection = editorView.state.selection;
+  const entry = getActiveFileEntry();
+  const headerTextRaw = entry ? getHeaderEditorValue() : "";
+  const headerText = sanitizeFileHeaderForInteractiveRender(headerTextRaw);
+  const prefixPayload = buildHeaderPrefixWithLayerSpans(headerText, true, sourceText);
+  const payloadText = prefixPayload.text ? `${prefixPayload.text}${sourceText}` : sourceText;
+  const showLayers = $payloadModeShowLayers ? Boolean($payloadModeShowLayers.checked) : true;
+
+  payloadModeSource = { text: sourceText, selection: sourceSelection, tuneUid: activeTuneUid };
+  payloadModeLayerSpans = prefixPayload.spans || [];
+  payloadModeShowLayers = showLayers;
+
+  setPayloadModeUI(true);
+  suppressDirty = true;
+  setEditorValue(payloadText);
+  suppressDirty = false;
+
+  // Keep cursor at the start of the tune header by default (after any injected prefix).
+  try {
+    const offset = computePayloadTuneOffset(payloadText);
+    editorView.dispatch({
+      selection: { anchor: offset, head: offset },
+      scrollIntoView: true,
+    });
+  } catch {}
+
+  scheduleRenderNow({ clearOutput: true });
+  setStatus("OK");
+}
+
+async function exitPayloadMode() {
+  if (!payloadMode) return;
+  try { stopPlaybackTransport(); } catch {}
+  resetPlaybackState();
+
+  const restore = payloadModeSource;
+  payloadModeSource = null;
+  payloadModeLayerSpans = [];
+  payloadModeShowLayers = true;
+
+  setPayloadModeUI(false);
+
+  if (restore && typeof restore.text === "string") {
+    suppressDirty = true;
+    setEditorValue(restore.text);
+    suppressDirty = false;
+    try {
+      if (restore.selection) {
+        editorView.dispatch({ selection: restore.selection, scrollIntoView: false });
+      }
+    } catch {}
+  }
+  scheduleRenderNow({ clearOutput: true });
+  setStatus("OK");
 }
 
 function toggleLineComments(view) {
@@ -7542,12 +7720,12 @@ function initEditor() {
 	  ]);
   const updateListener = EditorView.updateListener.of((update) => {
     if (update.docChanged) {
-      if (!suppressDirty && currentDoc) {
+      if (!suppressDirty && currentDoc && !payloadMode) {
         currentDoc.content = update.state.doc.toString();
         currentDoc.dirty = true;
         setDirtyIndicator(true);
       }
-      if (!suppressDirty && currentDoc && activeTuneUid) {
+      if (!suppressDirty && currentDoc && activeTuneUid && !payloadMode) {
         scheduleWorkingCopyTuneSync();
       }
       if (!rawMode) {
@@ -7601,6 +7779,7 @@ function initEditor() {
         errorActivationHighlightPlugin,
         practiceBarHighlightPlugin,
         intonationHighlightPlugin,
+        payloadLayerPlugin,
       ]),
       abcCompletionCompartment.of([
         autocompletion({ override: [buildAbcCompletionSource()], activateOnTyping: false }),
@@ -8023,6 +8202,7 @@ function renderLibraryTree(files = null) {
       const input = document.createElement("input");
       input.type = "text";
       input.className = "tree-label tree-rename";
+      input.disabled = payloadMode;
       input.value = entry.label || "";
       input.dataset.filePath = entry.id;
       input.addEventListener("keydown", async (ev) => {
@@ -8043,6 +8223,7 @@ function renderLibraryTree(files = null) {
       const fileLabel = document.createElement("button");
       fileLabel.type = "button";
       fileLabel.className = "tree-label tree-file-label";
+      fileLabel.disabled = payloadMode;
       fileLabel.dataset.filePath = entry.id;
       const labelText = document.createElement("span");
       labelText.className = "tree-label-text";
@@ -8125,6 +8306,7 @@ function renderLibraryTree(files = null) {
       button.type = "button";
       button.className = "tree-label tune-label";
       button.draggable = true;
+      button.disabled = payloadMode;
       const labelNumber = tune.xNumber || String(tune.indexInFile);
       const title = tune.title || tune.preview || "";
       const composer = tune.composer ? ` - ${tune.composer}` : "";
@@ -8938,6 +9120,7 @@ function startScanForErrorsFromToolbarEnable() {
 if ($btnFileNew) {
   $btnFileNew.addEventListener("click", async () => {
     try {
+      if (payloadMode) { showToast("Exit Payload Mode to create a new file.", 2400); return; }
       if (rawMode) {
         const ok = await leaveRawModeForAction("creating a new file");
         if (!ok) return;
@@ -8949,6 +9132,7 @@ if ($btnFileNew) {
 if ($btnNewTune) {
   $btnNewTune.addEventListener("click", async () => {
     try {
+      if (payloadMode) { showToast("Exit Payload Mode to create/append tunes.", 2400); return; }
       if (rawMode) {
         const ok = await leaveRawModeForAction("creating a new tune");
         if (!ok) return;
@@ -8960,6 +9144,7 @@ if ($btnNewTune) {
 if ($btnTemplates) {
   $btnTemplates.addEventListener("click", async () => {
     try {
+      if (payloadMode) { showToast("Exit Payload Mode to use templates.", 2400); return; }
       if (rawMode) {
         const ok = await leaveRawModeForAction("opening templates");
         if (!ok) return;
@@ -8971,6 +9156,7 @@ if ($btnTemplates) {
 if ($btnFileOpen) {
   $btnFileOpen.addEventListener("click", async () => {
     try {
+      if (payloadMode) { showToast("Exit Payload Mode to open files.", 2400); return; }
       if (rawMode) {
         const ok = await leaveRawModeForAction("opening a file");
         if (!ok) return;
@@ -8981,17 +9167,24 @@ if ($btnFileOpen) {
 }
 if ($btnFileSave) {
   $btnFileSave.addEventListener("click", async () => {
-    try { await fileSave(); } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
+    try {
+      if (payloadMode) { showToast("Payload Mode is diagnostics-only (no saves).", 2600); return; }
+      await fileSave();
+    } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
   });
 }
 if ($btnFileClose) {
   $btnFileClose.addEventListener("click", async () => {
-    try { await fileClose(); } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
+    try {
+      if (payloadMode) { showToast("Exit Payload Mode to close files.", 2400); return; }
+      await fileClose();
+    } catch (e) { logErr((e && e.stack) ? e.stack : String(e)); }
   });
 }
 if ($btnToggleRaw) {
   $btnToggleRaw.addEventListener("click", async () => {
     try {
+      if (payloadMode) { showToast("Exit Payload Mode to switch Raw mode.", 2400); return; }
       if (rawMode) await exitRawMode();
       else await enterRawMode();
     } catch (e) {
@@ -9007,6 +9200,11 @@ if ($fileTuneSelect) {
     if (tuneId === "__new__") return;
     if (isNewTuneDraft) isNewTuneDraft = false;
     if (!tuneId) return;
+    if (payloadMode) {
+      showToast("Exit Payload Mode to change tunes.", 2400);
+      try { if (activeTuneUid || activeTuneId) $fileTuneSelect.value = rawMode ? activeTuneId : (activeTuneUid || activeTuneId); } catch {}
+      return;
+    }
     if (rawMode) {
       setActiveTuneInRaw(tuneId);
       scrollToTuneInRaw(tuneId);
@@ -16179,6 +16377,10 @@ async function importMusicXml() {
 
 async function fileSave() {
   if (!currentDoc) return;
+  if (payloadMode) {
+    showToast("Payload Mode is diagnostics-only (no saves).", 2600);
+    return;
+  }
   if (rawMode) {
     await performRawSaveFlow();
     return;
@@ -16188,6 +16390,10 @@ async function fileSave() {
 
 async function fileSaveAs() {
   if (!currentDoc) return;
+  if (payloadMode) {
+    showToast("Exit Payload Mode to Save As.", 2400);
+    return;
+  }
   await performSaveAsFlow();
 }
 
@@ -16540,8 +16746,33 @@ function wireMenuActions() {
       const busy = isPlaybackBusy();
       if (busy) {
         // During Play/Pause, ignore menu actions (except Play/Pause itself, Reset Layout, and Quit).
-        const allowed = new Set(["playToggle", "resetLayout", "quit", "playGotoMeasure", "toggleFocusMode", "setSplitOrientation", "toggleSplitOrientation"]);
+        const allowed = new Set(["playToggle", "stopPlayback", "resetLayout", "quit", "openPayloadMode", "playGotoMeasure", "toggleFocusMode", "setSplitOrientation", "toggleSplitOrientation"]);
         if (!allowed.has(actionType)) return;
+      }
+      if (payloadMode) {
+        // Payload Mode is diagnostics-only. Keep actions that don't touch the library/working copy.
+        const allowed = new Set([
+          "openPayloadMode",
+          "playStart",
+          "playPrev",
+          "playToggle",
+          "playNext",
+          "stopPlayback",
+          "playGotoMeasure",
+          "zoomIn",
+          "zoomOut",
+          "zoomReset",
+          "resetLayout",
+          "setSplitOrientation",
+          "toggleSplitOrientation",
+          "openKeyboardHelp",
+          "openSettings",
+          "openSettingsFolder",
+        ]);
+        if (!allowed.has(actionType)) {
+          showToast("Payload Mode: exit to use file/library actions.", 2600);
+          return;
+        }
       }
       if (rawMode) {
         const blocked = new Set([
@@ -16605,6 +16836,10 @@ function wireMenuActions() {
       else if (actionType === "importMusicXml") await importMusicXml();
       else if (actionType === "save") await fileSave();
       else if (actionType === "saveAs") await fileSaveAs();
+      else if (actionType === "openPayloadMode") {
+        if (payloadMode) await exitPayloadMode();
+        else await enterPayloadMode();
+      }
       else if (actionType === "printPreview") await runPrintAction("preview");
       else if (actionType === "print") await runPrintAction("print");
       else if (actionType === "printAll") await runPrintAllAction("print");
@@ -16728,6 +16963,33 @@ function wireMenuActions() {
 }
 
 wireMenuActions();
+
+if ($payloadModeExit) {
+  $payloadModeExit.addEventListener("click", () => {
+    exitPayloadMode().catch(() => {});
+  });
+}
+if ($payloadModeCopy) {
+  $payloadModeCopy.addEventListener("click", async () => {
+    try {
+      const text = getEditorValue();
+      if (text && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        showToast("Copied payload.", 1800);
+      } else {
+        showToast("Clipboard not available.", 2200);
+      }
+    } catch {
+      showToast("Copy failed.", 2200);
+    }
+  });
+}
+if ($payloadModeShowLayers) {
+  $payloadModeShowLayers.addEventListener("change", () => {
+    payloadModeShowLayers = Boolean($payloadModeShowLayers.checked);
+    refreshPayloadLayerDecorations();
+  });
+}
 
 if ($intonationExplorerClose) {
   $intonationExplorerClose.addEventListener("click", () => {
@@ -18577,6 +18839,17 @@ function appendPlaybackTrace(evt) {
 
 function getPlaybackSourceKey() {
   const tuneText = getEditorValue();
+  if (payloadMode) {
+    const offset = computePayloadTuneOffset(tuneText);
+    const preparedText = normalizeBlankLinesForPlayback(
+      normalizeDollarLineBreaksForPlayback(String(tuneText || ""))
+    );
+    const sanitized = sanitizeAbcForPlayback(preparedText);
+    const expandRepeats = window.__abcarusPlaybackExpandRepeats === true;
+    const repeatsFlag = expandRepeats ? "exp:on" : "exp:off";
+    // Key includes the sanitized payload text and offset. No header merge or injected directives in payload mode.
+    return `payload|||${sanitized.text}|||${offset}|||${repeatsFlag}`;
+  }
   const entry = getActiveFileEntry();
   const prefixPayload = buildHeaderPrefix(entry ? getHeaderEditorValue() : "", false, tuneText);
   const baseText = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
@@ -20215,6 +20488,78 @@ function buildHeaderPrefix(entryHeader, includeCheckbars, tuneText) {
   return { text: prefix, offset: prefix.length };
 }
 
+function dedupeHeaderLayersWithMeta(layers, blockedKeys) {
+  const seen = new Set(blockedKeys || []);
+  const kept = layers.map(() => []);
+  for (let i = layers.length - 1; i >= 0; i -= 1) {
+    const layer = layers[i];
+    const text = layer && layer.text ? String(layer.text) : "";
+    const lines = text.split(/\r\n|\n|\r/);
+    for (const line of lines) {
+      const key = getHeaderLineKey(line);
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+      kept[i].push(line);
+    }
+  }
+  const out = [];
+  for (let i = 0; i < layers.length; i += 1) {
+    const meta = layers[i] || {};
+    const text = kept[i].join("\n");
+    if (!text.trim()) continue;
+    out.push({ ...meta, text });
+  }
+  return out;
+}
+
+function buildHeaderPrefixWithLayerSpans(entryHeader, includeCheckbars, tuneText) {
+  const tuneHeaderKeys = tuneText ? collectHeaderKeys(tuneText) : new Set();
+  const layers = [];
+  if (globalHeaderEnabled) {
+    const globalHeaderRaw = normalizeHeaderLayer(globalHeaderGlobalText);
+    if (globalHeaderRaw) layers.push({ kind: "abcarus", text: globalHeaderRaw });
+    const localHeaderRaw = normalizeHeaderLayer(globalHeaderLocalText);
+    if (localHeaderRaw) layers.push({ kind: "abcarus", text: localHeaderRaw });
+    const userHeaderRaw = normalizeHeaderLayer(globalHeaderUserText);
+    if (userHeaderRaw) layers.push({ kind: "abcarus", text: userHeaderRaw });
+    const legacyHeaderRaw = normalizeHeaderLayer(globalHeaderText);
+    if (legacyHeaderRaw) layers.push({ kind: "abcarus", text: legacyHeaderRaw });
+    const fontLayerRaw = buildAbc2svgFontHeaderLayer();
+    if (fontLayerRaw) layers.push({ kind: "abcarus", text: fontLayerRaw });
+  }
+  const fileHeaderRaw = String(entryHeader || "");
+  if (fileHeaderRaw.trim()) layers.push({ kind: "fileHeader", text: fileHeaderRaw.replace(/[\r\n]+$/, "") });
+
+  let deduped = dedupeHeaderLayersWithMeta(layers, tuneHeaderKeys);
+
+  // Keep measure checkbars consistent with normal render, but treat it as an ABCarus addition.
+  if (includeCheckbars && isMeasureCheckEnabled()) {
+    const has = deduped.some((l) => /%%\s*checkbars\b/i.test(String(l && l.text ? l.text : "")));
+    if (!has) {
+      deduped = [{ kind: "abcarus", text: "%%checkbars 1" }, ...deduped];
+    }
+  }
+
+  // Normalize: no trailing newlines per layer; join with single newlines and end with one newline.
+  const normalized = deduped.map((l) => ({ ...l, text: String(l.text || "").replace(/[\r\n]+$/, "") }))
+    .filter((l) => String(l.text || "").trim());
+  const joined = normalized.map((l) => l.text).join("\n");
+  if (!joined.trim()) return { text: "", offset: 0, spans: [] };
+
+  const spans = [];
+  let lineNo = 1;
+  for (let i = 0; i < normalized.length; i += 1) {
+    const layer = normalized[i];
+    const cls = layer.kind === "fileHeader" ? "cm-payload-layer-fileheader" : "cm-payload-layer-abcarus";
+    const lineCount = String(layer.text || "").split(/\r\n|\n|\r/).length;
+    spans.push({ fromLine: lineNo, toLine: lineNo + Math.max(0, lineCount - 1), className: cls });
+    lineNo += lineCount;
+  }
+
+  const prefix = /[\r\n]$/.test(joined) ? joined : `${joined}\n`;
+  return { text: prefix, offset: prefix.length, spans };
+}
+
 function sanitizeFileHeaderForInteractiveRender(text) {
   const raw = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   if (!raw.trim()) return "";
@@ -21526,6 +21871,42 @@ function diffSignatures(expected, actual) {
 
 function getPlaybackPayload() {
   const tuneText = getEditorValue();
+  if (payloadMode) {
+    const offset = computePayloadTuneOffset(tuneText);
+    const expandRepeats = window.__abcarusPlaybackExpandRepeats === true;
+    const repeatsFlag = expandRepeats ? "exp:on" : "exp:off";
+    const sourceKey = `payload|||${String(tuneText || "")}|||${offset}|||${repeatsFlag}`;
+    if (lastPlaybackPayloadCache && lastPlaybackPayloadCache.key === sourceKey) {
+      lastPlaybackMeta = lastPlaybackPayloadCache.meta
+        || { drumInsertAtLine: null, drumLineCount: 0 };
+      return {
+        text: lastPlaybackPayloadCache.text,
+        offset: lastPlaybackPayloadCache.offset,
+      };
+    }
+
+    playbackSanitizeWarnings = [];
+    let payload = { text: String(tuneText || ""), offset };
+    payload = { text: normalizeDollarLineBreaksForPlayback(payload.text), offset: payload.offset };
+    payload = { text: normalizeBlankLinesForPlayback(payload.text), offset: payload.offset };
+    const sanitized = sanitizeAbcForPlayback(payload.text);
+    playbackSanitizeWarnings = Array.isArray(sanitized.warnings) ? sanitized.warnings.slice(0, 200) : [];
+    payload = { text: sanitized.text, offset: payload.offset };
+    if (expandRepeats) {
+      payload = { text: expandRepeatsForPlayback(payload.text), offset: payload.offset };
+    }
+
+    lastPlaybackMeta = { drumInsertAtLine: null, drumLineCount: 0 };
+    lastPlaybackPayloadCache = {
+      key: sourceKey,
+      text: payload.text,
+      offset: payload.offset,
+      meta: lastPlaybackMeta,
+    };
+    lastPreparedPlaybackKey = sourceKey;
+    assertCleanAbcText(payload.text, "playback payload");
+    return payload;
+  }
   const entry = getActiveFileEntry();
   const prefixPayload = buildHeaderPrefix(entry ? getHeaderEditorValue() : "", false, tuneText);
   const baseText = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
@@ -21550,7 +21931,7 @@ function getPlaybackPayload() {
   }
   let payload = prefixPayload.text
     ? { text: `${prefixPayload.text}${tuneText}`, offset: prefixPayload.offset }
-    : { text: tuneText, offset: 0 };
+    : { text: tuneText, offset: prefixPayload.offset || 0 };
   const gchordInjected = injectGchordOn(payload.text, prefixPayload.offset || 0);
   if (gchordInjected.changed) {
     payload = {
@@ -21626,6 +22007,13 @@ function getPlaybackPayload() {
 }
 
 function getRenderPayload() {
+  if (payloadMode) {
+    const text = getEditorValue();
+    const offset = computePayloadTuneOffset(text);
+    const out = { text, offset };
+    assertCleanAbcText(out.text, "render payload");
+    return out;
+  }
   const tuneText = getEditorValue();
   const entry = getActiveFileEntry();
   const headerTextRaw = entry ? getHeaderEditorValue() : "";

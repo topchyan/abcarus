@@ -262,6 +262,19 @@
       </div>
       <div class="right-split">
         <div class="editor-pane">
+          <div id="payloadModeBar" class="payload-mode-bar hidden" role="region" aria-label="Payload mode">
+            <div class="payload-mode-left">
+              <span class="payload-mode-title">Payload mode (diagnostic)</span>
+              <label class="payload-mode-toggle">
+                <input id="payloadModeShowLayers" type="checkbox" checked />
+                <span>Show layers</span>
+              </label>
+            </div>
+            <div class="payload-mode-actions">
+              <button id="payloadModeCopy" type="button">Copy</button>
+              <button id="payloadModeExit" type="button">Exit</button>
+            </div>
+          </div>
           <div id="abc-editor"></div>
         </div>
         <div class="split-divider" id="splitDivider" role="separator" aria-orientation="vertical" tabindex="0"></div>

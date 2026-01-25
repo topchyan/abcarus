@@ -11,6 +11,8 @@ function formatRecentLabel(entry) {
 function buildDiagnosticsSubmenu(sendMenuAction) {
   return [
     { label: "Save Debug Dump…", accelerator: "CmdOrCtrl+Shift+D", click: () => sendMenuAction("dumpDebug") },
+    { type: "separator" },
+    { label: "Payload Mode (Current Tune)…", click: () => sendMenuAction("openPayloadMode") },
   ];
 }
 
