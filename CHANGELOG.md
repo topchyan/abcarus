@@ -6,12 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [0.23.1] - 2026-01-25
 ### Fixed
 - Charset: honor `%%abc-charset` when reading `.abc` files (tolerant-read / strict-write) so non-UTF8 tunebooks render correctly without changing the app UI encoding.
 - Library: apply `%%abc-charset` decoding during library scans so file/tune names display correctly in the UI for mixed-encoding libraries.
 - UI: move Intonation Explorer from `Tools → Diagnostics` to `Tools → Study` to better reflect its purpose.
-
-
 
 ## [0.23.0] - 2026-01-25
 ### Added
