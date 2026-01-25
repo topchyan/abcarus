@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Settings: Fonts — configure UI + Library Tree font family/size (with sensible defaults and reset/import/export support).
+- Transpose harness: add a regression fixture/test to prevent “large numeric” EDO-53 accidentals from being emitted.
+
+### Fixed
+- Transpose (EDO-53): avoid “mathematical” spellings like `_10B` / `^13G` by constraining output to the canonical micro-accidental set.
+
+### Changed
+- UI: make app modals draggable/resizable so tool dialogs don’t trap the user behind fixed overlays.
 
 
 ## [0.22.14] - 2026-01-24
