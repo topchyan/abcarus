@@ -2783,6 +2783,45 @@ textarea {
   max-width: none;
 }
 
+.settings-entry--fonttable {
+  grid-template-columns: 0px 1fr;
+}
+
+.settings-entry--fonttable > span:first-child {
+  width: 0;
+  overflow: hidden;
+}
+
+.settings-fonttable {
+  display: grid;
+  grid-template-columns: 90px minmax(220px, 360px) 90px;
+  gap: 8px 10px;
+  align-items: center;
+}
+
+.settings-fonttable-head {
+  font-size: var(--font-size-xs);
+  color: var(--muted-text);
+  font-weight: 600;
+}
+
+.settings-fonttable-rowlabel {
+  font-size: var(--font-size-sm);
+  color: var(--muted-text);
+  font-weight: 600;
+}
+
+.settings-fonttable-cell {
+  min-width: 0;
+}
+
+.settings-fonttable-cell input[type="text"],
+.settings-fonttable-cell input[type="number"],
+.settings-fonttable-cell select {
+  width: 100%;
+  max-width: none;
+}
+
 .settings-entry--compact-toggles {
   grid-template-columns: minmax(120px, 160px) 1fr;
 }

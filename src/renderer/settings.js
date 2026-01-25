@@ -1231,10 +1231,8 @@ export function initSettings(api) {
           const isFontsSection = sectionName === "Fonts";
           const fontsGroupHelp = isFontsSection
             ? (g.title === "UI"
-              ? "App UI only (not the OS menu bar)."
-              : (g.title === "Library"
-                ? "Library tree list."
-                : (g.title === "Editor" ? "ABC editor text." : (g.title === "Score" ? "Rendered score + playback." : ""))))
+              ? "App UI only (not the OS menu bar). Library can override."
+              : (g.title === "Editor" ? "ABC editor text." : (g.title === "Score" ? "Rendered score + playback." : "")))
             : "";
 
           if (isFontsSection && fontsGroupHelp) {
@@ -1290,6 +1288,76 @@ export function initSettings(api) {
             return block;
           };
 
+          const createCompactFontTableBlock = (rows) => {
+            const rowSpecs = Array.isArray(rows) ? rows : [];
+            const resolved = [];
+            for (const spec of rowSpecs) {
+              if (!spec) continue;
+              const familyEntry = groupEntries.find((e) => e && e.key === spec.familyKey);
+              const sizeEntry = groupEntries.find((e) => e && e.key === spec.sizeKey);
+              if (!familyEntry || !sizeEntry) continue;
+
+              const familyRow = createRow(familyEntry);
+              const sizeRow = createRow(sizeEntry);
+              const familyControl = familyRow ? familyRow.querySelector("input, select, textarea") : null;
+              const sizeControl = sizeRow ? sizeRow.querySelector("input, select, textarea") : null;
+              if (!familyControl || !sizeControl) continue;
+              resolved.push({
+                label: String(spec.label || ""),
+                familyEntry,
+                sizeEntry,
+                familyControl,
+                sizeControl,
+              });
+            }
+
+            if (!resolved.length) return null;
+
+            const block = document.createElement("div");
+            block.className = "settings-entry settings-entry--fonttable";
+            block.dataset.settingsSearch = resolved.map((r) =>
+              `${r.familyEntry.key} ${r.familyEntry.label || ""} ${r.familyEntry.help || ""} ${r.sizeEntry.key} ${r.sizeEntry.label || ""} ${r.sizeEntry.help || ""} ${sectionName} ${g.title}`
+            ).join(" ").toLowerCase();
+
+            const label = document.createElement("span");
+            label.textContent = "";
+            block.appendChild(label);
+
+            const table = document.createElement("div");
+            table.className = "settings-fonttable";
+
+            const headBlank = document.createElement("div");
+            headBlank.className = "settings-fonttable-head";
+            headBlank.textContent = "";
+            const headFamily = document.createElement("div");
+            headFamily.className = "settings-fonttable-head";
+            headFamily.textContent = "Family";
+            const headSize = document.createElement("div");
+            headSize.className = "settings-fonttable-head";
+            headSize.textContent = "Size";
+            table.appendChild(headBlank);
+            table.appendChild(headFamily);
+            table.appendChild(headSize);
+
+            for (const r of resolved) {
+              const cellLabel = document.createElement("div");
+              cellLabel.className = "settings-fonttable-rowlabel";
+              cellLabel.textContent = r.label;
+              const cellFamily = document.createElement("div");
+              cellFamily.className = "settings-fonttable-cell";
+              cellFamily.appendChild(r.familyControl);
+              const cellSize = document.createElement("div");
+              cellSize.className = "settings-fonttable-cell";
+              cellSize.appendChild(r.sizeControl);
+              table.appendChild(cellLabel);
+              table.appendChild(cellFamily);
+              table.appendChild(cellSize);
+            }
+
+            block.appendChild(table);
+            return block;
+          };
+
           const createCompactTogglesBlock = (labelText, keyA, keyB) => {
             const aEntry = groupEntries.find((e) => e && e.key === keyA);
             const bEntry = groupEntries.find((e) => e && e.key === keyB);
@@ -1334,11 +1402,11 @@ export function initSettings(api) {
           };
 
           if (isFontsSection && g.title === "UI") {
-            const pair = createCompactPairBlock("", "uiFontFamily", "uiFontSize");
-            if (pair) group.appendChild(pair);
-          } else if (isFontsSection && g.title === "Library") {
-            const pair = createCompactPairBlock("", "libraryUiFontFamily", "libraryUiFontSize");
-            if (pair) group.appendChild(pair);
+            const table = createCompactFontTableBlock([
+              { label: "UI", familyKey: "uiFontFamily", sizeKey: "uiFontSize" },
+              { label: "Library", familyKey: "libraryUiFontFamily", sizeKey: "libraryUiFontSize" },
+            ]);
+            if (table) group.appendChild(table);
           } else if (isFontsSection && g.title === "Editor") {
             const pair = createCompactPairBlock("", "editorFontFamily", "editorFontSize");
             if (pair) group.appendChild(pair);
