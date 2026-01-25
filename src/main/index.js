@@ -8,7 +8,7 @@ const { registerIpcHandlers } = require("./ipc");
 const { resolveThirdPartyRoot } = require("./conversion");
 const { getSettingsSchema, getDefaultSettings: getDefaultSettingsFromSchema } = require("./settings_schema");
 const { encodePropertiesFromSchema, parseSettingsPatchFromProperties } = require("./properties");
-const { decodeAbcTextFromBuffer } = require("./abcCharset");
+const { decodeAbcTextFromBuffer, detectAbcTextEncodingFromText } = require("./abcCharset");
 
 let mainWindow = null;
 let isQuitting = false;
@@ -1405,6 +1405,14 @@ function getPersistedEntry(filePath, stat) {
   if (entry.mtimeMs === stat.mtimeMs && entry.size === stat.size) {
     const parsed = entry.parsed || null;
     if (!parsed) return null;
+    // Charset-aware parsing: older cache entries may have been decoded as utf8 even when the file declares %%abc-charset.
+    // If the header declares a non-utf8 charset but the cache entry lacks encoding metadata, treat it as stale and re-parse.
+    try {
+      if (!parsed.encoding) {
+        const detected = detectAbcTextEncodingFromText(parsed.headerText || "");
+        if (detected && detected.encoding && detected.encoding !== "utf8") return null;
+      }
+    } catch {}
     if (!parsed.xIssues && Array.isArray(parsed.tunes)) {
       // Backfill xIssues for older cache entries where we didn't persist it yet.
       const tunes = parsed.tunes || [];
@@ -1543,7 +1551,7 @@ function setPersistedDiscoverEntry(filePath, stat, discover) {
   schedulePersistedLibraryIndexSave();
 }
 
-function setPersistedEntry(filePath, stat, parsed) {
+function setPersistedEntry(filePath, stat, parsed, encodingInfo = null) {
   if (!isPersistedLibraryIndexEnabled()) return;
   if (!stat || !parsed) return;
   if (!persistedLibraryIndex) {
@@ -1554,6 +1562,8 @@ function setPersistedEntry(filePath, stat, parsed) {
   const headerText = parsed.headerText ? String(parsed.headerText) : "";
   const cappedHeaderText = headerText.length > 200000 ? headerText.slice(0, 200000) : headerText;
   const tuneCount = Array.isArray(parsed.tunes) ? parsed.tunes.length : 0;
+  const enc = encodingInfo && typeof encodingInfo === "object" ? String(encodingInfo.encoding || "") : "";
+  const declared = encodingInfo && typeof encodingInfo === "object" ? String(encodingInfo.declared || "") : "";
   persistedLibraryIndex.files[key] = {
     mtimeMs: stat.mtimeMs,
     size: stat.size,
@@ -1563,6 +1573,8 @@ function setPersistedEntry(filePath, stat, parsed) {
       xIssues: parsed.xIssues || undefined,
     },
     parsed: {
+      encoding: enc || undefined,
+      charsetDeclared: declared || undefined,
       headerEndOffset: parsed.headerEndOffset || 0,
       headerText: cappedHeaderText,
       xIssues: parsed.xIssues || undefined,
@@ -1646,6 +1658,7 @@ async function parseSingleFile(filePath, sender, options = {}) {
   const progress = createProgressEmitter(sender);
   let stat = null;
   let content = "";
+  let encodingInfo = { text: "", encoding: "utf8", declared: "" };
   try {
     stat = await fs.promises.stat(filePath);
     if (!options || !options.force) {
@@ -1667,7 +1680,8 @@ async function parseSingleFile(filePath, sender, options = {}) {
       }
     }
     const raw = await fs.promises.readFile(filePath);
-    content = decodeAbcTextFromBuffer(raw).text;
+    encodingInfo = decodeAbcTextFromBuffer(raw);
+    content = encodingInfo.text;
   } catch (e) {
     progress.finish({
       phase: "parse",
@@ -1680,7 +1694,7 @@ async function parseSingleFile(filePath, sender, options = {}) {
   }
   const parsed = buildTunesFromContent(filePath, content);
   setCachedParse(filePath, stat, parsed);
-  setPersistedEntry(filePath, stat, parsed);
+  setPersistedEntry(filePath, stat, parsed, encodingInfo);
   return {
     root: path.dirname(filePath),
     files: [
@@ -1873,12 +1887,13 @@ async function scanLibrary(rootDir, sender, options = {}) {
           setCachedParse(filePath, stat, parsed);
           cachedCount += 1;
         } else {
-        const content = await fs.promises.readFile(filePath, "utf8");
-        parsed = buildTunesFromContent(filePath, content);
-        setCachedParse(filePath, stat, parsed);
-        setPersistedEntry(filePath, stat, parsed);
-        parsedCount += 1;
-        }
+	        const raw = await fs.promises.readFile(filePath);
+	        const encodingInfo = decodeAbcTextFromBuffer(raw);
+	        parsed = buildTunesFromContent(filePath, encodingInfo.text);
+	        setCachedParse(filePath, stat, parsed);
+	        setPersistedEntry(filePath, stat, parsed, encodingInfo);
+	        parsedCount += 1;
+	        }
       }
     } catch (e) {
       progress.send({
