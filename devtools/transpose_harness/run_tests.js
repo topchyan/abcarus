@@ -170,6 +170,8 @@ function collectBase12AndMicro53(text) {
   const parseExplicitMicroFromPrefix = (prefix) => {
     const p = String(prefix || "");
     if (p === "=") return 0;
+    if (p === "^/") return 2;
+    if (p === "_/") return -2;
     const m = p.match(/^(\^|_)(-?\d+)$/);
     if (!m) return null;
     const sign = m[1] === "^" ? 1 : -1;
@@ -396,6 +398,7 @@ function main() {
   const micro53 = readText(path.join(FIXTURES, "test6_micro_53_western_semitone.abc"));
   const micro53Inline = readText(path.join(FIXTURES, "test8_micro_53_inline_fields_and_decorations.abc"));
   const numAcc = readText(path.join(FIXTURES, "numeric_accidentals.abc"));
+  const micro53NoLarge = readText(path.join(FIXTURES, "test9_micro_53_no_large_prefix.abc"));
 
   const results = [];
 
@@ -564,6 +567,35 @@ function main() {
     const up = transpose_abc(numAcc, +1);
     const back = transpose_abc(up, -1);
     assertSemanticPitchEqual("TEST 8", numAcc, back);
+  }));
+
+  results.push(runTest("TEST 9: micro 53 should not emit large numeric accidentals", () => {
+    const down = transpose_abc(micro53NoLarge, -1);
+    const musicOnly = down
+      .split(/\r\n|\n|\r/)
+      .filter((l) => !/^\s*(%%|%|[A-Za-z]:)/.test(l))
+      .join("\n")
+      .replace(/\"[^\"]*\"/g, ""); // strip chord symbols / quoted annotations
+    if (/(?:^|[^A-Za-z0-9_])_10B\b/.test(musicOnly)) {
+      fail("TEST 9: found forbidden note token '_10B' (large numeric accidental)");
+    }
+    if (/(?:^|[^A-Za-z0-9_])[\^_](?:1\\d|[2-9]\\d)[A-Ga-g]/.test(musicOnly)) {
+      fail("TEST 9: found forbidden large numeric accidental (>= 10)");
+    }
+
+    // Semantic model (B-mode truth-scale): all absolute pitches shift by the same Δ commas chosen from the key tonic.
+    const tonicPc = tonicPc12FromKeyLineBody53(micro53NoLarge.split(/\\r\\n|\\n|\\r/).find((l) => /^\\s*K:/.test(l)) || "K:C");
+    const deltaCommas = euroDeltaCommas53ForTonicPc(tonicPc, -1);
+    const inAbs = collectAbs53StepsBMode(micro53NoLarge);
+    const outAbs = collectAbs53StepsBMode(down);
+    if (inAbs.abs53.length !== outAbs.abs53.length) {
+      fail(`TEST 9: pitch token count mismatch ${inAbs.abs53.length} vs ${outAbs.abs53.length}`);
+    }
+    for (let i = 0; i < inAbs.abs53.length; i += 1) {
+      if (outAbs.abs53[i] !== inAbs.abs53[i] + deltaCommas) {
+        fail(`TEST 9: abs53 mismatch at note #${i + 1}: expected ${inAbs.abs53[i] + deltaCommas}, got ${outAbs.abs53[i]}`);
+      }
+    }
   }));
 
   const ok = results.every(Boolean);
