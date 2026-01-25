@@ -265,9 +265,13 @@
           <div id="payloadModeBar" class="payload-mode-bar hidden" role="region" aria-label="Payload mode">
             <div class="payload-mode-left">
               <span class="payload-mode-title">Payload mode (diagnostic)</span>
+              <div class="payload-mode-tabs" role="tablist" aria-label="Payload view">
+                <button id="payloadModeTabRender" type="button" class="payload-mode-tab is-active" role="tab" aria-selected="true">Render</button>
+                <button id="payloadModeTabPlayback" type="button" class="payload-mode-tab" role="tab" aria-selected="false">Playback</button>
+              </div>
               <label class="payload-mode-toggle">
                 <input id="payloadModeShowLayers" type="checkbox" checked />
-                <span>Show layers</span>
+                <span id="payloadModeHighlightLabel">Show layers</span>
               </label>
             </div>
             <div class="payload-mode-actions">

@@ -48,7 +48,10 @@ import { fileExists, mkdirp, readFile, renameFile, safeBasename, safeDirname, wr
 const $editorHost = document.getElementById("abc-editor");
 const $out = document.getElementById("out");
 const $payloadModeBar = document.getElementById("payloadModeBar");
+const $payloadModeTabRender = document.getElementById("payloadModeTabRender");
+const $payloadModeTabPlayback = document.getElementById("payloadModeTabPlayback");
 const $payloadModeShowLayers = document.getElementById("payloadModeShowLayers");
+const $payloadModeHighlightLabel = document.getElementById("payloadModeHighlightLabel");
 const $payloadModeCopy = document.getElementById("payloadModeCopy");
 const $payloadModeExit = document.getElementById("payloadModeExit");
 const $status = document.getElementById("status");
@@ -194,6 +197,7 @@ const abcDiagnosticsCompartment = new Compartment();
 const abcCompletionCompartment = new Compartment();
 const abcHoverCompartment = new Compartment();
 const abcTuningModeCompartment = new Compartment();
+const abcPayloadReadOnlyCompartment = new Compartment();
 
 function buildAbcCompletionSource() {
   const keyOptions = [
@@ -537,6 +541,9 @@ let payloadMode = false;
 let payloadModeSource = null;
 let payloadModeLayerSpans = [];
 let payloadModeShowLayers = true;
+let payloadModeView = "render"; // render | playback
+let payloadModeRenderState = null; // { text, selection, spans }
+let payloadModePlaybackState = null; // { text, selection, spans }
 
 let setListItems = [];
 let setListPageBreaks = "perTune"; // perTune | none | auto
@@ -5976,6 +5983,106 @@ function setPayloadModeUI(enabled) {
   try { scheduleRenderLibraryTree(sourceFiles); } catch {}
 }
 
+function updatePayloadModeTabUI() {
+  const isRender = payloadModeView === "render";
+  if ($payloadModeTabRender) {
+    $payloadModeTabRender.classList.toggle("is-active", isRender);
+    $payloadModeTabRender.setAttribute("aria-selected", isRender ? "true" : "false");
+  }
+  if ($payloadModeTabPlayback) {
+    $payloadModeTabPlayback.classList.toggle("is-active", !isRender);
+    $payloadModeTabPlayback.setAttribute("aria-selected", isRender ? "false" : "true");
+  }
+  if ($payloadModeHighlightLabel) {
+    $payloadModeHighlightLabel.textContent = isRender ? "Show layers" : "Show deltas";
+  }
+}
+
+async function setPayloadModeView(nextView) {
+  if (!payloadMode) return;
+  const next = nextView === "playback" ? "playback" : "render";
+  if (payloadModeView === next) return;
+  if (!editorView) return;
+
+  if (payloadModeView === "render") {
+    // Leaving render view: capture sandbox edits.
+    const text = getEditorValue();
+    const selection = editorView.state.selection;
+    if (!payloadModeRenderState) payloadModeRenderState = { text, selection, spans: payloadModeLayerSpans || [] };
+    payloadModeRenderState.text = text;
+    payloadModeRenderState.selection = selection;
+  }
+
+  if (next === "playback") {
+    // Build final playback payload from the current render payload.
+    const baseText = payloadModeRenderState && typeof payloadModeRenderState.text === "string"
+      ? payloadModeRenderState.text
+      : getEditorValue();
+    const baseOffset = computePayloadTuneOffset(baseText);
+    const built = buildPlaybackPayloadForDiagnosticsFromRenderText(baseText, baseOffset);
+    payloadModePlaybackState = {
+      text: built.text,
+      selection: null,
+      spans: built.spans || [],
+    };
+
+    payloadModeView = "playback";
+    updatePayloadModeTabUI();
+    payloadModeLayerSpans = payloadModePlaybackState.spans || [];
+    setPayloadEditorReadOnly(true);
+
+    suppressDirty = true;
+    setEditorValue(payloadModePlaybackState.text || "");
+    suppressDirty = false;
+
+    try {
+      const offset = computePayloadTuneOffset(payloadModePlaybackState.text || "");
+      editorView.dispatch({
+        selection: { anchor: offset, head: offset },
+        scrollIntoView: true,
+      });
+    } catch {}
+
+    refreshPayloadLayerDecorations();
+    scheduleRenderNow({ clearOutput: true });
+    return;
+  }
+
+  // Switch to render view.
+  payloadModeView = "render";
+  updatePayloadModeTabUI();
+  payloadModeLayerSpans = (payloadModeRenderState && payloadModeRenderState.spans) ? payloadModeRenderState.spans : [];
+  setPayloadEditorReadOnly(false);
+
+  const restore = payloadModeRenderState;
+  suppressDirty = true;
+  setEditorValue(restore && typeof restore.text === "string" ? restore.text : "");
+  suppressDirty = false;
+  try {
+    if (restore && restore.selection) {
+      editorView.dispatch({ selection: restore.selection, scrollIntoView: false });
+    }
+  } catch {}
+
+  refreshPayloadLayerDecorations();
+  scheduleRenderNow({ clearOutput: true });
+}
+
+function setPayloadEditorReadOnly(enabled) {
+  if (!editorView) return;
+  try {
+    const readonly = Boolean(enabled);
+    editorView.dispatch({
+      effects: abcPayloadReadOnlyCompartment.reconfigure(
+        readonly
+          ? [EditorState.readOnly.of(true), EditorView.editable.of(false)]
+          : []
+      ),
+      scrollIntoView: false,
+    });
+  } catch {}
+}
+
 function buildRawFileText({ headerText, bodyText }) {
   let header = String(headerText || "");
   const body = String(bodyText || "");
@@ -6269,6 +6376,73 @@ function computePayloadTuneOffset(text) {
   return Math.max(0, Number(m.index) || 0);
 }
 
+function findLineNumberAtOffset(text, offset) {
+  const src = String(text || "");
+  const idx = Math.max(0, Math.min(src.length, Number(offset) || 0));
+  // 1-based line number
+  return src.slice(0, idx).split(/\r\n|\n|\r/).length;
+}
+
+function buildPlaybackPayloadForDiagnosticsFromRenderText(renderText, renderOffset) {
+  const baseText = String(renderText || "");
+  const baseOffset = Number.isFinite(renderOffset) ? Number(renderOffset) : 0;
+  const spans = [];
+
+  const addLineSpan = (lineNo, className) => {
+    if (!lineNo || !Number.isFinite(lineNo)) return;
+    spans.push({ fromLine: lineNo, toLine: lineNo, className });
+  };
+  const addRangeSpan = (fromLine, toLine, className) => {
+    const a = Number(fromLine);
+    const b = Number(toLine);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return;
+    spans.push({ fromLine: Math.min(a, b), toLine: Math.max(a, b), className });
+  };
+
+  let payload = { text: baseText, offset: baseOffset };
+
+  // 1) gchord on injection (playback-only)
+  const gchordInjected = injectGchordOn(payload.text, payload.offset || 0);
+  if (gchordInjected && gchordInjected.changed) {
+    payload = { text: gchordInjected.text, offset: (payload.offset || 0) + (gchordInjected.offsetDelta || 0) };
+    const lineNo = findLineNumberAtOffset(payload.text, Math.max(0, (payload.offset || 0) - (gchordInjected.offsetDelta || 0)));
+    addLineSpan(lineNo, "cm-payload-layer-playback");
+  }
+
+  // 2) drum injection (playback-only when not using native drums)
+  const nativeDrums = shouldUseNativeMidiDrums();
+  const drumInjected = nativeDrums
+    ? { text: payload.text, changed: false, insertAtLine: null, lineCount: 0 }
+    : injectDrumPlayback(payload.text);
+  if (drumInjected && drumInjected.changed) {
+    payload = { text: drumInjected.text, offset: payload.offset || 0 };
+    const startLine = Number(drumInjected.insertAtLine) || 0;
+    const count = Number(drumInjected.lineCount) || 0;
+    if (startLine > 0 && count > 0) {
+      addRangeSpan(startLine, startLine + count - 1, "cm-payload-layer-playback");
+    }
+  }
+
+  // 3) normalize + sanitize (playback-only stability)
+  payload = { text: normalizeDollarLineBreaksForPlayback(payload.text), offset: payload.offset };
+  payload = { text: normalizeBlankLinesForPlayback(payload.text), offset: payload.offset };
+  const sanitized = sanitizeAbcForPlayback(payload.text);
+  payload = { text: sanitized.text, offset: payload.offset };
+  const warnings = Array.isArray(sanitized.warnings) ? sanitized.warnings : [];
+  for (const w of warnings) {
+    if (!w || !w.line) continue;
+    addLineSpan(Number(w.line), "cm-payload-layer-playback");
+  }
+
+  // 4) expansion (optional)
+  const expandRepeats = window.__abcarusPlaybackExpandRepeats === true;
+  if (expandRepeats) {
+    payload = { text: expandRepeatsForPlayback(payload.text), offset: payload.offset };
+  }
+
+  return { text: payload.text, offset: payload.offset || 0, spans };
+}
+
 async function enterPayloadMode() {
   if (payloadMode) return;
   if (rawMode || focusModeEnabled) {
@@ -6294,10 +6468,15 @@ async function enterPayloadMode() {
   const showLayers = $payloadModeShowLayers ? Boolean($payloadModeShowLayers.checked) : true;
 
   payloadModeSource = { text: sourceText, selection: sourceSelection, tuneUid: activeTuneUid };
-  payloadModeLayerSpans = prefixPayload.spans || [];
+  payloadModeRenderState = { text: payloadText, selection: null, spans: prefixPayload.spans || [] };
+  payloadModePlaybackState = null;
+  payloadModeView = "render";
+  payloadModeLayerSpans = payloadModeRenderState.spans || [];
   payloadModeShowLayers = showLayers;
 
   setPayloadModeUI(true);
+  updatePayloadModeTabUI();
+  setPayloadEditorReadOnly(false);
   suppressDirty = true;
   setEditorValue(payloadText);
   suppressDirty = false;
@@ -6324,8 +6503,12 @@ async function exitPayloadMode() {
   payloadModeSource = null;
   payloadModeLayerSpans = [];
   payloadModeShowLayers = true;
+  payloadModeView = "render";
+  payloadModeRenderState = null;
+  payloadModePlaybackState = null;
 
   setPayloadModeUI(false);
+  setPayloadEditorReadOnly(false);
 
   if (restore && typeof restore.text === "string") {
     suppressDirty = true;
@@ -7786,6 +7969,7 @@ function initEditor() {
       ]),
       abcHoverCompartment.of([]),
       abcTuningModeCompartment.of([]),
+      abcPayloadReadOnlyCompartment.of([]),
       updateListener,
       customKeys,
       foldService.of(foldBeginTextBlocks),
@@ -16969,13 +17153,23 @@ if ($payloadModeExit) {
     exitPayloadMode().catch(() => {});
   });
 }
+if ($payloadModeTabRender) {
+  $payloadModeTabRender.addEventListener("click", () => {
+    setPayloadModeView("render").catch(() => {});
+  });
+}
+if ($payloadModeTabPlayback) {
+  $payloadModeTabPlayback.addEventListener("click", () => {
+    setPayloadModeView("playback").catch(() => {});
+  });
+}
 if ($payloadModeCopy) {
   $payloadModeCopy.addEventListener("click", async () => {
     try {
       const text = getEditorValue();
       if (text && navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(text);
-        showToast("Copied payload.", 1800);
+        showToast(payloadModeView === "playback" ? "Copied playback payload." : "Copied render payload.", 1800);
       } else {
         showToast("Clipboard not available.", 2200);
       }
@@ -18840,6 +19034,13 @@ function appendPlaybackTrace(evt) {
 function getPlaybackSourceKey() {
   const tuneText = getEditorValue();
   if (payloadMode) {
+    if (payloadModeView === "playback") {
+      const offset = computePayloadTuneOffset(tuneText);
+      const expandRepeats = window.__abcarusPlaybackExpandRepeats === true;
+      const repeatsFlag = expandRepeats ? "exp:on" : "exp:off";
+      // Playback view shows the final text; don't re-sanitize or inject.
+      return `payloadFinal|||${String(tuneText || "")}|||${offset}|||${repeatsFlag}`;
+    }
     const offset = computePayloadTuneOffset(tuneText);
     const preparedText = normalizeBlankLinesForPlayback(
       normalizeDollarLineBreaksForPlayback(String(tuneText || ""))
@@ -21872,6 +22073,10 @@ function diffSignatures(expected, actual) {
 function getPlaybackPayload() {
   const tuneText = getEditorValue();
   if (payloadMode) {
+    if (payloadModeView === "playback") {
+      const offset = computePayloadTuneOffset(tuneText);
+      return { text: String(tuneText || ""), offset };
+    }
     const offset = computePayloadTuneOffset(tuneText);
     const expandRepeats = window.__abcarusPlaybackExpandRepeats === true;
     const repeatsFlag = expandRepeats ? "exp:on" : "exp:off";

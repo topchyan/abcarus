@@ -3032,6 +3032,32 @@ body.print-mode {
   min-width: 0;
 }
 
+.payload-mode-tabs {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.payload-mode-tab {
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  padding: 4px 10px;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.payload-mode-tab:last-child {
+  border-right: 0;
+}
+
+.payload-mode-tab.is-active {
+  background: var(--button);
+  color: var(--text);
+}
+
 .payload-mode-title {
   font-weight: 600;
   font-size: var(--font-size-sm);
@@ -3071,4 +3097,8 @@ body.print-mode {
 
 .cm-payload-layer-fileheader {
   background: rgba(90, 255, 165, 0.10);
+}
+
+.cm-payload-layer-playback {
+  background: rgba(255, 180, 90, 0.10);
 }
