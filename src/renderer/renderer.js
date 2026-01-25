@@ -5228,6 +5228,84 @@ function enableDraggableToolPanel(panelEl) {
   });
 }
 
+function enableDraggableModal(modalEl) {
+  if (!modalEl || modalEl.__abcarusDraggableModal) return;
+  // Settings + Print All already have their own drag logic (and persistence).
+  if (modalEl.id === "settingsModal" || modalEl.id === "printAllOptionsModal") return;
+  const card = modalEl.querySelector(".modal-card");
+  const header = modalEl.querySelector(".modal-header");
+  if (!card || !header) return;
+  modalEl.__abcarusDraggableModal = true;
+
+  let dragState = null;
+  let dragBaseRect = null;
+
+  const clampTranslate = (pos) => {
+    if (!dragBaseRect) return pos;
+    const margin = 12;
+    const base = dragBaseRect;
+    const minX = margin - base.left;
+    const maxX = (window.innerWidth - margin) - base.right;
+    const minY = margin - base.top;
+    const maxY = (window.innerHeight - margin) - base.bottom;
+    return {
+      x: Math.min(maxX, Math.max(minX, pos.x)),
+      y: Math.min(maxY, Math.max(minY, pos.y)),
+    };
+  };
+
+  const applyTranslate = (pos) => {
+    const p = clampTranslate(pos);
+    card.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
+  };
+
+  header.addEventListener("pointerdown", (event) => {
+    if (!event || event.button !== 0) return;
+    const target = event.target;
+    if (target && (target.closest("button") || target.closest("input") || target.closest("select") || target.closest("textarea"))) {
+      return;
+    }
+    if (!modalEl.classList.contains("open")) return;
+    dragBaseRect = card.getBoundingClientRect();
+    const start = readTranslateXY(card.style.transform);
+    dragState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: start.x,
+      originY: start.y,
+    };
+    card.classList.add("dragging");
+    try { header.setPointerCapture(event.pointerId); } catch {}
+    event.preventDefault();
+  });
+
+  header.addEventListener("pointermove", (event) => {
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+    const dx = event.clientX - dragState.startX;
+    const dy = event.clientY - dragState.startY;
+    applyTranslate({ x: dragState.originX + dx, y: dragState.originY + dy });
+  });
+
+  const endDrag = (event) => {
+    if (!dragState) return;
+    if (event && dragState.pointerId != null && event.pointerId !== dragState.pointerId) return;
+    dragState = null;
+    dragBaseRect = null;
+    card.classList.remove("dragging");
+    try { if (event) header.releasePointerCapture(event.pointerId); } catch {}
+  };
+
+  header.addEventListener("pointerup", endDrag);
+  header.addEventListener("pointercancel", endDrag);
+
+  window.addEventListener("resize", () => {
+    if (!modalEl.classList.contains("open")) return;
+    dragBaseRect = card.getBoundingClientRect();
+    applyTranslate(readTranslateXY(card.style.transform));
+  });
+}
+
 function getHeaderEditorValue() {
   if (!headerEditorView) return "";
   return headerEditorView.state.doc.toString();
@@ -13879,6 +13957,7 @@ if ($xIssuesModal) {
     e.stopPropagation();
     closeXIssuesModal();
   });
+  enableDraggableModal($xIssuesModal);
 }
 
 if ($printAllOptionsModal) {
@@ -17314,6 +17393,7 @@ if ($moveTuneModal) {
       $moveTuneApply.click();
     }
   });
+  enableDraggableModal($moveTuneModal);
 }
 
 if ($aboutClose) {
@@ -17333,6 +17413,7 @@ if ($aboutModal) {
     e.stopPropagation();
     closeAbout();
   });
+  enableDraggableModal($aboutModal);
 }
 
 if ($aboutCopy) {
@@ -17426,6 +17507,7 @@ if ($templatesModal) {
       $templatesInsert.click();
     }
   });
+  enableDraggableModal($templatesModal);
 }
 
 if ($makamDnaClose) {
@@ -17520,6 +17602,7 @@ if ($makamDnaModal) {
       $makamDnaSave.click();
     }
   });
+  enableDraggableModal($makamDnaModal);
 }
 
 if ($setListClose) {
@@ -17645,6 +17728,7 @@ if ($setListModal) {
     e.stopPropagation();
     closeSetList();
   });
+  enableDraggableModal($setListModal);
 }
 
 if ($setListHeaderClose) {
@@ -17664,6 +17748,7 @@ if ($setListHeaderModal) {
     e.stopPropagation();
     closeSetListHeaderEditor();
   });
+  enableDraggableModal($setListHeaderModal);
 }
 
 if ($setListHeaderReset) {
@@ -17747,6 +17832,7 @@ if ($disclaimerModal) {
       dismissDisclaimer();
     }
   });
+  enableDraggableModal($disclaimerModal);
 }
 
 if ($fileHeaderSave) {

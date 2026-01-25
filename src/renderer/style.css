@@ -2071,7 +2071,8 @@ svg {
   align-items: center;
   justify-content: center;
   background: var(--overlay-bg);
-  z-index: 20;
+  /* Must stay above tool panels (e.g. Intonation Explorer). */
+  z-index: 120;
 }
 
 .modal.open {
@@ -2087,6 +2088,10 @@ svg {
   box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  resize: both;
+  min-width: 360px;
+  min-height: 220px;
 }
 
 .modal-card.settings-card {
@@ -2202,6 +2207,15 @@ svg {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.modal-header {
+  cursor: move;
+  user-select: none;
+}
+
+.modal-card.dragging .modal-header {
+  cursor: grabbing;
 }
 
 .modal-footer {
