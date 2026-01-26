@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Diagnostics: add Payload Mode to inspect the current tune’s Render vs Playback payload (including per-layer/delta highlighting).
+- Debug dumps: include working copy state plus a lightweight recent-actions trace to aid troubleshooting intermittent issues without reproduction steps.
+
+### Fixed
+- Playback drums: align injected `V:DRUM` bar/repeat skeleton with the primary voice and preserve original line wrapping for easier comparison.
+- Playback drums: use `c`/`d` tokens for `%%MIDI drummap` keys (does not affect sound, improves readability).
+- Working Copy: auto-reopen a missing WC session on Save to avoid “No working copy open” save failures.
 
 
 ## [0.23.1] - 2026-01-25
