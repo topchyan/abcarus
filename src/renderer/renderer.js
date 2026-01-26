@@ -1500,6 +1500,21 @@ function recordDebugLog(level, args, stackOverride) {
   if (debugLogBuffer.length > 300) debugLogBuffer.splice(0, debugLogBuffer.length - 300);
 }
 
+// Always-on, lightweight action trace for troubleshooting "what just happened?" without requiring DevTools flags.
+// Captured into debug dumps (last N entries). Keep this sparse: no keystroke-level events.
+const recentActions = [];
+function recordRecentAction(type, details) {
+  try {
+    const entry = {
+      ts: new Date().toISOString(),
+      type: String(type || "event"),
+      details: details && typeof details === "object" ? details : (details != null ? { value: String(details) } : null),
+    };
+    recentActions.push(entry);
+    if (recentActions.length > 200) recentActions.splice(0, recentActions.length - 200);
+  } catch {}
+}
+
 function perfNowMs() {
   try {
     return (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
@@ -2255,15 +2270,25 @@ async function refreshWorkingCopySnapshot() {
     if (!res || !res.ok || !res.snapshot) {
       workingCopySnapshot = null;
       renderUnifiedStatus();
+      recordRecentAction("wc.snapshot.missing", {
+        ok: Boolean(res && res.ok),
+        error: (res && res.error) ? String(res.error) : null,
+      });
       return null;
     }
     workingCopySnapshot = res.snapshot;
     renderUnifiedStatus();
+    recordRecentAction("wc.snapshot", {
+      path: workingCopySnapshot && workingCopySnapshot.path ? String(workingCopySnapshot.path) : null,
+      version: workingCopySnapshot && Number.isFinite(Number(workingCopySnapshot.version)) ? Number(workingCopySnapshot.version) : null,
+      dirty: workingCopySnapshot ? Boolean(workingCopySnapshot.dirty) : null,
+    });
     return workingCopySnapshot;
   } catch (err) {
     logErr(err);
     workingCopySnapshot = null;
     renderUnifiedStatus();
+    recordRecentAction("wc.snapshot.error", { error: err && err.message ? String(err.message) : String(err) });
     return null;
   }
 }
@@ -2280,10 +2305,17 @@ async function ensureWorkingCopyOpenForPath(filePath) {
   try {
     const metaRes = await window.api.getWorkingCopyMeta();
     const metaPath = (metaRes && metaRes.ok && metaRes.meta && metaRes.meta.path) ? String(metaRes.meta.path) : "";
+    recordRecentAction("wc.meta", {
+      ok: Boolean(metaRes && metaRes.ok),
+      path: metaPath || null,
+      dirty: (metaRes && metaRes.ok && metaRes.meta) ? Boolean(metaRes.meta.dirty) : null,
+      version: (metaRes && metaRes.ok && metaRes.meta && Number.isFinite(Number(metaRes.meta.version))) ? Number(metaRes.meta.version) : null,
+    });
     if (metaPath && pathsEqual(metaPath, p)) return true;
   } catch {}
 
   try {
+    recordRecentAction("wc.open", { path: p, reason: "ensureWorkingCopyOpenForPath" });
     await window.api.openWorkingCopy(p);
     const metaRes2 = await window.api.getWorkingCopyMeta();
     const metaPath2 = (metaRes2 && metaRes2.ok && metaRes2.meta && metaRes2.meta.path) ? String(metaRes2.meta.path) : "";
@@ -2448,6 +2480,30 @@ function scheduleWorkingCopyTuneSync() {
   }, WORKING_COPY_TUNE_SYNC_DEBOUNCE_MS);
 }
 
+function tryResolveActiveTuneUidFromWorkingCopySnapshot() {
+  if (rawMode) return false;
+  if (payloadMode) return false;
+  if (activeTuneUid) return true;
+  if (!activeTuneMeta || !activeTuneMeta.path) return false;
+  if (!workingCopySnapshot || !workingCopySnapshot.path || !pathsEqual(workingCopySnapshot.path, activeTuneMeta.path)) return false;
+
+  const resolved = resolveTuneEntryFromSnapshot(workingCopySnapshot, {
+    tuneUid: null,
+    tuneIndex: activeTuneIndex,
+    startOffset: activeTuneMeta.startOffset,
+  });
+  if (!resolved || !resolved.tuneUid) return false;
+  activeTuneUid = resolved.tuneUid;
+  if (Number.isFinite(Number(resolved.tuneIndex))) activeTuneIndex = Number(resolved.tuneIndex);
+  try {
+    if (activeTuneMeta) {
+      activeTuneMeta.startOffset = Number(resolved.start);
+      activeTuneMeta.endOffset = Number(resolved.end);
+    }
+  } catch {}
+  return true;
+}
+
 async function flushWorkingCopyTuneSync() {
   const epoch = workingCopyTuneSyncEpoch;
   if (workingCopyTuneSyncInFlight) {
@@ -2456,7 +2512,11 @@ async function flushWorkingCopyTuneSync() {
   }
   if (rawMode) return;
   if (payloadMode) return;
-  if (!activeTuneUid) return;
+  if (!activeTuneUid) {
+    // Some open paths (e.g., recents / stale library metadata) may not have a tuneUid yet.
+    // Try to self-heal from the current working copy snapshot; otherwise refuse to sync.
+    if (!tryResolveActiveTuneUidFromWorkingCopySnapshot()) return;
+  }
   if (!activeTuneMeta || !activeTuneMeta.path) return;
   if (!window.api || typeof window.api.applyWorkingCopyTuneText !== "function") return;
 
@@ -8456,7 +8516,17 @@ function renderLibraryTree(files = null) {
         if (entry.isFile && ev && ev.detail && ev.detail > 1) return;
         showHoverStatus(entry.label);
         if (entry.isFile) {
-          activeFilePath = entry.id;
+          // Do not change the editor's active file by merely expanding/collapsing the tree.
+          // `activeFilePath` is the editor file source of truth (set by `setActiveTuneText` / file loads).
+          //
+          // Exception: when no file is currently open in the editor (Untitled), allow selecting a file
+          // as a target for append/new-tune workflows.
+          const editorFilePath = (activeTuneMeta && activeTuneMeta.path)
+            ? String(activeTuneMeta.path || "")
+            : ((currentDoc && currentDoc.path) ? String(currentDoc.path || "") : "");
+          if (!editorFilePath) {
+            activeFilePath = entry.id;
+          }
           if (collapsedFiles.has(entry.id)) collapsedFiles.delete(entry.id);
           else collapsedFiles.add(entry.id);
         } else {
@@ -8479,9 +8549,6 @@ function renderLibraryTree(files = null) {
       fileLabel.addEventListener("contextmenu", (ev) => {
         if (!entry.isFile) return;
         ev.preventDefault();
-        activeFilePath = entry.id;
-        scheduleRenderLibraryTree(sourceFiles);
-        scheduleSaveLibraryUiState();
         showContextMenuAt(ev.clientX, ev.clientY, { type: "file", filePath: entry.id });
       });
       fileLabel.addEventListener("dragover", (ev) => {
@@ -8614,6 +8681,13 @@ async function selectTune(tuneId, options = {}) {
   const perfOn = isStartupPerfEnabled();
   const t0 = perfOn ? perfNowMs() : 0;
   if (!libraryIndex || !tuneId) return;
+  recordRecentAction("selectTune.start", {
+    tuneId: String(tuneId),
+    skipConfirm: Boolean(options && options.skipConfirm),
+    rawMode: Boolean(rawMode),
+    focusMode: Boolean(focusMode),
+    payloadMode: Boolean(payloadMode),
+  });
   if (!options.skipConfirm) {
     const ok = await ensureSafeToAbandonCurrentDoc("switching tunes");
     if (!ok) return { ok: false, cancelled: true };
@@ -8636,6 +8710,7 @@ async function selectTune(tuneId, options = {}) {
     if (window.api && typeof window.api.openWorkingCopy === "function" && fileMeta.path) {
       if (!workingCopySnapshot || !workingCopySnapshot.path || !pathsEqual(workingCopySnapshot.path, fileMeta.path)) {
         const tWc0 = perfOn ? perfNowMs() : 0;
+        recordRecentAction("wc.open", { path: String(fileMeta.path), reason: "selectTune" });
         await window.api.openWorkingCopy(fileMeta.path);
         const snapshot = await refreshWorkingCopySnapshot();
         if (perfOn) logStartupPerf("selectTune: openWorkingCopy", { ms: Math.round(perfNowMs() - tWc0), file: safeBasename(fileMeta.path) });
@@ -13752,6 +13827,17 @@ async function buildDebugDumpSnapshot({ reason = "" } = {}) {
     }
   })();
 
+  const workingCopyMeta = await (async () => {
+    try {
+      if (!window.api || typeof window.api.getWorkingCopyMeta !== "function") return { ok: false, error: "unavailable" };
+      const res = await window.api.getWorkingCopyMeta();
+      if (!res || !res.ok || !res.meta) return { ok: false, error: (res && res.error) ? String(res.error) : "No working copy open." };
+      return { ok: true, meta: res.meta };
+    } catch (e) {
+      return { ok: false, error: (e && e.message) ? e.message : String(e) };
+    }
+  })();
+
   return {
     kind: "abcarus-debug-dump",
     createdAt: new Date().toISOString(),
@@ -13766,6 +13852,7 @@ async function buildDebugDumpSnapshot({ reason = "" } = {}) {
     },
     about: aboutInfo,
     debugLog: debugLogBuffer.slice(),
+    recentActions: recentActions.slice(-20),
     selection: editorView ? {
       anchor: editorView.state.selection.main.anchor,
       head: editorView.state.selection.main.head,
@@ -13791,6 +13878,16 @@ async function buildDebugDumpSnapshot({ reason = "" } = {}) {
       },
       editorText: safeString(getEditorValue(), 350000),
       headerText: safeString(getHeaderEditorValue(), 250000),
+    },
+    workingCopy: {
+      snapshot: workingCopySnapshot ? {
+        path: workingCopySnapshot.path || null,
+        version: workingCopySnapshot.version || null,
+        dirty: Boolean(workingCopySnapshot.dirty),
+        encoding: workingCopySnapshot.encoding || null,
+        tuneCount: Array.isArray(workingCopySnapshot.tunes) ? workingCopySnapshot.tunes.length : null,
+      } : null,
+      meta: workingCopyMeta,
     },
     playback: {
       isPlaying: Boolean(isPlaying),
@@ -14865,6 +14962,18 @@ async function handleMissingWorkingCopySave(filePath) {
 async function performSaveFlow() {
   if (!currentDoc) return false;
 
+  recordRecentAction("save.start", {
+    currentDocPath: currentDoc && currentDoc.path ? String(currentDoc.path) : null,
+    currentDocDirty: currentDoc ? Boolean(currentDoc.dirty) : null,
+    headerDirty: Boolean(headerDirty),
+    isNewTuneDraft: Boolean(isNewTuneDraft),
+    activeTunePath: activeTuneMeta && activeTuneMeta.path ? String(activeTuneMeta.path) : null,
+    wcSnapshotPath: workingCopySnapshot && workingCopySnapshot.path ? String(workingCopySnapshot.path) : null,
+    payloadMode: Boolean(payloadMode),
+    rawMode: Boolean(rawMode),
+    focusMode: Boolean(focusMode),
+  });
+
   if (headerDirty && activeFilePath) {
     try {
       const headerRes = await saveFileHeaderText(activeFilePath, getHeaderEditorValue());
@@ -14899,7 +15008,16 @@ async function performSaveFlow() {
   if (activeTuneMeta && activeTuneMeta.path) {
     const wcOk = await ensureWorkingCopyOpenForPath(activeTuneMeta.path);
     if (!wcOk) {
+      recordRecentAction("save.wc.missing", { path: String(activeTuneMeta.path) });
       await showSaveError("Unable to save file: no working copy open.");
+      return false;
+    }
+    // Strict-write guard: never commit a stale working copy that doesn't include the editor buffer.
+    // If we cannot resolve the active tune identity inside the working copy snapshot, refuse loudly.
+    // (This prevents “Save succeeded but reopened shows older text” class of failures.)
+    await refreshWorkingCopySnapshot();
+    if (!tryResolveActiveTuneUidFromWorkingCopySnapshot()) {
+      await showSaveError("Unable to save: tune identity is missing. Re-open the tune and try again.");
       return false;
     }
     try {
@@ -14912,12 +15030,14 @@ async function performSaveFlow() {
         return Boolean(handled && handled.ok);
       }
       if (res && res.ok) {
+        recordRecentAction("save.wc.commit.ok", { path: String(activeTuneMeta.path) });
         await finalizeWorkingCopySave(activeTuneMeta.path);
         return true;
       }
       if (res && res.conflict) {
         const forced = await window.api.commitWorkingCopyToDisk({ force: true });
         if (forced && forced.ok) {
+          recordRecentAction("save.wc.commit.forced", { path: String(activeTuneMeta.path) });
           await finalizeWorkingCopySave(activeTuneMeta.path);
           return true;
         }
@@ -14925,6 +15045,10 @@ async function performSaveFlow() {
         await showSaveError((forced && forced.error) ? forced.error : "Unable to save file.");
         return false;
       }
+      recordRecentAction("save.wc.commit.fail", {
+        path: String(activeTuneMeta.path),
+        error: (res && res.error) ? String(res.error) : "unknown",
+      });
       await showSaveError((res && res.error) ? res.error : "Unable to save file.");
       return false;
     }
