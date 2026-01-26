@@ -2252,14 +2252,48 @@ async function refreshWorkingCopySnapshot() {
   if (!window.api || typeof window.api.getWorkingCopySnapshot !== "function") return null;
   try {
     const res = await window.api.getWorkingCopySnapshot();
-    if (!res || !res.ok || !res.snapshot) return null;
+    if (!res || !res.ok || !res.snapshot) {
+      workingCopySnapshot = null;
+      renderUnifiedStatus();
+      return null;
+    }
     workingCopySnapshot = res.snapshot;
     renderUnifiedStatus();
     return workingCopySnapshot;
   } catch (err) {
     logErr(err);
+    workingCopySnapshot = null;
+    renderUnifiedStatus();
     return null;
   }
+}
+
+async function ensureWorkingCopyOpenForPath(filePath) {
+  const p = String(filePath || "");
+  if (!p) return false;
+  if (
+    !window.api
+    || typeof window.api.getWorkingCopyMeta !== "function"
+    || typeof window.api.openWorkingCopy !== "function"
+  ) return false;
+
+  try {
+    const metaRes = await window.api.getWorkingCopyMeta();
+    const metaPath = (metaRes && metaRes.ok && metaRes.meta && metaRes.meta.path) ? String(metaRes.meta.path) : "";
+    if (metaPath && pathsEqual(metaPath, p)) return true;
+  } catch {}
+
+  try {
+    await window.api.openWorkingCopy(p);
+    const metaRes2 = await window.api.getWorkingCopyMeta();
+    const metaPath2 = (metaRes2 && metaRes2.ok && metaRes2.meta && metaRes2.meta.path) ? String(metaRes2.meta.path) : "";
+    if (metaPath2 && pathsEqual(metaPath2, p)) {
+      await refreshWorkingCopySnapshot();
+      return true;
+    }
+  } catch {}
+
+  return false;
 }
 
 async function confirmReloadFromDisk(filePath) {
@@ -14863,6 +14897,11 @@ async function performSaveFlow() {
   }
 
   if (activeTuneMeta && activeTuneMeta.path) {
+    const wcOk = await ensureWorkingCopyOpenForPath(activeTuneMeta.path);
+    if (!wcOk) {
+      await showSaveError("Unable to save file: no working copy open.");
+      return false;
+    }
     try {
       await flushWorkingCopyTuneSync();
     } catch {}
