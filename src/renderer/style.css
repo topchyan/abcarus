@@ -3035,16 +3035,19 @@ body.print-mode {
 .payload-mode-tabs {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
+  padding: 2px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  overflow: hidden;
+  background: var(--panel);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .payload-mode-tab {
-  border: 0;
-  border-right: 1px solid var(--border);
+  border: 1px solid transparent;
   background: transparent;
   padding: 4px 10px;
+  border-radius: 6px;
   font-size: var(--font-size-sm);
   cursor: pointer;
 }
@@ -3056,25 +3059,14 @@ body.print-mode {
 .payload-mode-tab.is-active {
   background: var(--button);
   color: var(--text);
+  border-color: var(--border);
+  font-weight: 600;
 }
 
 .payload-mode-title {
   font-weight: 600;
   font-size: var(--font-size-sm);
   white-space: nowrap;
-}
-
-.payload-mode-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--font-size-sm);
-  color: var(--text-dim);
-  user-select: none;
-}
-
-.payload-mode-toggle input[type="checkbox"] {
-  margin: 0;
 }
 
 .payload-mode-actions {
@@ -3091,14 +3083,23 @@ body.print-mode {
   background: var(--button);
 }
 
+.cm-line.cm-payload-layer-abcarus,
 .cm-payload-layer-abcarus {
-  background: rgba(90, 135, 255, 0.12);
+  background: rgba(90, 135, 255, 0.28) !important;
+  box-shadow: inset 4px 0 0 rgba(90, 135, 255, 0.75) !important;
+  background-image: linear-gradient(90deg, rgba(90, 135, 255, 0.25), rgba(90, 135, 255, 0.12)) !important;
 }
 
+.cm-line.cm-payload-layer-fileheader,
 .cm-payload-layer-fileheader {
-  background: rgba(90, 255, 165, 0.10);
+  background: rgba(90, 255, 165, 0.22) !important;
+  box-shadow: inset 4px 0 0 rgba(90, 255, 165, 0.70) !important;
+  background-image: linear-gradient(90deg, rgba(90, 255, 165, 0.22), rgba(90, 255, 165, 0.10)) !important;
 }
 
+.cm-line.cm-payload-layer-playback,
 .cm-payload-layer-playback {
-  background: rgba(255, 180, 90, 0.10);
+  background: rgba(255, 180, 90, 0.28) !important;
+  box-shadow: inset 4px 0 0 rgba(255, 150, 60, 0.80) !important;
+  background-image: linear-gradient(90deg, rgba(255, 180, 90, 0.25), rgba(255, 180, 90, 0.12)) !important;
 }

@@ -101,6 +101,7 @@ const SETTINGS_SECTION_HINTS = {
 const FALLBACK_SCHEMA = [
   { key: "renderZoom", type: "number", default: 1, section: "General", label: "Score zoom (%)", ui: { input: "percent", min: 50, max: 800, step: 5 } },
   { key: "editorZoom", type: "number", default: 1, section: "General", label: "Editor zoom (%)", ui: { input: "percent", min: 50, max: 800, step: 5 } },
+  { key: "editorHelpEnabled", type: "boolean", default: true, section: "General", group: "Editor Help", groupOrder: 30, label: "Enable editor help", ui: { input: "checkbox" } },
   { key: "uiFontFamily", type: "string", default: "system-ui, -apple-system, \"Segoe UI\", Roboto, Ubuntu, Cantarell, \"Noto Sans\", sans-serif", section: "Fonts", group: "Interface", label: "Font family", ui: { input: "text" } },
   { key: "uiFontSize", type: "number", default: 13, section: "Fonts", group: "Interface", label: "Font size", ui: { input: "number", min: 10, max: 28, step: 1 } },
   { key: "libraryUiFontFamily", type: "string", default: "system-ui, -apple-system, \"Segoe UI\", Roboto, Ubuntu, Cantarell, \"Noto Sans\", sans-serif", section: "Fonts", group: "Interface", label: "Library font family", ui: { input: "text" } },
@@ -110,6 +111,8 @@ const FALLBACK_SCHEMA = [
   { key: "editorNotesBold", type: "boolean", default: true, section: "Fonts", group: "Editor", label: "Notes", ui: { input: "checkbox" } },
   { key: "editorLyricsBold", type: "boolean", default: true, section: "Fonts", group: "Editor", label: "Lyrics", ui: { input: "checkbox" } },
   { key: "useNativeTranspose", type: "boolean", default: true, section: "Tools", label: "Use native transpose", ui: { input: "checkbox" } },
+  { key: "makamToolsEnabled", type: "boolean", default: false, section: "Tools", group: "Makam Tools", groupOrder: 5, label: "Enable Makam Tools (microtone/EDO-53)", ui: { input: "checkbox" }, advanced: true },
+  { key: "payloadModeEnabled", type: "boolean", default: false, section: "Tools", group: "Diagnostics", groupOrder: 6, label: "Enable Payload Mode (Diagnostics)", ui: { input: "checkbox" }, advanced: true },
   { key: "autoAlignBarsAfterTransforms", type: "boolean", default: false, section: "Tools", label: "Auto-align bars after transforms", ui: { input: "checkbox" }, advanced: true },
   { key: "abc2xmlArgs", type: "string", default: "", section: "Tools", group: "Import/Export", groupOrder: 20, label: "abc2xml flags", ui: { input: "text", placeholder: "-x -y=value" }, advanced: true },
   { key: "xml2abcArgs", type: "string", default: "", section: "Tools", group: "Import/Export", groupOrder: 20, label: "xml2abc flags", ui: { input: "text", placeholder: "-x -y=value" }, advanced: true },

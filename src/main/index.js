@@ -989,6 +989,9 @@ function applySettingsPatch(patch, { persistToSettingsFile = true } = {}) {
   next.editorLyricsBold = Boolean(next.editorLyricsBold);
   next.confirmAppendToActiveFile = Boolean(next.confirmAppendToActiveFile);
   next.autoAlignBarsAfterTransforms = Boolean(next.autoAlignBarsAfterTransforms);
+  next.editorHelpEnabled = Boolean(next.editorHelpEnabled);
+  next.makamToolsEnabled = Boolean(next.makamToolsEnabled || next.studyToolsEnabled);
+  next.payloadModeEnabled = Boolean(next.payloadModeEnabled);
   next.playbackNativeMidiDrums = Boolean(next.playbackNativeMidiDrums);
   next.playbackNativeMidiDrumsSetByUser = Boolean(next.playbackNativeMidiDrumsSetByUser);
   if (patch && Object.prototype.hasOwnProperty.call(patch, "usePortalFileDialogs")) {
@@ -1004,6 +1007,13 @@ function applySettingsPatch(patch, { persistToSettingsFile = true } = {}) {
   if (persistToSettingsFile) schedulePersistAttachedSettingsFile();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("settings:changed", next);
+  }
+  if (patch && (
+    Object.prototype.hasOwnProperty.call(patch, "makamToolsEnabled")
+    || Object.prototype.hasOwnProperty.call(patch, "studyToolsEnabled")
+    || Object.prototype.hasOwnProperty.call(patch, "payloadModeEnabled")
+  )) {
+    refreshMenu();
   }
   return next;
 }

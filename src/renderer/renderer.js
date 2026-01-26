@@ -30,9 +30,6 @@ import {
   baseId53ForNaturalLetter,
   NOTE_BASES,
 } from "./transpose.mjs";
-import { resolvePerdeName } from "./perde53.mjs";
-import { resolvePerdeNamesFromAbcToken } from "./perde_by_abc.mjs";
-import { BUILTIN_MAKAM_DNA } from "./makam_dna/makam_dna.mjs";
 import { normalizeMeasuresLineBreaks, transformMeasuresPerLine } from "./measures.mjs";
 import {
   buildDefaultDrumVelocityMap,
@@ -50,8 +47,6 @@ const $out = document.getElementById("out");
 const $payloadModeBar = document.getElementById("payloadModeBar");
 const $payloadModeTabRender = document.getElementById("payloadModeTabRender");
 const $payloadModeTabPlayback = document.getElementById("payloadModeTabPlayback");
-const $payloadModeShowLayers = document.getElementById("payloadModeShowLayers");
-const $payloadModeHighlightLabel = document.getElementById("payloadModeHighlightLabel");
 const $payloadModeCopy = document.getElementById("payloadModeCopy");
 const $payloadModeExit = document.getElementById("payloadModeExit");
 const $status = document.getElementById("status");
@@ -540,10 +535,11 @@ let rawModeOriginalTuneId = null;
 let payloadMode = false;
 let payloadModeSource = null;
 let payloadModeLayerSpans = [];
-let payloadModeShowLayers = true;
+let payloadModeShowLayers = false;
 let payloadModeView = "render"; // render | playback
 let payloadModeRenderState = null; // { text, selection, spans }
 let payloadModePlaybackState = null; // { text, selection, spans }
+let payloadModeUiWired = false;
 
 let setListItems = [];
 let setListPageBreaks = "perTune"; // perTune | none | auto
@@ -1598,6 +1594,18 @@ function setUiFontsFromSettings(settings) {
       tree.style.fontFamily = libraryFamily || "";
       tree.style.fontSize = (Number.isFinite(librarySize) && librarySize > 0) ? `${Math.round(librarySize)}px` : "";
     }
+  } catch {}
+}
+
+function setEditorHelpFromSettings(settings) {
+  const enabled = settings ? Boolean(settings.editorHelpEnabled) : true;
+  // Keep this narrow: only toggle "Editor Help" surfaces.
+  // Do not touch other compartments (tuning mode, payload read-only, etc.).
+  try {
+    reconfigureAbcExtensions({
+      completionEnabled: enabled,
+      hoverEnabled: enabled,
+    });
   } catch {}
 }
 
@@ -3800,6 +3808,7 @@ function buildPayloadLayerDecorations(state) {
     for (let lineNo = fromLine; lineNo <= toLine; lineNo += 1) {
       const line = state.doc.line(lineNo);
       builder.add(line.from, line.from, Decoration.line({ class: cls }));
+      builder.add(line.from, line.to, Decoration.mark({ class: cls }));
     }
   }
   return builder.finish();
@@ -3919,12 +3928,21 @@ function normalizeMakamKey(name) {
     .trim();
 }
 
-let activeMakamDnaEntries = Array.isArray(BUILTIN_MAKAM_DNA) ? BUILTIN_MAKAM_DNA : [];
+let activeMakamDnaEntries = [];
 let activeMakamDnaUserText = "";
 let makamDnaLoaded = false;
+let builtinMakamDnaPromise = null;
 
 function getMakamDnaEntries() {
   return Array.isArray(activeMakamDnaEntries) ? activeMakamDnaEntries : [];
+}
+
+async function getBuiltinMakamDnaEntries() {
+  if (builtinMakamDnaPromise) return builtinMakamDnaPromise;
+  builtinMakamDnaPromise = import("./makam_dna/makam_dna.mjs")
+    .then((mod) => (Array.isArray(mod.BUILTIN_MAKAM_DNA) ? mod.BUILTIN_MAKAM_DNA : []))
+    .catch(() => []);
+  return builtinMakamDnaPromise;
 }
 
 function extractEntriesFromMakamDnaPayload(payload) {
@@ -3974,18 +3992,19 @@ function formatMakamDnaForEditor(entries) {
 async function ensureMakamDnaLoaded() {
   if (makamDnaLoaded) return;
   makamDnaLoaded = true;
+  activeMakamDnaEntries = await getBuiltinMakamDnaEntries();
   if (!window.api || typeof window.api.getMakamDnaUser !== "function") return;
   try {
     const res = await window.api.getMakamDnaUser();
     if (!res || !res.ok || !res.text) return;
     const parsed = parseMakamDnaText(String(res.text || ""));
     if (!parsed.ok) return;
-    activeMakamDnaEntries = parsed.entries;
-    activeMakamDnaUserText = String(res.text || "");
-  } catch (e) {
-    logErr(e && e.message ? e.message : String(e));
+      activeMakamDnaEntries = parsed.entries;
+      activeMakamDnaUserText = String(res.text || "");
+    } catch (e) {
+      logErr(e && e.message ? e.message : String(e));
+    }
   }
-}
 
 let makamDnaNameIndex = { idx: new Map(), sorted: [] };
 
@@ -4050,11 +4069,46 @@ function normalizePerdeKey(name) {
     .trim();
 }
 
-function buildPerdeNameIndex() {
+let perdeApisPromise = null;
+let resolvePerdeNameFn = null;
+let resolvePerdeNamesFromAbcTokenFn = null;
+let perdeNameIndex = null;
+
+async function ensurePerdeApisLoaded() {
+  if (resolvePerdeNameFn && resolvePerdeNamesFromAbcTokenFn) return;
+  if (!perdeApisPromise) {
+    perdeApisPromise = Promise.all([
+      import("./perde53.mjs").catch(() => null),
+      import("./perde_by_abc.mjs").catch(() => null),
+    ]).then(([perde53, perdeByAbc]) => {
+      resolvePerdeNameFn = perde53 && typeof perde53.resolvePerdeName === "function" ? perde53.resolvePerdeName : null;
+      resolvePerdeNamesFromAbcTokenFn = perdeByAbc && typeof perdeByAbc.resolvePerdeNamesFromAbcToken === "function"
+        ? perdeByAbc.resolvePerdeNamesFromAbcToken
+        : null;
+    });
+  }
+  await perdeApisPromise;
+}
+
+function resolvePerdeNameSafe(args) {
+  try { return resolvePerdeNameFn ? (resolvePerdeNameFn(args) || "") : ""; } catch { return ""; }
+}
+
+function resolvePerdeNamesFromAbcTokenSafe(token) {
+  try { return resolvePerdeNamesFromAbcTokenFn ? (resolvePerdeNamesFromAbcTokenFn(token) || []) : []; } catch { return []; }
+}
+
+async function ensurePerdeNameIndexLoaded() {
+  if (perdeNameIndex) return;
+  await ensurePerdeApisLoaded();
+  if (!resolvePerdeNameFn) {
+    perdeNameIndex = new Map();
+    return;
+  }
   const idx = new Map();
   for (let octave = 4; octave <= 8; octave += 1) {
     for (let pc53 = 0; pc53 < 53; pc53 += 1) {
-      const name = resolvePerdeName({ pc53, octave });
+      const name = resolvePerdeNameSafe({ pc53, octave });
       if (!name) continue;
       const key = normalizePerdeKey(name);
       if (!key) continue;
@@ -4063,10 +4117,8 @@ function buildPerdeNameIndex() {
       idx.get(key).push({ pc53, octave, abs53, name });
     }
   }
-  return idx;
+  perdeNameIndex = idx;
 }
-
-const perdeNameIndex = buildPerdeNameIndex();
 
 function parseMakamDnaPerdeField(fieldText) {
   const raw = String(fieldText || "");
@@ -4078,7 +4130,7 @@ function parseMakamDnaPerdeField(fieldText) {
 
 function pickOverlayAbs53ForPerde(perdeName, { hint, observedMinAbs, observedMaxAbs } = {}) {
   const key = normalizePerdeKey(perdeName);
-  const candidates = key ? (perdeNameIndex.get(key) || []) : [];
+  const candidates = key && perdeNameIndex ? (perdeNameIndex.get(key) || []) : [];
   if (!candidates.length) return null;
   const mid = (Number.isFinite(observedMinAbs) && Number.isFinite(observedMaxAbs))
     ? (observedMinAbs + observedMaxAbs) / 2
@@ -4263,7 +4315,7 @@ function renderIntonationSeyirPlot({ noteEvents, baseStep, overlayMakamName } = 
     c.setAttribute("data-kind", it.kind);
     c.setAttribute("data-start", String(e.start ?? ""));
     c.setAttribute("data-end", String(e.end ?? ""));
-    const perde = intonationExplorerIs53 ? (resolvePerdeName({ pc53: mod53(e.pc53 || 0), octave: e.octave }) || "") : "";
+    const perde = intonationExplorerIs53 ? (resolvePerdeNameSafe({ pc53: mod53(e.pc53 || 0), octave: e.octave }) || "") : "";
     const role = (intonationExplorerRoleAbs53Map && intonationExplorerRoleAbs53Map.get(String(abs53))) ? intonationExplorerRoleAbs53Map.get(String(abs53)) : "";
     const perdePart = perde ? `; perde=${perde}` : "";
 	    const rolePart = role ? `; role=${role}` : "";
@@ -4696,9 +4748,9 @@ function scanIntonationEntries(snapshot, { skipGraceNotes = true } = {}) {
 
   function formatPerdeNameForIntonationRow(row, { is53 } = {}) {
     if (!is53) return "";
-    const fromToken = resolvePerdeNamesFromAbcToken(row.abcSpelling).filter(Boolean);
+    const fromToken = resolvePerdeNamesFromAbcTokenSafe(row.abcSpelling).filter(Boolean);
     if (fromToken.length) return fromToken.join(" / ");
-    return resolvePerdeName({ pc53: row.absStep, octave: row.octave }) || "";
+    return resolvePerdeNameSafe({ pc53: row.absStep, octave: row.octave }) || "";
   }
 
   function buildSeyirSnapshotText({ tuneText, rows, noteEvents, baseStep, baseLabel, is53 }) {
@@ -5011,11 +5063,11 @@ function renderIntonationExplorerRows(rows, { is53, roleAbs53Map } = {}) {
     const perde = document.createElement("td");
     let perdeName = "";
     if (is53) {
-      const fromToken = resolvePerdeNamesFromAbcToken(row.abcSpelling).filter(Boolean);
+      const fromToken = resolvePerdeNamesFromAbcTokenSafe(row.abcSpelling).filter(Boolean);
       if (fromToken.length) {
         perdeName = fromToken.join(" / ");
       } else {
-        perdeName = resolvePerdeName({ pc53: row.absStep, octave: row.octave }) || "";
+        perdeName = resolvePerdeNameSafe({ pc53: row.absStep, octave: row.octave }) || "";
       }
     }
 	    if (!is53) {
@@ -5129,9 +5181,9 @@ async function refreshIntonationExplorer() {
 		      });
 		    }
 		  if (scanned.error) {
-	      intonationExplorerRows = [];
-	      intonationExplorerActiveStep = null;
-      intonationExplorerIs53 = false;
+		      intonationExplorerRows = [];
+		      intonationExplorerActiveStep = null;
+	      intonationExplorerIs53 = false;
 		    renderIntonationExplorerRows([], { is53: false });
 		    setIntonationHighlightRanges([]);
 		    clearSvgIntonationBarHighlight();
@@ -5141,11 +5193,14 @@ async function refreshIntonationExplorer() {
         clearIntonationExplorerPlot();
 		    setIntonationExplorerStatus(scanned.error, { error: true });
 		    return;
-		  }
-	      intonationExplorerIs53 = Boolean(scanned.is53);
-		    updateIntonationBaseUi();
-	    const fullText = String(snapshot.text || "");
-	    const tuneText = scanned.tune ? fullText.slice(scanned.tune.start, scanned.tune.end) : "";
+			  }
+		      intonationExplorerIs53 = Boolean(scanned.is53);
+		      if (intonationExplorerIs53) {
+		        try { await ensurePerdeApisLoaded(); } catch {}
+		      }
+			    updateIntonationBaseUi();
+		    const fullText = String(snapshot.text || "");
+		    const tuneText = scanned.tune ? fullText.slice(scanned.tune.start, scanned.tune.end) : "";
 
 	    // Best-effort auto-fill: if the tune text contains a recognizable makam name,
 	    // preselect both dropdowns once (convenience only).
@@ -5195,20 +5250,21 @@ async function refreshIntonationExplorer() {
 
 			    // Optional: tag observed steps that match the declared makam roles (durak/güçlü/yeden).
 			    const tRoles0 = perfOn ? perfNowMs() : 0;
-			    let roleAbs53Map = null;
-			    try {
-			      const entry = getMakamDnaEntry(intonationExplorerDeclaredMakam);
-		      const events = Array.isArray(scanned.noteEvents) ? scanned.noteEvents : [];
-		      const absVals = events.map((ev) => Number(ev.abs53)).filter((n) => Number.isFinite(n));
-		      const observedMinAbs = absVals.length ? Math.min(...absVals) : null;
-		      const observedMaxAbs = absVals.length ? Math.max(...absVals) : null;
-			      if (entry && (entry.durak || entry.guclu || entry.yeden)) {
-			        const durak = parseMakamDnaPerdeField(entry.durak);
-			        const guclu = parseMakamDnaPerdeField(entry.guclu);
-			        const yeden = parseMakamDnaPerdeField(entry.yeden);
-			        const durakAbs = durak && durak.name ? pickOverlayAbs53ForPerde(durak.name, { hint: durak.hint, observedMinAbs, observedMaxAbs }) : null;
-			        const gucluAbs = guclu && guclu.name ? pickOverlayAbs53ForPerde(guclu.name, { hint: guclu.hint, observedMinAbs, observedMaxAbs }) : null;
-			        const yedenAbs = yeden && yeden.name ? pickOverlayAbs53ForPerde(yeden.name, { hint: yeden.hint, observedMinAbs, observedMaxAbs }) : null;
+				    let roleAbs53Map = null;
+				    try {
+				      const entry = getMakamDnaEntry(intonationExplorerDeclaredMakam);
+			      const events = Array.isArray(scanned.noteEvents) ? scanned.noteEvents : [];
+			      const absVals = events.map((ev) => Number(ev.abs53)).filter((n) => Number.isFinite(n));
+			      const observedMinAbs = absVals.length ? Math.min(...absVals) : null;
+			      const observedMaxAbs = absVals.length ? Math.max(...absVals) : null;
+				      if (entry && (entry.durak || entry.guclu || entry.yeden)) {
+				        try { await ensurePerdeNameIndexLoaded(); } catch {}
+				        const durak = parseMakamDnaPerdeField(entry.durak);
+				        const guclu = parseMakamDnaPerdeField(entry.guclu);
+				        const yeden = parseMakamDnaPerdeField(entry.yeden);
+				        const durakAbs = durak && durak.name ? pickOverlayAbs53ForPerde(durak.name, { hint: durak.hint, observedMinAbs, observedMaxAbs }) : null;
+				        const gucluAbs = guclu && guclu.name ? pickOverlayAbs53ForPerde(guclu.name, { hint: guclu.hint, observedMinAbs, observedMaxAbs }) : null;
+				        const yedenAbs = yeden && yeden.name ? pickOverlayAbs53ForPerde(yeden.name, { hint: yeden.hint, observedMinAbs, observedMaxAbs }) : null;
 			        roleAbs53Map = new Map();
 			        if (Number.isFinite(durakAbs)) roleAbs53Map.set(String(durakAbs), "durak");
 			        if (Number.isFinite(gucluAbs)) roleAbs53Map.set(String(gucluAbs), "güçlü");
@@ -6087,9 +6143,6 @@ function updatePayloadModeTabUI() {
     $payloadModeTabPlayback.classList.toggle("is-active", !isRender);
     $payloadModeTabPlayback.setAttribute("aria-selected", isRender ? "false" : "true");
   }
-  if ($payloadModeHighlightLabel) {
-    $payloadModeHighlightLabel.textContent = isRender ? "Show layers" : "Show deltas";
-  }
 }
 
 async function setPayloadModeView(nextView) {
@@ -6534,6 +6587,29 @@ function buildPlaybackPayloadForDiagnosticsFromRenderText(renderText, renderOffs
     payload = { text: expandRepeatsForPlayback(payload.text), offset: payload.offset };
   }
 
+  // Fallback: if no playback spans were recorded, highlight any explicit V:DRUM block
+  // so users can still see injected drum content.
+  if (!spans.some((s) => s && s.className === "cm-payload-layer-playback")) {
+    const lines = String(payload.text || "").split(/\r\n|\n|\r/);
+    let drumStart = -1;
+    for (let i = 0; i < lines.length; i += 1) {
+      if (/^\s*V:\s*DRUM\b/i.test(lines[i])) {
+        drumStart = i + 1; // 1-based line number
+        break;
+      }
+    }
+    if (drumStart > 0) {
+      let drumEnd = lines.length;
+      for (let i = drumStart; i < lines.length; i += 1) {
+        if (/^\s*V:\s*\w+/i.test(lines[i]) && !/^\s*V:\s*DRUM\b/i.test(lines[i])) {
+          drumEnd = i;
+          break;
+        }
+      }
+      addRangeSpan(drumStart, drumEnd, "cm-payload-layer-playback");
+    }
+  }
+
   return { text: payload.text, offset: payload.offset || 0, spans };
 }
 
@@ -6559,14 +6635,13 @@ async function enterPayloadMode() {
   const headerText = sanitizeFileHeaderForInteractiveRender(headerTextRaw);
   const prefixPayload = buildHeaderPrefixWithLayerSpans(headerText, true, sourceText);
   const payloadText = prefixPayload.text ? `${prefixPayload.text}${sourceText}` : sourceText;
-  const showLayers = $payloadModeShowLayers ? Boolean($payloadModeShowLayers.checked) : true;
 
   payloadModeSource = { text: sourceText, selection: sourceSelection, tuneUid: activeTuneUid };
   payloadModeRenderState = { text: payloadText, selection: null, spans: prefixPayload.spans || [] };
   payloadModePlaybackState = null;
   payloadModeView = "render";
   payloadModeLayerSpans = payloadModeRenderState.spans || [];
-  payloadModeShowLayers = showLayers;
+  payloadModeShowLayers = false;
 
   setPayloadModeUI(true);
   updatePayloadModeTabUI();
@@ -6596,7 +6671,7 @@ async function exitPayloadMode() {
   const restore = payloadModeSource;
   payloadModeSource = null;
   payloadModeLayerSpans = [];
-  payloadModeShowLayers = true;
+  payloadModeShowLayers = false;
   payloadModeView = "render";
   payloadModeRenderState = null;
   payloadModePlaybackState = null;
@@ -6616,6 +6691,58 @@ async function exitPayloadMode() {
   }
   scheduleRenderNow({ clearOutput: true });
   setStatus("OK");
+}
+
+function ensurePayloadModeUiWired() {
+  if (payloadModeUiWired) return;
+  payloadModeUiWired = true;
+
+  if ($payloadModeExit) {
+    $payloadModeExit.addEventListener("click", () => {
+      exitPayloadMode().catch(() => {});
+    });
+  }
+  if ($payloadModeTabRender) {
+    $payloadModeTabRender.addEventListener("click", () => {
+      setPayloadModeView("render").catch(() => {});
+    });
+  }
+  if ($payloadModeTabPlayback) {
+    $payloadModeTabPlayback.addEventListener("click", () => {
+      setPayloadModeView("playback").catch(() => {});
+    });
+  }
+  if ($payloadModeCopy) {
+    $payloadModeCopy.addEventListener("click", async () => {
+      try {
+        if (!editorView) return;
+        const doc = editorView.state.doc;
+        const ranges = editorView.state.selection && editorView.state.selection.ranges
+          ? editorView.state.selection.ranges
+          : [];
+        let selectionText = "";
+        for (const r of ranges) {
+          if (r && Number.isFinite(r.from) && Number.isFinite(r.to) && r.from !== r.to) {
+            selectionText = doc.sliceString(r.from, r.to);
+            break;
+          }
+        }
+        const text = selectionText || getEditorValue();
+        if (text && navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          if (selectionText) {
+            showToast("Copied selection.", 1600);
+          } else {
+            showToast(payloadModeView === "playback" ? "Copied playback payload." : "Copied render payload.", 1800);
+          }
+        } else {
+          showToast("Clipboard not available.", 2200);
+        }
+      } catch {
+        showToast("Copy failed.", 2200);
+      }
+    });
+  }
 }
 
 function toggleLineComments(view) {
@@ -8113,6 +8240,26 @@ function initEditor() {
     const inside = pos >= activeErrorHighlight.from && pos <= activeErrorHighlight.to;
     if (!inside) clearActiveErrorHighlight("abandon");
   }, true);
+
+  editorView.dom.addEventListener("copy", (e) => {
+    try {
+      if (!payloadMode || !editorView) return;
+      const selection = editorView.state.selection;
+      if (!selection || selection.empty) return;
+      const doc = editorView.state.doc;
+      const parts = [];
+      for (const range of selection.ranges || []) {
+        if (!range || range.from === range.to) continue;
+        parts.push(doc.sliceString(range.from, range.to));
+      }
+      if (!parts.length) return;
+      const text = parts.join("\n");
+      if (e.clipboardData && typeof e.clipboardData.setData === "function") {
+        e.clipboardData.setData("text/plain", text);
+        e.preventDefault();
+      }
+    } catch {}
+  });
 
   editorView.dom.addEventListener("contextmenu", (ev) => {
     ev.preventDefault();
@@ -13927,6 +14074,11 @@ async function buildDebugDumpSnapshot({ reason = "" } = {}) {
       pendingPlaybackPlan,
       lastPlaybackGuardMessage,
       lastPlaybackAbortMessage,
+      lastPlaybackException: lastPlaybackException ? {
+        phase: lastPlaybackException.phase || null,
+        message: lastPlaybackException.message || null,
+        stack: lastPlaybackException.stack || null,
+      } : null,
       payload: playbackPayload,
       debugState: playbackDebug && typeof playbackDebug.getState === "function" ? playbackDebug.getState() : null,
       timeline: playbackDebug && typeof playbackDebug.getTimeline === "function" ? playbackDebug.getTimeline() : null,
@@ -17184,6 +17336,12 @@ function wireMenuActions() {
       else if (actionType === "save") await fileSave();
       else if (actionType === "saveAs") await fileSaveAs();
       else if (actionType === "openPayloadMode") {
+        const enabled = Boolean(latestSettingsSnapshot && latestSettingsSnapshot.payloadModeEnabled);
+        if (!enabled) {
+          showToast("Payload Mode is disabled. Enable in Settings → Options → Tools → Diagnostics.", 4200);
+          return;
+        }
+        ensurePayloadModeUiWired();
         if (payloadMode) await exitPayloadMode();
         else await enterPayloadMode();
       }
@@ -17245,6 +17403,11 @@ function wireMenuActions() {
       }
       else if (actionType === "alignBars") alignBarsInEditor();
       else if (actionType === "openIntonationExplorer") {
+        const enabled = Boolean(latestSettingsSnapshot && (latestSettingsSnapshot.makamToolsEnabled || latestSettingsSnapshot.studyToolsEnabled));
+        if (!enabled) {
+          showToast("Makam Tools are disabled. Enable in Settings → Options → Tools → Makam Tools.", 4200);
+          return;
+        }
         if (intonationExplorerVisible) hideIntonationExplorerPanel();
         else showIntonationExplorerPanel();
       }
@@ -17310,43 +17473,6 @@ function wireMenuActions() {
 }
 
 wireMenuActions();
-
-if ($payloadModeExit) {
-  $payloadModeExit.addEventListener("click", () => {
-    exitPayloadMode().catch(() => {});
-  });
-}
-if ($payloadModeTabRender) {
-  $payloadModeTabRender.addEventListener("click", () => {
-    setPayloadModeView("render").catch(() => {});
-  });
-}
-if ($payloadModeTabPlayback) {
-  $payloadModeTabPlayback.addEventListener("click", () => {
-    setPayloadModeView("playback").catch(() => {});
-  });
-}
-if ($payloadModeCopy) {
-  $payloadModeCopy.addEventListener("click", async () => {
-    try {
-      const text = getEditorValue();
-      if (text && navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(text);
-        showToast(payloadModeView === "playback" ? "Copied playback payload." : "Copied render payload.", 1800);
-      } else {
-        showToast("Clipboard not available.", 2200);
-      }
-    } catch {
-      showToast("Copy failed.", 2200);
-    }
-  });
-}
-if ($payloadModeShowLayers) {
-  $payloadModeShowLayers.addEventListener("change", () => {
-    payloadModeShowLayers = Boolean($payloadModeShowLayers.checked);
-    refreshPayloadLayerDecorations();
-  });
-}
 
 if ($intonationExplorerClose) {
   $intonationExplorerClose.addEventListener("click", () => {
@@ -17496,27 +17622,31 @@ if (window.api && typeof window.api.getSettings === "function") {
   logStartupPerf("getSettings() start");
   window.api.getSettings().then((settings) => {
 		      logStartupPerf("getSettings() done", { hasSettings: Boolean(settings) });
-		      if (settings) {
-		      latestSettingsSnapshot = settings;
-		      logStartupPerf("apply settings: begin");
-		      setUiFontsFromSettings(settings);
-		      setGlobalHeaderFromSettings(settings);
-		      setAbc2svgFontsFromSettings(settings);
-		      setSoundfontFromSettings(settings);
-		      setDrumVelocityFromSettings(settings);
+			      if (settings) {
+			      latestSettingsSnapshot = settings;
+			      logStartupPerf("apply settings: begin");
+			      setUiFontsFromSettings(settings);
+			      setEditorHelpFromSettings(settings);
+			      setGlobalHeaderFromSettings(settings);
+			      setAbc2svgFontsFromSettings(settings);
+			      setSoundfontFromSettings(settings);
+			      setDrumVelocityFromSettings(settings);
 	        setLayoutFromSettings(settings);
 		      setFollowFromSettings(settings);
 		      setLoopFromSettings(settings);
-		      setPlaybackAutoScrollFromSettings(settings);
-	        setPrintAllFromSettings(settings);
-		      applyLibraryPrefsFromSettings(settings);
-		      updateGlobalHeaderToggle();
-	      updateErrorsFeatureUI();
-	      refreshHeaderLayers().catch(() => {});
-	      showDisclaimerIfNeeded(settings);
-	      scheduleStartupLayoutReset();
-	      logStartupPerf("apply settings: end");
-        markStartupSettingsApplied();
+				      setPlaybackAutoScrollFromSettings(settings);
+		        setPrintAllFromSettings(settings);
+			      applyLibraryPrefsFromSettings(settings);
+			      updateGlobalHeaderToggle();
+		      updateErrorsFeatureUI();
+		      refreshHeaderLayers().catch(() => {});
+		      try {
+		        if (settings && settings.payloadModeEnabled) ensurePayloadModeUiWired();
+		      } catch {}
+		      showDisclaimerIfNeeded(settings);
+		      scheduleStartupLayoutReset();
+		      logStartupPerf("apply settings: end");
+	        markStartupSettingsApplied();
 	    }
 	    suppressLibraryPrefsWrite = false;
       if (!settings) markStartupSettingsApplied();
@@ -17536,23 +17666,33 @@ if (window.api && typeof window.api.getFontDirs === "function") {
 if (window.api && typeof window.api.onSettingsChanged === "function") {
   window.api.onSettingsChanged((settings) => {
     latestSettingsSnapshot = settings || null;
-    const prevHeader = `${globalHeaderEnabled}|${globalHeaderText}|${abc2svgNotationFontFile}|${abc2svgTextFontFile}`;
-    const prevSoundfont = soundfontName;
-    setUiFontsFromSettings(settings);
-    setGlobalHeaderFromSettings(settings);
-    setAbc2svgFontsFromSettings(settings);
-	    setSoundfontFromSettings(settings);
-	    setDrumVelocityFromSettings(settings);
+	    const prevHeader = `${globalHeaderEnabled}|${globalHeaderText}|${abc2svgNotationFontFile}|${abc2svgTextFontFile}`;
+	    const prevSoundfont = soundfontName;
+	    setUiFontsFromSettings(settings);
+	    setEditorHelpFromSettings(settings);
+	    setGlobalHeaderFromSettings(settings);
+	    setAbc2svgFontsFromSettings(settings);
+		    setSoundfontFromSettings(settings);
+		    setDrumVelocityFromSettings(settings);
       setLayoutFromSettings(settings);
 	    setFollowFromSettings(settings);
 	    setLoopFromSettings(settings);
 	    setPlaybackAutoScrollFromSettings(settings);
-      setPrintAllFromSettings(settings);
-	    applyLibraryPrefsFromSettings(settings);
-	    updateGlobalHeaderToggle();
-    updateErrorsFeatureUI();
-    refreshHeaderLayers().catch(() => {});
-    showDisclaimerIfNeeded(settings);
+	    setPrintAllFromSettings(settings);
+		    applyLibraryPrefsFromSettings(settings);
+		    updateGlobalHeaderToggle();
+	    updateErrorsFeatureUI();
+	    refreshHeaderLayers().catch(() => {});
+	    try {
+	      const payloadEnabled = Boolean(settings && settings.payloadModeEnabled);
+	      if (payloadEnabled) ensurePayloadModeUiWired();
+	      if (!payloadEnabled && payloadMode) exitPayloadMode().catch(() => {});
+	    } catch {}
+	    try {
+	      const makamEnabled = Boolean(settings && (settings.makamToolsEnabled || settings.studyToolsEnabled));
+	      if (!makamEnabled && intonationExplorerVisible) hideIntonationExplorerPanel();
+	    } catch {}
+	    showDisclaimerIfNeeded(settings);
     if (settings && prevHeader !== `${globalHeaderEnabled}|${globalHeaderText}|${abc2svgNotationFontFile}|${abc2svgTextFontFile}`) {
       scheduleRenderNow();
     }
@@ -18164,19 +18304,20 @@ if ($makamDnaResetBuiltin) {
       setMakamDnaModalStatus("Not available in this build.", { error: true });
       return;
     }
-    try {
-      const res = await window.api.clearMakamDnaUser();
-      if (!res || !res.ok) {
-        setMakamDnaModalStatus(res && res.error ? String(res.error) : "Reset failed.", { error: true });
-        return;
-      }
-      activeMakamDnaEntries = Array.isArray(BUILTIN_MAKAM_DNA) ? BUILTIN_MAKAM_DNA : [];
-      activeMakamDnaUserText = "";
-      rebuildMakamDnaNameIndex();
-      populateIntonationExplorerMakams();
-      if ($makamDnaEditor) $makamDnaEditor.value = formatMakamDnaForEditor(getMakamDnaEntries());
-      if (intonationExplorerVisible) refreshIntonationExplorer().catch(() => {});
-      setMakamDnaModalStatus("Reset to built-in.");
+	    try {
+	      const res = await window.api.clearMakamDnaUser();
+	      if (!res || !res.ok) {
+	        setMakamDnaModalStatus(res && res.error ? String(res.error) : "Reset failed.", { error: true });
+	        return;
+	      }
+	      activeMakamDnaEntries = await getBuiltinMakamDnaEntries();
+	      activeMakamDnaUserText = "";
+	      makamDnaLoaded = true;
+	      rebuildMakamDnaNameIndex();
+	      populateIntonationExplorerMakams();
+	      if ($makamDnaEditor) $makamDnaEditor.value = formatMakamDnaForEditor(getMakamDnaEntries());
+	      if (intonationExplorerVisible) refreshIntonationExplorer().catch(() => {});
+	      setMakamDnaModalStatus("Reset to built-in.");
     } catch (e) {
       logErr(e && e.message ? e.message : String(e));
       setMakamDnaModalStatus("Reset failed.", { error: true });
@@ -18586,6 +18727,7 @@ let lastPlaybackKeyOrderWarning = null;
 let playbackStartToken = 0;
 let lastPlaybackGuardMessage = "";
 let lastPlaybackAbortMessage = "";
+let lastPlaybackException = null; // { phase, message, stack }
 let playbackNeedsReprepare = false;
 
 let focusModeEnabled = false;
@@ -19435,6 +19577,7 @@ function resetPlaybackState() {
   resumeStartIdx = null;
   playbackState = null;
   playbackIndexOffset = 0;
+  lastPlaybackException = null;
   activePlaybackRange = null;
   activePlaybackEndAbcOffset = null;
   activePlaybackEndSymbol = null;
@@ -21507,6 +21650,7 @@ function buildDrumVoiceText(info) {
   let patternKey = null;
   let patternBarIndex = 0;
   let wasOn = false;
+  let resetPatternNext = false;
   let lineBuffer = "";
   let sep = info.leadingToken || "";
   const lineIndents = (info && info.lineIndents instanceof Map) ? info.lineIndents : null;
@@ -21525,6 +21669,18 @@ function buildDrumVoiceText(info) {
     const barUnits = fractionDiv(meter, unit);
     let barText = "";
 
+    const startToken = bar.startToken || "";
+    const endToken = bar.endToken || "";
+    let resetPatternHere = resetPatternNext;
+    resetPatternNext = false;
+    // Reset at repeat/volta boundaries so each segment starts from bar 1 of the drum pattern.
+    if (startToken && (/\|:/.test(startToken) || /\[\d/.test(startToken) || /\|\|/.test(startToken))) {
+      resetPatternHere = true;
+    }
+    if (endToken && (/:\|/.test(endToken) || /\|\|/.test(endToken) || /\|\]/.test(endToken))) {
+      resetPatternNext = true;
+    }
+
     if (!bar.drumOn || !bar.pattern) {
       barText = `z${formatDuration(barUnits)}`;
       patternKey = null;
@@ -21533,7 +21689,7 @@ function buildDrumVoiceText(info) {
     } else {
       const pattern = bar.pattern;
       const key = `${pattern.id}:${bar.drumBars}`;
-      if (!wasOn || key !== patternKey) patternBarIndex = 0;
+      if (!wasOn || key !== patternKey || resetPatternHere) patternBarIndex = 0;
       patternKey = key;
       wasOn = true;
 
@@ -21578,6 +21734,11 @@ function buildDrumVoiceText(info) {
     }
     lineBuffer += `${sep}${barText}`;
     sep = bar.endToken || "|";
+
+    // If the tune ends explicitly with `|]`, stop emitting further drum bars.
+    if (bar.endToken && /\|\]/.test(bar.endToken)) {
+      break;
+    }
 
     const nextBar = bars[barIndex + 1] || null;
     const nextLineKey = nextBar && Number.isFinite(nextBar.srcLineIndex) ? nextBar.srcLineIndex : null;
@@ -21647,6 +21808,26 @@ function injectDrumPlayback(text) {
     console.log("[abcarus] drum voice:\n" + drumVoice);
   }
   const lines = String(text || "").split(/\r\n|\n|\r/);
+  // Once we inject an explicit DRUM voice, we no longer want abc2svg playback to interpret
+  // the original `%%MIDI drum ...` directives (they can be long, have custom continuations, or
+  // be parsed differently across versions). Keep the text length stable for Follow mapping.
+  let inDrumDirectiveRun = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    const raw = lines[i] || "";
+    const trimmed = raw.trim();
+    if (/^\s*%%MIDI\s+drum\b/i.test(raw)) {
+      inDrumDirectiveRun = true;
+      const len = raw.length;
+      lines[i] = len <= 0 ? "%" : (`%${" ".repeat(Math.max(0, len - 1))}`);
+      continue;
+    }
+    if (inDrumDirectiveRun && /^\+:\s*/i.test(trimmed)) {
+      const len = raw.length;
+      lines[i] = len <= 0 ? "%" : (`%${" ".repeat(Math.max(0, len - 1))}`);
+      continue;
+    }
+    inDrumDirectiveRun = false;
+  }
   for (let i = 0; i < lines.length; i += 1) {
     const trimmed = lines[i].trim();
     if (/^%/.test(trimmed)) continue;
@@ -21819,6 +22000,72 @@ function sanitizeAbcForPlayback(text) {
     if (/^%%\s*begintext\b/i.test(trimmed)) inTextBlock = true;
     if (/^%%\s*endtext\b/i.test(trimmed)) inTextBlock = false;
     if (!inBody && (/^\s*K:/.test(rawLine) || /^\s*\[\s*K:/.test(trimmed))) inBody = true;
+
+    // Playback compat: ABC 2.2 supports `%%MIDI drum +:` continuation lines, but abc2svg-playback
+    // rejects `%%MIDI drum +:`. Collapse the 2.2 form into a single `%%MIDI drum ...` line:
+    //   %%MIDI drum     <rhythm>
+    //   %%MIDI drum +:  <pitches>
+    //   %%MIDI drum +:  <velocities>
+    // becomes:
+    //   %%MIDI drum <rhythm> <pitches> <velocities>
+    // For follow/mapping stability, we keep line-count stable by replacing consumed continuation
+    // lines with length-preserving comment lines.
+    // Note: keep this outside `inBody` so tune-header forms (before K:) are handled too.
+    if (!inTextBlock) {
+      const main = rawLine.match(/^(\s*)%%MIDI\s+drum\s+(?!\+:)(.*)$/i);
+      if (main) {
+        const indent = main[1] || "";
+        const restRaw = main[2] || "";
+        const splitComment = (s) => {
+          const idx = s.indexOf("%", 2); // allow leading "%%" as directive marker
+          if (idx < 0) return { code: s, comment: "" };
+          return { code: s.slice(0, idx), comment: s.slice(idx) };
+        };
+        const mainParts = splitComment(rawLine);
+
+        const consumed = [];
+        let j = lineIndex + 1;
+        while (j < lines.length) {
+          const nextRaw = lines[j];
+          const m = nextRaw.match(/^\s*%%MIDI\s+drum\s+\+:\s*(.*)$/i);
+          if (!m) break;
+          const nextParts = splitComment(nextRaw);
+          // Extract only the continuation payload, excluding any trailing comment.
+          const tail = (m[1] || "");
+          // If there is a comment, keep the payload before it.
+          const payloadOnly = splitComment(tail).code;
+          consumed.push({ raw: nextRaw, payload: payloadOnly });
+          j += 1;
+        }
+
+        if (consumed.length > 0) {
+          const mainPayload = splitComment(restRaw).code;
+          const mainTokens = String(mainPayload || "").trim().split(/\s+/).filter(Boolean);
+          const isNum = (t) => /^-?\d+$/.test(String(t || "").trim());
+          let firstNum = -1;
+          for (let i = 0; i < mainTokens.length; i += 1) {
+            if (isNum(mainTokens[i])) { firstNum = i; break; }
+          }
+          const rhythmTokens = (firstNum === -1 ? mainTokens : mainTokens.slice(0, firstNum)).filter((t) => t !== "+:");
+          const rhythm = rhythmTokens.join("");
+          const numbers = (firstNum === -1 ? [] : mainTokens.slice(firstNum));
+          for (const c of consumed) {
+            const extra = String(c.payload || "").trim().split(/\s+/).filter(Boolean);
+            numbers.push(...extra);
+          }
+          const joined = [rhythm, numbers.join(" ")].filter(Boolean).join(" ").trim();
+          const combinedLine = `${indent}%%MIDI drum ${joined}` + (mainParts.comment || "");
+          out.push(combinedLine);
+          for (let k = 0; k < consumed.length; k += 1) {
+            const raw = consumed[k].raw;
+            out.push("%" + " ".repeat(Math.max(0, raw.length - 1)));
+          }
+          warnings.push({ kind: "midi-drum-continuation-collapsed", line: lineIndex + 1, lines: consumed.length + 1 });
+          lineIndex = j - 1;
+          continue;
+        }
+      }
+    }
 
     if (inTextBlock || !inBody) {
       // Still remove line-continuation backslashes outside text blocks even before body;
@@ -22229,19 +22476,33 @@ function extractBarSignatureFromText(text) {
 function computeExpectedBarSignatureFromInfo(info) {
   const sig = [];
   if (!info || !Array.isArray(info.bars)) return sig;
+  const bars = info.bars;
   let sep = info.leadingToken || "";
-  for (const bar of info.bars) {
+  for (let i = 0; i < bars.length; i += 1) {
+    const bar = bars[i];
     if (bar && bar.startToken) sep = bar.startToken;
     if (sep) sig.push(sep);
     sep = (bar && bar.endToken) ? bar.endToken : "|";
+
+    // Mirror buildDrumVoiceText(): if the next bar starts on a new source line, the previous separator
+    // is emitted at end-of-line *before* the next bar's startToken. This affects signatures like:
+    //   ... :|2 ... ||\n|: ...
+    const next = bars[i + 1] || null;
+    const lineA = bar && Number.isFinite(bar.srcLineIndex) ? bar.srcLineIndex : null;
+    const lineB = next && Number.isFinite(next.srcLineIndex) ? next.srcLineIndex : null;
+    if (lineA != null && lineB != null && lineA !== lineB) {
+      if (sep) sig.push(sep);
+      sep = "";
+    }
   }
   if (sep) sig.push(sep);
   return sig;
 }
 
 function diffSignatures(expected, actual) {
-  const a = Array.isArray(expected) ? expected : [];
-  const b = Array.isArray(actual) ? actual : [];
+  const clean = (arr) => (Array.isArray(arr) ? arr.filter((t) => t !== ":" && t != null) : []);
+  const a = clean(expected);
+  const b = clean(actual);
   const len = Math.max(a.length, b.length);
   for (let i = 0; i < len; i += 1) {
     if (a[i] !== b[i]) {
@@ -22914,23 +23175,28 @@ async function startPlaybackFromRange(rangeOverride) {
     && player
   );
   waitingForFirstNote = true;
-	  try {
-	    if (!canReuse) {
-	      stopPlaybackForRestart();
-	      const desired = soundfontName || "TimGM6mb.sf2";
-      setSoundfontCaption("Loading...");
-      updateSoundfontLoadingStatus(desired);
-	      await preparePlayback();
-	    } else {
-	      await ensureSoundfontReady();
-	      stopPlaybackForRestart();
-	    }
-	  } catch (e) {
-	    try { scheduleAutoDump("playback-start-failed", (e && e.message) ? e.message : String(e)); } catch {}
-	    stopPlaybackFromGuard(`Playback start failed: ${(e && e.message) ? e.message : String(e)}`);
-	    showToast("Playback failed to start. Try again.", 3200);
-	    return;
-	  }
+		  try {
+		    if (!canReuse) {
+		      stopPlaybackForRestart();
+		      const desired = soundfontName || "TimGM6mb.sf2";
+	      setSoundfontCaption("Loading...");
+	      updateSoundfontLoadingStatus(desired);
+		      await preparePlayback();
+		    } else {
+		      await ensureSoundfontReady();
+		      stopPlaybackForRestart();
+		    }
+		  } catch (e) {
+		    lastPlaybackException = {
+		      phase: "preparePlayback",
+		      message: (e && e.message) ? String(e.message) : String(e),
+		      stack: (e && e.stack) ? String(e.stack) : null,
+		    };
+		    try { scheduleAutoDump("playback-start-failed", (e && e.message) ? e.message : String(e)); } catch {}
+		    stopPlaybackFromGuard(`Playback start failed: ${(e && e.message) ? e.message : String(e)}`);
+		    showToast("Playback failed to start. Try again.", 3200);
+		    return;
+		  }
   if (startToken !== playbackStartToken) return;
 
   updatePracticeUi();
@@ -22984,6 +23250,11 @@ async function startPlaybackFromRange(rangeOverride) {
   try {
     startPlaybackFromPrepared(startSym.istart);
   } catch (e) {
+    lastPlaybackException = {
+      phase: "startPlaybackFromPrepared",
+      message: (e && e.message) ? String(e.message) : String(e),
+      stack: (e && e.stack) ? String(e.stack) : null,
+    };
     stopPlaybackFromGuard(`Playback start failed: ${(e && e.message) ? e.message : String(e)}`);
     showToast("Playback failed to start. Try again.", 3200);
     return;

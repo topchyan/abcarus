@@ -8,11 +8,11 @@ function formatRecentLabel(entry) {
   return `${base}  ${x}${title}`;
 }
 
-function buildDiagnosticsSubmenu(sendMenuAction) {
+function buildDiagnosticsSubmenu(appState, sendMenuAction) {
+  const payloadEnabled = Boolean(appState && appState.settings && appState.settings.payloadModeEnabled);
   return [
     { label: "Save Debug Dump…", accelerator: "CmdOrCtrl+Shift+D", click: () => sendMenuAction("dumpDebug") },
-    { type: "separator" },
-    { label: "Payload Mode (Current Tune)…", click: () => sendMenuAction("openPayloadMode") },
+    ...(payloadEnabled ? [{ type: "separator" }, { label: "Payload Mode (Current Tune)…", click: () => sendMenuAction("openPayloadMode") }] : []),
   ];
 }
 
@@ -212,15 +212,19 @@ function buildMenuTemplate(appState, sendMenuAction) {
         ],
       },
       { type: "separator" },
-      {
-        label: "Study",
-        submenu: [
-          {
-            label: "Intonation Explorer…",
-            click: () => sendMenuAction("openIntonationExplorer"),
-          },
-        ],
-      },
+      ...((appState && appState.settings && (appState.settings.makamToolsEnabled || appState.settings.studyToolsEnabled))
+        ? [
+            {
+              label: "Study",
+              submenu: [
+                {
+                  label: "Intonation Explorer…",
+                  click: () => sendMenuAction("openIntonationExplorer"),
+                },
+              ],
+            },
+          ]
+        : []),
       {
         label: "Renumber X (Active File)…",
         accelerator: "CmdOrCtrl+Shift+X",
@@ -237,7 +241,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
       { label: "ABC Guide (F1)", accelerator: "F1", click: () => sendMenuAction("helpGuide") },
       { label: "ABCarus User Guide", click: () => sendMenuAction("helpUserGuide") },
       { type: "separator" },
-      { label: "Diagnostics", submenu: buildDiagnosticsSubmenu(sendMenuAction) },
+      { label: "Diagnostics", submenu: buildDiagnosticsSubmenu(appState, sendMenuAction) },
       { label: "Open Settings Folder", click: () => sendMenuAction("openSettingsFolder") },
       { type: "separator" },
       { label: "ABC Notation Homepage", click: () => sendMenuAction({ type: "helpLink", url: "https://abcnotation.com/" }) },
