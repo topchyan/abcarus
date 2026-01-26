@@ -8685,7 +8685,7 @@ async function selectTune(tuneId, options = {}) {
     tuneId: String(tuneId),
     skipConfirm: Boolean(options && options.skipConfirm),
     rawMode: Boolean(rawMode),
-    focusMode: Boolean(focusMode),
+    focusMode: Boolean(focusModeEnabled),
     payloadMode: Boolean(payloadMode),
   });
   if (!options.skipConfirm) {
@@ -14971,7 +14971,7 @@ async function performSaveFlow() {
     wcSnapshotPath: workingCopySnapshot && workingCopySnapshot.path ? String(workingCopySnapshot.path) : null,
     payloadMode: Boolean(payloadMode),
     rawMode: Boolean(rawMode),
-    focusMode: Boolean(focusMode),
+    focusMode: Boolean(focusModeEnabled),
   });
 
   if (headerDirty && activeFilePath) {
