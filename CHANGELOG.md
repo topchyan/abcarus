@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [0.24.2] - 2026-01-27
 ### Added
 - Templates: allow choosing a template for New from Template, with Insert/Replace/Append actions.
 - Templates: support `.abc` files without `X:` by treating the whole file as a template (auto-adds `X:` on insert).
@@ -13,7 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Templates: group related actions under `File → Templates` and add `Edit → ABC Helpers…` + `File → Revert to Disk`.
-
 
 ## [0.24.0] - 2026-01-27
 ### Changed
