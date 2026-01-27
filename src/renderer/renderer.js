@@ -76,11 +76,13 @@ const $templatesSearch = document.getElementById("templatesSearch");
 const $templatesList = document.getElementById("templatesList");
 const $templatesFolderLabel = document.getElementById("templatesFolderLabel");
 const $templatesManage = document.getElementById("templatesManage");
-const $templatesChangeFolder = document.getElementById("templatesChangeFolder");
+const $templatesEdit = document.getElementById("templatesEdit");
 const $templatesReload = document.getElementById("templatesReload");
 const $templatesPreviewTitle = document.getElementById("templatesPreviewTitle");
 const $templatesPreviewText = document.getElementById("templatesPreviewText");
 const $templatesInsert = document.getElementById("templatesInsert");
+const $templatesReplace = document.getElementById("templatesReplace");
+const $templatesAppend = document.getElementById("templatesAppend");
 const $templatesCancel = document.getElementById("templatesCancel");
 const $xIssuesModal = document.getElementById("xIssuesModal");
 const $xIssuesInfo = document.getElementById("xIssuesInfo");
@@ -2813,6 +2815,7 @@ const LIBRARY_UI_STATE_DEBOUNCE_MS = 300;
 let templatesIndex = null;
 let templatesFlat = [];
 let templatesSelectedKey = "";
+let templatesInsertMode = "insert";
 const templatesFileCache = new Map(); // filePath -> full text
 
 const libraryViewStore = createLibraryViewStore({
@@ -8624,6 +8627,22 @@ function setActiveTuneText(text, metadata, options = {}) {
     maybeResetFocusLoopForTune(metadata.id);
   }
   scheduleRenderNow({ clearOutput: true });
+}
+
+function insertTextAtEditorSelection(text) {
+  if (!editorView) return false;
+  if (!text) return false;
+  try {
+    const sel = editorView.state.selection;
+    editorView.dispatch({
+      changes: { from: sel.main.from, to: sel.main.to, insert: text },
+      selection: { anchor: sel.main.from + text.length },
+      userEvent: "input",
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function setLibraryVisible(visible, { persist = true } = {}) {
@@ -17804,6 +17823,9 @@ function wireMenuActions() {
           "exportPdfAll",
           "exportMusicXml",
           "importMusicXml",
+          "templatesModal",
+          "abcHelpers",
+          "revertToDisk",
         ]);
         if (blocked.has(actionType)) {
           showToast("Raw mode: switch to tune mode for tools/playback/print/export.", 2400);
@@ -17819,6 +17841,8 @@ function wireMenuActions() {
           "openRecentTune",
           "openRecentFile",
           "openRecentFolder",
+          "templatesModal",
+          "revertToDisk",
           "close",
           "quit",
         ]);
@@ -17832,6 +17856,8 @@ function wireMenuActions() {
             openRecentTune: "opening a recent tune",
             openRecentFile: "opening a recent file",
             openRecentFolder: "opening a recent folder",
+            templatesModal: "opening templates",
+            revertToDisk: "reverting to disk",
             close: "closing this file",
             quit: "quitting",
           };
@@ -17842,11 +17868,40 @@ function wireMenuActions() {
       if (actionType === "new") await fileNew();
       else if (actionType === "newTune") await fileNewTune();
       else if (actionType === "newFromTemplate") await fileNewFromTemplate();
+      else if (actionType === "templatesModal") {
+        if (payloadMode) {
+          showToast("Exit Payload Mode to use templates.", 2400);
+          return;
+        }
+        await openTemplatesModal();
+      }
       else if (actionType === "open") await fileOpen();
       else if (actionType === "openFolder") await scanAndLoadLibrary();
       else if (actionType === "importMusicXml") await importMusicXml();
       else if (actionType === "save") await fileSave();
       else if (actionType === "saveAs") await fileSaveAs();
+      else if (actionType === "revertToDisk") {
+        const entry = getActiveFileEntry();
+        const filePath = entry && entry.path ? String(entry.path) : "";
+        if (!filePath) {
+          showToast("Open a file first.", 2200);
+          return;
+        }
+        if (isPlaying || isPaused) {
+          showToast("Stop playback to revert.", 2200);
+          return;
+        }
+        const confirm = await confirmReloadFromDisk(filePath);
+        if (!confirm) return;
+        const restoreTuneId = rawMode ? null : (activeTuneId || null);
+        const res = await discardAndReloadWorkingCopyFromDisk(filePath, { restoreTuneId });
+        if (!res || !res.ok) {
+          await showSaveError(res && res.error ? res.error : "Unable to revert to disk.");
+          return;
+        }
+        setStatus("Reverted to disk.");
+        showToast("Reverted to disk.", 1600);
+      }
       else if (actionType === "openPayloadMode") {
         const enabled = Boolean(latestSettingsSnapshot && latestSettingsSnapshot.payloadModeEnabled);
         if (!enabled) {
@@ -17889,6 +17944,25 @@ function wireMenuActions() {
       }
       else if (actionType === "openRecentFolder" && action && action.entry) {
         await openRecentFolder(action.entry);
+      }
+      else if (actionType === "abcHelpers") {
+        if (!editorView) return;
+        if (payloadMode) {
+          showToast("Exit Payload Mode to use ABC Helpers.", 2400);
+          return;
+        }
+        editorView.focus();
+        try {
+          const ev = new KeyboardEvent("keydown", {
+            key: "F2",
+            code: "F2",
+            ctrlKey: true,
+            bubbles: true,
+          });
+          editorView.dom.dispatchEvent(ev);
+        } catch (_) {
+          // no-op
+        }
       }
       else if (actionType === "find" && editorView) openFindPanel(editorView);
       else if (actionType === "replace" && editorView) openReplacePanel(editorView);
@@ -18353,6 +18427,9 @@ function closeTemplatesModal() {
   $templatesModal.setAttribute("aria-hidden", "true");
   templatesSelectedKey = "";
   if ($templatesInsert) $templatesInsert.disabled = true;
+  if ($templatesReplace) $templatesReplace.disabled = true;
+  if ($templatesAppend) $templatesAppend.disabled = true;
+  if ($templatesEdit) $templatesEdit.disabled = true;
   if ($templatesPreviewTitle) $templatesPreviewTitle.textContent = "Select a template";
   if ($templatesPreviewText) $templatesPreviewText.textContent = "";
 }
@@ -18434,7 +18511,8 @@ function renderTemplatesList() {
     subtitle.className = "templates-item-subtitle";
     const x = item.xNumber ? `X:${item.xNumber}` : "X:";
     const c = item.composer ? ` · ${item.composer}` : "";
-    subtitle.textContent = `${x}${c}`;
+    const src = item.preview === "Full file" ? " · full file" : "";
+    subtitle.textContent = `${x}${c}${src}`;
     right.appendChild(title);
     right.appendChild(subtitle);
     row.appendChild(left);
@@ -18466,6 +18544,9 @@ async function selectTemplateByKey(key) {
   const item = templatesFlat.find((t) => t && t.key === wanted) || null;
   templatesSelectedKey = item ? item.key : "";
   if ($templatesInsert) $templatesInsert.disabled = !item;
+  if ($templatesReplace) $templatesReplace.disabled = !item;
+  if ($templatesAppend) $templatesAppend.disabled = !item;
+  if ($templatesEdit) $templatesEdit.disabled = !item;
   renderTemplatesList();
   if (!$templatesPreviewTitle || !$templatesPreviewText) return;
   if (!item) {
@@ -18476,7 +18557,8 @@ async function selectTemplateByKey(key) {
   const title = item.title || item.preview || "Untitled";
   const x = item.xNumber ? `X:${item.xNumber}` : "X:";
   const c = item.composer ? ` · ${item.composer}` : "";
-  $templatesPreviewTitle.textContent = `${title} (${x}${c})`;
+  const src = item.preview === "Full file" ? " · full file" : "";
+  $templatesPreviewTitle.textContent = `${title} (${x}${c}${src})`;
   const full = await getTemplatesFileText(item.filePath);
   const start = Number(item.startOffset) || 0;
   const end = Number(item.endOffset) || 0;
@@ -18484,7 +18566,7 @@ async function selectTemplateByKey(key) {
   $templatesPreviewText.textContent = slice.trim() ? slice.trim() : "(Empty template)";
 }
 
-async function insertSelectedTemplateFromModal() {
+async function insertSelectedTemplateFromModal(modeOverride = "") {
   const key = String(templatesSelectedKey || "");
   const item = templatesFlat.find((t) => t && t.key === key) || null;
   if (!item) return;
@@ -18494,18 +18576,46 @@ async function insertSelectedTemplateFromModal() {
     return;
   }
 
-  const ok = await ensureSafeToAbandonCurrentDoc("inserting a template");
-  if (!ok) return;
-
   const full = await getTemplatesFileText(item.filePath);
   const start = Number(item.startOffset) || 0;
   const end = Number(item.endOffset) || 0;
-  const slice = full ? full.slice(start, Math.max(start, end)) : "";
+  let slice = full ? full.slice(start, Math.max(start, end)) : "";
   if (!slice.trim()) {
     await showSaveError("Template is empty.");
     return;
   }
-  const appended = await appendTuneTextToFileNow(entry.path, slice, { toastOk: "Template inserted." });
+  if (!/^[\t ]*X:/m.test(slice)) {
+    slice = ensureXNumberInAbc(slice, "");
+  }
+
+  const mode = String(modeOverride || templatesInsertMode || "insert");
+  if (mode === "insert") {
+    if (payloadMode) {
+      showToast("Exit Payload Mode to insert a template.", 2400);
+      return;
+    }
+    const ok = await ensureSafeToAbandonCurrentDoc("inserting a template");
+    if (!ok) return;
+    if (!/[\r\n]$/.test(slice)) slice = `${slice}\n`;
+    const inserted = insertTextAtEditorSelection(slice);
+    if (!inserted) return;
+    showToast("Template inserted.", 1800);
+    closeTemplatesModal();
+    return;
+  }
+
+  if (mode === "replace") {
+    if (payloadMode) {
+      showToast("Exit Payload Mode to replace a tune.", 2400);
+      return;
+    }
+    setEditorValue(slice.trimEnd());
+    showToast("Template replaced current tune.", 2200);
+    closeTemplatesModal();
+    return;
+  }
+
+  const appended = await appendTuneTextToFileNow(entry.path, slice, { toastOk: "Template appended." });
   if (appended) closeTemplatesModal();
 }
 
@@ -18539,19 +18649,37 @@ async function loadTemplatesForModal() {
   for (const file of scan.files || []) {
     const filePath = file && file.path ? String(file.path) : "";
     const fileBasename = file && file.basename ? String(file.basename) : safeBasename(filePath);
-    for (const tune of (file && file.tunes) ? file.tunes : []) {
-      if (!tune || !Number.isFinite(Number(tune.startOffset)) || !Number.isFinite(Number(tune.endOffset))) continue;
-      flat.push({
-        key: `${filePath}::${tune.startOffset}`,
-        filePath,
-        fileBasename,
-        startOffset: Number(tune.startOffset),
-        endOffset: Number(tune.endOffset),
-        xNumber: tune.xNumber ? String(tune.xNumber) : "",
-        title: tune.title ? String(tune.title) : "",
-        composer: tune.composer ? String(tune.composer) : "",
-        preview: tune.preview ? String(tune.preview) : "",
-      });
+    const tunes = (file && file.tunes) ? file.tunes : [];
+    if (tunes.length) {
+      for (const tune of tunes) {
+        if (!tune || !Number.isFinite(Number(tune.startOffset)) || !Number.isFinite(Number(tune.endOffset))) continue;
+        flat.push({
+          key: `${filePath}::${tune.startOffset}`,
+          filePath,
+          fileBasename,
+          startOffset: Number(tune.startOffset),
+          endOffset: Number(tune.endOffset),
+          xNumber: tune.xNumber ? String(tune.xNumber) : "",
+          title: tune.title ? String(tune.title) : "",
+          composer: tune.composer ? String(tune.composer) : "",
+          preview: tune.preview ? String(tune.preview) : "",
+        });
+      }
+    } else {
+      const length = Number(file && file.length);
+      if (Number.isFinite(length) && length > 0) {
+        flat.push({
+          key: `${filePath}::full`,
+          filePath,
+          fileBasename,
+          startOffset: 0,
+          endOffset: length,
+          xNumber: "",
+          title: fileBasename || "Untitled",
+          composer: "",
+          preview: "Full file",
+        });
+      }
     }
   }
   templatesFlat = flat;
@@ -18566,6 +18694,9 @@ async function openTemplatesModal() {
   if ($templatesPreviewTitle) $templatesPreviewTitle.textContent = "Select a template";
   if ($templatesPreviewText) $templatesPreviewText.textContent = "";
   if ($templatesInsert) $templatesInsert.disabled = true;
+  if ($templatesReplace) $templatesReplace.disabled = true;
+  if ($templatesAppend) $templatesAppend.disabled = true;
+  if ($templatesEdit) $templatesEdit.disabled = true;
   await loadTemplatesForModal();
   try { if ($templatesSearch) $templatesSearch.focus(); } catch {}
 }
@@ -18739,8 +18870,11 @@ if ($templatesSearch) {
 if ($templatesManage) {
   $templatesManage.addEventListener("click", async () => {
     try {
-      if (window.api && typeof window.api.openTemplatesFolder === "function") {
-        await window.api.openTemplatesFolder();
+      if (window.api && typeof window.api.pickTemplatesFolder === "function") {
+        const res = await window.api.pickTemplatesFolder();
+        if (res && res.ok && !res.canceled) {
+          await loadTemplatesForModal();
+        }
       }
     } catch (e) {
       logErr(e && e.message ? e.message : String(e));
@@ -18748,13 +18882,17 @@ if ($templatesManage) {
   });
 }
 
-if ($templatesChangeFolder) {
-  $templatesChangeFolder.addEventListener("click", async () => {
+if ($templatesEdit) {
+  $templatesEdit.addEventListener("click", async () => {
     try {
-      if (window.api && typeof window.api.pickTemplatesFolder === "function") {
-        const res = await window.api.pickTemplatesFolder();
-        if (res && res.ok && !res.canceled) {
-          await loadTemplatesForModal();
+      const key = String(templatesSelectedKey || "");
+      const item = templatesFlat.find((t) => t && t.key === key) || null;
+      if (!item || !item.filePath) return;
+      if (window.api && typeof window.api.openTemplatesFile === "function") {
+        const res = await window.api.openTemplatesFile(String(item.filePath));
+        if (!res || !res.ok) {
+          const msg = res && res.error ? String(res.error) : "Unable to open template file.";
+          showToast(msg, 3200);
         }
       }
     } catch (e) {
@@ -18772,6 +18910,18 @@ if ($templatesReload) {
 if ($templatesInsert) {
   $templatesInsert.addEventListener("click", async () => {
     try { await insertSelectedTemplateFromModal(); } catch (e) { logErr(e && e.message ? e.message : String(e)); }
+  });
+}
+
+if ($templatesReplace) {
+  $templatesReplace.addEventListener("click", async () => {
+    try { await insertSelectedTemplateFromModal("replace"); } catch (e) { logErr(e && e.message ? e.message : String(e)); }
+  });
+}
+
+if ($templatesAppend) {
+  $templatesAppend.addEventListener("click", async () => {
+    try { await insertSelectedTemplateFromModal("append"); } catch (e) { logErr(e && e.message ? e.message : String(e)); }
   });
 }
 

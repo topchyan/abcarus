@@ -809,6 +809,18 @@ function registerIpcHandlers(ctx) {
     }
   });
 
+  ipcMain.handle("templates:open-file", async (_event, filePath) => {
+    try {
+      const p = String(filePath || "");
+      if (!p) return { ok: false, error: "Missing file path." };
+      const err = await shell.openPath(p);
+      if (err) return { ok: false, error: String(err) };
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+
   ipcMain.handle("templates:scan", async () => {
     try {
       const resolved = resolveTemplatesFolder();
@@ -818,7 +830,14 @@ function registerIpcHandlers(ctx) {
       for (const filePath of discovered.files) {
         const parsed = await parseSingleFile(filePath, null, { force: true });
         if (!parsed || !parsed.files || !parsed.files.length) continue;
-        outFiles.push(parsed.files[0]);
+        const file = parsed.files[0];
+        if (file) {
+          try {
+            const stat = await fs.promises.stat(filePath);
+            if (Number.isFinite(stat.size)) file.length = stat.size;
+          } catch {}
+        }
+        outFiles.push(file);
       }
       return { ok: true, root: discovered.root, files: outFiles };
     } catch (e) {

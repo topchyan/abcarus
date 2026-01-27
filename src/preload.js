@@ -77,6 +77,7 @@ contextBridge.exposeInMainWorld("api", {
   getTemplatesInfo: async () => ipcRenderer.invoke("templates:get-info"),
   pickTemplatesFolder: async () => ipcRenderer.invoke("templates:pick-folder"),
   openTemplatesFolder: async () => ipcRenderer.invoke("templates:open-folder"),
+  openTemplatesFile: async (filePath) => ipcRenderer.invoke("templates:open-file", filePath),
   scanTemplates: async () => ipcRenderer.invoke("templates:scan"),
   addRecentTune: async (entry) => ipcRenderer.invoke("recent:add", entry),
   addRecentFile: async (entry) => ipcRenderer.invoke("recent:file", entry),

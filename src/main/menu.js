@@ -44,9 +44,18 @@ function buildMenuTemplate(appState, sendMenuAction) {
     submenu: [
       { label: "New File", accelerator: "CmdOrCtrl+N", click: () => sendMenuAction("new") },
       {
-        label: "New Tune From Template",
-        accelerator: "CmdOrCtrl+Shift+N",
-        click: () => sendMenuAction("newFromTemplate"),
+        label: "Templates",
+        submenu: [
+          {
+            label: "Templates Library…",
+            click: () => sendMenuAction("templatesModal"),
+          },
+          {
+            label: "New Tune From Template",
+            accelerator: "CmdOrCtrl+Shift+N",
+            click: () => sendMenuAction("newFromTemplate"),
+          },
+        ],
       },
       {
         label: "New Tune (Add to Active File)",
@@ -72,6 +81,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
       { type: "separator" },
       { label: "Save", accelerator: "CmdOrCtrl+S", click: () => sendMenuAction("save") },
       { label: "Save As…", accelerator: "CmdOrCtrl+Shift+S", click: () => sendMenuAction("saveAs") },
+      { label: "Revert to Disk", accelerator: "CmdOrCtrl+Alt+R", click: () => sendMenuAction("revertToDisk") },
       { type: "separator" },
       ...(process.platform === "linux"
         ? []
@@ -107,6 +117,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
       { label: "Replace…", accelerator: replaceAccel, click: () => sendMenuAction("replace") },
       { label: "Go to Line…", accelerator: "CmdOrCtrl+G", click: () => sendMenuAction("gotoLine") },
       { label: "Toggle Comment", accelerator: "CmdOrCtrl+/", click: () => sendMenuAction("toggleComment") },
+      { label: "ABC Helpers…", accelerator: "Ctrl+F2", click: () => sendMenuAction("abcHelpers") },
       { type: "separator" },
       { role: "cut" },
       { role: "copy" },

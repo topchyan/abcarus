@@ -1107,10 +1107,16 @@ body.resizing * {
 
 .templates-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 8px;
   padding: 10px 12px;
   border-top: 1px solid var(--border-color);
+}
+
+.templates-actions-left,
+.templates-actions-right {
+  display: flex;
+  gap: 8px;
 }
 
 .templates-actions button {

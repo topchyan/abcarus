@@ -387,8 +387,8 @@
       <div class="templates-toolbar">
         <input id="templatesSearch" type="text" placeholder="Search templates…" />
         <div class="templates-folder" id="templatesFolderLabel" title=""></div>
-        <button id="templatesManage" type="button" title="Open templates folder">Manage…</button>
-        <button id="templatesChangeFolder" type="button" title="Choose another templates folder">Change…</button>
+        <button id="templatesManage" type="button" title="Choose another templates folder">Choose…</button>
+        <button id="templatesEdit" type="button" title="Edit selected template" disabled>Edit…</button>
         <button id="templatesReload" type="button" title="Reload templates list">Reload</button>
       </div>
       <div class="templates-body">
@@ -399,8 +399,14 @@
         </div>
       </div>
       <div class="templates-actions">
-        <button id="templatesInsert" type="button" disabled>Insert</button>
-        <button id="templatesCancel" type="button">Cancel</button>
+        <div class="templates-actions-left">
+          <button id="templatesInsert" type="button" disabled title="Insert at cursor">Insert</button>
+          <button id="templatesReplace" type="button" disabled title="Replace current tune">Replace</button>
+          <button id="templatesAppend" type="button" disabled title="Append as a new tune">Append</button>
+        </div>
+        <div class="templates-actions-right">
+          <button id="templatesCancel" type="button">Cancel</button>
+        </div>
       </div>
     </div>
   </div>
