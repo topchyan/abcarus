@@ -430,7 +430,7 @@ function reconfigureAbcExtensions({
   effects.push(
     abcDiagnosticsCompartment.reconfigure(
       diagnosticsEnabled
-        ? [measureErrorPlugin, errorActivationHighlightPlugin, practiceBarHighlightPlugin]
+        ? [measureErrorPlugin, barMismatchPlugin, errorActivationHighlightPlugin, practiceBarHighlightPlugin]
         : []
     )
   );
@@ -962,6 +962,7 @@ function clearErrorsFeatureState() {
   tuneErrorScanToken += 1;
   setScanErrorButtonActive(false);
   setScanErrorButtonState(false);
+  setBarMismatchMarkers([]);
   clearErrors();
   // Ensure any "errors-only" filtering in the tune dropdown is cleared immediately.
   updateFileContext();
@@ -2209,6 +2210,8 @@ let errorLineOffset = 0;
 let measureErrorRanges = [];
 let measureErrorVersion = 0;
 let measureErrorRenderRanges = [];
+let barMismatchMarkers = [];
+let barMismatchVersion = 0;
 let lastRenderPayload = null;
 let globalHeaderText = "";
 let globalHeaderEnabled = true;
@@ -3744,6 +3747,124 @@ const measureErrorPlugin = ViewPlugin.fromClass(class {
 function setMeasureErrorRanges(ranges) {
   measureErrorRanges = ranges || [];
   measureErrorVersion += 1;
+  if (!editorView) return;
+  editorView.dispatch({
+    selection: editorView.state.selection,
+    scrollIntoView: false,
+  });
+}
+
+function buildBarMismatchDecorations(state, markers) {
+  if (!state || !state.doc || !Array.isArray(markers) || !markers.length) return Decoration.none;
+  const builder = new RangeSetBuilder();
+  const max = state.doc.length;
+  const lineInfo = new Map();
+  const ranges = [];
+
+  const pushLineInfo = (line, label, detail) => {
+    if (!line) return;
+    const key = line.number;
+    let entry = lineInfo.get(key);
+    if (!entry) {
+      entry = { line, labels: [], details: [] };
+      lineInfo.set(key, entry);
+    }
+    if (label && !entry.labels.includes(label)) entry.labels.push(label);
+    if (detail && entry.details.length < 3 && !entry.details.includes(detail)) entry.details.push(detail);
+  };
+
+  for (const marker of markers) {
+    if (!marker || !Number.isFinite(marker.offset)) continue;
+    const pos = Math.max(0, Math.min(max, Math.floor(marker.offset)));
+    const len = Math.max(1, Math.min(6, Math.floor(marker.len || 1)));
+    const to = Math.max(pos, Math.min(max, pos + len));
+    const line = state.doc.lineAt(pos);
+    const label = marker.deltaText ? `#${marker.barNumber} ${marker.deltaText}` : `#${marker.barNumber}`;
+    const detail = marker.detail || label;
+    pushLineInfo(line, label, detail);
+    ranges.push({
+      from: pos,
+      to,
+      value: Decoration.mark({
+        class: "cm-bar-mismatch-mark",
+        attributes: {
+          title: detail,
+          "data-bar-mismatch": label,
+          "data-bar-number": String(marker.barNumber || ""),
+        },
+      }),
+    });
+  }
+
+  for (const entry of lineInfo.values()) {
+    const labels = entry.labels.slice(0, 3);
+    const more = entry.labels.length - labels.length;
+    const labelText = more > 0 ? `${labels.join(", ")} (+${more})` : labels.join(", ");
+    const detailText = entry.details.join(" · ");
+    ranges.push({
+      from: entry.line.from,
+      to: entry.line.from,
+      value: Decoration.line({
+        class: "cm-bar-mismatch-line",
+        attributes: {
+          title: detailText || labelText,
+          "data-bar-mismatch": labelText,
+        },
+      }),
+    });
+  }
+
+  const getSide = (value) => {
+    if (!value) return 0;
+    if (Number.isFinite(value.startSide)) return Number(value.startSide);
+    if (value.spec && Number.isFinite(value.spec.side)) return Number(value.spec.side);
+    return 0;
+  };
+  ranges.sort((a, b) => {
+    const fromDiff = a.from - b.from;
+    if (fromDiff) return fromDiff;
+    const sideDiff = getSide(a.value) - getSide(b.value);
+    if (sideDiff) return sideDiff;
+    return a.to - b.to;
+  });
+  for (const r of ranges) {
+    builder.add(r.from, r.to, r.value);
+  }
+  return builder.finish();
+}
+
+const barMismatchPlugin = ViewPlugin.fromClass(class {
+  constructor(view) {
+    this.version = barMismatchVersion;
+    this.decorations = buildBarMismatchDecorations(view.state, barMismatchMarkers);
+  }
+  update(update) {
+    if (update.docChanged && barMismatchMarkers && barMismatchMarkers.length) {
+      try {
+        const max = update.state.doc.length;
+        const mapped = [];
+        for (const marker of barMismatchMarkers) {
+          if (!marker || !Number.isFinite(marker.offset)) continue;
+          const nextOffset = update.changes.mapPos(Number(marker.offset), 1);
+          if (!Number.isFinite(nextOffset)) continue;
+          const clamped = Math.max(0, Math.min(max, nextOffset));
+          mapped.push({ ...marker, offset: clamped });
+        }
+        barMismatchMarkers = mapped;
+      } catch {}
+    }
+    if (update.docChanged || this.version !== barMismatchVersion) {
+      this.version = barMismatchVersion;
+      this.decorations = buildBarMismatchDecorations(update.state, barMismatchMarkers);
+    }
+  }
+}, {
+  decorations: (v) => v.decorations,
+});
+
+function setBarMismatchMarkers(markers) {
+  barMismatchMarkers = Array.isArray(markers) ? markers : [];
+  barMismatchVersion += 1;
   if (!editorView) return;
   editorView.dispatch({
     selection: editorView.state.selection,
@@ -6035,7 +6156,7 @@ function refreshErrorsNow() {
       tuneErrorScanToken += 1;
       tuneErrorScanInFlight = true;
       setScanErrorButtonActive(true);
-      scanActiveFileForTuneErrors(entry).catch(() => {});
+      scanActiveFileForTuneErrors(entry, { filterToErrorTunes: tuneErrorFilter }).catch(() => {});
       updateLibraryStatus();
     }
   }
@@ -6078,6 +6199,7 @@ function setEditorValue(text) {
 function setRawModeUI(enabled) {
   rawMode = Boolean(enabled);
   if (rawMode && focusModeEnabled) setFocusModeEnabled(false);
+  if (rawMode) setBarMismatchMarkers([]);
   document.body.classList.toggle("raw-mode", rawMode);
   if ($btnToggleRaw) $btnToggleRaw.classList.toggle("toggle-active", rawMode);
   applyRightSplitSizesFromRatio();
@@ -6644,6 +6766,7 @@ async function enterPayloadMode() {
   payloadModeShowLayers = false;
 
   setPayloadModeUI(true);
+  setBarMismatchMarkers([]);
   updatePayloadModeTabUI();
   setPayloadEditorReadOnly(false);
   suppressDirty = true;
@@ -8180,6 +8303,7 @@ function initEditor() {
       abcHighlightCompartment.of([abcHighlight]),
       abcDiagnosticsCompartment.of([
         measureErrorPlugin,
+        barMismatchPlugin,
         errorActivationHighlightPlugin,
         practiceBarHighlightPlugin,
         intonationHighlightPlugin,
@@ -9515,24 +9639,26 @@ if ($scanErrorTunes) {
       showToast("Errors disabled");
       return;
     }
+    if (rawMode) {
+      showToast("Raw mode: switch to tune mode for errors.", 2200);
+      return;
+    }
     if (tuneErrorScanInFlight) return;
     const entry = getActiveFileEntry();
     if (!entry) return;
     clearErrors();
+    tuneErrorScanToken += 1;
     if (tuneErrorFilter) {
       tuneErrorFilter = false;
-      tuneErrorScanToken += 1;
       buildTuneSelectOptions(entry);
       setScanErrorButtonActive(false);
       updateLibraryStatus();
       return;
     }
     tuneErrorFilter = true;
-    tuneErrorScanToken += 1;
-    tuneErrorScanInFlight = true;
     buildTuneSelectOptions(entry);
     setScanErrorButtonActive(true);
-    scanActiveFileForTuneErrors(entry).catch(() => {});
+    scanActiveFileForTuneErrors(entry, { filterToErrorTunes: true }).catch(() => {});
     updateLibraryStatus();
   });
 }
@@ -9544,17 +9670,10 @@ function startScanForErrorsFromToolbarEnable() {
     showToast("Stop playback to scan errors");
     return;
   }
-  if (tuneErrorScanInFlight) return;
-  const entry = getActiveFileEntry();
-  if (!entry) return;
-  clearErrors();
-  tuneErrorFilter = true;
+  tuneErrorFilter = false;
   tuneErrorScanToken += 1;
-  tuneErrorScanInFlight = true;
-  buildTuneSelectOptions(entry);
-  setScanErrorButtonActive(true);
-  scanActiveFileForTuneErrors(entry).catch(() => {});
-  updateLibraryStatus();
+  setScanErrorButtonActive(false);
+  refreshErrorsNow();
 }
 
 if ($btnFileNew) {
@@ -9905,17 +10024,23 @@ function normalizeErrors(entries) {
     const measureRange = entry.measureRange && Number.isFinite(entry.measureRange.start) && Number.isFinite(entry.measureRange.end)
       ? { start: entry.measureRange.start, end: entry.measureRange.end }
       : null;
+    const errorStartOffset = Number.isFinite(entry.errorStartOffset)
+      ? Number(entry.errorStartOffset)
+      : (measureRange ? measureRange.start : null);
+    const errorEndOffset = Number.isFinite(entry.errorEndOffset)
+      ? Number(entry.errorEndOffset)
+      : (measureRange ? measureRange.end : null);
     out.push({
       tuneKey,
       tuneId: entry.tuneId || null,
       filePath: entry.filePath || null,
       tuneTitle,
       message,
-      source: "abc2svg",
+      source: entry.source ? String(entry.source) : "abc2svg",
       loc,
       measureRange,
-      errorStartOffset: measureRange ? measureRange.start : null,
-      errorEndOffset: measureRange ? measureRange.end : null,
+      errorStartOffset,
+      errorEndOffset,
     });
   }
   return out;
@@ -9978,6 +10103,9 @@ function reconcileActiveErrorHighlightAfterRender({ renderSucceeded = false } = 
   }
 
   const toRange = (entry) => {
+    if (Number.isFinite(entry.errorStartOffset) && Number.isFinite(entry.errorEndOffset) && entry.errorEndOffset > entry.errorStartOffset) {
+      return { from: entry.errorStartOffset, to: entry.errorEndOffset };
+    }
     if (entry.measureRange && Number.isFinite(entry.measureRange.start) && Number.isFinite(entry.measureRange.end) && entry.measureRange.end > entry.measureRange.start) {
       return { from: entry.measureRange.start, to: entry.measureRange.end };
     }
@@ -10832,6 +10960,240 @@ function detectRepeatMarkerAfterShortBar(abcText) {
   }
 
   return null;
+}
+
+function gcdInt(a, b) {
+  let x = Math.abs(Math.round(a));
+  let y = Math.abs(Math.round(b));
+  if (!x) return y || 1;
+  if (!y) return x || 1;
+  while (y) {
+    const t = x % y;
+    x = y;
+    y = t;
+  }
+  return x || 1;
+}
+
+function formatBarDelta(deltaUnits, metreDen) {
+  const denBase = Math.max(1, Math.round(Number(metreDen) || 8));
+  const scaledDen = denBase * 4;
+  const scaledNum = Math.round(Number(deltaUnits) * 4);
+  if (!Number.isFinite(scaledNum) || scaledNum === 0) return { text: "", approx: 0 };
+  const g = gcdInt(scaledNum, scaledDen);
+  const num = scaledNum / g;
+  const den = scaledDen / g;
+  const sign = num > 0 ? "+" : "−";
+  const absNum = Math.abs(num);
+  return { text: `${sign}${absNum}/${den}`, approx: num / den };
+}
+
+function computeLineStartOffsets(text) {
+  const lines = String(text || "").split(/\r\n|\n|\r/);
+  const offsets = [];
+  let cursor = 0;
+  for (let i = 0; i < lines.length; i += 1) {
+    offsets.push(cursor);
+    cursor += lines[i].length + 1;
+  }
+  return offsets;
+}
+
+function analyzeBarMismatchesForGutter(abcText) {
+  const text = String(abcText || "");
+  const metreText = formatMetreFromText(text) || "";
+  const metreMatch = metreText.match(/^\s*(\d+)\s*\/\s*(\d+)\s*$/);
+  if (!metreMatch) return [];
+  const metre = getMetre(text);
+  const defaultLen = getDefaultLen(text);
+  if (!Number.isFinite(metre) || metre <= 0) return [];
+  if (!Number.isFinite(defaultLen) && defaultLen !== "mcm_default") return [];
+
+  let currentMetre = metre;
+  let currentMetreText = metreText;
+  let currentDen = Number(metreMatch[2]) || 8;
+  const metreUnit = () => 1 / Math.max(1, currentDen);
+  const unitTol = 0.2; // ~1/5 of a metre unit before we warn
+
+  const lines = text.split(/\r\n|\n|\r/);
+  const lineStarts = computeLineStartOffsets(text);
+  let inTextBlock = false;
+  let inBody = false;
+  let buffer = "";
+  let barNumber = 0;
+  const markers = [];
+  const barEntries = [];
+  let currentVoice = "";
+  let firstVoice = "";
+  let referenceVoice = "";
+  let referenceBarNumber = 0;
+
+  const setVoice = (voiceIdRaw) => {
+    const voiceId = String(voiceIdRaw || "").trim().split(/\s+/)[0];
+    if (!voiceId) return;
+    currentVoice = voiceId;
+    if (!firstVoice) firstVoice = voiceId;
+    if (voiceId === "1") referenceVoice = "1";
+    else if (!referenceVoice) referenceVoice = voiceId;
+  };
+
+  const updateMetre = (num, den) => {
+    const n = Number(num);
+    const d = Number(den);
+    if (!Number.isFinite(n) || !Number.isFinite(d) || n <= 0 || d <= 0) return;
+    currentMetre = n / d;
+    currentMetreText = `${num}/${den}`;
+    currentDen = d;
+  };
+
+  const flushBar = (endToken, endOffset, endLen, lineNo, colNo) => {
+    const bar = buffer.trim();
+    buffer = "";
+    if (!bar) return;
+    const len = getBarLength(bar, defaultLen, currentMetre);
+    if (!Number.isFinite(len) || len <= 0) return;
+    barNumber += 1;
+    let displayBarNumber = barNumber;
+    if (referenceVoice) {
+      if (currentVoice === referenceVoice) referenceBarNumber += 1;
+      if (referenceBarNumber > 0) displayBarNumber = referenceBarNumber;
+    } else {
+      if (!currentVoice) setVoice("1");
+      referenceVoice = referenceVoice || currentVoice || firstVoice || "1";
+      referenceBarNumber += 1;
+      displayBarNumber = referenceBarNumber;
+    }
+    const delta = len - currentMetre;
+    const unit = metreUnit();
+    const deltaUnits = delta / unit;
+    if (!Number.isFinite(deltaUnits)) return;
+    barEntries.push({
+      bar,
+      barNumber,
+      displayBarNumber,
+      voiceId: currentVoice || referenceVoice || firstVoice || "",
+      len,
+      deltaUnits,
+      unit,
+      metre: currentMetre,
+      metreText: currentMetreText,
+      den: currentDen,
+      endToken,
+      endOffset,
+      endLen,
+      lineNo,
+      colNo,
+    });
+  };
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const rawLine = lines[lineIndex];
+    const trimmed = rawLine.trim();
+    if (/^%%\s*begintext\b/i.test(trimmed)) { inTextBlock = true; continue; }
+    if (/^%%\s*endtext\b/i.test(trimmed)) { inTextBlock = false; continue; }
+    if (inTextBlock) continue;
+
+    if (!inBody) {
+      if (/^\s*K:/.test(rawLine) || /^\s*\[\s*K:/.test(trimmed)) inBody = true;
+      continue;
+    }
+
+    if (!trimmed) continue;
+    if (/^%/.test(trimmed) && !/^%%/.test(trimmed)) continue;
+    if (/^\s*%%/.test(rawLine)) continue;
+
+    if (/^\s*V:/.test(rawLine)) {
+      setVoice(trimmed.slice(2));
+      continue;
+    }
+
+    const bodyMeterMatch = trimmed.match(/^M:\s*(\d+)\s*\/\s*(\d+)/i);
+    if (bodyMeterMatch) {
+      updateMetre(bodyMeterMatch[1], bodyMeterMatch[2]);
+      continue;
+    }
+    if (/^\s*[A-Za-z]:/.test(rawLine)) continue;
+
+    let line = rawLine;
+    const commentIdx = line.indexOf("%");
+    if (commentIdx >= 0) line = line.slice(0, commentIdx);
+    if (!line.trim()) continue;
+
+    const parts = splitLineIntoParts(line);
+    let cursor = 0;
+    for (const part of parts) {
+      const p = String(part || "");
+      const pos = line.indexOf(p, cursor);
+      const start = pos >= 0 ? pos : cursor;
+      cursor = start + p.length;
+
+      const token = p.trim();
+      if (BAR_SEP_NO_SPACE.test(token)) {
+        const endOffset = (lineStarts[lineIndex] || 0) + start;
+        flushBar(token, endOffset, p.length, lineIndex + 1, start + 1);
+        continue;
+      }
+
+      const inlineMeterRe = /\[\s*M:\s*(\d+)\s*\/\s*(\d+)\s*\]/gi;
+      let mm;
+      while ((mm = inlineMeterRe.exec(p)) !== null) {
+        updateMetre(mm[1], mm[2]);
+      }
+      buffer += ` ${p}`;
+    }
+  }
+
+  if (!barEntries.length) return markers;
+
+  const allowed = new Set();
+  const first = barEntries[0];
+  if (first && first.deltaUnits < -unitTol && isLikelyAnacrusis(first.bar, defaultLen, first.metre)) {
+    allowed.add(0);
+  }
+
+  for (let i = 0; i < barEntries.length - 1; i += 1) {
+    if (allowed.has(i) || allowed.has(i + 1)) continue;
+    const a = barEntries[i];
+    const b = barEntries[i + 1];
+    if (!a || !b) continue;
+    if (a.deltaUnits >= -unitTol || b.deltaUnits >= -unitTol) continue;
+    if (a.metreText !== b.metreText || a.den !== b.den) continue;
+    const sumDeltaUnits = (a.len + b.len - a.metre) / a.unit;
+    if (!Number.isFinite(sumDeltaUnits)) continue;
+    if (Math.abs(sumDeltaUnits) <= unitTol) {
+      allowed.add(i);
+      allowed.add(i + 1);
+    }
+  }
+
+  for (let i = 0; i < barEntries.length; i += 1) {
+    if (allowed.has(i)) continue;
+    const entry = barEntries[i];
+    if (!entry || Math.abs(entry.deltaUnits) <= unitTol) continue;
+    const deltaFmt = formatBarDelta(entry.deltaUnits, entry.den);
+    if (!deltaFmt.text) continue;
+    const ratio = entry.len / entry.metre;
+    const ratioText = Number.isFinite(ratio) ? ratio.toFixed(2).replace(/\.?0+$/, "") : "?";
+    const barNo = entry.displayBarNumber || entry.barNumber;
+    const voicePrefix = (entry.voiceId && referenceVoice && entry.voiceId !== referenceVoice)
+      ? `V:${entry.voiceId} · `
+      : "";
+    const detail = `${voicePrefix}Bar ${barNo}: ${deltaFmt.text} under M:${entry.metreText} (≈${ratioText}×)`;
+    markers.push({
+      offset: entry.endOffset,
+      len: Math.max(1, entry.endLen || 1),
+      barNumber: barNo,
+      deltaText: deltaFmt.text,
+      detail,
+      line: entry.lineNo,
+      col: entry.colNo,
+      token: String(entry.endToken || "").trim() || "|",
+      voiceId: entry.voiceId || "",
+      referenceVoice: referenceVoice || "",
+    });
+  }
+
+  return markers;
 }
 
 function alignBeams(bars) {
@@ -12281,6 +12643,11 @@ function addError(message, locOverride, contextOverride) {
   const context = contextOverride
     ? { ...(baseContext || {}), ...contextOverride }
     : baseContext;
+  const contextSource = context && context.source ? String(context.source) : "";
+  const contextStart = context && Number.isFinite(context.errorStartOffset) ? Number(context.errorStartOffset) : null;
+  const contextEnd = context && Number.isFinite(context.errorEndOffset) ? Number(context.errorEndOffset) : null;
+  const contextBarNumber = context && Number.isFinite(context.barNumber) ? Number(context.barNumber) : null;
+  const skipLineOffset = Boolean(context && context.skipLineOffset);
   const entry = {
     message: String(message),
     loc: renderLoc ? { line: renderLoc.line, col: renderLoc.col } : null,
@@ -12291,10 +12658,14 @@ function addError(message, locOverride, contextOverride) {
     tuneLabel: context ? context.tuneLabel || "" : "",
     xNumber: context ? context.xNumber || "" : "",
     title: context ? context.title || "" : "",
+    source: contextSource || "abc2svg",
+    errorStartOffset: contextStart,
+    errorEndOffset: contextEnd,
+    barNumber: contextBarNumber,
     count: 1,
     index: -1,
   };
-  if (entry.loc && errorLineOffset) {
+  if (entry.loc && errorLineOffset && !skipLineOffset) {
     if (entry.loc.line <= errorLineOffset) {
       entry.loc = null;
     } else {
@@ -12693,7 +13064,7 @@ function buildPrintErrorSummary(entry, items, totalTunes) {
   `;
 }
 
-async function scanActiveFileForTuneErrors(entry) {
+async function scanActiveFileForTuneErrors(entry, { filterToErrorTunes = false } = {}) {
   if (!errorsEnabled) return;
   if (!entry || !entry.path) return;
   if (currentDoc && currentDoc.dirty) {
@@ -12712,9 +13083,11 @@ async function scanActiveFileForTuneErrors(entry) {
       }
     }
   }
+  tuneErrorFilter = Boolean(filterToErrorTunes);
   const token = ++tuneErrorScanToken;
   tuneErrorScanInFlight = true;
   setScanErrorButtonState(true);
+  setScanErrorButtonActive(tuneErrorFilter);
   clearErrorIndexForFile(entry);
   const contentRes = await getFileContentCached(entry.path);
   if (!contentRes.ok) {
@@ -12729,7 +13102,7 @@ async function scanActiveFileForTuneErrors(entry) {
   const previousRenderScroll = $renderPane ? $renderPane.scrollTop : 0;
   suppressRecentEntries = true;
   for (let i = 0; i < tunes.length; i += 1) {
-    if (!tuneErrorFilter || token !== tuneErrorScanToken) {
+    if (token !== tuneErrorScanToken) {
       suppressRecentEntries = false;
       tuneErrorScanInFlight = false;
       setScanErrorButtonState(false);
@@ -12763,6 +13136,7 @@ async function scanActiveFileForTuneErrors(entry) {
   if ($renderPane) $renderPane.scrollTop = previousRenderScroll;
   tuneErrorScanInFlight = false;
   setScanErrorButtonState(false);
+  setScanErrorButtonActive(tuneErrorFilter);
   buildTuneSelectOptions(entry);
   setScanErrors(errorEntries);
   setStatus("OK");
@@ -13636,18 +14010,72 @@ function scheduleRenderNow({ delayMs = 0, clearOutput = false } = {}) {
   });
 }
 
+function refreshBarMismatchMarkersForTune(tuneText) {
+  if (!editorView || rawMode || payloadMode || !errorsEnabled) {
+    setBarMismatchMarkers([]);
+    return;
+  }
+  try {
+    const markers = analyzeBarMismatchesForGutter(tuneText);
+    setBarMismatchMarkers(markers);
+    if (window.__abcarusDebugBarMismatch === true) {
+      console.info("[bar-mismatch]", {
+        count: Array.isArray(markers) ? markers.length : 0,
+        first: Array.isArray(markers) ? markers.slice(0, 8) : [],
+      });
+    }
+  } catch {
+    setBarMismatchMarkers([]);
+    if (window.__abcarusDebugBarMismatch === true) {
+      console.warn("[bar-mismatch] analyze failed");
+    }
+  }
+}
+
+function addBarMismatchErrorsFromMarkers(markers) {
+  if (!errorsEnabled || !editorView) return;
+  if (!Array.isArray(markers) || markers.length === 0) return;
+  const docLen = editorView.state.doc.length;
+  const clamp = (value) => Math.max(0, Math.min(docLen, Math.floor(Number(value) || 0)));
+  for (const marker of markers) {
+    if (!marker || !Number.isFinite(marker.offset)) continue;
+    const start = clamp(marker.offset);
+    const len = Math.max(1, Math.min(16, Math.floor(Number(marker.len) || 1)));
+    const end = Math.max(start + 1, clamp(start + len));
+    const barLabel = marker.barNumber ? `Bar ${marker.barNumber}` : "Bar";
+    const deltaLabel = marker.deltaText ? ` ${marker.deltaText}` : "";
+    const voicePrefix = marker.voiceId ? `V:${marker.voiceId} · ` : "";
+    const detail = marker.detail ? String(marker.detail) : `${voicePrefix}${barLabel}${deltaLabel} mismatch.`;
+    const message = `Bar mismatch: ${detail}`;
+    const loc = Number.isFinite(marker.line)
+      ? { line: Number(marker.line), col: Number.isFinite(marker.col) ? Number(marker.col) : 1 }
+      : null;
+    addError(message, loc, {
+      source: "bar-mismatch",
+      skipMeasureRange: true,
+      skipLineOffset: true,
+      errorStartOffset: start,
+      errorEndOffset: end,
+      barNumber: marker.barNumber || null,
+      voiceId: marker.voiceId || "",
+    });
+  }
+}
+
 function renderNow() {
   clearNoteSelection();
   clearErrors();
   setRenderBusy(true);
   const currentText = getEditorValue();
   if (!currentText.trim()) {
+    setBarMismatchMarkers([]);
     setStatus("Ready");
     setRenderBusy(false);
     updateLibraryErrorIndexFromCurrentErrors();
     reconcileActiveErrorHighlightAfterRender({ renderSucceeded: true });
     return;
   }
+  refreshBarMismatchMarkersForTune(currentText);
   const renderPayload = getRenderPayload();
   if (!assertCleanAbcText(renderPayload.text, "renderNow")) {
     logErr("ABC text corruption detected (render).");
@@ -13665,6 +14093,7 @@ function renderNow() {
     offset: renderPayload.offset || 0,
   };
   setErrorLineOffsetFromHeader(renderPayload.text.slice(0, renderPayload.offset || 0));
+  addBarMismatchErrorsFromMarkers(barMismatchMarkers);
   setStatus("Rendering…");
 
   try {
@@ -13985,6 +14414,84 @@ async function buildDebugDumpSnapshot({ reason = "" } = {}) {
     }
   })();
 
+  const drumDiagnostics = (() => {
+    try {
+      const nativeDrums = shouldUseNativeMidiDrums();
+      const tuneText = getEditorValue();
+      let preDrumRaw = String(tuneText || "");
+      let source = "payload-mode";
+
+      if (!payloadMode) {
+        source = "normal";
+        const entry = getActiveFileEntry();
+        const prefixPayload = buildHeaderPrefix(entry ? getHeaderEditorValue() : "", false, tuneText);
+        preDrumRaw = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : String(tuneText || "");
+        const gchordPreview = injectGchordOn(preDrumRaw, prefixPayload.offset || 0);
+        if (gchordPreview && gchordPreview.changed) preDrumRaw = gchordPreview.text;
+      }
+
+      if (!preDrumRaw) return null;
+
+      preDrumRaw = normalizeDollarLineBreaksForPlayback(preDrumRaw);
+      preDrumRaw = normalizeBlankLinesForPlayback(preDrumRaw);
+      const sanitized = sanitizeAbcForPlayback(preDrumRaw);
+      preDrumRaw = sanitized && sanitized.text ? sanitized.text : preDrumRaw;
+
+      const hasDrumDirective = /(^|\n)\s*(%%MIDI\s+drum\b|I:\s*MIDI\s+drum\b)/i.test(preDrumRaw);
+      if (nativeDrums) {
+        return {
+          summary: "Native %%MIDI drum handling is enabled (no V:DRUM injection).",
+          source,
+          nativeDrums: true,
+          hasDrumDirective,
+        };
+      }
+
+      const normalized = normalizeLeadingInlineDirectivesForPlayback(preDrumRaw);
+      const normalizedChanged = normalized !== preDrumRaw;
+      const info = extractDrumPlaybackBars(normalized);
+      const expectedSig = computeExpectedBarSignatureFromInfo(info);
+      const drumVoice = buildDrumVoiceText(info);
+      const actualSig = extractBarSignatureFromText(drumVoice || "");
+      const diff = diffSignatures(expectedSig, actualSig);
+      const mismatchBar = diff && diff.ok === false && Number.isFinite(diff.index) ? diff.index + 1 : null;
+      const summary = diff && diff.ok
+        ? "Drum bar skeleton matches V:1."
+        : (mismatchBar != null
+          ? `Drum skeleton mismatch at bar ${mismatchBar}.`
+          : "Drum skeleton mismatch.");
+      const preview = drumVoice
+        ? drumVoice.split(/\r\n|\n|\r/).slice(0, 80).join("\n")
+        : "";
+      const lastInjection = lastDrumInjectResult ? {
+        changed: Boolean(lastDrumInjectResult.changed),
+        insertAtLine: lastDrumInjectResult.insertAtLine || null,
+        lineCount: lastDrumInjectResult.lineCount || 0,
+      } : null;
+      return {
+        summary,
+        source,
+        nativeDrums: false,
+        hasDrumDirective,
+        normalizedChanged,
+        lastInjectionActive: Boolean(lastDrumPlaybackActive),
+        lastInjection,
+        lastSignatureDiff: lastDrumSignatureDiff || null,
+        recomputed: {
+          mismatchBar,
+          bars: Array.isArray(info && info.bars) ? info.bars.length : 0,
+          patterns: Array.isArray(info && info.patterns) ? info.patterns.length : 0,
+          expectedBars: Array.isArray(expectedSig) ? expectedSig.length : 0,
+          actualBars: Array.isArray(actualSig) ? actualSig.length : 0,
+          signatureDiff: diff,
+          drumVoicePreview: safeString(preview, 12000),
+        },
+      };
+    } catch (e) {
+      return { error: (e && e.message) ? e.message : String(e) };
+    }
+  })();
+
   return {
     kind: "abcarus-debug-dump",
     createdAt: new Date().toISOString(),
@@ -14086,12 +14593,17 @@ async function buildDebugDumpSnapshot({ reason = "" } = {}) {
       parseErrors: Array.isArray(playbackParseErrors) ? playbackParseErrors.slice(0, 200) : null,
       sanitizeWarnings: Array.isArray(playbackSanitizeWarnings) ? playbackSanitizeWarnings.slice(0, 200) : null,
       drumSignatureDiff: lastDrumSignatureDiff,
+      drumDiagnostics,
       lastRhythmErrorSuggestion,
     },
     render: {
       lastRenderPayload: lastRenderPayload ? {
         offset: lastRenderPayload.offset || 0,
         text: lastRenderPayload.text ? safeString(lastRenderPayload.text, 350000) : "",
+      } : null,
+      barMismatchMarkers: Array.isArray(barMismatchMarkers) ? {
+        count: barMismatchMarkers.length,
+        first: barMismatchMarkers.slice(0, 20),
       } : null,
     },
     errors: {
@@ -19340,13 +19852,13 @@ function getPlaybackSourceKey() {
   const tuneText = getEditorValue();
   if (payloadMode) {
     if (payloadModeView === "playback") {
-      const offset = computePayloadTuneOffset(tuneText);
+      const offset = 0;
       const expandRepeats = window.__abcarusPlaybackExpandRepeats === true;
       const repeatsFlag = expandRepeats ? "exp:on" : "exp:off";
       // Playback view shows the final text; don't re-sanitize or inject.
       return `payloadFinal|||${String(tuneText || "")}|||${offset}|||${repeatsFlag}`;
     }
-    const offset = computePayloadTuneOffset(tuneText);
+    const offset = 0;
     const preparedText = normalizeBlankLinesForPlayback(
       normalizeDollarLineBreaksForPlayback(String(tuneText || ""))
     );
@@ -21369,7 +21881,16 @@ function extractDrumPlaybackBars(text) {
   let inTextBlock = false;
   const bars = [];
   const patterns = [];
+  let pendingDirectives = [];
   const lineIndents = new Map();
+  const recordFieldDirective = (field, value, { inline = false } = {}) => {
+    const f = String(field || "").trim().toUpperCase();
+    const v = String(value || "").trim();
+    if (!f || !v) return;
+    if (f !== "M" && f !== "L" && f !== "Q") return;
+    const text = inline ? `[${f}:${v}]` : `${f}:${v}`;
+    pendingDirectives.push(text);
+  };
   function applyMidiDirective(directiveLine) {
     const line = String(directiveLine || "").trim();
     if (!line) return;
@@ -21459,17 +21980,26 @@ function extractDrumPlaybackBars(text) {
     if (f === "M") {
       const parsed = parseFraction(v);
       if (parsed) meter = parsed;
+      recordFieldDirective("M", v, { inline: true });
       return;
     }
     if (f === "L") {
       const parsed = parseFraction(v);
       if (parsed) unit = parsed;
+      recordFieldDirective("L", v, { inline: true });
+      return;
+    }
+    if (f === "Q") {
+      recordFieldDirective("Q", v, { inline: true });
       return;
     }
     if (f === "I") {
       // Support inline MIDI directives like [I:MIDI drum ...]
       const cleaned = v.replace(/^\s*MIDI\s+/i, "");
-      if (cleaned !== v) applyMidiDirective(`%%MIDI ${cleaned}`);
+      if (cleaned !== v) {
+        const midiLine = `%%MIDI ${cleaned}`;
+        applyMidiDirective(midiLine);
+      }
     }
   };
   const applyInlineFieldsFromLine = (line) => {
@@ -21528,18 +22058,25 @@ function extractDrumPlaybackBars(text) {
     if (meterValue) {
       const parsed = parseFraction(meterValue);
       if (parsed) meter = parsed;
+      if (inBody && /^\s*M:/.test(trimmed)) recordFieldDirective("M", meterValue, { inline: false });
     }
     const unitValue = parseFieldValue(trimmed, "L");
     if (unitValue) {
       const parsed = parseFraction(unitValue);
       if (parsed) unit = parsed;
+      if (inBody && /^\s*L:/.test(trimmed)) recordFieldDirective("L", unitValue, { inline: false });
+    }
+    const tempoValue = parseFieldValue(trimmed, "Q");
+    if (tempoValue) {
+      if (inBody && /^\s*Q:/.test(trimmed)) recordFieldDirective("Q", tempoValue, { inline: false });
     }
     if (/^%%MIDI\b/i.test(trimmed)) {
       applyMidiDirective(trimmed);
       continue;
     }
     if (/^I:\s*MIDI\b/i.test(trimmed)) {
-      applyMidiDirective(trimmed.replace(/^I:\s*/i, "%%"));
+      const midiLine = trimmed.replace(/^I:\s*/i, "%%");
+      applyMidiDirective(midiLine);
       continue;
     }
     if (!inBody) continue;
@@ -21598,10 +22135,12 @@ function extractDrumPlaybackBars(text) {
               drumOn,
               drumBars,
               pattern: currentPattern,
+              directives: pendingDirectives,
               startToken: pendingStartToken,
               endToken: token.token,
               srcLineIndex: lineIndex,
             });
+            pendingDirectives = [];
             pendingStartToken = null;
             hasContent = false;
           } else {
@@ -21618,7 +22157,7 @@ function extractDrumPlaybackBars(text) {
       i += 1;
     }
   }
-  return { bars, patterns, leadingToken, lineIndents };
+  return { bars, patterns, leadingToken, lineIndents, trailingDirectives: pendingDirectives };
 }
 
 function buildDrumVoiceText(info) {
@@ -21664,6 +22203,15 @@ function buildDrumVoiceText(info) {
 
   for (let barIndex = 0; barIndex < bars.length; barIndex += 1) {
     const bar = bars[barIndex];
+    const directives = Array.isArray(bar.directives) ? bar.directives : [];
+    if (directives.length) {
+      if (lineBuffer) {
+        flushLine();
+      }
+      for (const directive of directives) {
+        if (directive) out.push(String(directive));
+      }
+    }
     const meter = normalizeFraction(bar.meter) || { num: 4, den: 4 };
     const unit = normalizeFraction(bar.unit) || { num: 1, den: 8 };
     const barUnits = fractionDiv(meter, unit);
@@ -21762,6 +22310,65 @@ function buildDrumVoiceText(info) {
       out[lastIdx] = `${lastLine}${sep}`;
     }
   }
+  const trailing = Array.isArray(info.trailingDirectives) ? info.trailingDirectives : [];
+  for (const directive of trailing) {
+    if (directive) out.push(String(directive));
+  }
+  return out.join("\n");
+}
+
+function normalizeLeadingInlineDirectivesForPlayback(text) {
+  const lines = String(text || "").split(/\r\n|\n|\r/);
+  const out = [];
+  const tokenRe = /^\[\s*([A-Za-z]+)\s*:\s*([^\]]*)\]\s*/;
+
+  for (const rawLine of lines) {
+    const indent = String(rawLine || "").match(/^[\t ]*/)?.[0] ?? "";
+    let rest = String(rawLine || "").slice(indent.length);
+    if (!rest.startsWith("[")) {
+      out.push(rawLine);
+      continue;
+    }
+
+    const directives = [];
+    const keptTokens = [];
+    let consumedAny = false;
+
+    while (rest.startsWith("[")) {
+      const match = rest.match(tokenRe);
+      if (!match) break;
+      consumedAny = true;
+      const rawToken = match[0];
+      const field = String(match[1] || "").trim().toUpperCase();
+      const value = String(match[2] || "").trim();
+      rest = rest.slice(rawToken.length);
+
+      let converted = null;
+      if ((field === "M" || field === "L" || field === "Q") && value) {
+        converted = `${field}:${value}`;
+      } else if (field === "I" && /^MIDI\s+/i.test(value)) {
+        const cleaned = value.replace(/^MIDI\s+/i, "").trim();
+        if (cleaned) converted = `%%MIDI ${cleaned}`;
+      }
+
+      if (converted) {
+        directives.push(`${indent}${converted}`);
+      } else {
+        keptTokens.push(rawToken.trim());
+      }
+    }
+
+    if (!consumedAny || !directives.length) {
+      out.push(rawLine);
+      continue;
+    }
+
+    out.push(...directives);
+    const keptPrefix = keptTokens.length ? `${keptTokens.join(" ")} ` : "";
+    const remainder = `${indent}${keptPrefix}${rest}`.replace(/[ \t]+$/g, "");
+    if (remainder.trim()) out.push(remainder);
+  }
+
   return out.join("\n");
 }
 
@@ -21771,23 +22378,24 @@ function injectDrumPlayback(text) {
   }
   lastDrumPlaybackActive = false;
   lastDrumSignatureDiff = null;
+  const normalizedText = normalizeLeadingInlineDirectivesForPlayback(text);
   if (window.__abcarusDisableDrumInjection === true) {
-    const res = { text, changed: false, insertAtLine: null, lineCount: 0 };
+    const res = { text: normalizedText, changed: false, insertAtLine: null, lineCount: 0 };
     lastDrumInjectInput = text;
     lastDrumInjectResult = res;
     return res;
   }
-  if (/^\s*V:\s*DRUM\b/im.test(text || "")) {
-    const res = { text, changed: false, insertAtLine: null, lineCount: 0 };
+  if (/^\s*V:\s*DRUM\b/im.test(normalizedText || "")) {
+    const res = { text: normalizedText, changed: false, insertAtLine: null, lineCount: 0 };
     lastDrumInjectInput = text;
     lastDrumInjectResult = res;
     return res;
   }
-  const info = extractDrumPlaybackBars(text);
+  const info = extractDrumPlaybackBars(normalizedText);
   const expectedSig = computeExpectedBarSignatureFromInfo(info);
   const drumVoice = buildDrumVoiceText(info);
   if (!drumVoice) {
-    const res = { text, changed: false, insertAtLine: null, lineCount: 0 };
+    const res = { text: normalizedText, changed: false, insertAtLine: null, lineCount: 0 };
     lastDrumInjectInput = text;
     lastDrumInjectResult = res;
     return res;
@@ -21798,7 +22406,7 @@ function injectDrumPlayback(text) {
     // Safety guard: if our generated drums don't match the barline skeleton, do not inject drums.
     lastDrumPlaybackActive = false;
     lastDrumSignatureDiff = sigDiff;
-    const res = { text, changed: false, insertAtLine: null, lineCount: 0, signatureDiff: sigDiff };
+    const res = { text: normalizedText, changed: false, insertAtLine: null, lineCount: 0, signatureDiff: sigDiff };
     lastDrumInjectInput = text;
     lastDrumInjectResult = res;
     return res;
@@ -21807,7 +22415,7 @@ function injectDrumPlayback(text) {
   if (window.__abcarusDebugDrums) {
     console.log("[abcarus] drum voice:\n" + drumVoice);
   }
-  const lines = String(text || "").split(/\r\n|\n|\r/);
+  const lines = String(normalizedText || "").split(/\r\n|\n|\r/);
   // Once we inject an explicit DRUM voice, we no longer want abc2svg playback to interpret
   // the original `%%MIDI drum ...` directives (they can be long, have custom continuations, or
   // be parsed differently across versions). Keep the text length stable for Follow mapping.
@@ -22527,10 +23135,12 @@ function getPlaybackPayload() {
   const tuneText = getEditorValue();
   if (payloadMode) {
     if (payloadModeView === "playback") {
-      const offset = computePayloadTuneOffset(tuneText);
-      return { text: String(tuneText || ""), offset };
+      // In payload mode the editor already contains the full payload text,
+      // so playback indices should map 1:1 to editor offsets.
+      return { text: String(tuneText || ""), offset: 0 };
     }
-    const offset = computePayloadTuneOffset(tuneText);
+    // Render view is also a full payload in the editor; keep offset at 0 for follow mapping.
+    const offset = 0;
     const expandRepeats = window.__abcarusPlaybackExpandRepeats === true;
     const repeatsFlag = expandRepeats ? "exp:on" : "exp:off";
     const sourceKey = `payload|||${String(tuneText || "")}|||${offset}|||${repeatsFlag}`;
