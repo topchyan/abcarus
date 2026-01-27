@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Errors: do not flag pickup (anacrusis) or final partial bars as mismatches, and keep bar numbers aligned with abc2svg.
 
 
 ## [0.24.2] - 2026-01-27
