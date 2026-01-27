@@ -3782,7 +3782,9 @@ function buildBarMismatchDecorations(state, markers) {
     const len = Math.max(1, Math.min(6, Math.floor(marker.len || 1)));
     const to = Math.max(pos, Math.min(max, pos + len));
     const line = state.doc.lineAt(pos);
-    const label = marker.deltaText ? `#${marker.barNumber} ${marker.deltaText}` : `#${marker.barNumber}`;
+    const label = marker.label
+      ? String(marker.label)
+      : (marker.deltaText ? `#${marker.barNumber} ${marker.deltaText}` : `#${marker.barNumber}`);
     const detail = marker.detail || label;
     pushLineInfo(line, label, detail);
     ranges.push({
@@ -11072,6 +11074,9 @@ function analyzeBarMismatchesForGutter(abcText) {
     const len = getBarLength(bar, defaultLen, currentMetre);
     if (!Number.isFinite(len) || len <= 0) return;
     barNumber += 1;
+    const unit = metreUnit();
+    const delta = len - currentMetre;
+    const deltaUnits = delta / unit;
     let displayBarNumber = barNumber;
     if (referenceVoice) {
       if (currentVoice === referenceVoice) referenceBarNumber += 1;
@@ -11082,9 +11087,6 @@ function analyzeBarMismatchesForGutter(abcText) {
       referenceBarNumber += 1;
       displayBarNumber = referenceBarNumber;
     }
-    const delta = len - currentMetre;
-    const unit = metreUnit();
-    const deltaUnits = delta / unit;
     if (!Number.isFinite(deltaUnits)) return;
     barEntries.push({
       bar,
@@ -11169,6 +11171,11 @@ function analyzeBarMismatchesForGutter(abcText) {
   if (first && first.deltaUnits < -unitTol && isLikelyAnacrusis(first.bar, defaultLen, first.metre)) {
     allowed.add(0);
   }
+  const lastIdx = barEntries.length - 1;
+  const last = barEntries[lastIdx];
+  if (last && last.deltaUnits < -unitTol) {
+    allowed.add(lastIdx);
+  }
 
   for (let i = 0; i < barEntries.length - 1; i += 1) {
     if (allowed.has(i) || allowed.has(i + 1)) continue;
@@ -11198,10 +11205,12 @@ function analyzeBarMismatchesForGutter(abcText) {
       ? `V:${entry.voiceId} · `
       : "";
     const detail = `${voicePrefix}Bar ${barNo}: ${deltaFmt.text} under M:${entry.metreText} (≈${ratioText}×)`;
+    const label = `#${barNo} ${deltaFmt.text}`;
     markers.push({
       offset: entry.endOffset,
       len: Math.max(1, entry.endLen || 1),
       barNumber: barNo,
+      label,
       deltaText: deltaFmt.text,
       detail,
       line: entry.lineNo,
@@ -14061,7 +14070,9 @@ function addBarMismatchErrorsFromMarkers(markers) {
     const start = clamp(marker.offset);
     const len = Math.max(1, Math.min(16, Math.floor(Number(marker.len) || 1)));
     const end = Math.max(start + 1, clamp(start + len));
-    const barLabel = marker.barNumber ? `Bar ${marker.barNumber}` : "Bar";
+    const barLabel = marker.barLabel
+      ? String(marker.barLabel)
+      : (marker.barNumber ? `Bar ${marker.barNumber}` : "Bar");
     const deltaLabel = marker.deltaText ? ` ${marker.deltaText}` : "";
     const voicePrefix = marker.voiceId ? `V:${marker.voiceId} · ` : "";
     const detail = marker.detail ? String(marker.detail) : `${voicePrefix}${barLabel}${deltaLabel} mismatch.`;
