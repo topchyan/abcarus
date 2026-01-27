@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Errors: show bar-length markers only when `Errors` is enabled, and move bar-mismatch badges into a non-overlapping line header.
+- Errors: make the `Scan` button explicitly scan the file for error tunes (and toggle the error-only tune filter).
+
+### Fixed
+- Errors: prevent CodeMirror crashes from unsorted bar-mismatch decorations.
+- Errors: treat pickups (anacrusis) and split bars that sum to a full measure as valid patterns.
+- Errors: anchor bar mismatch navigation by explicit editor offsets, not just line/column parsing.
+
+### Added
+- Errors: include bar mismatch diagnostics in the `Errors` list and enable jump-to-bar navigation.
 
 
 ## [0.23.2] - 2026-01-26
