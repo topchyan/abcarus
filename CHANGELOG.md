@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [0.24.0] - 2026-01-27
 ### Changed
 - Errors: show bar-length markers only when `Errors` is enabled, and move bar-mismatch badges into a non-overlapping line header.
 - Errors: make the `Scan` button explicitly scan the file for error tunes (and toggle the error-only tune filter).
@@ -17,7 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Errors: include bar mismatch diagnostics in the `Errors` list and enable jump-to-bar navigation.
-
 
 ## [0.23.2] - 2026-01-26
 ### Added
