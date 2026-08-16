@@ -244,6 +244,9 @@ async function runPythonScript({
   maxOutputBytes = 10 * 1024 * 1024,
   env,
 }) {
+  if (!pythonPath || typeof pythonPath !== "string") {
+    return Promise.reject(new ConversionError("Invalid python path.", "pythonPath must be a non-empty string.", "INVALID_ARGUMENT"));
+  }
   return new Promise((resolve, reject) => {
     const child = spawn(pythonPath, [scriptPath, ...(args || [])], {
       cwd,
