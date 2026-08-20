@@ -1,6 +1,6 @@
 // edit.js - file used in the abc2svg editor
 //
-// Copyright (C) 2014-2025 Jean-Francois Moine
+// Copyright (C) 2014-2026 Jean-François Moine
 //
 // This file is part of abc2svg.
 //
@@ -313,8 +313,6 @@ function selsvg(evt) {
     var	v,
 	cl = evt.target.getAttribute('class')
 
-	play.loop = false;
-
 //	evt.stopImmediatePropagation();
 //	evt.preventDefault()
 
@@ -396,8 +394,6 @@ function seltxt(evt) {
 	elt = elt_ref.source,
 	start = elt.selectionStart,
 	end = elt.selectionEnd
-
-	play.loop = false
 
 	if (!start) {
 		if (end == elt.value.length)
@@ -515,10 +511,6 @@ function notehlight(i, on) {
 	}
 }
 function endplay(repv) {
-	if (play.loop) {
-		play.abcplay.play(play.si, play.ei)
-		return
-	}
 	play.playing = false;
 	play.repv = repv		// repeat variant number for continue
 
@@ -644,7 +636,7 @@ function play_tune(what) {
 	} // get_ee()
 
 	// start playing
-	function play_start(si, ei) {
+	function play_start(si, ei, loop) {
 		if (!si)
 			return
 		selx_sav[0] = selx[0];		// remove the colors
@@ -653,7 +645,7 @@ function play_tune(what) {
 		setsel(1, 0);
 
 		play.stop = 0;
-		play.abcplay.play(si, ei, play.repv)
+		play.abcplay.play(si, ei, play.repv, loop)
 	}
 
 	// play tune()
@@ -671,13 +663,6 @@ function play_tune(what) {
 
 		play.si = play.ei = null
 		play.stop = 0
-		play.loop = false
-	}
-
-	// if loop again
-	if (what == 2 && play.loop) {
-		play_start(play.si, play.ei)
-		return
 	}
 
 	// get the starting and ending play indexes, and start playing
@@ -717,11 +702,10 @@ function play_tune(what) {
 	if (what != 3) {		// if not continue
 		play.si = si;
 		play.ei = ei;
-		play.loop = what == 2
 		play.repv = 0
 	}
 
-	play_start(si, ei)
+	play_start(si, ei, what == 2)
 }
 
 // set the version and initialize the playing engine

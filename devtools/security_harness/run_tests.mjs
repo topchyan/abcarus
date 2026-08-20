@@ -115,6 +115,14 @@ const ipcSource = await readFile("src/main/ipc.js", "utf8");
 assert.match(ipcSource, /ipcMain\.handle\("shell:open-external"/);
 assert.match(ipcSource, /const target = normalizeAllowedExternalUrl\(url\)/);
 
+const rendererHtml = await readFile("src/renderer/index.html", "utf8");
+assert.match(rendererHtml, /script-src\s+'self'/);
+assert.doesNotMatch(rendererHtml, /unsafe-eval/);
+
+const abc2svgRuntime = await readFile("third_party/abc2svg/abc2svg-1.js", "utf8");
+assert.doesNotMatch(abc2svgRuntime, /eval\(meter\.top/);
+assert.match(abc2svgRuntime, /meter\.top\.split\(\/\[ \+\]\+\//);
+
 const debugDumpSource = await readFile("src/renderer/app/diagnostics/debug_dump_builder.js", "utf8");
 assert.match(debugDumpSource, /privacyNotice:/);
 
