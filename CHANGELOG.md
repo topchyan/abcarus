@@ -6,7 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Updated abc2svg to the 2026-08-20 upstream tip and tightened the renderer Content Security Policy without requiring `unsafe-eval`.
 
+### Fixed
+- Hardened handling of externally supplied documents, external navigation, diagnostics, and release packaging.
+- Developer-only workspace material and machine-specific paths are excluded from packaged applications.
 
 ## [1.6.0] - 2026-08-19
 ### Added
