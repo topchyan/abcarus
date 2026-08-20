@@ -1,5 +1,5 @@
 # SymbTr Makams: K-signature correlation
-- Source: `/home/avetik/Projects/ABC/abc/makams.abc`
+- Source: `makams.abc` (local SymbTr-derived corpus)
 - SHA-256: `53f0964793c80a1063b3325d33ba82d25dca8988f6eb3ed4b9987e6e7773c7e8`
 - Tunes: `2200`
 - Unique detected makam tokens: `155` (heuristic)

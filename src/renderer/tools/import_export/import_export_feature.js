@@ -1,4 +1,5 @@
 import { NEW_FILE_MINIMAL_ABC } from "../../abc/default_documents.js";
+import { callAbc2svgSafely } from "../../security/abc_security.js";
 
 function formatConversionError(res) {
   if (!res) return "Unknown error.";
@@ -608,7 +609,7 @@ function createImportExportFeature({
           if (msg) errors.push(msg);
         };
       }
-      abc.tosvg("midi_export", text);
+      callAbc2svgSafely(abc, "midi_export", text);
       if (typeof win.midigen !== "function") throw new Error("midigen() not loaded.");
       win.midigen();
     } finally {

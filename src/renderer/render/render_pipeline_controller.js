@@ -1,3 +1,5 @@
+import { callAbc2svgSafely } from "../security/abc_security.js";
+
 function createRenderPipelineController({
   windowRef = typeof window !== "undefined" ? window : null,
   outputElement = null,
@@ -328,7 +330,7 @@ function createRenderPipelineController({
           const abc = new AbcCtor(user);
           abcInstance = abc;
           const tSvg0 = perfOn ? perfNowMs() : 0;
-          abc.tosvg("out", renderText);
+          callAbc2svgSafely(abc, "out", renderText);
           if (perfOn) {
             logRenderPerf("renderNow: abc2svg", {
               token: perfContext ? perfContext.token : null,

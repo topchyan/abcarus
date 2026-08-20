@@ -5,6 +5,7 @@ import {
   findMeasureStartOffsetByNumber,
   findMeasureStartOffsetByNumberInPrimaryVoice,
 } from "../../abc/measure_navigation_model.js";
+import { callAbc2svgSafely } from "../../security/abc_security.js";
 
 function createMeasureNavigationController({
   getEditorView = () => null,
@@ -48,7 +49,7 @@ function createMeasureNavigationController({
       };
       const abc = new AbcCtor(user);
       const navText = neutralizeMidiDrumDirectives(payload.text || "");
-      abc.tosvg("nav_measures", navText);
+      callAbc2svgSafely(abc, "nav_measures", navText);
       const tunes = abc.tunes || [];
       const first = tunes && tunes[0] ? tunes[0][0] : null;
       if (!first) return null;

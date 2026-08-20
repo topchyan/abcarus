@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "updatedAt": "2026-01-23",
   "provenance": {
-    "sourceProjectPath": "/home/avetik/Projects/Makams",
+    "sourceProject": "Makams",
     "sourceFile": "master_koma53_rebuilt.csv",
     "note": "This mapping is used to label 53-EDO pitch classes (pc53=0..52) with Turkish Perde names by register. Fields are not exhaustive; only steps with known Perde names are listed."
   },

@@ -1,3 +1,5 @@
+import { callAbc2svgSafely } from "../security/abc_security.js";
+
 function createAbcToSvgMarkupRenderer({
   windowRef = typeof window !== "undefined" ? window : null,
   ensureAbc2svgLoader = () => {},
@@ -68,7 +70,7 @@ function createAbcToSvgMarkupRenderer({
           const AbcCtor = getAbcCtor();
           if (!AbcCtor) return { ok: false, error: "abc2svg constructor not found." };
           const abc = new AbcCtor(user);
-          abc.tosvg("out", renderText);
+          callAbc2svgSafely(abc, "out", renderText);
           if (windowRef && windowRef.abc2svg && typeof windowRef.abc2svg.abc_end === "function") {
             windowRef.abc2svg.abc_end();
           }

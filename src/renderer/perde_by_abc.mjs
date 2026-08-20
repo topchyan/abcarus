@@ -1,7 +1,7 @@
 // Canonical Perde naming by ABC token (EDO-53 only).
 //
 // Source of truth (research workspace):
-// - /home/avetik/Projects/Makams/tones_map_sorted.csv
+// - local Makams corpus: tones_map_sorted.csv
 //   Columns: Tone_name, ABC_Main, ABC_Enh
 //
 // Notes:
@@ -114,10 +114,10 @@ export const PERDE_NAMES_BY_ABC_TOKEN = Object.freeze({
   "c''": Object.freeze(["Tiz Tîz Çârgâh"]),
 
   // Additional microtone spellings observed in the SymbTr makam corpus
-  // (/home/avetik/Projects/ABC/abc/makams.abc). Names come from:
-  // - /home/avetik/Projects/Makams/master_koma53_clean.csv (incl. `expr` fallback)
-  // - /home/avetik/Projects/Makams/master_koma53_names_clean.csv
-  // - /home/avetik/Projects/Makams/master_koma53_unified.csv
+  // (local SymbTr-derived makams.abc corpus). Names come from:
+  // - master_koma53_clean.csv (incl. `expr` fallback)
+  // - master_koma53_names_clean.csv
+  // - master_koma53_unified.csv
   "^1A": Object.freeze(["Dügâh"]),
   "^1B": Object.freeze(["Bûselik"]),
   "^1E": Object.freeze(["Hüseynî Aşîrân", "Aşîrân"]),

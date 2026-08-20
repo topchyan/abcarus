@@ -244,7 +244,7 @@ Soundfonts are managed separately (SF2), and can also be installed locally.
 - `Help → ABCarus User Guide` opens this guide.
 - `Help → ABC Guide (F1)` opens a general ABC notation guide.
 - `Help → abc2svg / abcm2ps Reference (Jef Moine)` opens directive/reference docs (including `%%MIDI` keywords).
-- `Help → Diagnostics → Save Debug Dump…` saves a JSON dump useful for bug reports.
+- `Help → Diagnostics → Save Debug Dump…` saves a JSON dump useful for bug reports. The dump includes the active ABC/header text and local file paths; review or redact it before sharing it publicly.
 - `Help → Open Settings Folder` opens the folder that stores app settings and user-installed assets.
 
 ## 13) Templates (quick practical use)

@@ -45,7 +45,7 @@ Expected:
 Goal: Ensure canonical one-line `%%MIDI drum` definitions are passed to abc2svg native playback.
 
 Steps:
-1. Open `/home/avetik/Projects/ABC/abc/Ara_Dinkjian_etc.abc`.
+1. Open a local test corpus containing the canonical drum fixture (historically `Ara_Dinkjian_etc.abc`).
 2. Select the tune `X:160` (Bu akşam gün batarken gel).
 3. Open **Help → Diagnostics → Payload mode** and switch to **Playback payload**.
 4. Find the `%%MIDI drum` definition in the payload.

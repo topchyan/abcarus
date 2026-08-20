@@ -1,3 +1,5 @@
+import { callAbc2svgSafely } from "../security/abc_security.js";
+
 function createDrumPreviewController({
   transport,
   velocityToDynamic,
@@ -44,7 +46,7 @@ function createDrumPreviewController({
         `!${dyn}!C,`,
         "",
       ].join("\n");
-      abc.tosvg("drum_preview", abcText);
+      callAbc2svgSafely(abc, "drum_preview", abcText);
       const tunes = abc.tunes || [];
       if (!tunes.length) return;
       p.add(tunes[0][0], tunes[0][1], tunes[0][3]);

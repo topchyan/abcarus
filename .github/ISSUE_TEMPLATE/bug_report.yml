@@ -92,6 +92,7 @@ body:
       label: Debug dump / diagnostics (highly recommended)
       description: |
         Attach the `abcarus-debug-*.json` created via Help → Diagnostics → Save Debug Dump….
+        Privacy: the dump contains the active ABC/header text and local file paths. Review or redact it before attaching to a public issue.
         If you can’t attach, paste key fields (example): context.filePath, context.xNumber, context.label.
       placeholder: "Attach file(s) or paste relevant fields here."
     validations:
