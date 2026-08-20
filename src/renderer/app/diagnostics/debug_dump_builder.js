@@ -127,6 +127,7 @@ export async function buildDebugDumpSnapshot({
   return {
     kind: "abcarus-debug-dump",
     createdAt: new Date().toISOString(),
+    privacyNotice: "Contains active ABC/header text and absolute local file paths. Review or redact before sharing.",
     reason: reason ? String(reason) : null,
     context: {
       label: ctxLabel,

@@ -3386,7 +3386,7 @@ case 2:v=1;break}
 cmd="systvoices"}
 cfmt[cmd]=v
 break
-case"abc-version":case"bgcolor":case"fgcolor":case"propagate-accidentals":case"writeout-accidentals":cfmt[cmd]=param
+case"abc-version":case"bgcolor":case"fgcolor":case"playbeats":case"propagate-accidentals":case"writeout-accidentals":cfmt[cmd]=param
 break
 case"beamslope":case"breaklimit":case"gracedur":case"lineskipfac":case"maxshrink":case"pagescale":case"parskipfac":case"scale":case"slurheight":case"stemheight":case"tieheight":f=+param
 if(isNaN(f)||!param||f<0){syntax(1,errs.bad_val,'%%'+cmd)
@@ -6896,7 +6896,7 @@ break
 if(i>=p.length||p[i+1]=='(')
 break
 meter.top+=p[i++]}
-m1=eval(meter.top.replace(/ /g,'+'))
+m1=meter.top.split(/[ +]+/).reduce((a,v)=>a+ +v,0)
 break}
 if(!in_parenth){if(meter.bot)
 m2=+meter.bot
@@ -10373,4 +10373,4 @@ this.nreq++
 abc2svg.loadjs(fn+"-1.js",load_end,function(){abc2svg.modules.errmsg('Error loading the module '+fn)
 load_end()})}
 return this.nreq==nreq_i}}
-abc2svg.version="v1.23.4";abc2svg.vdate="2026-08-12"
+abc2svg.version="v1.23.4";abc2svg.vdate="2026-08-20"

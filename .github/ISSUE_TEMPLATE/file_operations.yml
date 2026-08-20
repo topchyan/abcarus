@@ -57,6 +57,6 @@ body:
     id: debug_dump
     attributes:
       label: Debug dump (highly recommended)
-      description: Attach `abcarus-debug-*.json` from Help → Diagnostics → Save Debug Dump…
+      description: Attach `abcarus-debug-*.json` from Help → Diagnostics → Save Debug Dump… after reviewing or redacting its active ABC/header text and local file paths.
     validations:
       required: false

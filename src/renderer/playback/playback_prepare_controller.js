@@ -14,6 +14,7 @@ import {
 import {
   normalizeHeaderNoneSpacing,
 } from "../render/render_payload_model.js";
+import { callAbc2svgSafely } from "../security/abc_security.js";
 
 function createPlaybackPrepareController({
   windowRef,
@@ -208,14 +209,14 @@ function createPlaybackPrepareController({
         if (windowRef.__abcarusDebugPlayback) showToast("Playback: moved %%MIDI drum* after K:.", 3200);
       }
     }
-    abc.tosvg("play", playbackText);
+    callAbc2svgSafely(abc, "play", playbackText);
 
     if (transport.lastPlaybackMidiDrumVoiceCompatSeen || hasMidiDrumMustBeInVoicePlaybackError(transport.playbackParseErrors)) {
       transport.addSanitizeWarning({ kind: "playback-midi-drums-neutralized" });
       const abc2 = new AbcCtor(user);
       transport.playbackParseErrors = [];
       playbackText = neutralizeMidiDrumDirectivesForPlayback(playbackText);
-      abc2.tosvg("play", playbackText);
+      callAbc2svgSafely(abc2, "play", playbackText);
       abc.tunes = abc2.tunes;
       if (windowRef.__abcarusDebugPlayback || windowRef.__abcarusDebugDrums) {
         addError("Warning: Playback ignored global %%MIDI drum* directives (must be inside a voice).", null, { skipMeasureRange: true });
@@ -231,7 +232,7 @@ function createPlaybackPrepareController({
       transport.addSanitizeWarning({ kind: "playback-lyrics-dropped" });
       const abc2 = new AbcCtor(user);
       const stripped = stripLyricsForPlayback(playbackText);
-      abc2.tosvg("play", stripped);
+      callAbc2svgSafely(abc2, "play", stripped);
       abc.tunes = abc2.tunes;
       showToast("Playback: lyrics ignored (compat mode).", 3600);
     }
@@ -239,7 +240,7 @@ function createPlaybackPrepareController({
       transport.addSanitizeWarning({ kind: "playback-bars-normalized" });
       const abc3 = new AbcCtor(user);
       const normalized = normalizeBarsForPlayback(playbackText);
-      abc3.tosvg("play", normalized);
+      callAbc2svgSafely(abc3, "play", normalized);
       abc.tunes = abc3.tunes;
       showToast("Playback: barlines normalized (compat mode).", 3600);
     }
@@ -252,7 +253,7 @@ function createPlaybackPrepareController({
         transport.addSanitizeWarning({ kind: "playback-chords-stripped" });
         const abc2 = new AbcCtor(user);
         const stripped = stripChordSymbolsForPlayback(playbackText);
-        abc2.tosvg("play", stripped);
+        callAbc2svgSafely(abc2, "play", stripped);
         abc.tunes = abc2.tunes;
         showToast("Playback: chord symbols ignored (compat mode).", 3600);
       } else {
@@ -299,7 +300,7 @@ function createPlaybackPrepareController({
           }
           const abcRetry = new AbcCtor(user);
           transport.playbackParseErrors = [];
-          abcRetry.tosvg("play", retryText);
+          callAbc2svgSafely(abcRetry, "play", retryText);
           if (abcRetry.tunes && abcRetry.tunes.length) {
             abc.tunes = abcRetry.tunes;
             tunes = abcRetry.tunes;

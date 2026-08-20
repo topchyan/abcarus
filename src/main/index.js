@@ -18,6 +18,7 @@ const {
 } = require("./global_header_store");
 const { decodeAbcTextFromBuffer, detectAbcTextEncodingFromText } = require("./abcCharset");
 const { extractTuneHeader } = require("./library_metadata");
+const { normalizeAllowedExternalUrl } = require("./url_security");
 const {
   composeStateDocument,
   loadProfileDocument,
@@ -2710,6 +2711,16 @@ async function createWindow() {
   });
 
   mainWindow = win;
+  win.webContents.on("will-navigate", (event, targetUrl) => {
+    event.preventDefault();
+    const externalUrl = normalizeAllowedExternalUrl(targetUrl);
+    if (externalUrl) shell.openExternal(externalUrl).catch(() => {});
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    const externalUrl = normalizeAllowedExternalUrl(url);
+    if (externalUrl) shell.openExternal(externalUrl).catch(() => {});
+    return { action: "deny" };
+  });
   if (process.platform === "linux") {
     // Best-effort: update the window icon if the OS theme flips light/dark.
     // Not all Linux desktops propagate this to Electron consistently.

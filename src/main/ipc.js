@@ -9,6 +9,7 @@ const { getSettingsSchema } = require("./settings_schema");
 const { parseSettingsPatchFromProperties } = require("./properties");
 const { parseProfileDocument, serializeProfileDocument } = require("./state_store");
 const { decodeAbcTextFromBuffer, encodeAbcTextToBuffer } = require("./abcCharset");
+const { normalizeAllowedExternalUrl } = require("./url_security");
 
 const os = require("os");
 const { execFile } = require("child_process");
@@ -2101,8 +2102,9 @@ function registerIpcHandlers(ctx) {
   });
   ipcMain.handle("shell:open-external", async (_event, url) => {
     try {
-      if (!url) return { ok: false, error: "Missing URL." };
-      await shell.openExternal(String(url));
+      const target = normalizeAllowedExternalUrl(url);
+      if (!target) return { ok: false, error: "Only HTTP(S) links may be opened externally." };
+      await shell.openExternal(target);
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e && e.message ? e.message : String(e) };

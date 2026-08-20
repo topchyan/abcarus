@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "generatedAt": "2026-07-01T22:53:28Z",
   "source": {
-    "path": "/home/avetik/Projects/ABC/abc/makams.abc",
+    "file": "makams.abc",
     "sha256": "53f0964793c80a1063b3325d33ba82d25dca8988f6eb3ed4b9987e6e7773c7e8"
   },
   "tunesTotal": 2200,

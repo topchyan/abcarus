@@ -10,7 +10,7 @@
 //     octave <= 5 -> low, octave == 6 -> mid, octave >= 7 -> high.
 //
 // Data provenance (generated, then curated):
-// - /home/avetik/Projects/Makams/master_koma53_with_abc_octaves.csv
+// - local Makams corpus: master_koma53_with_abc_octaves.csv
 // - Columns: `koma_base` (pc53), `name_low`, `name_mid`, `name_high`.
 //
 // Keep this module small and deterministic: no I/O, no dependencies.

@@ -8,7 +8,8 @@ return conf.gain;conf.gain=v
 if(current&&current.set_vol)
 current.set_vol(v)},play:play,stop:vf}
 function vf(){}
-function play(istart,i_iend,a_e){init.istart=istart;init.i_iend=i_iend;init.a_e=a_e
+function play(istart,i_iend,a_e,loop){init.istart=istart;init.i_iend=i_iend;init.loop=loop
+init.a_e=a_e
 if(midi5)
 midi5.get_outputs(play2)
 else
@@ -40,7 +41,7 @@ if(window.sessionStorage)
 sessionStorage.setItem("audio",out[o])}}
 current=out[o]=='sf2'?audio5:midi5;abcplay.play=current.play;abcplay.stop=current.stop
 if(current.set_output)
-current.set_output(out[o]);abcplay.play(init.istart,init.i_iend,init.a_e)}
+current.set_output(out[o]);abcplay.play(init.istart,init.i_iend,init.a_e,init.loop)}
 conf.gain=0.7;conf.speed=1;(function(){var v
 try{if(!localStorage)
 return}catch(e){return}
@@ -355,6 +356,9 @@ s2=null
 while(1){if((!s||s.part1)&&po.i_p!=undefined){s2=po.ps[++po.i_p]
 if(!s2)
 s=s2=null}
+if(po.s_loop&&(!s||s==po.s_end)&&!po.stop){s2=po.s_loop.ts_next
+if(s2?.p_v.id=="_beats"){while(s2?.p_v.id=="_beats")
+s2=s2.ts_next}}
 if(s2){s=s2
 s2=null
 po.stim=t-s.ptim/po.conf.speed
@@ -676,7 +680,7 @@ if(navigator.userAgentData&&navigator.userAgentData.getHighEntropyValues)
 navigator.userAgentData.getHighEntropyValues(['model']).then(function(ua){model=ua.model})
 else
 model=navigator.userAgent
-return{get_outputs:function(){return(window.AudioContext||window.webkitAudioContext)?['sf2']:null},play:function(i_start,i_end,i_lvl){errmsg=conf.errmsg||alert
+return{get_outputs:function(){return(window.AudioContext||window.webkitAudioContext)?['sf2']:null},play:function(i_start,i_end,i_lvl,i_loop){errmsg=conf.errmsg||alert
 function play_unlock(){var buf=ac.createBuffer(1,1,22050),src=ac.createBufferSource()
 src.buffer=buf
 src.connect(ac.destination)
@@ -691,6 +695,8 @@ gain.gain.value=conf.gain}
 while(i_start.noplay)
 i_start=i_start.ts_next
 po={conf:conf,onend:conf.onend||empty,onnote:conf.onnote||empty,s_end:i_end,s_cur:i_start,repv:i_lvl||0,tgen:2,get_time:get_time,midi_ctrl:midi_ctrl,midi_prog:midi_prog,note_run:note_run,timouts:[],v_c:[],c_i:[],v_b:[],ac:ac,gain:gain,rates:rates}
+if(i_loop)
+po.s_loop=i_start
 w_instr++
 load_res(i_start)
 if(--w_instr==0)
@@ -787,7 +793,9 @@ while(1){o=os.next()
 if(!o||o.done)
 break
 if(o.value.name==name){op=o.value
-break}}},play:function(i_start,i_end,i_lvl){po={conf:conf,onend:conf.onend||empty,onnote:conf.onnote||empty,s_end:i_end,s_cur:i_start,repv:i_lvl||0,tgen:2,get_time:get_time,midi_ctrl:midi_ctrl,midi_prog:midi_prog,note_run:note_run,timouts:[],op:op,v_c:[],c_i:[]}
+break}}},play:function(i_start,i_end,i_lvl,i_loop){po={conf:conf,onend:conf.onend||empty,onnote:conf.onnote||empty,s_end:i_end,s_cur:i_start,repv:i_lvl||0,tgen:2,get_time:get_time,midi_ctrl:midi_ctrl,midi_prog:midi_prog,note_run:note_run,timouts:[],op:op,v_c:[],c_i:[]}
+if(i_loop)
+po.s_loop=i_start
 abc2svg.play_next(po)},stop:function(){po.stop=true
 po.timouts.forEach(function(id){clearTimeout(id)})
 abc2svg.play_next(po)
