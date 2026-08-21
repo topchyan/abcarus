@@ -290,7 +290,7 @@ function createLibraryTreeView({
           dragTuneId = tune.id;
           ev.dataTransfer.setData(LIBRARY_TUNE_DRAG_MIME, tune.id);
           ev.dataTransfer.setData("text/plain", tune.id);
-          ev.dataTransfer.effectAllowed = "move";
+          ev.dataTransfer.effectAllowed = "copyMove";
         });
         button.addEventListener("dragend", () => {
           dragTuneId = "";

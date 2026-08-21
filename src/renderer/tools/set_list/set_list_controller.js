@@ -1,3 +1,29 @@
+const SET_LIST_ITEM_DRAG_MIME = "application/x-abcarus-set-list-item";
+const LIBRARY_TUNE_DRAG_MIME = "application/x-abcarus-tune-id";
+
+function getDropInsertionIndex(row, clientY, itemCount) {
+  const count = Math.max(0, Number(itemCount) || 0);
+  if (!row || !row.dataset) return { index: count, edge: "end" };
+  const rowIndex = Number(row.dataset.index);
+  if (!Number.isInteger(rowIndex) || rowIndex < 0 || rowIndex >= count) {
+    return { index: count, edge: "end" };
+  }
+  const rect = row.getBoundingClientRect();
+  const after = Number(clientY) >= rect.top + (rect.height / 2);
+  return { index: rowIndex + (after ? 1 : 0), edge: after ? "after" : "before" };
+}
+
+function getMoveTargetIndex(fromIndex, insertionIndex, itemCount) {
+  const from = Number(fromIndex);
+  const count = Number(itemCount);
+  let insertion = Number(insertionIndex);
+  if (!Number.isInteger(from) || !Number.isInteger(count) || count < 1 || from < 0 || from >= count) return null;
+  if (!Number.isInteger(insertion)) insertion = count;
+  insertion = Math.max(0, Math.min(count, insertion));
+  if (from < insertion) insertion -= 1;
+  return Math.max(0, Math.min(count - 1, insertion));
+}
+
 function createSetListController({
   modal,
   closeButton,
@@ -258,6 +284,33 @@ function createSetListController({
 
   if (itemsList) {
     let contextMenu = null;
+    const dropZone = itemsList.parentElement || itemsList;
+    const clearDropIndicator = () => {
+      itemsList.classList.remove("drop-at-end");
+      for (const row of itemsList.querySelectorAll(".set-list-row.drop-before, .set-list-row.drop-after")) {
+        row.classList.remove("drop-before", "drop-after");
+      }
+    };
+    const hasTransferType = (event, type) => {
+      const types = event && event.dataTransfer ? event.dataTransfer.types : null;
+      if (!types) return false;
+      try { return Array.from(types).includes(type); } catch { return false; }
+    };
+    const isSupportedDrag = (event) => dragFromIndex !== null
+      || hasTransferType(event, SET_LIST_ITEM_DRAG_MIME)
+      || hasTransferType(event, LIBRARY_TUNE_DRAG_MIME);
+    const findDropRow = (event) => {
+      const direct = event && event.target && event.target.closest
+        ? event.target.closest(".set-list-row")
+        : null;
+      if (direct && itemsList.contains(direct)) return direct;
+      const clientY = Number(event && event.clientY);
+      if (!Number.isFinite(clientY)) return null;
+      return Array.from(itemsList.querySelectorAll(".set-list-row")).find((row) => {
+        const rect = row.getBoundingClientRect();
+        return clientY < rect.top + (rect.height / 2);
+      }) || null;
+    };
     const closeItemContextMenu = () => {
       if (contextMenu) contextMenu.remove();
       contextMenu = null;
@@ -283,7 +336,8 @@ function createSetListController({
       try {
         if (e.dataTransfer) {
           e.dataTransfer.effectAllowed = "move";
-          e.dataTransfer.setData("text/plain", String(idx));
+          e.dataTransfer.setData(SET_LIST_ITEM_DRAG_MIME, String(idx));
+          e.dataTransfer.setData("text/plain", `set-list-item:${idx}`);
         }
       } catch {}
     });
@@ -292,55 +346,53 @@ function createSetListController({
       dragFromIndex = null;
       const rows = itemsList.querySelectorAll(".set-list-row.dragging");
       for (const row of rows) row.classList.remove("dragging");
-      const over = itemsList.querySelectorAll(".set-list-row.drag-over");
-      for (const row of over) row.classList.remove("drag-over");
+      clearDropIndicator();
     });
 
-    itemsList.addEventListener("dragover", (e) => {
-      if (!e) return;
-      const row = e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
+    dropZone.addEventListener("dragover", (e) => {
+      if (!e || !isSupportedDrag(e)) return;
+      const row = findDropRow(e);
       e.preventDefault();
-      try { if (e.dataTransfer) e.dataTransfer.dropEffect = "move"; } catch {}
-      if (!row) return;
+      try { if (e.dataTransfer) e.dataTransfer.dropEffect = dragFromIndex !== null ? "move" : "copy"; } catch {}
+      clearDropIndicator();
+      const placement = getDropInsertionIndex(row, e.clientY, readState().items.length);
+      if (!row || placement.edge === "end") itemsList.classList.add("drop-at-end");
+      else row.classList.add(placement.edge === "after" ? "drop-after" : "drop-before");
     });
 
-    itemsList.addEventListener("dragenter", (e) => {
-      const row = e && e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
-      if (!row) return;
-      row.classList.add("drag-over");
+    dropZone.addEventListener("dragleave", (e) => {
+      if (!e || (e.relatedTarget && dropZone.contains(e.relatedTarget))) return;
+      clearDropIndicator();
     });
 
-    itemsList.addEventListener("dragleave", (e) => {
-      const row = e && e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
-      if (!row) return;
-      row.classList.remove("drag-over");
-    });
-
-    itemsList.addEventListener("drop", (e) => {
-      if (!e) return;
+    dropZone.addEventListener("drop", (e) => {
+      if (!e || !isSupportedDrag(e)) return;
       e.preventDefault();
-      const row = e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
+      const row = findDropRow(e);
       const state = readState();
-      const toIdx = row && row.dataset ? Number(row.dataset.index) : state.items.length;
-      let raw = "";
-      try { raw = e.dataTransfer ? e.dataTransfer.getData("text/plain") : ""; } catch {}
+      const placement = getDropInsertionIndex(row, e.clientY, state.items.length);
+      clearDropIndicator();
 
       let fromIdx = dragFromIndex;
       if (!Number.isFinite(fromIdx)) {
-        const parsed = Number(raw);
+        let encodedIndex = "";
+        try { encodedIndex = e.dataTransfer ? e.dataTransfer.getData(SET_LIST_ITEM_DRAG_MIME) : ""; } catch {}
+        const parsed = Number(encodedIndex);
         if (Number.isFinite(parsed)) fromIdx = parsed;
       }
 
       if (Number.isFinite(fromIdx)) {
+        const toIdx = getMoveTargetIndex(fromIdx, placement.index, state.items.length);
         if (!Number.isFinite(toIdx)) return;
         if (typeof onMoveItem === "function") onMoveItem(fromIdx, toIdx);
         render();
         return;
       }
 
-      const tuneId = String(raw || "").trim();
+      let tuneId = "";
+      try { tuneId = e.dataTransfer ? e.dataTransfer.getData(LIBRARY_TUNE_DRAG_MIME) : ""; } catch {}
       if (!tuneId || typeof onAddTune !== "function") return;
-      onAddTune(tuneId, { insertIndex: toIdx }).then(() => {
+      onAddTune(tuneId, { insertIndex: placement.index }).then(() => {
         if (typeof showToast === "function") showToast("Added to Set List.", 2000);
         render();
       }).catch((err) => {
@@ -557,4 +609,6 @@ function createSetListController({
 
 export {
   createSetListController,
+  getDropInsertionIndex,
+  getMoveTargetIndex,
 };

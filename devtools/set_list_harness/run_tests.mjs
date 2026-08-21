@@ -36,6 +36,11 @@ const {
 } = await importBundledModule("src/renderer/tools/set_list/set_list_feature.js");
 
 const {
+  getDropInsertionIndex,
+  getMoveTargetIndex,
+} = await importBundledModule("src/renderer/tools/set_list/set_list_controller.js");
+
+const {
   buildSetListExportAbc,
   getPrintableSetListItems,
   shouldInjectNewPageBeforeTune,
@@ -70,6 +75,19 @@ test("moves removes and inserts immutably", () => {
   assert.deepEqual(insertSetListDocumentItem(source, { id: "x" }, 1).map((item) => item.id), ["a", "x", "b", "c"]);
   assert.deepEqual(insertSetListDocumentItem(source, { id: "x" }, 99).map((item) => item.id), ["a", "b", "c", "x"]);
   assert.equal(insertSetListDocumentItem(source, null, 0), source);
+});
+
+test("maps Set List drops to stable before and after positions", () => {
+  const row = {
+    dataset: { index: "2" },
+    getBoundingClientRect: () => ({ top: 100, height: 40 }),
+  };
+  assert.deepEqual(getDropInsertionIndex(row, 110, 5), { index: 2, edge: "before" });
+  assert.deepEqual(getDropInsertionIndex(row, 130, 5), { index: 3, edge: "after" });
+  assert.deepEqual(getDropInsertionIndex(null, 0, 5), { index: 5, edge: "end" });
+  assert.equal(getMoveTargetIndex(0, 3, 5), 2);
+  assert.equal(getMoveTargetIndex(4, 1, 5), 1);
+  assert.equal(getMoveTargetIndex(2, 3, 5), 2);
 });
 
 test("accepts lightweight and self-contained portable documents", () => {
