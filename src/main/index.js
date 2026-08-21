@@ -1389,6 +1389,48 @@ function buildPrintHtml(svgMarkup, fontBase64, suggestedName) {
             document.fonts.ready.catch(function () { return null; }),
           ]);
         }
+        // abc2svg reuses stable fragment ids (for example stdef) in every
+        // SVG.  Set List/PDF output places several SVG roots in one document;
+        // namespace each root so <use>, clipPath, and filter references stay
+        // local to the notation that owns them.
+        function namespaceSvgFragmentIds() {
+          const svgs = Array.from(document.querySelectorAll("svg"));
+          svgs.forEach(function (svg, svgIndex) {
+            const elements = Array.from(svg.querySelectorAll("[id]"));
+            if (!elements.length) return;
+            const prefix = "abcarusSvg" + svgIndex + "_";
+            const ids = new Map();
+            elements.forEach(function (element) {
+              const oldId = element.getAttribute("id");
+              if (!oldId || ids.has(oldId)) return;
+              ids.set(oldId, prefix + oldId);
+            });
+            elements.forEach(function (element) {
+              const oldId = element.getAttribute("id");
+              const nextId = ids.get(oldId);
+              if (nextId) element.setAttribute("id", nextId);
+            });
+            const replaceRefs = function (value) {
+              let next = String(value || "");
+              ids.forEach(function (newId, oldId) {
+                next = next.split("#" + oldId).join("#" + newId);
+              });
+              return next;
+            };
+            Array.from(svg.querySelectorAll("*"))
+              .forEach(function (element) {
+                Array.from(element.attributes || []).forEach(function (attribute) {
+                  if (attribute.name === "id") return;
+                  const next = replaceRefs(attribute.value);
+                  if (next !== attribute.value) element.setAttribute(attribute.name, next);
+                });
+              });
+            Array.from(svg.querySelectorAll("style"))
+              .forEach(function (style) {
+                style.textContent = replaceRefs(style.textContent);
+              });
+          });
+        }
         function normalizeSvgBounds() {
           const svgs = Array.from(document.querySelectorAll("svg"));
           for (const svg of svgs) {
@@ -1483,6 +1525,7 @@ function buildPrintHtml(svgMarkup, fontBase64, suggestedName) {
           });
         }
         window._rasterReadyPromise = waitForFonts().then(function () {
+          namespaceSvgFragmentIds();
           normalizeSvgBounds();
           alignSourceSections();
           if (skipRaster) return null;
