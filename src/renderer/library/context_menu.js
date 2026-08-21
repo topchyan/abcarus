@@ -130,7 +130,6 @@ function createLibraryContextMenu({
       hide();
       try {
         await addTuneToSetList(tuneId);
-        showToast("Added to Set List.", 2000);
       } catch (e) {
         showToast(e && e.message ? e.message : String(e), 5000);
       }

@@ -316,7 +316,14 @@ const $aboutClose = document.getElementById("aboutClose");
 const $aboutInfo = document.getElementById("aboutInfo");
 const $aboutCopy = document.getElementById("aboutCopy");
 const $setListModal = document.getElementById("setListModal");
+const $setListDivider = document.getElementById("setListDivider");
 const $setListClose = document.getElementById("setListClose");
+const $setListTitle = document.getElementById("setListTitle");
+const $setListNew = document.getElementById("setListNew");
+const $setListOpen = document.getElementById("setListOpen");
+const $setListSave = document.getElementById("setListSave");
+const $setListSaveAs = document.getElementById("setListSaveAs");
+const $setListAddCurrent = document.getElementById("setListAddCurrent");
 const $setListEmpty = document.getElementById("setListEmpty");
 const $setListItems = document.getElementById("setListItems");
 const $setListHeader = document.getElementById("setListHeader");
@@ -369,6 +376,16 @@ const $setListHeaderClose = document.getElementById("setListHeaderClose");
 const $setListHeaderText = document.getElementById("setListHeaderText");
 const $setListHeaderReset = document.getElementById("setListHeaderReset");
 const $setListHeaderSave = document.getElementById("setListHeaderSave");
+const $setListSnapshotModal = document.getElementById("setListSnapshotModal");
+const $setListSnapshotClose = document.getElementById("setListSnapshotClose");
+const $setListSnapshotTitle = document.getElementById("setListSnapshotTitle");
+const $setListSnapshotPreview = document.getElementById("setListSnapshotPreview");
+const $setListTargetModal = document.getElementById("setListTargetModal");
+const $setListTargetClose = document.getElementById("setListTargetClose");
+const $setListTargetSelect = document.getElementById("setListTargetSelect");
+const $setListTargetNew = document.getElementById("setListTargetNew");
+const $setListTargetCancel = document.getElementById("setListTargetCancel");
+const $setListTargetAdd = document.getElementById("setListTargetAdd");
 const $disclaimerModal = document.getElementById("disclaimerModal");
 const $disclaimerClose = document.getElementById("disclaimerClose");
 const $disclaimerOk = document.getElementById("disclaimerOk");
@@ -831,6 +848,9 @@ const setListRendererAdapter = createSetListRendererAdapter({
   confirmUnsavedChanges,
   performSaveFlow,
   findTuneById,
+  getLibraryIndex: libraryRuntime.getIndex,
+  getTuneText,
+  selectTune,
   readFile,
   writeFile,
   pathsEqual,
@@ -843,10 +863,39 @@ const setListRendererAdapter = createSetListRendererAdapter({
   showSaveError,
   withFileLock,
 });
+let setListPanelVisible = false;
+let setListPanelWidth = 300;
+
+function applySetListPanelVisibility(visible) {
+  const nextVisible = Boolean(visible);
+  if (setListPanelVisible === nextVisible) return;
+  setListPanelVisible = nextVisible;
+  document.body.classList.toggle("set-list-visible", setListPanelVisible);
+  if (libraryRuntime.isVisible()) {
+    const width = libraryUiStateController
+      ? libraryUiStateController.getLastSidebarWidth()
+      : ($sidebar.getBoundingClientRect().width || 280);
+    layoutController.setPaneSizes(width || 280);
+  } else {
+    $main.style.gridTemplateColumns = setListPanelVisible
+      ? `0px 0px ${setListPanelWidth}px 6px 1fr`
+      : "0px 0px 0px 0px 1fr";
+  }
+  requestAnimationFrame(() => {
+    try { layoutController.resetView(); } catch {}
+  });
+}
+
 const setListFeature = createSetListFeature({
   elements: {
     modal: $setListModal,
     closeButton: $setListClose,
+    titleInput: $setListTitle,
+    newButton: $setListNew,
+    openButton: $setListOpen,
+    saveButton: $setListSave,
+    saveAsButton: $setListSaveAs,
+    addCurrentButton: $setListAddCurrent,
     empty: $setListEmpty,
     itemsList: $setListItems,
     headerButton: $setListHeader,
@@ -861,10 +910,34 @@ const setListFeature = createSetListFeature({
     headerText: $setListHeaderText,
     headerResetButton: $setListHeaderReset,
     headerSaveButton: $setListHeaderSave,
+    snapshotModal: $setListSnapshotModal,
+    snapshotCloseButton: $setListSnapshotClose,
+    snapshotTitle: $setListSnapshotTitle,
+    snapshotPreview: $setListSnapshotPreview,
+    targetModal: $setListTargetModal,
+    targetCloseButton: $setListTargetClose,
+    targetSelect: $setListTargetSelect,
+    targetNewButton: $setListTargetNew,
+    targetCancelButton: $setListTargetCancel,
+    targetAddButton: $setListTargetAdd,
   },
   readStorage: safeReadJsonLocalStorage,
   writeStorage: safeWriteJsonLocalStorage,
+  readFile,
+  writeFile,
+  showOpenSetListDialog: () => window.api && typeof window.api.showOpenSetListDialog === "function"
+    ? window.api.showOpenSetListDialog()
+    : Promise.resolve(null),
+  showSaveSetListDialog: (name, dir) => window.api && typeof window.api.showSaveSetListDialog === "function"
+    ? window.api.showSaveSetListDialog(name, dir)
+    : Promise.resolve(null),
+  getDefaultSaveDir,
+  getActiveTuneId: () => activeContext.getActiveTuneId(),
+  safeBasename,
   buildItemForTuneId: setListRendererAdapter.buildItemForTuneId,
+  activateItemSource: setListRendererAdapter.activateItemSource,
+  resolveItemSource: setListRendererAdapter.resolveItemSource,
+  onPanelVisibilityChange: applySetListPanelVisibility,
   renderItemToSvg: setListRendererAdapter.renderItemToSvg,
   buildSourceLinkMarkup: (abcText) => sourceLinkFeature.buildPrintMarkup(abcText),
   outputPrint: setListRendererAdapter.outputPrint,
@@ -879,6 +952,7 @@ const setListFeature = createSetListFeature({
   showToast,
   logError: logErr,
   confirm: (message) => window.confirm(message),
+  confirmUnsavedChanges,
   enableDraggable: enableDraggableModal,
 });
 
@@ -1229,6 +1303,8 @@ const layoutController = createLayoutController({
   minErrorPaneHeight: MIN_ERROR_PANE_HEIGHT,
   useErrorOverlay: USE_ERROR_OVERLAY,
   getLibraryVisible: libraryRuntime.isVisible,
+  getSetListVisible: () => setListPanelVisible,
+  getSetListPaneWidth: () => setListPanelWidth,
   getLatestSettings: settingsSnapshot.get,
   isNormalModeForSplitToggle,
   isRawMode: () => isRawModeActive(),
@@ -1241,6 +1317,33 @@ const layoutController = createLayoutController({
   },
   showToast,
 });
+
+if ($setListDivider && $setListModal) {
+  $setListDivider.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    $setListDivider.setPointerCapture(event.pointerId);
+    const startWidth = $setListModal.getBoundingClientRect().width || setListPanelWidth;
+    const startX = event.clientX;
+    const onMove = (moveEvent) => {
+      const libraryWidth = libraryRuntime.isVisible() ? ($sidebar.getBoundingClientRect().width || 0) : 0;
+      const maxWidth = Math.max(220, $main.clientWidth - libraryWidth - 320);
+      setListPanelWidth = Math.max(220, Math.min(startWidth + moveEvent.clientX - startX, maxWidth));
+      if (libraryRuntime.isVisible()) layoutController.setPaneSizes(libraryWidth || 280);
+      else $main.style.gridTemplateColumns = `0px 0px ${setListPanelWidth}px 6px 1fr`;
+    };
+    const onUp = () => {
+      $setListDivider.releasePointerCapture(event.pointerId);
+      $setListDivider.removeEventListener("pointermove", onMove);
+      $setListDivider.removeEventListener("pointerup", onUp);
+      $setListDivider.removeEventListener("pointercancel", onUp);
+      document.body.classList.remove("resizing");
+    };
+    document.body.classList.add("resizing");
+    $setListDivider.addEventListener("pointermove", onMove);
+    $setListDivider.addEventListener("pointerup", onUp);
+    $setListDivider.addEventListener("pointercancel", onUp);
+  });
+}
 
 function isNormalModeForSplitToggle() {
   return !isRawModeActive() && !isFocusModeEnabled();
@@ -1501,6 +1604,8 @@ const libraryUiDomain = createLibraryUiDomain({
   },
   state: {
     getLibraryVisible: libraryRuntime.isVisible,
+    getSetListVisible: () => setListPanelVisible,
+    getSetListPaneWidth: () => setListPanelWidth,
     setLibraryVisibleState: libraryRuntime.setVisible,
     isLibraryDisabled: () => chordProFeature.isEnabled(),
     getLibraryIndex: libraryRuntime.getIndex,
@@ -1516,7 +1621,7 @@ const libraryUiDomain = createLibraryUiDomain({
     isRawMode: () => isRawModeActive(),
   },
   actions: {
-    addTuneToSetList: (tuneId, options = {}) => setListFeature.addTuneById(tuneId, options),
+    addTuneToSetList: (tuneId, options = {}) => setListFeature.addTuneWithTargetChoice(tuneId, options),
     buildTemplatesPreviewContextMenuItems: (target) => templatesFeature.buildPreviewContextMenuItems(target),
     confirmReloadFromDisk,
     copyTuneById,
@@ -1556,7 +1661,7 @@ const libraryUiDomain = createLibraryUiDomain({
     renameFile,
     renameLibraryFile,
     requestLoadLibraryFile,
-    resetRightPaneSplit: () => layoutController.resetRightPaneSplit(),
+    resetRightPaneSplit: () => layoutController.resetView(),
     restoreHoverStatus,
     renumberXInActiveFile,
     updateYouTubeMetadata: () => sourceLinkFeature.updateYouTubeMetadata(),
@@ -3425,6 +3530,7 @@ async function requestCloseDocument() {
 }
 
 async function requestQuitApplication() {
+  if (setListFeature && !await setListFeature.prepareToLeave("quitting")) return;
   if (documentSessionController) await documentSessionController.requestQuitApplication();
 }
 

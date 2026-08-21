@@ -79,6 +79,8 @@ function createLibraryUiDomain({
       isLibraryDisabled: () => (typeof state.isLibraryDisabled === "function" ? state.isLibraryDisabled() : false),
       getLastSidebarWidth: () => uiStateController ? uiStateController.getLastSidebarWidth() : 280,
       getLibraryIndex: () => (typeof state.getLibraryIndex === "function" ? state.getLibraryIndex() : null),
+      getSetListVisible: () => (typeof state.getSetListVisible === "function" ? state.getSetListVisible() : false),
+      getSetListPaneWidth: () => (typeof state.getSetListPaneWidth === "function" ? state.getSetListPaneWidth() : 300),
     },
     actions: {
       ensureSafeToAbandonCurrentDoc: actions.ensureSafeToAbandonCurrentDoc,
@@ -563,9 +565,7 @@ function createLibraryUiDomain({
         if (!row) return;
         const tuneId = row && row.tuneId ? String(row.tuneId) : "";
         if (!tuneId || typeof actions.addTuneToSetList !== "function") return;
-        actions.addTuneToSetList(tuneId, { fallbackTitle: row.title, fallbackComposer: row.composer }).then(() => {
-          if (typeof actions.showToast === "function") actions.showToast("Added to Set List.", 2000);
-        }).catch((e) => {
+        actions.addTuneToSetList(tuneId, { fallbackTitle: row.title, fallbackComposer: row.composer }).catch((e) => {
           if (typeof actions.showToast === "function") actions.showToast(e && e.message ? e.message : String(e), 5000);
         });
       } catch {}

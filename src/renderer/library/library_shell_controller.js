@@ -17,6 +17,8 @@ export function createLibraryShellController({
     isLibraryDisabled = () => false,
     getLastSidebarWidth = () => 280,
     getLibraryIndex = () => null,
+    getSetListVisible = () => false,
+    getSetListPaneWidth = () => 300,
   } = state;
 
   const {
@@ -45,7 +47,9 @@ export function createLibraryShellController({
     if (visible) {
       setPaneSizes(getLastSidebarWidth() || MIN_PANE_WIDTH);
     } else if (main) {
-      main.style.gridTemplateColumns = "0px 0px 1fr";
+      main.style.gridTemplateColumns = getSetListVisible()
+        ? `0px 0px ${Math.max(220, Number(getSetListPaneWidth()) || 300)}px 6px 1fr`
+        : "0px 0px 0px 0px 1fr";
     }
     if (persist) scheduleSaveLibraryPrefs({ libraryPaneVisible: Boolean(visible) });
   }

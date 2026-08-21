@@ -262,8 +262,11 @@ function createSettingsDomain({
   }
 
   function resetLayout() {
-    if (settingsController) settingsController.zoomReset();
-    if (controllers.layout) controllers.layout.resetRightPaneSplit();
+    if (settingsController) {
+      if (typeof settingsController.resetEditorZoom === "function") settingsController.resetEditorZoom();
+      else settingsController.zoomReset();
+    }
+    if (controllers.layout) controllers.layout.resetView();
   }
 
   function wireActivePaneTracking() {

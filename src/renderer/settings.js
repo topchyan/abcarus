@@ -1985,6 +1985,7 @@ export function initSettings(api) {
     zoomIn: () => zoomBy(ZOOM_STEP),
     zoomOut: () => zoomBy(-ZOOM_STEP),
     zoomReset,
+    resetEditorZoom: () => updateSettings({ editorZoom: 1 }),
     setActivePane: (pane) => { activePane = pane; },
   };
 }

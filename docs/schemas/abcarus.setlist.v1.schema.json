@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/topchyan/abcarus/blob/master/docs/schemas/abcarus.setlist.v1.schema.json",
+  "title": "ABCarus Set List v1",
+  "description": "Canonical strict-write schema for a portable ABCarus Set List document.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "title", "createdAt", "updatedAt", "print", "items"],
+  "properties": {
+    "schema": { "const": "abcarus.setlist.v1" },
+    "id": { "$ref": "#/$defs/nonEmptyString" },
+    "title": { "type": "string" },
+    "createdAt": { "$ref": "#/$defs/timestamp" },
+    "updatedAt": { "$ref": "#/$defs/timestamp" },
+    "print": { "$ref": "#/$defs/print" },
+    "items": {
+      "type": "array",
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/item" }
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "contentHash": {
+      "type": "string",
+      "pattern": "^(|sha256:[0-9a-f]{64})$"
+    },
+    "print": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["headerText", "pageBreaks", "compact"],
+      "properties": {
+        "headerText": { "type": "string" },
+        "pageBreaks": { "enum": ["perTune", "none", "auto"] },
+        "compact": { "type": "boolean" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["locatorHint", "pathHint", "xNumberHint"],
+      "properties": {
+        "locatorHint": { "type": "string" },
+        "pathHint": { "type": "string" },
+        "xNumberHint": { "type": "string" }
+      }
+    },
+    "tune": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "composer", "key", "rhythm", "origin", "groups", "source", "contentHash"],
+      "properties": {
+        "title": { "type": "string" },
+        "composer": { "type": "string" },
+        "key": { "type": "string" },
+        "rhythm": { "type": "string" },
+        "origin": { "type": "string" },
+        "groups": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "source": { "$ref": "#/$defs/source" },
+        "contentHash": { "$ref": "#/$defs/contentHash" }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capturedAt"],
+      "properties": {
+        "capturedAt": { "$ref": "#/$defs/timestamp" },
+        "sourceFileModifiedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "performance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transposeSemitones", "tempoScale"],
+      "properties": {
+        "transposeSemitones": { "type": "number" },
+        "tempoScale": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "url", "label"],
+      "properties": {
+        "kind": { "type": "string" },
+        "url": { "type": "string", "minLength": 1 },
+        "label": { "type": "string" }
+      }
+    },
+    "export": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["includeInPdf", "pageBreakBefore"],
+      "properties": {
+        "includeInPdf": { "type": "boolean" },
+        "pageBreakBefore": { "type": "boolean" }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "dependentRequired": {
+        "embeddedHeaderAbc": ["embeddedAbc"],
+        "snapshot": ["embeddedAbc"]
+      },
+      "required": ["id", "tune", "performance", "notes", "links", "export"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "tune": { "$ref": "#/$defs/tune" },
+        "embeddedAbc": { "type": "string", "minLength": 1 },
+        "embeddedHeaderAbc": { "type": "string", "minLength": 1 },
+        "snapshot": { "$ref": "#/$defs/snapshot" },
+        "performance": { "$ref": "#/$defs/performance" },
+        "notes": { "type": "string" },
+        "links": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "#/$defs/link" }
+        },
+        "export": { "$ref": "#/$defs/export" }
+      }
+    }
+  }
+}

@@ -3381,6 +3381,15 @@ async function runUiSmoke(win) {
         && openFolderAsLibraryButton.closest(".toolbar-dropdown-menu")
       );
       const librarySplitControl = byId("btnToggleLibrary").closest(".library-split-control");
+      const normalRightPane = document.querySelector("main > .pane.right");
+      const normalRightPaneWidthPx = normalRightPane
+        ? Math.round(normalRightPane.getBoundingClientRect().width)
+        : 0;
+      const normalRightPaneVisible = Boolean(
+        normalRightPane
+        && normalRightPaneWidthPx >= 300
+        && normalRightPane.getClientRects().length > 0
+      );
       const hook = window.__abcarusDevUiSmoke;
       if (hook && typeof hook.setText === "function") {
         hook.setText([
@@ -3531,6 +3540,11 @@ async function runUiSmoke(win) {
       let modalBackdropSafe = false;
       let compactModalOk = false;
       let toolbarDomainsOk = false;
+      let setListDocumentUiOk = false;
+      let resetViewLayoutOk = false;
+      let scoreCenteredAfterReset = false;
+      let resetViewRatio = null;
+      let scoreCenterGeometry = null;
       if (hook && typeof hook.dispatchAction === "function") {
         await hook.dispatchAction({ type: "fonts" });
         await wait(250);
@@ -3572,6 +3586,8 @@ async function runUiSmoke(win) {
           "aboutClose",
           "setListClose",
           "setListHeaderClose",
+          "setListSnapshotClose",
+          "setListTargetClose",
           "xIssuesClose",
           "printAllOptionsClose",
           "disclaimerClose",
@@ -3626,6 +3642,72 @@ async function runUiSmoke(win) {
           && compactClose
         );
         if (compactClose) compactClose.click();
+
+        await hook.dispatchAction({ type: "setList" });
+        await wait(80);
+        const setListModal = byId("setListModal");
+        const setListTitle = byId("setListTitle");
+        const setListSave = byId("setListSave");
+        const setListSaveAs = byId("setListSaveAs");
+        const setListTarget = byId("setListTargetModal");
+        if (setListTitle) {
+          setListTitle.value = "Smoke Set List";
+          setListTitle.dispatchEvent(new Event("change", { bubbles: true }));
+          await wait(30);
+        }
+        setListDocumentUiOk = Boolean(
+          setListModal
+          && setListModal.classList.contains("open")
+          && setListModal.classList.contains("set-list-panel")
+          && !setListModal.closest(".modal")
+          && document.body.classList.contains("set-list-visible")
+          && setListTitle
+          && setListTitle.value === "Smoke Set List *"
+          && setListSave
+          && !setListSave.disabled
+          && setListSaveAs
+          && !setListSaveAs.disabled
+          && setListTarget
+          && setListTarget.getAttribute("aria-hidden") === "true"
+        );
+        const setListClose = byId("setListClose");
+        if (setListClose) {
+          setListClose.click();
+          await wait(120);
+          setListDocumentUiOk = setListDocumentUiOk
+            && !document.body.classList.contains("set-list-visible")
+            && setListTitle.value === "Smoke Set List *";
+          const rightSplit = document.querySelector(".right-split");
+          const editorPane = document.querySelector(".editor-pane");
+          const renderPane = document.querySelector(".render-pane");
+          const horizontal = document.body.classList.contains("right-split-horizontal");
+          if (rightSplit && editorPane && renderPane) {
+            const editorRect = editorPane.getBoundingClientRect();
+            const renderRect = renderPane.getBoundingClientRect();
+            const occupied = horizontal
+              ? editorRect.height + renderRect.height
+              : editorRect.width + renderRect.width;
+            resetViewRatio = occupied > 0
+              ? (horizontal ? renderRect.height : editorRect.width) / occupied
+              : null;
+            const expected = horizontal ? 0.62 : 0.44;
+            resetViewLayoutOk = Number.isFinite(resetViewRatio) && Math.abs(resetViewRatio - expected) <= 0.03;
+            const scoreSvg = document.querySelector("#out svg");
+            const out = byId("out");
+            if (scoreSvg && out) {
+              const svgRect = scoreSvg.getBoundingClientRect();
+              const outRect = out.getBoundingClientRect();
+              scoreCenterGeometry = {
+                svgLeft: Math.round(svgRect.left),
+                svgWidth: Math.round(svgRect.width),
+                outLeft: Math.round(outRect.left),
+                outWidth: Math.round(outRect.width),
+              };
+              scoreCenteredAfterReset = svgRect.width > outRect.width
+                || Math.abs((svgRect.left + svgRect.right) - (outRect.left + outRect.right)) <= 6;
+            }
+          }
+        }
       }
       return {
         ok: errorsVisible
@@ -3652,7 +3734,11 @@ async function runUiSmoke(win) {
           && modalCloseButtonsOk
           && modalBackdropSafe
           && compactModalOk
-          && toolbarDomainsOk,
+          && toolbarDomainsOk
+          && normalRightPaneVisible
+          && resetViewLayoutOk
+          && scoreCenteredAfterReset
+          && setListDocumentUiOk,
         visualGapPx,
         togglesGapPx,
         libRadiusPx,
@@ -3683,6 +3769,13 @@ async function runUiSmoke(win) {
         modalBackdropSafe,
         compactModalOk,
         toolbarDomainsOk,
+        normalRightPaneVisible,
+        normalRightPaneWidthPx,
+        resetViewLayoutOk,
+        resetViewRatio,
+        scoreCenteredAfterReset,
+        scoreCenterGeometry,
+        setListDocumentUiOk,
       };
     })()`,
     true
