@@ -3,6 +3,7 @@ title: "ADR-0020: Portable Set List Documents"
 date: 2026-08-20
 status: "Accepted"
 supersedes: "ADR-0004"
+refined_by: "ADR-0021"
 ---
 
 # ADR-0020: Portable Set List Documents
@@ -15,8 +16,10 @@ output. That workflow is useful, but it cannot represent named performance
 programs, portable saved revisions, explicit Library reconciliation, or a
 shared desktop/mobile contract.
 
-A Set List is a musician-facing document. It is not a Library backup and does
-not own or modify source tune files.
+A Set List is a musician-facing document. It is not a general Library backup
+and does not own or silently modify source tune files. Its embedded tune
+snapshots may, however, be used as explicit comparison and recovery material as
+defined by ADR-0021.
 
 ## Decision
 
@@ -117,11 +120,16 @@ PDF and combined ABC are derived artifacts, not alternate sources of truth.
 
 ### Adding from Library
 
+> Refined by ADR-0021: desktop additions must produce a visible result in the
+> active docked Set List panel. A non-active Set List is opened and made active
+> before it is changed; it is not silently rewritten in the background.
+
 `Add to Set List` from a tune context menu targets an explicit document. When
 several Set Lists are known, the command presents a compact chooser containing
-the last-used Set List first, other recent Set Lists, and `New Set List...`.
-Adding does not require opening the complete workspace, but it gives visible
-confirmation naming the destination.
+the active Set List first, other recent Set Lists, and actions to open or create
+a Set List. On desktop, the selected destination is opened, made active, and
+shown before the tune is added, as specified by ADR-0021. Other clients must
+provide equally explicit destination and result feedback.
 
 The application profile may retain recent Set List paths and the last-used
 path for this chooser. Those path hints are navigation history only: Set List
