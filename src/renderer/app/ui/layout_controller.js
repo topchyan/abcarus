@@ -42,6 +42,14 @@ export function createLayoutController({
   let layoutPrefsSaveTimer = null;
   let pendingLayoutPrefsPatch = null;
   const layoutPrefsSaveDebounceMs = 300;
+  const defaultVerticalEditorRatio = 0.44;
+  const defaultHorizontalScoreRatio = 0.62;
+  const requestFrame = (callback) => {
+    if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+      return window.requestAnimationFrame(callback);
+    }
+    return setTimeout(callback, 0);
+  };
 
   const scheduleSaveLayoutPrefs = (patch) => {
     if (!patch || typeof patch !== "object") return;
@@ -227,6 +235,37 @@ export function createLayoutController({
     applyRightSplitSizesFromRatio();
   };
 
+  const resetView = ({ fitScore = true, resetScroll = true } = {}) => {
+    if (rightSplitOrientation === "horizontal") {
+      rightSplitRatioHorizontal = defaultHorizontalScoreRatio;
+      scheduleSaveLayoutPrefs({ layoutSplitRatioHorizontal: rightSplitRatioHorizontal });
+    } else {
+      rightSplitRatioVertical = defaultVerticalEditorRatio;
+      scheduleSaveLayoutPrefs({ layoutSplitRatioVertical: rightSplitRatioVertical });
+    }
+    applyRightSplitSizesFromRatio({ rawMode: Boolean(isRawMode()) });
+
+    requestFrame(() => requestFrame(() => {
+      if (fitScore && !isRawMode()) {
+        const fit = computeFocusFitZoom({ currentZoom: readRenderZoom() });
+        if (Number.isFinite(fit) && fit > 0) {
+          setRenderZoom(fit);
+          const orientationZoomKey = rightSplitOrientation === "horizontal"
+            ? "layoutRenderZoomHorizontal"
+            : "layoutRenderZoomVertical";
+          scheduleSaveLayoutPrefs({ renderZoom: fit, [orientationZoomKey]: fit });
+        }
+      }
+      if (resetScroll && renderPane) {
+        if (typeof renderPane.scrollTo === "function") renderPane.scrollTo({ top: 0, left: 0 });
+        else {
+          renderPane.scrollTop = 0;
+          renderPane.scrollLeft = 0;
+        }
+      }
+    }));
+  };
+
   const setSidebarSplitSizes = (topHeight) => {
     if (useErrorOverlay) return;
     if (!sidebarBody || !sidebarSplit || !errorPane || !libraryTree) return;
@@ -323,8 +362,15 @@ export function createLayoutController({
       if (Number.isFinite(w) && w > maxIntrinsicWidth) maxIntrinsicWidth = w;
     }
     if (!Number.isFinite(maxIntrinsicWidth) || maxIntrinsicWidth <= 10) return null;
-    const target = Math.max(100, paneWidth - 24);
-    const next = target / maxIntrinsicWidth;
+    let outputHorizontalPadding = 24;
+    try {
+      const outputStyle = getComputedStyle(output);
+      const left = Number.parseFloat(outputStyle.paddingLeft || "0") || 0;
+      const right = Number.parseFloat(outputStyle.paddingRight || "0") || 0;
+      outputHorizontalPadding = left + right;
+    } catch {}
+    const target = Math.max(100, paneWidth);
+    const next = target / (maxIntrinsicWidth + outputHorizontalPadding);
     return typeof clamp === "function" ? clamp(next, 0.5, 8, zoom) : Math.max(0.5, Math.min(8, next));
   };
 
@@ -384,6 +430,7 @@ export function createLayoutController({
     initRightPaneResizer,
     initSidebarResizer,
     resetRightPaneSplit,
+    resetView,
     computeFocusFitZoom,
     getRenderZoomFactor,
     readRenderZoom,

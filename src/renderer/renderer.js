@@ -867,7 +867,9 @@ let setListPanelVisible = false;
 let setListPanelWidth = 300;
 
 function applySetListPanelVisibility(visible) {
-  setListPanelVisible = Boolean(visible);
+  const nextVisible = Boolean(visible);
+  if (setListPanelVisible === nextVisible) return;
+  setListPanelVisible = nextVisible;
   document.body.classList.toggle("set-list-visible", setListPanelVisible);
   if (libraryRuntime.isVisible()) {
     const width = libraryUiStateController
@@ -879,6 +881,9 @@ function applySetListPanelVisibility(visible) {
       ? `0px 0px ${setListPanelWidth}px 6px 1fr`
       : "0px 0px 0px 0px 1fr";
   }
+  requestAnimationFrame(() => {
+    try { layoutController.resetView(); } catch {}
+  });
 }
 
 const setListFeature = createSetListFeature({
@@ -1656,7 +1661,7 @@ const libraryUiDomain = createLibraryUiDomain({
     renameFile,
     renameLibraryFile,
     requestLoadLibraryFile,
-    resetRightPaneSplit: () => layoutController.resetRightPaneSplit(),
+    resetRightPaneSplit: () => layoutController.resetView(),
     restoreHoverStatus,
     renumberXInActiveFile,
     updateYouTubeMetadata: () => sourceLinkFeature.updateYouTubeMetadata(),

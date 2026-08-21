@@ -3541,6 +3541,10 @@ async function runUiSmoke(win) {
       let compactModalOk = false;
       let toolbarDomainsOk = false;
       let setListDocumentUiOk = false;
+      let resetViewLayoutOk = false;
+      let scoreCenteredAfterReset = false;
+      let resetViewRatio = null;
+      let scoreCenterGeometry = null;
       if (hook && typeof hook.dispatchAction === "function") {
         await hook.dispatchAction({ type: "fonts" });
         await wait(250);
@@ -3669,9 +3673,40 @@ async function runUiSmoke(win) {
         const setListClose = byId("setListClose");
         if (setListClose) {
           setListClose.click();
+          await wait(120);
           setListDocumentUiOk = setListDocumentUiOk
             && !document.body.classList.contains("set-list-visible")
             && setListTitle.value === "Smoke Set List *";
+          const rightSplit = document.querySelector(".right-split");
+          const editorPane = document.querySelector(".editor-pane");
+          const renderPane = document.querySelector(".render-pane");
+          const horizontal = document.body.classList.contains("right-split-horizontal");
+          if (rightSplit && editorPane && renderPane) {
+            const editorRect = editorPane.getBoundingClientRect();
+            const renderRect = renderPane.getBoundingClientRect();
+            const occupied = horizontal
+              ? editorRect.height + renderRect.height
+              : editorRect.width + renderRect.width;
+            resetViewRatio = occupied > 0
+              ? (horizontal ? renderRect.height : editorRect.width) / occupied
+              : null;
+            const expected = horizontal ? 0.62 : 0.44;
+            resetViewLayoutOk = Number.isFinite(resetViewRatio) && Math.abs(resetViewRatio - expected) <= 0.03;
+            const scoreSvg = document.querySelector("#out svg");
+            const out = byId("out");
+            if (scoreSvg && out) {
+              const svgRect = scoreSvg.getBoundingClientRect();
+              const outRect = out.getBoundingClientRect();
+              scoreCenterGeometry = {
+                svgLeft: Math.round(svgRect.left),
+                svgWidth: Math.round(svgRect.width),
+                outLeft: Math.round(outRect.left),
+                outWidth: Math.round(outRect.width),
+              };
+              scoreCenteredAfterReset = svgRect.width > outRect.width
+                || Math.abs((svgRect.left + svgRect.right) - (outRect.left + outRect.right)) <= 6;
+            }
+          }
         }
       }
       return {
@@ -3701,6 +3736,8 @@ async function runUiSmoke(win) {
           && compactModalOk
           && toolbarDomainsOk
           && normalRightPaneVisible
+          && resetViewLayoutOk
+          && scoreCenteredAfterReset
           && setListDocumentUiOk,
         visualGapPx,
         togglesGapPx,
@@ -3734,6 +3771,10 @@ async function runUiSmoke(win) {
         toolbarDomainsOk,
         normalRightPaneVisible,
         normalRightPaneWidthPx,
+        resetViewLayoutOk,
+        resetViewRatio,
+        scoreCenteredAfterReset,
+        scoreCenterGeometry,
         setListDocumentUiOk,
       };
     })()`,
