@@ -3269,20 +3269,6 @@ body.set-list-visible .set-list-divider {
   white-space: nowrap;
 }
 
-.set-list-row .set-list-status {
-  flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #9a9a9a;
-}
-
-.set-list-row[data-resolution="FOUND_EXACT"] .set-list-status { background: #1a7f37; }
-.set-list-row[data-resolution="FOUND_MODIFIED"] .set-list-status { background: #bf8700; }
-.set-list-row[data-resolution="FOUND_STRONG"] .set-list-status { background: #1b5fbf; }
-.set-list-row[data-resolution="AMBIGUOUS"] .set-list-status,
-.set-list-row[data-resolution="MISSING"] .set-list-status { background: #cf222e; }
-
 .set-list-item-menu {
   position: absolute;
   z-index: 12;
