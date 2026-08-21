@@ -45,9 +45,9 @@
     "source": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["tuneIdHint", "pathHint", "xNumberHint"],
+      "required": ["locatorHint", "pathHint", "xNumberHint"],
       "properties": {
-        "tuneIdHint": { "type": "string" },
+        "locatorHint": { "type": "string" },
         "pathHint": { "type": "string" },
         "xNumberHint": { "type": "string" }
       }
@@ -110,6 +110,10 @@
     "item": {
       "type": "object",
       "additionalProperties": false,
+      "dependentRequired": {
+        "embeddedHeaderAbc": ["embeddedAbc"],
+        "snapshot": ["embeddedAbc"]
+      },
       "required": ["id", "tune", "performance", "notes", "links", "export"],
       "properties": {
         "id": { "$ref": "#/$defs/nonEmptyString" },

@@ -14,7 +14,7 @@
       "rhythm": "",
       "origin": "",
       "groups": [],
-      "source": { "tuneIdHint": "/old/festival.abc::12", "pathHint": "/old/festival.abc", "xNumberHint": "12" },
+      "source": { "locatorHint": "/old/festival.abc::12", "pathHint": "/old/festival.abc", "xNumberHint": "12" },
       "contentHash": "sha256:bae9426e48b6d89b810ac0c01b7a565dd4d1bf33814f25925fb9150c4c7cc162"
     },
     "embeddedAbc": "X:12\nT:Song A\nC:Composer\nK:D\nD E F G|\n",

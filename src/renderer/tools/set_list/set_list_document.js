@@ -45,23 +45,48 @@ function normalizedIdentityText(value) {
 function normalizeSource(source) {
   const raw = source && typeof source === "object" ? source : {};
   return {
-    tuneIdHint: text(raw.tuneIdHint),
+    locatorHint: text(raw.locatorHint) || text(raw.tuneIdHint),
     pathHint: text(raw.pathHint),
     xNumberHint: text(raw.xNumberHint),
   };
 }
 
+function normalizeContentHash(value) {
+  const raw = text(value);
+  return /^sha256:[0-9a-f]{64}$/.test(raw) ? raw : "";
+}
+
+function normalizeGroups(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const groups = [];
+  for (const entry of value) {
+    const group = text(entry);
+    if (!group || seen.has(group)) continue;
+    seen.add(group);
+    groups.push(group);
+  }
+  return groups;
+}
+
 function normalizeTuneSnapshot(snapshot) {
   const raw = snapshot && typeof snapshot === "object" ? snapshot : {};
+  const legacyGroup = text(raw.group);
+  const source = raw.source && typeof raw.source === "object" ? raw.source : {};
   return {
     title: text(raw.title),
     composer: text(raw.composer),
     key: text(raw.key),
     rhythm: text(raw.rhythm),
     origin: text(raw.origin),
-    groups: Array.isArray(raw.groups) ? raw.groups.map(text).filter(Boolean) : [],
-    source: normalizeSource(raw.source),
-    contentHash: text(raw.contentHash),
+    groups: normalizeGroups(Array.isArray(raw.groups) ? raw.groups : (legacyGroup ? [legacyGroup] : [])),
+    source: normalizeSource({
+      ...source,
+      locatorHint: text(source.locatorHint) || text(raw.tuneIdHint),
+      pathHint: text(source.pathHint) || text(raw.sourcePath),
+      xNumberHint: text(source.xNumberHint) || text(raw.xNumber),
+    }),
+    contentHash: normalizeContentHash(raw.contentHash),
   };
 }
 
@@ -70,7 +95,7 @@ function normalizeLinks(links) {
   return links.slice(0, MAX_SET_LIST_LINKS).map((link) => {
     const raw = link && typeof link === "object" ? link : {};
     return {
-      kind: text(raw.kind) || "reference",
+      kind: text(raw.kind) || text(raw.type) || "reference",
       url: text(raw.url),
       label: text(raw.label),
     };
@@ -124,28 +149,33 @@ function normalizeSetListDocumentItem(item, options = {}) {
   if (!id) return null;
   const performance = item.performance && typeof item.performance === "object" ? item.performance : {};
   const exportIntent = item.export && typeof item.export === "object" ? item.export : {};
+  const tempoScale = finiteNumber(performance.tempoScale, 1);
+  const includeInPdf = typeof exportIntent.includeInPdf === "boolean"
+    ? exportIntent.includeInPdf
+    : boolean(exportIntent.include, true);
   const normalized = {
     id,
     tune: normalizeTuneSnapshot(item.tune),
     performance: {
       transposeSemitones: finiteNumber(performance.transposeSemitones, 0),
-      tempoScale: finiteNumber(performance.tempoScale, 1),
+      tempoScale: tempoScale > 0 ? tempoScale : 1,
     },
     notes: text(item.notes),
     links: normalizeLinks(item.links),
     export: {
-      includeInPdf: boolean(exportIntent.includeInPdf, true),
+      includeInPdf,
       pageBreakBefore: boolean(exportIntent.pageBreakBefore, false),
     },
   };
   if (typeof item.embeddedAbc === "string" && item.embeddedAbc.trim()) {
     normalized.embeddedAbc = item.embeddedAbc;
   }
-  if (typeof item.embeddedHeaderAbc === "string" && item.embeddedHeaderAbc.trim()) {
+  const hasEmbeddedAbc = Boolean(typeof item.embeddedAbc === "string" && item.embeddedAbc.trim());
+  if (typeof item.embeddedHeaderAbc === "string" && item.embeddedHeaderAbc.trim() && hasEmbeddedAbc) {
     normalized.embeddedHeaderAbc = item.embeddedHeaderAbc;
   }
   const snapshot = normalizeSnapshotObservation(item.snapshot);
-  if (snapshot) normalized.snapshot = snapshot;
+  if (snapshot && hasEmbeddedAbc) normalized.snapshot = snapshot;
   return normalized;
 }
 
@@ -166,7 +196,7 @@ function normalizeSetListDocument(value, options = {}) {
   return {
     schema: SET_LIST_SCHEMA,
     id,
-    title: text(value.title) || "Untitled Set List",
+    title: text(value.title) || text(value.name) || "Untitled Set List",
     createdAt,
     updatedAt: text(value.updatedAt) || createdAt,
     print: {
@@ -207,7 +237,7 @@ function convertLegacySetListState(legacy, options = {}) {
         title: text(item && item.title),
         composer: text(item && item.composer),
         source: {
-          tuneIdHint: text(item && item.sourceTuneId),
+          locatorHint: text(item && item.sourceTuneId),
           pathHint: text(item && item.sourcePath),
           xNumberHint: text(item && item.xNumber),
         },

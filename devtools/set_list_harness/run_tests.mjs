@@ -35,6 +35,16 @@ const {
   createSetListFeature,
 } = await importBundledModule("src/renderer/tools/set_list/set_list_feature.js");
 
+const {
+  buildSetListExportAbc,
+  getPrintableSetListItems,
+  shouldInjectNewPageBeforeTune,
+} = await importBundledModule("src/renderer/print/set_list_markup.js");
+
+const {
+  createSetListRendererAdapter,
+} = await importBundledModule("src/renderer/tools/set_list/set_list_renderer_adapter.js");
+
 function readFixture(name) {
   return JSON.parse(fs.readFileSync(`devtools/set_list_harness/fixtures/${name}`, "utf8"));
 }
@@ -106,6 +116,88 @@ test("portable document serialization drops unknown fields", () => {
   assert.equal(parsed.internalWindowState, undefined);
   assert.equal(parsed.items[0].runtimeResolution, undefined);
   assert.equal(serialized.endsWith("\n"), true);
+});
+
+test("migrates pre-freeze locator aliases and writes only canonical fields", () => {
+  const source = readFixture("lightweight.abcarus-setlist.json");
+  source.name = "Legacy Gig";
+  delete source.title;
+  source.items[0].tune.tuneIdHint = "/legacy/session.abc::7";
+  source.items[0].tune.sourcePath = "/legacy/session.abc";
+  source.items[0].tune.xNumber = "7";
+  source.items[0].tune.group = "Session";
+  delete source.items[0].tune.source;
+  delete source.items[0].tune.groups;
+  source.items[0].links = [{ type: "youtube", url: "https://example.com", label: "Legacy" }];
+  source.items[0].export = { include: false, pageBreakBefore: true };
+  source.items[0].performance.tempoScale = 0;
+  const parsed = JSON.parse(serializeSetListDocument(source));
+  assert.equal(parsed.title, "Legacy Gig");
+  assert.deepEqual(parsed.items[0].tune.source, {
+    locatorHint: "/legacy/session.abc::7",
+    pathHint: "/legacy/session.abc",
+    xNumberHint: "7",
+  });
+  assert.deepEqual(parsed.items[0].tune.groups, ["Session"]);
+  assert.deepEqual(parsed.items[0].links, [{ kind: "youtube", url: "https://example.com", label: "Legacy" }]);
+  assert.deepEqual(parsed.items[0].export, { includeInPdf: false, pageBreakBefore: true });
+  assert.equal(parsed.items[0].performance.tempoScale, 1);
+});
+
+test("defines item export inclusion and page-break precedence", () => {
+  const items = [
+    { text: "X:1\nK:C\nC|\n", export: { includeInPdf: true, pageBreakBefore: false } },
+    { text: "X:2\nK:C\nD|\n", export: { includeInPdf: false, pageBreakBefore: true } },
+  ];
+  assert.deepEqual(getPrintableSetListItems(items), [items[0]]);
+  assert.equal(shouldInjectNewPageBeforeTune(items[1].text, {
+    mode: "none",
+    idx: 1,
+    pageBreakBefore: true,
+  }), true);
+  assert.equal(shouldInjectNewPageBeforeTune(items[1].text, {
+    mode: "perTune",
+    idx: 1,
+    pageBreakBefore: false,
+  }), true);
+  assert.equal(shouldInjectNewPageBeforeTune(items[0].text, {
+    mode: "none",
+    idx: 0,
+    pageBreakBefore: true,
+  }), false);
+  const abc = buildSetListExportAbc({
+    items,
+    pageBreaks: "none",
+    ensureXNumberInAbc: (text) => text,
+  });
+  assert.match(abc, /C\|\n%%newpage\nX:2/);
+  const leadingEmpty = buildSetListExportAbc({
+    items: [
+      { text: "", export: { pageBreakBefore: false } },
+      { text: "X:9\nK:C\nE|\n", export: { pageBreakBefore: true } },
+    ],
+    pageBreaks: "perTune",
+    ensureXNumberInAbc: (text, number) => text.replace(/^X:\d+/m, `X:${number}`),
+  });
+  assert.match(leadingEmpty, /^X:1/m);
+  assert.doesNotMatch(leadingEmpty, /^%%newpage/m);
+});
+
+await test("captures only the source file preamble as embedded header context", async () => {
+  const content = "%%titleformat T\nX:1\nT:First\nK:C\nC|\n%%between-tunes\nX:2\nT:Second\nK:D\nD|\n";
+  const secondStart = content.indexOf("X:2");
+  const adapter = createSetListRendererAdapter({
+    findTuneById: () => ({
+      file: { path: "/music/set.abc", headerText: "%%titleformat T\n", updatedAtMs: 1787227200000 },
+      tune: { startOffset: secondStart, endOffset: content.length, xNumber: "2", title: "Second" },
+    }),
+    readFile: async () => ({ ok: true, data: content }),
+  });
+  const captured = await adapter.buildItemForTuneId("/music/set.abc::2");
+  assert.equal(captured.headerText, "%%titleformat T\n");
+  assert.match(captured.text, /^X:2/m);
+  assert.doesNotMatch(captured.headerText, /between-tunes/);
+  assert.equal(captured.sourceFileModifiedAt, "2026-08-20T12:00:00.000Z");
 });
 
 test("converts the current snapshot workspace without losing ABC", () => {

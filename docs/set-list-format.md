@@ -13,8 +13,12 @@ desktop workflow and source-versus-snapshot authority.
 One Set List is one UTF-8 JSON file named `*.abcarus-setlist.json`.
 
 Readers of `abcarus.setlist.v1` are tolerant of omitted optional fields and
-unknown fields. Writers emit only fields defined by the v1 schema. A reader
-must reject an unknown schema identifier instead of rewriting it.
+unknown fields. Writers emit only fields defined by the v1 schema. Consequently,
+opening and saving a v1 document in an older writer may discard fields that the
+writer does not understand. This is an intentional tolerant-read/strict-write
+tradeoff: semantic format additions require a new schema revision rather than
+silently extending frozen v1. A reader must reject an unknown schema identifier
+instead of rewriting it.
 
 Fields added during the v1 draft period, including `snapshot`, remain optional
 when reading existing files. Newly captured embedded revisions should write
@@ -57,7 +61,7 @@ An item contains a metadata snapshot and source hints:
     "origin": "",
     "groups": [],
     "source": {
-      "tuneIdHint": "/music/file.abc::12",
+      "locatorHint": "/music/file.abc::12",
       "pathHint": "/music/file.abc",
       "xNumberHint": "12"
     },
@@ -83,7 +87,11 @@ An item contains a metadata snapshot and source hints:
 ```
 
 Source hints assist resolution but are neither durable identity nor editing
-authority. `contentHash` identifies the captured tune text.
+authority. `locatorHint` is an application-derived locator, not a tune ID.
+`pathHint` may be absolute or relative and may use platform-specific syntax. A
+reader must not assume that it exists, is portable to another device, or still
+refers to the same content. `xNumberHint` is meaningful only within a candidate
+source file. `contentHash` identifies the captured tune text.
 
 ### Embedded ABC
 
@@ -109,6 +117,12 @@ It does not contain:
 
 The field is omitted when the source file has no preamble. Consumers must not
 interpret it as authority to modify the source file header.
+
+Directives physically located after one tune's `X:` boundary and before the
+next tune's `X:` boundary are not part of `embeddedHeaderAbc`. They remain in
+the tune segment assigned by the source segmenter. This matches the desktop
+single-tune pipeline; the Set List format does not invent a second
+interpretation of inter-tune directives.
 
 ### Snapshot observation
 
@@ -175,6 +189,36 @@ This preserves the saved program even when a Library source changes later.
 Before export, a client may report modified sources and offer an explicit
 snapshot update.
 
+`print.pageBreaks` controls automatic breaks. `item.export.pageBreakBefore`
+adds an explicit break before that occurrence (except the first printable
+item), even when automatic mode is `none`. A false value does not suppress an
+automatic `perTune` or `auto` break; v1 intentionally has no tri-state override.
+
+`item.export.includeInPdf` controls PDF and direct print output only. It does
+not remove the occurrence from combined ABC export. Page-break intent applies
+to combined ABC, PDF, and direct print output.
+
+`tune.groups` is an array of strings. It is semantically a set of descriptive
+groups: array order has no resolution or export meaning. Writers preserve the
+provided order for readable, stable round trips and should avoid duplicates.
+
+## Draft migration aliases
+
+Older local/mobile and pre-freeze desktop representations are migration input,
+not canonical aliases. Import maps them in one direction:
+
+```text
+SetList.name / top-level name     → title
+tuneIdHint                        → tune.source.locatorHint
+tune.sourcePath                   → tune.source.pathHint
+tune.xNumber                      → tune.source.xNumberHint
+tune.group                        → tune.groups[]
+links[].type                      → links[].kind
+export.include                    → export.includeInPdf
+```
+
+Canonical v1 writers emit only the right-hand form.
+
 ## Cross-platform fixtures
 
 Desktop and mobile implementations must share fixtures for:
@@ -187,4 +231,3 @@ Desktop and mobile implementations must share fixtures for:
 - modified, strong, ambiguous, and missing resolution;
 - unknown future schema rejection;
 - deterministic read-normalize-write output.
-

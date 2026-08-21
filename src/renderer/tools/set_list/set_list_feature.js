@@ -15,6 +15,7 @@ import {
 import { createSetListController } from "./set_list_controller.js";
 import {
   buildSetListExportAbc,
+  getPrintableSetListItems,
   getSetListFileHeaderText,
   shouldInjectNewPageBeforeTune,
 } from "../../print/set_list_markup.js";
@@ -101,13 +102,14 @@ function createSetListFeature({
   function getExportItems() {
     return getItems().map((item) => ({
       id: item.id,
-      sourceTuneId: item.tune.source.tuneIdHint || `${item.tune.source.pathHint}::${item.tune.source.xNumberHint}`,
+      sourceTuneId: item.tune.source.locatorHint || `${item.tune.source.pathHint}::${item.tune.source.xNumberHint}`,
       sourcePath: item.tune.source.pathHint,
       xNumber: item.tune.source.xNumberHint,
       title: item.tune.title,
       composer: item.tune.composer,
       headerText: item.embeddedHeaderAbc || "",
       text: item.embeddedAbc || "",
+      export: { ...item.export },
     }));
   }
 
@@ -236,7 +238,7 @@ function createSetListFeature({
         origin: source.origin || "",
         groups: Array.isArray(source.groups) ? source.groups.slice() : [],
         source: {
-          tuneIdHint: String(tuneId || ""),
+          locatorHint: String(tuneId || ""),
           pathHint: source.sourcePath || "",
           xNumberHint: source.xNumber || "",
         },
@@ -281,7 +283,7 @@ function createSetListFeature({
     const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
     const includeIssueCards = options.includeIssueCards !== false;
     const includeIssueSummary = options.includeIssueSummary !== false;
-    const items = getExportItems();
+    const items = getPrintableSetListItems(getExportItems());
     if (!hasItems(items)) return { ok: false, error: "No tunes in Set List." };
 
     const entry = { basename: "Set List" };
@@ -296,6 +298,7 @@ function createSetListFeature({
     };
 
     const total = items.length;
+    let printableIndex = 0;
     for (let i = 0; i < total; i += 1) {
       const item = items[i] || {};
       const raw = String(item.text || "");
@@ -304,18 +307,20 @@ function createSetListFeature({
 
       const tune = {
         id: item.sourceTuneId || item.id || "",
-        xNumber: String(i + 1),
+        xNumber: String(printableIndex + 1),
         title: item.title || "",
-        preview: item.title || `X:${i + 1}`,
+        preview: item.title || `X:${printableIndex + 1}`,
       };
 
       const pageBreaks = getDocument().print.pageBreaks;
-      const breakBefore = pageBreaks === "perTune"
-        ? i > 0
-        : shouldInjectNewPageBeforeTune(raw, { mode: pageBreaks, idx: i });
+      const breakBefore = shouldInjectNewPageBeforeTune(raw, {
+        mode: pageBreaks,
+        idx: printableIndex,
+        pageBreakBefore: item.export.pageBreakBefore,
+      });
       if (breakBefore) flush();
 
-      const renumbered = ensureXNumberInAbc(raw, i + 1);
+      const renumbered = ensureXNumberInAbc(raw, printableIndex + 1);
       const combinedHeader = `${getFileHeaderText()}${item.headerText || ""}`;
       const renderRes = await renderItemToSvg({
         abcText: renumbered,
@@ -340,6 +345,7 @@ function createSetListFeature({
       if (sourceMarkup) current.push(sourceMarkup);
 
       if (pageBreaks === "perTune") flush();
+      printableIndex += 1;
     }
     flush();
 
