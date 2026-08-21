@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [1.7.1] - 2026-08-21
 ### Added
 - Set List panel shortcuts: `F6` toggles the panel and `Ctrl/Cmd+Alt+P` prints the active Set List.
 - Set List Layout now exposes global print page margins alongside page-break controls.
