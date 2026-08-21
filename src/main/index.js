@@ -3381,6 +3381,15 @@ async function runUiSmoke(win) {
         && openFolderAsLibraryButton.closest(".toolbar-dropdown-menu")
       );
       const librarySplitControl = byId("btnToggleLibrary").closest(".library-split-control");
+      const normalRightPane = document.querySelector("main > .pane.right");
+      const normalRightPaneWidthPx = normalRightPane
+        ? Math.round(normalRightPane.getBoundingClientRect().width)
+        : 0;
+      const normalRightPaneVisible = Boolean(
+        normalRightPane
+        && normalRightPaneWidthPx >= 300
+        && normalRightPane.getClientRects().length > 0
+      );
       const hook = window.__abcarusDevUiSmoke;
       if (hook && typeof hook.setText === "function") {
         hook.setText([
@@ -3691,6 +3700,7 @@ async function runUiSmoke(win) {
           && modalBackdropSafe
           && compactModalOk
           && toolbarDomainsOk
+          && normalRightPaneVisible
           && setListDocumentUiOk,
         visualGapPx,
         togglesGapPx,
@@ -3722,6 +3732,8 @@ async function runUiSmoke(win) {
         modalBackdropSafe,
         compactModalOk,
         toolbarDomainsOk,
+        normalRightPaneVisible,
+        normalRightPaneWidthPx,
         setListDocumentUiOk,
       };
     })()`,

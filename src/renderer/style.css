@@ -431,6 +431,12 @@ main {
   grid-template-columns: 280px 6px 0 0 1fr;
 }
 
+main > .sidebar { grid-column: 1; }
+main > .divider { grid-column: 2; }
+main > .set-list-panel { grid-column: 3; }
+main > .set-list-divider { grid-column: 4; }
+main > .pane.right { grid-column: 5; }
+
 .controls button,
 .sidebar-action,
 .file-header-actions button,
