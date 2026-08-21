@@ -3277,7 +3277,7 @@ body.set-list-visible .set-list-divider {
   background: #9a9a9a;
 }
 
-.set-list-row[data-resolution="FOUND_EXACT"] .set-list-status { visibility: hidden; }
+.set-list-row[data-resolution="FOUND_EXACT"] .set-list-status { background: #1a7f37; }
 .set-list-row[data-resolution="FOUND_MODIFIED"] .set-list-status { background: #bf8700; }
 .set-list-row[data-resolution="FOUND_STRONG"] .set-list-status { background: #1b5fbf; }
 .set-list-row[data-resolution="AMBIGUOUS"] .set-list-status,

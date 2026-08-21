@@ -1,5 +1,12 @@
 const SET_LIST_ITEM_DRAG_MIME = "application/x-abcarus-set-list-item";
 const LIBRARY_TUNE_DRAG_MIME = "application/x-abcarus-tune-id";
+const SET_LIST_RESOLUTION_LABELS = Object.freeze({
+  FOUND_EXACT: "Source matches the stored snapshot",
+  FOUND_MODIFIED: "Source has changed since the snapshot",
+  FOUND_STRONG: "Possible source found; explicit relink required",
+  AMBIGUOUS: "Several possible sources found",
+  MISSING: "Source not found",
+});
 
 function getDropInsertionIndex(row, clientY, itemCount) {
   const count = Math.max(0, Number(itemCount) || 0);
@@ -146,7 +153,7 @@ function createSetListController({
 
         const status = document.createElement("span");
         status.className = "set-list-status";
-        status.title = resolution ? resolution.replaceAll("_", " ") : "Source not checked";
+        status.title = SET_LIST_RESOLUTION_LABELS[resolution] || "Source not checked";
 
         const idx = document.createElement("div");
         idx.className = "set-list-idx";
