@@ -1,0 +1,26 @@
+{
+  "schema": "abcarus.setlist.v1",
+  "id": "set-contained",
+  "title": "Saved Performance",
+  "createdAt": "2026-08-20T12:00:00.000Z",
+  "updatedAt": "2026-08-20T12:00:00.000Z",
+  "print": { "headerText": "", "pageBreaks": "none", "compact": true },
+  "items": [{
+    "id": "item-saved",
+    "tune": {
+      "title": "Song A",
+      "composer": "Composer",
+      "key": "D",
+      "rhythm": "",
+      "origin": "",
+      "groups": [],
+      "source": { "pathHint": "/old/festival.abc", "xNumberHint": "12" },
+      "contentHash": "sha256:song-a-v1"
+    },
+    "embeddedAbc": "X:12\nT:Song A\nC:Composer\nK:D\nD E F G|\n",
+    "performance": { "transposeSemitones": 2, "tempoScale": 0.92 },
+    "notes": "Use saved arrangement.",
+    "links": [{ "kind": "youtube", "url": "https://youtu.be/example", "label": "Reference" }],
+    "export": { "includeInPdf": true, "pageBreakBefore": true }
+  }]
+}

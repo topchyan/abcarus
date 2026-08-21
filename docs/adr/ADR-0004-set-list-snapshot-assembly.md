@@ -1,10 +1,13 @@
 ---
 title: "ADR-0004: Set List as Snapshot-Based Assembly with Deterministic Export"
 date: 2026-01-13
-status: "Accepted"
+status: "Superseded by ADR-0020"
 ---
 
 # ADR-0004: Set List as Snapshot-Based Assembly with Deterministic Export
+
+> Superseded by ADR-0020. The existing snapshot assembly workflow remains a
+> supported compatibility case inside the persistent Set List document model.
 
 ## Context
 
