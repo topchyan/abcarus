@@ -38,6 +38,7 @@ const {
 const {
   getDropInsertionIndex,
   getMoveTargetIndex,
+  getSetListDragKind,
 } = await importBundledModule("src/renderer/tools/set_list/set_list_controller.js");
 
 const {
@@ -88,6 +89,14 @@ test("maps Set List drops to stable before and after positions", () => {
   assert.equal(getMoveTargetIndex(0, 3, 5), 2);
   assert.equal(getMoveTargetIndex(4, 1, 5), 1);
   assert.equal(getMoveTargetIndex(2, 3, 5), 2);
+});
+
+test("Library tune drops override stale internal Set List drag state", () => {
+  const eventWithTypes = (...types) => ({ dataTransfer: { types } });
+  assert.equal(getSetListDragKind(eventWithTypes("application/x-abcarus-tune-id"), 3), "library-tune");
+  assert.equal(getSetListDragKind(eventWithTypes("application/x-abcarus-set-list-item"), null), "set-list-item");
+  assert.equal(getSetListDragKind(eventWithTypes("text/plain"), 3), "set-list-item");
+  assert.equal(getSetListDragKind(eventWithTypes("text/plain"), null), "");
 });
 
 test("accepts lightweight and self-contained portable documents", () => {
