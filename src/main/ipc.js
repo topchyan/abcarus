@@ -10,6 +10,7 @@ const { parseSettingsPatchFromProperties } = require("./properties");
 const { parseProfileDocument, serializeProfileDocument } = require("./state_store");
 const { decodeAbcTextFromBuffer, encodeAbcTextToBuffer } = require("./abcCharset");
 const { normalizeAllowedExternalUrl } = require("./url_security");
+const { applyPrintPageMargins } = require("./print_layout");
 
 const os = require("os");
 const { execFile } = require("child_process");
@@ -1629,8 +1630,9 @@ function registerIpcHandlers(ctx) {
 
   ipcMain.handle("print:preview", async (_event, svgMarkup, suggestedName) => {
     if (!svgMarkup) return { ok: false, error: "No notation to print." };
+    const printMarkup = applyPrintPageMargins(svgMarkup, getSettings()?.printPageMargins);
     const safeName = sanitizeSuggestedFileBaseName(suggestedName, "abc-preview");
-    if (typeof previewPdf === "function") return previewPdf(svgMarkup, safeName);
+    if (typeof previewPdf === "function") return previewPdf(printMarkup, safeName);
     const tmpName = `${safeName}-${Date.now()}.pdf`;
     const tmpPath = path.join(app.getPath("temp"), tmpName);
     const res = await withMainPrintMode(async (contents) => {
@@ -1643,11 +1645,12 @@ function registerIpcHandlers(ctx) {
   });
   ipcMain.handle("print:dialog", async (_event, svgMarkup, suggestedName) => {
     if (!svgMarkup) return { ok: false, error: "No notation to print." };
+    const printMarkup = applyPrintPageMargins(svgMarkup, getSettings()?.printPageMargins);
     const safeName = sanitizeSuggestedFileBaseName(suggestedName, "abc-print");
     if (os.platform() === "linux") {
-      return printViaPdf(svgMarkup, safeName);
+      return printViaPdf(printMarkup, safeName);
     }
-    if (typeof printWithDialog === "function") return printWithDialog(svgMarkup, safeName);
+    if (typeof printWithDialog === "function") return printWithDialog(printMarkup, safeName);
     return withMainPrintMode((contents) =>
       new Promise((resolve) => {
         contents.print({ printBackground: true, silent: false, margins: { marginType: "custom", top: 0, bottom: 0, left: 0, right: 0 } }, (success, failureReason) => {
@@ -1659,6 +1662,7 @@ function registerIpcHandlers(ctx) {
   });
   ipcMain.handle("print:pdf", async (event, svgMarkup, suggestedName) => {
     if (!svgMarkup) return { ok: false, error: "No notation to export." };
+    const printMarkup = applyPrintPageMargins(svgMarkup, getSettings()?.printPageMargins);
     const safeName = sanitizeSuggestedFileBaseName(suggestedName, "tune");
     const parent = getParentForDialog(event, "print:pdf");
     const filePath = dialog.showSaveDialogSync(parent || undefined, {
@@ -1668,7 +1672,7 @@ function registerIpcHandlers(ctx) {
     });
     if (!filePath) return { ok: false, error: "Canceled" };
     rememberDialogPath(filePath, { dialogId: "printPdf" });
-    if (typeof exportPdf === "function") return exportPdf(svgMarkup, filePath);
+    if (typeof exportPdf === "function") return exportPdf(printMarkup, filePath);
     return withMainPrintMode(async (contents) => {
       try {
         const pdfData = await contents.printToPDF({ printBackground: true, margins: { marginType: "custom", top: 0, bottom: 0, left: 0, right: 0 } });

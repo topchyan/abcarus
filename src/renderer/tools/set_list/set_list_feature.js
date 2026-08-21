@@ -13,8 +13,10 @@ import {
 import { createSetListController } from "./set_list_controller.js";
 import {
   buildSetListExportAbc,
+  composeSetListRenderHeader,
   getPrintableSetListItems,
   getSetListFileHeaderText,
+  namespaceSetListSvgIds,
   shouldInjectNewPageBeforeTune,
 } from "../../print/set_list_markup.js";
 import {
@@ -44,6 +46,8 @@ function createSetListFeature({
   activateItemSource = async () => ({ status: "MISSING", candidate: null }),
   resolveItemSource = async () => ({ status: "MISSING", candidate: null }),
   onPanelVisibilityChange = () => {},
+  getPrintPageMargins = () => "standard",
+  setPrintPageMargins = async () => {},
   renderItemToSvg = async () => ({ ok: false, error: "Render unavailable." }),
   buildSourceLinkMarkup = async () => "",
   outputPrint = async () => ({ ok: false, error: "Print unavailable." }),
@@ -93,6 +97,8 @@ function createSetListFeature({
       compact: state.document.print.compact,
       title: state.document.title,
       dirty: state.dirty,
+      dirtyReasons: state.dirtyReasons,
+      pageMargins: getPrintPageMargins(),
       filePath: state.filePath,
       notice: legacyImported
         ? "Imported from the previous ABCarus Set List. Use Save As to keep it as a portable document."
@@ -103,6 +109,9 @@ function createSetListFeature({
     };
   };
   const getHeaderText = () => getDocument().print.headerText;
+  const getSuggestedBaseName = () => (
+    sanitizeFileBaseName(getDocument().title || "Untitled Set List") || "Untitled Set List"
+  );
 
   function getExportItems() {
     return getItems().map((item) => ({
@@ -120,17 +129,11 @@ function createSetListFeature({
 
   const getFileHeaderText = () => getSetListFileHeaderText(getHeaderText());
 
-  const shouldUseZeroPageMargins = () => {
-    const header = String(getHeaderText() || "");
-    const hasLeft0 = /^\s*%%\s*leftmargin\s+0(\s|$)/im.test(header);
-    const hasRight0 = /^\s*%%\s*rightmargin\s+0(\s|$)/im.test(header);
-    return hasLeft0 && hasRight0;
-  };
-
   controller = createSetListController({
     modal: elements.modal,
     closeButton: elements.closeButton,
     titleInput: elements.titleInput,
+    dirtySummary: elements.dirtySummary,
     newButton: elements.newButton,
     openButton: elements.openButton,
     saveButton: elements.saveButton,
@@ -144,6 +147,7 @@ function createSetListFeature({
     exportPdfButton: elements.exportPdfButton,
     printButton: elements.printButton,
     pageBreaksSelect: elements.pageBreaksSelect,
+    pageMarginsSelect: elements.pageMarginsSelect,
     compactCheckbox: elements.compactCheckbox,
     headerModal: elements.headerModal,
     headerCloseButton: elements.headerCloseButton,
@@ -166,11 +170,11 @@ function createSetListFeature({
     onMoveItem: (fromIndex, toIndex) => {
       session.mutate((document) => {
         document.items = moveSetListDocumentItems(document.items, fromIndex, toIndex);
-      });
+      }, { reason: "item order" });
     },
     onRemoveItem: (index) => {
       const item = getItems()[Number(index)];
-      session.mutate((document) => { document.items = removeSetListDocumentItem(document.items, index); });
+      session.mutate((document) => { document.items = removeSetListDocumentItem(document.items, index); }, { reason: "items" });
       if (item) itemResolutions.delete(item.id);
       if (item && activeItemId === item.id) activeItemId = "";
     },
@@ -181,7 +185,7 @@ function createSetListFeature({
       duplicate.id = makeId();
       session.mutate((document) => {
         document.items = insertSetListDocumentItem(document.items, duplicate, Number(index) + 1);
-      });
+      }, { reason: "items" });
       itemResolutions.set(duplicate.id, itemResolutions.get(item.id) || "");
       activeItemId = duplicate.id;
       return true;
@@ -219,7 +223,7 @@ function createSetListFeature({
       replacement.notes = item.notes;
       replacement.links = structuredClone(item.links);
       replacement.export = structuredClone(item.export);
-      session.mutate((document) => { document.items[Number(index)] = replacement; });
+      session.mutate((document) => { document.items[Number(index)] = replacement; }, { reason: "snapshot" });
       itemResolutions.set(item.id, "FOUND_EXACT");
       showToast("Set List snapshot updated from the Library source.", 3000);
       return true;
@@ -254,18 +258,21 @@ function createSetListFeature({
     },
     onVisibilityChange: onPanelVisibilityChange,
     onClear: () => {
-      session.mutate((document) => { document.items = []; });
+      session.mutate((document) => { document.items = []; }, { reason: "items" });
     },
     onPageBreaksChange: (value) => {
-      session.mutate((document) => { document.print.pageBreaks = value; });
+      session.mutate((document) => { document.print.pageBreaks = value; }, { reason: "layout" });
+    },
+    onPageMarginsChange: (value) => {
+      Promise.resolve(setPrintPageMargins(value)).catch(logError);
     },
     onCompactChange: (value) => {
-      session.mutate((document) => { document.print.compact = Boolean(value); });
+      session.mutate((document) => { document.print.compact = Boolean(value); }, { reason: "layout" });
     },
     onHeaderTextChange: (value) => {
-      session.mutate((document) => { document.print.headerText = String(value || ""); });
+      session.mutate((document) => { document.print.headerText = String(value || ""); }, { reason: "header" });
     },
-    onTitleChange: (value) => session.mutate((document) => { document.title = String(value || "Untitled Set List"); }),
+    onTitleChange: (value) => session.mutate((document) => { document.title = String(value || "Untitled Set List"); }, { reason: "title" }),
     onNew: () => { newSetList().catch(logError); },
     onOpen: () => { openSetList().catch(logError); },
     onSave: () => { saveSetList(false).catch(logError); },
@@ -308,13 +315,14 @@ function createSetListFeature({
     refreshItemResolutions().catch(() => {});
   };
   const close = () => controller.close();
+  const toggle = () => controller.toggle();
   const openHeaderEditor = () => controller.openHeaderEditor();
   const closeHeaderEditor = () => controller.closeHeaderEditor();
 
   const insertItem = (item, index) => {
     session.mutate((document) => {
       document.items = insertSetListDocumentItem(document.items, item, index);
-    });
+    }, { reason: "items" });
     return true;
   };
 
@@ -375,8 +383,7 @@ function createSetListFeature({
 
   async function exportAbc() {
     if (!hasItems(getItems())) return false;
-    const base = getExportBaseName();
-    const suggestedName = `${base ? `${base}-` : ""}set-list.abc`;
+    const suggestedName = `${getSuggestedBaseName()}.abc`;
     const content = buildExportAbc();
     if (!content.trim()) {
       showToast("Nothing to export.", 2400);
@@ -429,7 +436,7 @@ function createSetListFeature({
       if (breakBefore) flush();
 
       const renumbered = ensureXNumberInAbc(raw, printableIndex + 1);
-      const combinedHeader = `${getFileHeaderText()}${item.headerText || ""}`;
+      const combinedHeader = composeSetListRenderHeader(item.headerText || "", getFileHeaderText());
       const renderRes = await renderItemToSvg({
         abcText: renumbered,
         headerText: combinedHeader,
@@ -448,7 +455,9 @@ function createSetListFeature({
         if (includeIssueCards) current.push(buildPrintErrorCard(entry, tune, tuneErrors).trim());
       }
 
-      if (renderRes && renderRes.svg && renderRes.svg.trim()) current.push(renderRes.svg.trim());
+      if (renderRes && renderRes.svg && renderRes.svg.trim()) {
+        current.push(namespaceSetListSvgIds(renderRes.svg.trim(), `abcarus-set-list-${printableIndex + 1}`));
+      }
       const sourceMarkup = await buildSourceLinkMarkup(renderRes && renderRes.blockText ? renderRes.blockText : renumbered);
       if (sourceMarkup) current.push(sourceMarkup);
 
@@ -495,13 +504,7 @@ function createSetListFeature({
     }
 
     let svgMarkup = applyPrintDebugMarkup(renderRes.svg);
-    if (shouldUseZeroPageMargins()) {
-      svgMarkup = `<!--abcarus:pdf-no-margins-->\n<style>body{padding:0 !important}</style>\n${svgMarkup}`;
-    }
-    if (getDocument().print.compact) {
-      svgMarkup = `<style>body{padding:12px !important}</style>\n${svgMarkup}`;
-    }
-    const suggestedName = sanitizeFileBaseName(`${getPrintBaseName() || "set-list"} - set-list`);
+    const suggestedName = getSuggestedBaseName();
     const res = await outputPrint({ type, svgMarkup, suggestedName });
     if (res && res.ok) {
       setStatus("OK");
@@ -560,6 +563,22 @@ function createSetListFeature({
     itemResolutions.clear();
     render();
     return true;
+  }
+
+  async function restoreLastSetList() {
+    if (legacyImported) return false;
+    const paths = getDocumentState().recentPaths.slice();
+    for (const path of paths) {
+      const result = await session.open(path);
+      if (result.ok) {
+        activeItemId = "";
+        itemResolutions.clear();
+        render();
+        return true;
+      }
+      session.forgetRecentPath(path);
+    }
+    return false;
   }
 
   async function saveSetList(forceSaveAs = false) {
@@ -645,8 +664,10 @@ function createSetListFeature({
     prepareToLeave,
     render,
     renderSvgMarkupForPrint,
+    restoreLastSetList,
     runPrintAction,
     saveSetList,
+    toggle,
   };
 }
 

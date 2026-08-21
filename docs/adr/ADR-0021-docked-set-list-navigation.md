@@ -56,6 +56,21 @@ Header
 Export ABC / Export PDF / Print
 ```
 
+The application menu exposes explicit shortcuts for showing/hiding the panel
+and printing the active Set List. Panel visibility changes run the same view
+reconciliation as `Reset View`, so Editor and Score do not retain stale sizes.
+
+The dirty indicator identifies the changed document areas (for example,
+items, item order, layout, header, snapshot, or title). Global print margins
+may be adjusted from the Set List Layout menu as a convenience, but remain an
+application print preference and do not dirty the Set List document.
+
+The Set List title is document metadata. It identifies the active document and
+supplies default names for Set List, ABC, and PDF files. It is not currently a
+printed title page or a Library index. Changing it therefore dirties the Set
+List JSON; renaming only the filesystem entry would be a separate future
+command.
+
 Changing to another Set List follows `Save / Don't Save / Cancel`. Hiding the
 panel does not invoke that guard. Quitting with a dirty Set List does.
 

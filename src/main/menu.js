@@ -357,7 +357,21 @@ function buildMenuTemplate(appState, sendMenuAction) {
       },
       { type: "separator" },
       { label: "Library Metadata…", click: () => sendMenuAction("libraryMetadata") },
-      { label: "Set List…", click: () => sendMenuAction("setList") },
+      {
+        label: "Set List",
+        submenu: [
+          {
+            label: "Show/Hide Panel",
+            accelerator: "F6",
+            click: () => sendMenuAction("toggleSetList"),
+          },
+          {
+            label: "Print Active Set List…",
+            accelerator: "CmdOrCtrl+Alt+P",
+            click: () => sendMenuAction("printSetList"),
+          },
+        ],
+      },
       {
         label: "Source Links",
         submenu: [

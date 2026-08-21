@@ -14,12 +14,21 @@ function main() {
   const schemaPath = path.resolve(__dirname, "../../src/main/settings_schema.js");
   const normalizePath = path.resolve(__dirname, "../../src/main/settings_normalize.js");
   const propertiesPath = path.resolve(__dirname, "../../src/main/properties.js");
+  const printLayoutPath = path.resolve(__dirname, "../../src/main/print_layout.js");
   // eslint-disable-next-line global-require, import/no-dynamic-require
   const { getSettingsSchema, getDefaultSettings } = require(schemaPath);
   // eslint-disable-next-line global-require, import/no-dynamic-require
   const { normalizeMicrotonalSettings } = require(normalizePath);
   // eslint-disable-next-line global-require, import/no-dynamic-require
   const { encodePropertiesFromSchema, parseSettingsPatchFromProperties } = require(propertiesPath);
+  // eslint-disable-next-line global-require, import/no-dynamic-require
+  const {
+    applyPrintPageMargins,
+    normalizePrintPageMargins,
+    printPageBodyPadding,
+    printPageMarginsUseChromiumDefaults,
+    readPrintPageMargins,
+  } = require(printLayoutPath);
 
   const schema = getSettingsSchema();
   assert(Array.isArray(schema) && schema.length > 0, "schema must be a non-empty array");
@@ -46,6 +55,7 @@ function main() {
     playbackSelectionMutedVoices: "",
     stripImportedMeasureComments: true,
     autoFormatImportedAbc: true,
+    printPageMargins: "standard",
   };
   for (const [key, expected] of Object.entries(requiredDefaults)) {
     assert(seen.has(key), `missing schema key: ${key}`);
@@ -64,6 +74,22 @@ function main() {
     const entry = schema.find((item) => item && item.key === key);
     assert(entry && entry.ui && entry.ui.input === "select", `${key} must use a user-facing selector`);
     assert(entry.ui.options === "interfaceFonts", `${key} must use the shared interface font catalog`);
+  }
+
+  {
+    const source = "<svg></svg>";
+    const standard = applyPrintPageMargins(source, "standard");
+    const narrow = applyPrintPageMargins(source, "narrow");
+    const none = applyPrintPageMargins(source, "none");
+    assert(readPrintPageMargins(standard) === "standard", "standard print margins must round-trip");
+    assert(readPrintPageMargins(narrow) === "narrow", "narrow print margins must round-trip");
+    assert(readPrintPageMargins(none) === "none", "no print margins must round-trip");
+    assert(printPageMarginsUseChromiumDefaults(standard), "standard margins must retain Chromium defaults");
+    assert(!printPageMarginsUseChromiumDefaults(narrow), "narrow margins must remove Chromium defaults");
+    assert(!printPageMarginsUseChromiumDefaults(none), "no margins must remove Chromium defaults");
+    assert(printPageBodyPadding(narrow) === "24px", "narrow margins must retain a controlled page inset");
+    assert(printPageBodyPadding(none) === "0", "no margins must remove the page inset");
+    assert(normalizePrintPageMargins("unknown") === "standard", "invalid margins must fall back safely");
   }
 
   {

@@ -20,6 +20,10 @@ const { decodeAbcTextFromBuffer, detectAbcTextEncodingFromText } = require("./ab
 const { extractTuneHeader } = require("./library_metadata");
 const { normalizeAllowedExternalUrl } = require("./url_security");
 const {
+  printPageBodyPadding,
+  printPageMarginsUseChromiumDefaults,
+} = require("./print_layout");
+const {
   composeStateDocument,
   loadProfileDocument,
   saveStateDocument,
@@ -47,6 +51,7 @@ const DEFAULT_MAIN_WINDOW_BOUNDS = {
 const STARTUP_PERF_ENABLED = process.env.ABCARUS_DEV_STARTUP_PERF === "1";
 const UI_SMOKE_ENABLED = process.env.ABCARUS_DEV_UI_SMOKE === "1";
 const DEV_NO_CACHE_ENABLED = process.env.ABCARUS_DEV_NO_CACHE !== "0";
+const PRINT_CAPTURE_ENABLED = process.env.ABCARUS_DEBUG_PRINT_CAPTURE === "1";
 const DEV_SOUNDFONT_PATH = UI_SMOKE_ENABLED
   ? String(process.env.ABCARUS_DEV_SOUNDFONT_PATH || "").trim()
   : "";
@@ -1326,16 +1331,17 @@ function buildPrintHtml(svgMarkup, fontBase64, suggestedName) {
   const safeSvg = injectFontIntoSvg(normalizedMarkup, fontBase64);
   const forceRaster = rawMarkup.includes("<!--abcarus:force-raster-->");
   const skipRaster = rawMarkup.includes("<!--abcarus:no-raster-->") || !forceRaster;
+  const skipNormalizeSvgBounds = rawMarkup.includes("<!--abcarus:no-normalize-svg-bounds-->");
   const title = sanitizePrintFileBaseName(suggestedName, "Print");
+  const pageBodyPadding = printPageBodyPadding(rawMarkup);
   return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8">
     <title>${escapeHtmlText(title)}</title>
     <style>
-      @page { margin: 0; }
       html, body { margin: 0; padding: 0; }
-      body { padding: 16px; font-family: sans-serif; }
+      body { padding: ${pageBodyPadding}; font-family: sans-serif; }
       svg { max-width: 100%; height: auto; display: block; overflow: visible; }
       img { max-width: 100%; height: auto; display: block; }
       .nobrk { page-break-inside: avoid; break-inside: avoid; }
@@ -1382,6 +1388,7 @@ function buildPrintHtml(svgMarkup, fontBase64, suggestedName) {
     <script>
       (function () {
         var skipRaster = ${skipRaster ? "true" : "false"};
+        var skipNormalizeSvgBounds = ${skipNormalizeSvgBounds ? "true" : "false"};
         function waitForFonts() {
           if (!document.fonts || !document.fonts.load) return Promise.resolve();
           return Promise.all([
@@ -1483,7 +1490,7 @@ function buildPrintHtml(svgMarkup, fontBase64, suggestedName) {
           });
         }
         window._rasterReadyPromise = waitForFonts().then(function () {
-          normalizeSvgBounds();
+          if (!skipNormalizeSvgBounds) normalizeSvgBounds();
           alignSourceSections();
           if (skipRaster) return null;
           return rasterizeAll();
@@ -1492,12 +1499,6 @@ function buildPrintHtml(svgMarkup, fontBase64, suggestedName) {
     </script>
   </body>
 </html>`;
-}
-
-function getPrintMargins() {
-  // ABCarus supplies the visible page inset through body padding. Explicit
-  // zeroes cover Chromium versions that ignore marginType alone.
-  return { marginType: "custom", top: 0, bottom: 0, left: 0, right: 0 };
 }
 
 async function withPrintWindow(svgMarkup, action, options) {
@@ -1516,13 +1517,38 @@ async function withPrintWindow(svgMarkup, action, options) {
   const fontBase64 = await getMusicFontBase64().catch(() => null);
   const suggestedName = sanitizePrintFileBaseName(options && options.suggestedName, "abc-print");
   const html = buildPrintHtml(svgMarkup, fontBase64, suggestedName);
-  const tmpName = `${suggestedName}-${Date.now()}.html`;
+  const captureStamp = Date.now();
+  const tmpName = `${suggestedName}-${captureStamp}.html`;
   const tmpPath = path.join(app.getPath("temp"), tmpName);
   await fs.promises.writeFile(tmpPath, html);
+  let captureBasePath = "";
+  if (PRINT_CAPTURE_ENABLED) {
+    try {
+      const captureDir = path.join(app.getPath("temp"), "abcarus-print-debug");
+      await fs.promises.mkdir(captureDir, { recursive: true });
+      captureBasePath = path.join(captureDir, `${suggestedName}-${captureStamp}`);
+      await Promise.all([
+        fs.promises.writeFile(`${captureBasePath}-input.html`, String(svgMarkup || "")),
+        fs.promises.writeFile(`${captureBasePath}-initial.html`, html),
+      ]);
+    } catch (error) {
+      captureBasePath = "";
+      console.warn("[print-capture] unable to save initial artifacts", error);
+    }
+  }
   await win.loadFile(tmpPath);
   try {
     await win.webContents.executeJavaScript("window._rasterReadyPromise || Promise.resolve()", true);
   } catch {}
+  if (captureBasePath) {
+    try {
+      const readyHtml = await win.webContents.executeJavaScript("document.documentElement.outerHTML", true);
+      await fs.promises.writeFile(`${captureBasePath}-ready.html`, String(readyHtml || ""));
+      console.info(`[print-capture] ${captureBasePath}-{input,initial,ready}.html`);
+    } catch (error) {
+      console.warn("[print-capture] unable to save ready DOM", error);
+    }
+  }
   if (options && options.show && !win.isDestroyed()) {
     win.show();
     win.focus();
@@ -1540,7 +1566,8 @@ async function withPrintWindow(svgMarkup, action, options) {
 async function printWithDialog(svgMarkup, suggestedName) {
   return withPrintWindow(svgMarkup, (contents) =>
     new Promise((resolve) => {
-      contents.print({ printBackground: true, silent: false, margins: getPrintMargins() }, (success, failureReason) => {
+      const marginType = printPageMarginsUseChromiumDefaults(svgMarkup) ? "default" : "none";
+      contents.print({ printBackground: true, silent: false, margins: { marginType } }, (success, failureReason) => {
         if (!success) return resolve({ ok: false, error: failureReason || "Print failed" });
         resolve({ ok: true });
       });
@@ -1550,7 +1577,8 @@ async function printWithDialog(svgMarkup, suggestedName) {
 
 async function exportPdf(svgMarkup, filePath) {
   return withPrintWindow(svgMarkup, async (contents) => {
-    const pdfData = await contents.printToPDF({ printBackground: true, margins: getPrintMargins() });
+    const marginsType = printPageMarginsUseChromiumDefaults(svgMarkup) ? 0 : 1;
+    const pdfData = await contents.printToPDF({ printBackground: true, marginsType });
     await fs.promises.writeFile(filePath, pdfData);
     return { ok: true, path: filePath };
   }, { show: false, suggestedName: filePath ? path.basename(filePath, path.extname(filePath)) : "" });
@@ -1561,7 +1589,8 @@ async function previewPdf(svgMarkup, suggestedName) {
   const tmpName = `${safeName}-${Date.now()}.pdf`;
   const tmpPath = path.join(app.getPath("temp"), tmpName);
   const res = await withPrintWindow(svgMarkup, async (contents) => {
-    const pdfData = await contents.printToPDF({ printBackground: true, margins: getPrintMargins() });
+    const marginsType = printPageMarginsUseChromiumDefaults(svgMarkup) ? 0 : 1;
+    const pdfData = await contents.printToPDF({ printBackground: true, marginsType });
     await fs.promises.writeFile(tmpPath, pdfData);
     return { ok: true, path: tmpPath };
   }, { show: false, suggestedName: safeName });
@@ -1576,7 +1605,8 @@ async function printViaPdf(svgMarkup, suggestedName) {
   const tmpName = `${safeName}-${Date.now()}.pdf`;
   const tmpPath = path.join(app.getPath("temp"), tmpName);
   const res = await withPrintWindow(svgMarkup, async (contents) => {
-    const pdfData = await contents.printToPDF({ printBackground: true, margins: getPrintMargins() });
+    const marginsType = printPageMarginsUseChromiumDefaults(svgMarkup) ? 0 : 1;
+    const pdfData = await contents.printToPDF({ printBackground: true, marginsType });
     await fs.promises.writeFile(tmpPath, pdfData);
     return { ok: true, path: tmpPath };
   }, { show: false, suggestedName: safeName });
@@ -3645,7 +3675,7 @@ async function runUiSmoke(win) {
 
         await hook.dispatchAction({ type: "setList" });
         await wait(80);
-        const setListModal = byId("setListModal");
+        const setListPanel = byId("setListPanel");
         const setListTitle = byId("setListTitle");
         const setListSave = byId("setListSave");
         const setListSaveAs = byId("setListSaveAs");
@@ -3656,10 +3686,10 @@ async function runUiSmoke(win) {
           await wait(30);
         }
         setListDocumentUiOk = Boolean(
-          setListModal
-          && setListModal.classList.contains("open")
-          && setListModal.classList.contains("set-list-panel")
-          && !setListModal.closest(".modal")
+          setListPanel
+          && setListPanel.classList.contains("open")
+          && setListPanel.classList.contains("set-list-panel")
+          && !setListPanel.closest(".modal")
           && document.body.classList.contains("set-list-visible")
           && setListTitle
           && setListTitle.value === "Smoke Set List *"

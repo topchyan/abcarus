@@ -319,9 +319,10 @@
 
 	    <div class="divider" id="paneDivider" role="separator" aria-orientation="vertical" tabindex="0"></div>
 
-	    <aside class="set-list-panel" id="setListModal" aria-hidden="true" aria-label="Set List">
+	    <aside class="set-list-panel" id="setListPanel" aria-hidden="true" aria-label="Set List">
 	      <div class="set-list-panel-header">
 	        <input class="set-list-title-input" id="setListTitle" type="text" value="Untitled Set List" aria-label="Set List name" />
+	        <span class="set-list-dirty-summary" id="setListDirtySummary" hidden></span>
 	        <button class="set-list-panel-close" id="setListClose" type="button" aria-label="Hide Set List" title="Hide Set List">&times;</button>
 	      </div>
 	      <nav class="set-list-menubar" aria-label="Set List menu">
@@ -350,10 +351,19 @@
 	          <div class="set-list-menu-popup set-list-layout-menu" role="menu">
 	            <label class="set-list-menu-field">
 	              <span>Page breaks</span>
-	              <select id="setListPageBreaks">
-	                <option value="perTune">Per tune</option>
+	              <select id="setListPageBreaks" title="Controls forced page breaks between tunes">
+	                <option value="perTune">Per tune (forced)</option>
+	                <option value="none">Continuous</option>
+	                <option value="auto">Auto (before long tunes)</option>
+	              </select>
+	            </label>
+	            <div class="set-list-menu-help">Breaks are inserted between tunes; a long tune may still span pages.</div>
+	            <label class="set-list-menu-field">
+	              <span>Page margins</span>
+	              <select id="setListPageMargins" title="Global print margins used by all print and PDF output">
+	                <option value="standard">Standard</option>
+	                <option value="narrow">Narrow</option>
 	                <option value="none">None</option>
-	                <option value="auto">Auto</option>
 	              </select>
 	            </label>
 	            <label class="set-list-menu-check">

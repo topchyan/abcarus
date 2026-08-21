@@ -49,10 +49,11 @@ function createSetListSession({
   let filePath = "";
   let diskText = null;
   let dirty = false;
+  let dirtyReasons = [];
   let recentPaths = normalizeRecentPaths(readStorage(recentsKey));
 
   function snapshot() {
-    return { document, filePath, dirty, recentPaths: recentPaths.slice() };
+    return { document, filePath, dirty, dirtyReasons: dirtyReasons.slice(), recentPaths: recentPaths.slice() };
   }
 
   function emit() {
@@ -66,24 +67,37 @@ function createSetListSession({
     writeStorage(recentsKey, recentPaths);
   }
 
-  function replaceDocument(nextDocument, { nextFilePath = "", nextDiskText = null, nextDirty = false } = {}) {
+  function replaceDocument(nextDocument, {
+    nextFilePath = "",
+    nextDiskText = null,
+    nextDirty = false,
+    nextDirtyReasons = [],
+  } = {}) {
     const normalized = normalizeSetListDocument(nextDocument, { makeId, nowIso });
     if (!normalized) throw new Error("Invalid Set List document.");
     document = normalized;
     filePath = String(nextFilePath || "");
     diskText = typeof nextDiskText === "string" ? nextDiskText : null;
     dirty = Boolean(nextDirty);
+    dirtyReasons = dirty
+      ? Array.from(new Set((Array.isArray(nextDirtyReasons) ? nextDirtyReasons : []).map((value) => String(value || "").trim()).filter(Boolean)))
+      : [];
     if (filePath) rememberPath(filePath);
     emit();
     return snapshot();
   }
 
-  function mutate(mutator) {
+  function mutate(mutator, { reason = "content" } = {}) {
     const draft = structuredClone(document);
     const result = typeof mutator === "function" ? mutator(draft) : draft;
     const candidate = result && typeof result === "object" ? result : draft;
     candidate.updatedAt = nowIso();
-    return replaceDocument(candidate, { nextFilePath: filePath, nextDiskText: diskText, nextDirty: true });
+    return replaceDocument(candidate, {
+      nextFilePath: filePath,
+      nextDiskText: diskText,
+      nextDirty: true,
+      nextDirtyReasons: [...dirtyReasons, reason],
+    });
   }
 
   function newDocument(title) {

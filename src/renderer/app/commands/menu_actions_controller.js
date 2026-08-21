@@ -12,6 +12,7 @@ const BUSY_ALLOWED_ACTIONS = new Set([
   "toggleAutoDump",
   "toggleNoteTypingPreview",
   "openIntonationExplorer",
+  "toggleSetList",
 ]);
 
 const PAYLOAD_ALLOWED_ACTIONS = new Set([
@@ -34,6 +35,7 @@ const PAYLOAD_ALLOWED_ACTIONS = new Set([
   "openKeyboardHelp",
   "openSettings",
   "openSettingsFolder",
+  "toggleSetList",
 ]);
 
 const RAW_BLOCKED_ACTIONS = new Set([
@@ -221,6 +223,8 @@ function createMenuActionsController({
     else if (actionType === "libraryList") actions.openLibraryCatalog();
     else if (actionType === "libraryMetadata") actions.openLibraryMetadata();
     else if (actionType === "setList") actions.openSetList();
+    else if (actionType === "toggleSetList") actions.toggleSetList();
+    else if (actionType === "printSetList") await actions.printSetList();
     else if (actionType === "toggleLibrary") actions.toggleLibrary();
     else if (actionType === "toggleFocusMode") actions.toggleFocusMode();
     else if (actionType === "toggleSplitOrientation") actions.toggleSplitOrientation({ userAction: true });

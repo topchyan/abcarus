@@ -45,6 +45,8 @@ let toggleLibraryCalls = 0;
 let libraryCatalogCalls = 0;
 let openFolderCalls = 0;
 let libraryMetadataCalls = 0;
+let toggleSetListCalls = 0;
+let printSetListCalls = 0;
 
 const domain = createAppCommandsDomain({
   documentRef,
@@ -67,6 +69,8 @@ const domain = createAppCommandsDomain({
     openLibraryCatalog: () => { libraryCatalogCalls += 1; },
     scanAndLoadLibrary: async () => { openFolderCalls += 1; },
     openLibraryMetadata: () => { libraryMetadataCalls += 1; },
+    toggleSetList: () => { toggleSetListCalls += 1; },
+    printSetList: async () => { printSetListCalls += 1; },
   },
 });
 
@@ -91,5 +95,9 @@ assert.equal(newFromTemplateCalls, 1, "New Tune From Template must retain its ne
 assert.equal(templatesCalls, 1, "Templates Library must remain distinct from New Tune");
 await domain.dispatch("libraryMetadata");
 assert.equal(libraryMetadataCalls, 1, "Tools -> Library Metadata must dispatch its feature action");
+await domain.dispatch("toggleSetList");
+await domain.dispatch("printSetList");
+assert.equal(toggleSetListCalls, 1, "Tools -> Set List must toggle the docked panel");
+assert.equal(printSetListCalls, 1, "Tools -> Set List must print the active Set List");
 
 console.log("app commands harness: all tests passed");

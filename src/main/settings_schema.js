@@ -803,6 +803,24 @@ function getSettingsSchema() {
       ui: { input: "number", min: 10, max: 40, step: 1 },
     },
     {
+      key: "printPageMargins",
+      type: "string",
+      default: "standard",
+      section: "Print",
+      group: "Page",
+      groupOrder: 5,
+      label: "Page margins",
+      help: "Controls the outer page margins for single-tune, Print All, and Set List output. ABC margin directives still control the score inside the page.",
+      ui: {
+        input: "select",
+        options: [
+          { value: "standard", label: "Standard" },
+          { value: "narrow", label: "Narrow" },
+          { value: "none", label: "None" },
+        ],
+      },
+    },
+    {
       key: "printAllPageBreaks",
       type: "string",
       default: "perTune",

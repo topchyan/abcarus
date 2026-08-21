@@ -315,10 +315,11 @@ const $aboutModal = document.getElementById("aboutModal");
 const $aboutClose = document.getElementById("aboutClose");
 const $aboutInfo = document.getElementById("aboutInfo");
 const $aboutCopy = document.getElementById("aboutCopy");
-const $setListModal = document.getElementById("setListModal");
+const $setListPanel = document.getElementById("setListPanel");
 const $setListDivider = document.getElementById("setListDivider");
 const $setListClose = document.getElementById("setListClose");
 const $setListTitle = document.getElementById("setListTitle");
+const $setListDirtySummary = document.getElementById("setListDirtySummary");
 const $setListNew = document.getElementById("setListNew");
 const $setListOpen = document.getElementById("setListOpen");
 const $setListSave = document.getElementById("setListSave");
@@ -370,6 +371,7 @@ function reconfigureAbcExtensions({
 }
 const $setListPrint = document.getElementById("setListPrint");
 const $setListPageBreaks = document.getElementById("setListPageBreaks");
+const $setListPageMargins = document.getElementById("setListPageMargins");
 const $setListCompact = document.getElementById("setListCompact");
 const $setListHeaderModal = document.getElementById("setListHeaderModal");
 const $setListHeaderClose = document.getElementById("setListHeaderClose");
@@ -881,16 +883,17 @@ function applySetListPanelVisibility(visible) {
       ? `0px 0px ${setListPanelWidth}px 6px 1fr`
       : "0px 0px 0px 0px 1fr";
   }
-  requestAnimationFrame(() => {
+  requestAnimationFrame(() => requestAnimationFrame(() => {
     try { layoutController.resetView(); } catch {}
-  });
+  }));
 }
 
 const setListFeature = createSetListFeature({
   elements: {
-    modal: $setListModal,
+    modal: $setListPanel,
     closeButton: $setListClose,
     titleInput: $setListTitle,
+    dirtySummary: $setListDirtySummary,
     newButton: $setListNew,
     openButton: $setListOpen,
     saveButton: $setListSave,
@@ -904,6 +907,7 @@ const setListFeature = createSetListFeature({
     exportPdfButton: $setListExportPdf,
     printButton: $setListPrint,
     pageBreaksSelect: $setListPageBreaks,
+    pageMarginsSelect: $setListPageMargins,
     compactCheckbox: $setListCompact,
     headerModal: $setListHeaderModal,
     headerCloseButton: $setListHeaderClose,
@@ -938,6 +942,12 @@ const setListFeature = createSetListFeature({
   activateItemSource: setListRendererAdapter.activateItemSource,
   resolveItemSource: setListRendererAdapter.resolveItemSource,
   onPanelVisibilityChange: applySetListPanelVisibility,
+  getPrintPageMargins: () => String(settingsSnapshot.get()?.printPageMargins || "standard"),
+  setPrintPageMargins: async (value) => {
+    const nextValue = ["standard", "narrow", "none"].includes(String(value)) ? String(value) : "standard";
+    settingsSnapshot.patch({ printPageMargins: nextValue });
+    await settingsSnapshot.persistPatch({ printPageMargins: nextValue });
+  },
   renderItemToSvg: setListRendererAdapter.renderItemToSvg,
   buildSourceLinkMarkup: (abcText) => sourceLinkFeature.buildPrintMarkup(abcText),
   outputPrint: setListRendererAdapter.outputPrint,
@@ -955,6 +965,7 @@ const setListFeature = createSetListFeature({
   confirmUnsavedChanges,
   enableDraggable: enableDraggableModal,
 });
+setListFeature.restoreLastSetList().catch(logErr);
 
 function isPayloadMode() {
   return payloadModeFeature.isEnabled();
@@ -1318,11 +1329,11 @@ const layoutController = createLayoutController({
   showToast,
 });
 
-if ($setListDivider && $setListModal) {
+if ($setListDivider && $setListPanel) {
   $setListDivider.addEventListener("pointerdown", (event) => {
     event.preventDefault();
     $setListDivider.setPointerCapture(event.pointerId);
-    const startWidth = $setListModal.getBoundingClientRect().width || setListPanelWidth;
+    const startWidth = $setListPanel.getBoundingClientRect().width || setListPanelWidth;
     const startX = event.clientX;
     const onMove = (moveEvent) => {
       const libraryWidth = libraryRuntime.isVisible() ? ($sidebar.getBoundingClientRect().width || 0) : 0;
@@ -3670,6 +3681,8 @@ appCommandsDomain = createAppCommandsDomain({
     openRecentTune,
     openReplace: editorRuntime.openReplace,
     openSetList: () => setListFeature.open(),
+    toggleSetList: () => setListFeature.toggle(),
+    printSetList: () => setListFeature.runPrintAction("print"),
     openTemplatesModal,
     renumberXInActiveFile,
     requestCloseDocument,

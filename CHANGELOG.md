@@ -6,7 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Set List panel shortcuts: `F6` toggles the panel and `Ctrl/Cmd+Alt+P` prints the active Set List.
+- Set List Layout now exposes global print page margins alongside page-break controls.
 
+### Changed
+- Showing or hiding the Set List recalculates the Editor/Score layout as part of view reset.
+- Set List dirty state now identifies changed areas such as items, layout, header, snapshots, and title.
+- Page-break choices use explicit labels for forced, continuous, and automatic behavior.
+
+### Fixed
+- Tools → Set List → Show/Hide Panel now reaches the renderer action correctly.
 
 ## [1.7.0] - 2026-08-21
 ### Added

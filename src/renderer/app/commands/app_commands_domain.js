@@ -148,6 +148,8 @@ function createAppCommandsDomain({
       openRecentTune: actions.openRecentTune,
       openReplace: actions.openReplace,
       openSetList: actions.openSetList,
+      toggleSetList: actions.toggleSetList,
+      printSetList: actions.printSetList,
       openSettings: () => {
         const settings = getSettingsDomain();
         if (settings && typeof settings.openSettings === "function") settings.openSettings();

@@ -37,6 +37,7 @@ function createSetListController({
   modal,
   closeButton,
   titleInput,
+  dirtySummary,
   newButton,
   openButton,
   saveButton,
@@ -50,6 +51,7 @@ function createSetListController({
   exportPdfButton,
   printButton,
   pageBreaksSelect,
+  pageMarginsSelect,
   compactCheckbox,
   headerModal,
   headerCloseButton,
@@ -79,6 +81,7 @@ function createSetListController({
   onVisibilityChange,
   onClear,
   onPageBreaksChange,
+  onPageMarginsChange,
   onCompactChange,
   onHeaderTextChange,
   onTitleChange,
@@ -113,9 +116,11 @@ function createSetListController({
     return {
       items: Array.isArray(state.items) ? state.items : [],
       pageBreaks: state.pageBreaks || "perTune",
+      pageMargins: state.pageMargins || "standard",
       compact: Boolean(state.compact),
       title: String(state.title || "Untitled Set List"),
       dirty: Boolean(state.dirty),
+      dirtyReasons: Array.isArray(state.dirtyReasons) ? state.dirtyReasons : [],
       notice: String(state.notice || ""),
       canAddCurrentTune: Boolean(state.canAddCurrentTune),
       activeItemId: String(state.activeItemId || ""),
@@ -162,10 +167,19 @@ function createSetListController({
     }
 
     if (pageBreaksSelect) pageBreaksSelect.value = state.pageBreaks;
+    if (pageMarginsSelect) pageMarginsSelect.value = state.pageMargins;
     if (compactCheckbox) compactCheckbox.checked = state.compact;
+    const dirtyLabel = state.dirtyReasons.length
+      ? `Unsaved: ${state.dirtyReasons.join(", ")}`
+      : (state.dirty ? "Unsaved changes" : "");
+    if (dirtySummary) {
+      dirtySummary.hidden = !state.dirty;
+      dirtySummary.textContent = dirtyLabel;
+      dirtySummary.title = dirtyLabel;
+    }
     if (titleInput && document.activeElement !== titleInput) {
       titleInput.value = `${state.title}${state.dirty ? " *" : ""}`;
-      titleInput.title = state.notice;
+      titleInput.title = [state.notice, dirtyLabel].filter(Boolean).join("\n");
     }
     if (saveButton) saveButton.disabled = !state.dirty;
     if (addCurrentButton) addCurrentButton.disabled = !state.canAddCurrentTune;
@@ -190,6 +204,16 @@ function createSetListController({
     modal.classList.remove("open");
     modal.setAttribute("aria-hidden", "true");
     if (typeof onVisibilityChange === "function") onVisibilityChange(false);
+  }
+
+  function isOpen() {
+    return Boolean(modal && modal.classList.contains("open"));
+  }
+
+  function toggle() {
+    if (isOpen()) close();
+    else open();
+    return isOpen();
   }
 
   function openHeaderEditor() {
@@ -566,6 +590,13 @@ function createSetListController({
     });
   }
 
+  if (pageMarginsSelect) {
+    pageMarginsSelect.addEventListener("change", () => {
+      if (typeof onPageMarginsChange === "function") onPageMarginsChange(String(pageMarginsSelect.value || "standard"));
+      render();
+    });
+  }
+
   if (compactCheckbox) {
     compactCheckbox.addEventListener("change", () => {
       if (typeof onCompactChange === "function") onCompactChange(Boolean(compactCheckbox.checked));
@@ -601,10 +632,12 @@ function createSetListController({
     close,
     closeHeaderEditor,
     chooseTarget,
+    isOpen,
     open,
     openHeaderEditor,
     openSnapshotPreview,
     render,
+    toggle,
   };
 }
 

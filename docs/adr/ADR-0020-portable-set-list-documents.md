@@ -59,6 +59,12 @@ For self-contained rendering, an item may also carry `embeddedHeaderAbc`, the
 captured source file header that accompanied `embeddedAbc`. It is part of the
 saved revision, not a live reference to the source file.
 
+For Set List rendering, header layers are composed from least to most specific:
+the captured source file header, then the Set List Header, then the tune body.
+This lets the Set List define its own explicit print layout while preserving
+tune-local directives as the final authority. Application print preferences
+control only the outer Chromium page and do not inject hidden ABC directives.
+
 Source paths and `X:` numbers are matching hints, not durable identity and not
 authority over saved musical content. `contentHash` identifies the ABC revision
 that the snapshot describes.
