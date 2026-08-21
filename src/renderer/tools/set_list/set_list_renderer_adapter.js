@@ -69,6 +69,12 @@ function createSetListRendererAdapter({
       xNumber: res.tune.xNumber || "",
       title: res.tune.title || fallbackTitle || "",
       composer: res.tune.composer || fallbackComposer || "",
+      key: res.tune.key || "",
+      rhythm: res.tune.rhythm || "",
+      origin: res.tune.origin || "",
+      groups: Array.isArray(res.tune.groups)
+        ? res.tune.groups.slice()
+        : (res.tune.group ? [res.tune.group] : []),
       headerText: entryHeader,
       text: slice,
     };

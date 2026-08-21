@@ -48,6 +48,10 @@ links
 export intent
 ```
 
+For self-contained rendering, an item may also carry `embeddedHeaderAbc`, the
+captured source file header that accompanied `embeddedAbc`. It is part of the
+saved revision, not a live reference to the source file.
+
 Source paths and `X:` numbers are matching hints, not durable identity and not
 authority over saved musical content. `contentHash` identifies the ABC revision
 that the snapshot describes.

@@ -671,6 +671,49 @@ function registerIpcHandlers(ctx) {
   ipcMain.handle("dialog:save", async (event, suggestedName, suggestedDir) =>
     await showSaveDialog(suggestedName, suggestedDir, event)
   );
+  ipcMain.handle("dialog:set-list-open", async (event) => {
+    const parent = prepareDialogParent(event, "open-set-list");
+    const result = await dialog.showOpenDialog(parent || undefined, {
+      modal: true,
+      title: "Open Set List",
+      properties: ["openFile"],
+      defaultPath: getDialogDefaultPath({ dialogId: "setListOpen" }),
+      filters: [
+        { name: "ABCarus Set List", extensions: ["json"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+    if (!result || result.canceled || !result.filePaths || !result.filePaths.length) return null;
+    const selected = result.filePaths[0];
+    rememberDialogPath(selected, { dialogId: "setListOpen", filterIndex: result.filterIndex });
+    return selected;
+  });
+  ipcMain.handle("dialog:set-list-save", async (event, suggestedName, suggestedDir) => {
+    const parent = prepareDialogParent(event, "save-set-list");
+    const defaultName = sanitizeSuggestedFileBaseName(suggestedName, "Untitled Set List")
+      .replace(/(?:\.abcarus-setlist)?\.json$/i, "");
+    const result = await dialog.showSaveDialog(parent || undefined, {
+      modal: true,
+      title: "Save Set List",
+      defaultPath: getDialogDefaultPath({
+        dialogId: "setListSave",
+        suggestedName: `${defaultName}.abcarus-setlist.json`,
+        suggestedDir,
+        preferFileNameOnPortal: true,
+      }),
+      filters: [
+        { name: "ABCarus Set List", extensions: ["json"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+    if (!result || result.canceled || !result.filePath) return null;
+    let selected = String(result.filePath);
+    if (!/\.abcarus-setlist\.json$/i.test(selected)) {
+      selected = selected.replace(/\.json$/i, "") + ".abcarus-setlist.json";
+    }
+    rememberDialogPath(selected, { dialogId: "setListSave", filterIndex: result.filterIndex });
+    return selected;
+  });
   ipcMain.handle("dialog:confirm-unsaved", async (event, contextLabel) =>
     confirmUnsavedChanges(contextLabel, event)
   );

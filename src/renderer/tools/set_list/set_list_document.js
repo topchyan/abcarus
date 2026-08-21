@@ -1,4 +1,5 @@
 const SET_LIST_SCHEMA = "abcarus.setlist.v1";
+const DEFAULT_SET_LIST_HEADER_TEXT = "%%stretchlast 1\n";
 const SET_LIST_RESOLUTION = Object.freeze({
   FOUND_EXACT: "FOUND_EXACT",
   FOUND_MODIFIED: "FOUND_MODIFIED",
@@ -9,6 +10,20 @@ const SET_LIST_RESOLUTION = Object.freeze({
 
 const MAX_SET_LIST_ITEMS = 500;
 const MAX_SET_LIST_LINKS = 50;
+
+function canonicalizeAbcForHash(value) {
+  return text(value).replace(/\r\n?/g, "\n");
+}
+
+async function hashSetListAbc(value, cryptoRef = globalThis.crypto) {
+  if (!cryptoRef || !cryptoRef.subtle || typeof cryptoRef.subtle.digest !== "function") {
+    throw new Error("SHA-256 is unavailable.");
+  }
+  const bytes = new TextEncoder().encode(canonicalizeAbcForHash(value));
+  const digest = await cryptoRef.subtle.digest("SHA-256", bytes);
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `sha256:${hex}`;
+}
 
 function text(value) {
   return typeof value === "string" ? value : "";
@@ -30,6 +45,7 @@ function normalizedIdentityText(value) {
 function normalizeSource(source) {
   const raw = source && typeof source === "object" ? source : {};
   return {
+    tuneIdHint: text(raw.tuneIdHint),
     pathHint: text(raw.pathHint),
     xNumberHint: text(raw.xNumberHint),
   };
@@ -61,6 +77,36 @@ function normalizeLinks(links) {
   }).filter((link) => link.url);
 }
 
+function moveSetListDocumentItems(items, fromIndex, toIndex) {
+  const source = Array.isArray(items) ? items : [];
+  const from = Number(fromIndex);
+  const to = Number(toIndex);
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < 0 || from >= source.length || to >= source.length || from === to) {
+    return source;
+  }
+  const next = source.slice();
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
+function removeSetListDocumentItem(items, index) {
+  const source = Array.isArray(items) ? items : [];
+  const target = Number(index);
+  if (!Number.isInteger(target) || target < 0 || target >= source.length) return source;
+  return source.filter((_item, itemIndex) => itemIndex !== target);
+}
+
+function insertSetListDocumentItem(items, item, index) {
+  const source = Array.isArray(items) ? items : [];
+  if (!item) return source;
+  const next = source.slice();
+  const target = Number(index);
+  if (!Number.isInteger(target) || target < 0 || target >= next.length) next.push(item);
+  else next.splice(target, 0, item);
+  return next;
+}
+
 function normalizeSetListDocumentItem(item, options = {}) {
   if (!item || typeof item !== "object") return null;
   const makeId = typeof options.makeId === "function" ? options.makeId : () => "";
@@ -84,6 +130,9 @@ function normalizeSetListDocumentItem(item, options = {}) {
   };
   if (typeof item.embeddedAbc === "string" && item.embeddedAbc.trim()) {
     normalized.embeddedAbc = item.embeddedAbc;
+  }
+  if (typeof item.embeddedHeaderAbc === "string" && item.embeddedHeaderAbc.trim()) {
+    normalized.embeddedHeaderAbc = item.embeddedHeaderAbc;
   }
   return normalized;
 }
@@ -146,12 +195,14 @@ function convertLegacySetListState(legacy, options = {}) {
         title: text(item && item.title),
         composer: text(item && item.composer),
         source: {
+          tuneIdHint: text(item && item.sourceTuneId),
           pathHint: text(item && item.sourcePath),
           xNumberHint: text(item && item.xNumber),
         },
         contentHash: "",
       },
       embeddedAbc: text(item && item.text),
+      embeddedHeaderAbc: text(item && item.headerText),
       performance: { transposeSemitones: 0, tempoScale: 1 },
       notes: "",
       links: [],
@@ -214,11 +265,17 @@ function resolveSetListItem(item, candidates) {
 }
 
 export {
+  DEFAULT_SET_LIST_HEADER_TEXT,
   SET_LIST_RESOLUTION,
   SET_LIST_SCHEMA,
+  canonicalizeAbcForHash,
   convertLegacySetListState,
+  hashSetListAbc,
+  insertSetListDocumentItem,
+  moveSetListDocumentItems,
   normalizeSetListDocument,
   normalizeSetListDocumentItem,
   resolveSetListItem,
+  removeSetListDocumentItem,
   serializeSetListDocument,
 };

@@ -3100,6 +3100,36 @@ svg {
   gap: 8px;
 }
 
+.modal .set-list-title-input {
+  flex: 1 1 220px;
+  min-width: 120px;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 3px 5px;
+}
+
+.modal .set-list-title-input:hover,
+.modal .set-list-title-input:focus {
+  border-color: var(--border-color);
+  background: #fff;
+}
+
+.set-list-target-card {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.set-list-target-field {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.set-list-target-field select {
+  min-width: 0;
+  width: 100%;
+}
+
 #setListHeaderText {
   width: 100%;
   resize: vertical;

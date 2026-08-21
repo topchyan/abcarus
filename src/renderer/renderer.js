@@ -317,6 +317,11 @@ const $aboutInfo = document.getElementById("aboutInfo");
 const $aboutCopy = document.getElementById("aboutCopy");
 const $setListModal = document.getElementById("setListModal");
 const $setListClose = document.getElementById("setListClose");
+const $setListTitle = document.getElementById("setListTitle");
+const $setListNew = document.getElementById("setListNew");
+const $setListOpen = document.getElementById("setListOpen");
+const $setListSave = document.getElementById("setListSave");
+const $setListSaveAs = document.getElementById("setListSaveAs");
 const $setListEmpty = document.getElementById("setListEmpty");
 const $setListItems = document.getElementById("setListItems");
 const $setListHeader = document.getElementById("setListHeader");
@@ -369,6 +374,12 @@ const $setListHeaderClose = document.getElementById("setListHeaderClose");
 const $setListHeaderText = document.getElementById("setListHeaderText");
 const $setListHeaderReset = document.getElementById("setListHeaderReset");
 const $setListHeaderSave = document.getElementById("setListHeaderSave");
+const $setListTargetModal = document.getElementById("setListTargetModal");
+const $setListTargetClose = document.getElementById("setListTargetClose");
+const $setListTargetSelect = document.getElementById("setListTargetSelect");
+const $setListTargetNew = document.getElementById("setListTargetNew");
+const $setListTargetCancel = document.getElementById("setListTargetCancel");
+const $setListTargetAdd = document.getElementById("setListTargetAdd");
 const $disclaimerModal = document.getElementById("disclaimerModal");
 const $disclaimerClose = document.getElementById("disclaimerClose");
 const $disclaimerOk = document.getElementById("disclaimerOk");
@@ -847,6 +858,11 @@ const setListFeature = createSetListFeature({
   elements: {
     modal: $setListModal,
     closeButton: $setListClose,
+    titleInput: $setListTitle,
+    newButton: $setListNew,
+    openButton: $setListOpen,
+    saveButton: $setListSave,
+    saveAsButton: $setListSaveAs,
     empty: $setListEmpty,
     itemsList: $setListItems,
     headerButton: $setListHeader,
@@ -861,9 +877,25 @@ const setListFeature = createSetListFeature({
     headerText: $setListHeaderText,
     headerResetButton: $setListHeaderReset,
     headerSaveButton: $setListHeaderSave,
+    targetModal: $setListTargetModal,
+    targetCloseButton: $setListTargetClose,
+    targetSelect: $setListTargetSelect,
+    targetNewButton: $setListTargetNew,
+    targetCancelButton: $setListTargetCancel,
+    targetAddButton: $setListTargetAdd,
   },
   readStorage: safeReadJsonLocalStorage,
   writeStorage: safeWriteJsonLocalStorage,
+  readFile,
+  writeFile,
+  showOpenSetListDialog: () => window.api && typeof window.api.showOpenSetListDialog === "function"
+    ? window.api.showOpenSetListDialog()
+    : Promise.resolve(null),
+  showSaveSetListDialog: (name, dir) => window.api && typeof window.api.showSaveSetListDialog === "function"
+    ? window.api.showSaveSetListDialog(name, dir)
+    : Promise.resolve(null),
+  getDefaultSaveDir,
+  safeBasename,
   buildItemForTuneId: setListRendererAdapter.buildItemForTuneId,
   renderItemToSvg: setListRendererAdapter.renderItemToSvg,
   buildSourceLinkMarkup: (abcText) => sourceLinkFeature.buildPrintMarkup(abcText),
@@ -879,6 +911,7 @@ const setListFeature = createSetListFeature({
   showToast,
   logError: logErr,
   confirm: (message) => window.confirm(message),
+  confirmUnsavedChanges,
   enableDraggable: enableDraggableModal,
 });
 
@@ -1516,7 +1549,7 @@ const libraryUiDomain = createLibraryUiDomain({
     isRawMode: () => isRawModeActive(),
   },
   actions: {
-    addTuneToSetList: (tuneId, options = {}) => setListFeature.addTuneById(tuneId, options),
+    addTuneToSetList: (tuneId, options = {}) => setListFeature.addTuneWithTargetChoice(tuneId, options),
     buildTemplatesPreviewContextMenuItems: (target) => templatesFeature.buildPreviewContextMenuItems(target),
     confirmReloadFromDisk,
     copyTuneById,
@@ -3425,6 +3458,7 @@ async function requestCloseDocument() {
 }
 
 async function requestQuitApplication() {
+  if (setListFeature && !await setListFeature.prepareToLeave("quitting")) return;
   if (documentSessionController) await documentSessionController.requestQuitApplication();
 }
 

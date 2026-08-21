@@ -1,6 +1,11 @@
 function createSetListController({
   modal,
   closeButton,
+  titleInput,
+  newButton,
+  openButton,
+  saveButton,
+  saveAsButton,
   empty,
   itemsList,
   headerButton,
@@ -15,6 +20,12 @@ function createSetListController({
   headerText,
   headerResetButton,
   headerSaveButton,
+  targetModal,
+  targetCloseButton,
+  targetSelect,
+  targetNewButton,
+  targetCancelButton,
+  targetAddButton,
   defaultHeaderText = "",
   getState,
   getHeaderText,
@@ -25,6 +36,11 @@ function createSetListController({
   onPageBreaksChange,
   onCompactChange,
   onHeaderTextChange,
+  onTitleChange,
+  onNew,
+  onOpen,
+  onSave,
+  onSaveAs,
   onSaveAbc,
   onExportPdf,
   onPrint,
@@ -33,6 +49,7 @@ function createSetListController({
   enableDraggable,
 } = {}) {
   let dragFromIndex = null;
+  let targetChoiceResolve = null;
 
   function readState() {
     const state = typeof getState === "function" ? getState() : {};
@@ -40,6 +57,8 @@ function createSetListController({
       items: Array.isArray(state.items) ? state.items : [],
       pageBreaks: state.pageBreaks || "perTune",
       compact: Boolean(state.compact),
+      title: String(state.title || "Untitled Set List"),
+      dirty: Boolean(state.dirty),
     };
   }
 
@@ -89,6 +108,10 @@ function createSetListController({
 
     if (pageBreaksSelect) pageBreaksSelect.value = state.pageBreaks;
     if (compactCheckbox) compactCheckbox.checked = state.compact;
+    if (titleInput && document.activeElement !== titleInput) {
+      titleInput.value = `${state.title}${state.dirty ? " *" : ""}`;
+    }
+    if (saveButton) saveButton.disabled = !state.dirty;
 
     const disableActions = !hasItems;
     if (clearButton) clearButton.disabled = disableActions;
@@ -127,6 +150,63 @@ function createSetListController({
 
   if (closeButton) closeButton.addEventListener("click", close);
   if (headerButton) headerButton.addEventListener("click", openHeaderEditor);
+  if (newButton) newButton.addEventListener("click", () => { if (typeof onNew === "function") onNew(); });
+  if (openButton) openButton.addEventListener("click", () => { if (typeof onOpen === "function") onOpen(); });
+  if (saveButton) saveButton.addEventListener("click", () => { if (typeof onSave === "function") onSave(); });
+  if (saveAsButton) saveAsButton.addEventListener("click", () => { if (typeof onSaveAs === "function") onSaveAs(); });
+  if (titleInput) {
+    titleInput.addEventListener("focus", () => {
+      titleInput.value = titleInput.value.replace(/\s+\*$/, "");
+      titleInput.select();
+    });
+    titleInput.addEventListener("change", () => {
+      if (typeof onTitleChange === "function") onTitleChange(titleInput.value.replace(/\s+\*$/, ""));
+      render();
+    });
+  }
+
+  function closeTargetChoice(value = null) {
+    if (targetModal) {
+      targetModal.classList.remove("open");
+      targetModal.setAttribute("aria-hidden", "true");
+    }
+    const resolve = targetChoiceResolve;
+    targetChoiceResolve = null;
+    if (resolve) resolve(value);
+  }
+
+  function chooseTarget(targets = []) {
+    if (!targetModal || !targetSelect) return Promise.resolve(null);
+    if (targetChoiceResolve) closeTargetChoice(null);
+    targetSelect.textContent = "";
+    for (const target of targets) {
+      const option = document.createElement("option");
+      option.value = String(target && target.value || "");
+      option.textContent = String(target && target.label || target && target.value || "Set List");
+      targetSelect.appendChild(option);
+    }
+    targetModal.classList.add("open");
+    targetModal.setAttribute("aria-hidden", "false");
+    targetSelect.focus();
+    return new Promise((resolve) => { targetChoiceResolve = resolve; });
+  }
+
+  if (targetCloseButton) targetCloseButton.addEventListener("click", () => closeTargetChoice(null));
+  if (targetCancelButton) targetCancelButton.addEventListener("click", () => closeTargetChoice(null));
+  if (targetAddButton) targetAddButton.addEventListener("click", () => closeTargetChoice(targetSelect ? targetSelect.value : null));
+  if (targetNewButton) targetNewButton.addEventListener("click", () => closeTargetChoice("__new__"));
+  if (targetModal) {
+    targetModal.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeTargetChoice(null);
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        closeTargetChoice(targetSelect ? targetSelect.value : null);
+      }
+    });
+    if (typeof enableDraggable === "function") enableDraggable(targetModal);
+  }
 
   if (itemsList) {
     itemsList.addEventListener("dragstart", (e) => {
@@ -319,6 +399,7 @@ function createSetListController({
   return {
     close,
     closeHeaderEditor,
+    chooseTarget,
     open,
     openHeaderEditor,
     render,

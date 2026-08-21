@@ -563,9 +563,7 @@ function createLibraryUiDomain({
         if (!row) return;
         const tuneId = row && row.tuneId ? String(row.tuneId) : "";
         if (!tuneId || typeof actions.addTuneToSetList !== "function") return;
-        actions.addTuneToSetList(tuneId, { fallbackTitle: row.title, fallbackComposer: row.composer }).then(() => {
-          if (typeof actions.showToast === "function") actions.showToast("Added to Set List.", 2000);
-        }).catch((e) => {
+        actions.addTuneToSetList(tuneId, { fallbackTitle: row.title, fallbackComposer: row.composer }).catch((e) => {
           if (typeof actions.showToast === "function") actions.showToast(e && e.message ? e.message : String(e), 5000);
         });
       } catch {}

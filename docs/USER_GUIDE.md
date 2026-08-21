@@ -116,9 +116,11 @@ In the library tree you can:
 Move semantics:
 - Moving a tune copies it to the target file (assigning a new `X:`) and removes it from the source file.
 
-## 7) Set List (build a playlist file)
+## 7) Set List (build a performance program)
 
-Set List is a lightweight “assembly workspace” for building a new `.abc` file out of existing tunes, in a chosen order.
+Set List is a portable performance document containing an ordered selection of
+tunes. Save one program per `*.abcarus-setlist.json` file; use `Export ABC…`,
+`Export PDF…`, or `Print…` to create derived output.
 
 - Open: `View → Set List…`
 - Add tunes:
@@ -127,6 +129,10 @@ Set List is a lightweight “assembly workspace” for building a new `.abc` fil
   - Active tune: right-click in the editor → `Add Active Tune to Set List`
 - Reorder: drag-and-drop inside the Set List, or use ↑ / ↓.
 - Remove: `✕` per row, or `Clear` to reset the list.
+- Documents: use `New`, `Open…`, `Save`, and `Save As…` in the Set List window.
+- Name: edit the name at the top of the Set List window.
+- When several recent Set Lists exist, adding from Library asks which document
+  should receive the tune. The current document is listed first.
 
 Export/print:
 - `Export ABC…` saves a new `.abc` file.
@@ -134,8 +140,11 @@ Export/print:
 
 Important notes:
 - Export normalizes `X:` as `1..N` in the exported/printed output (to encode order and avoid conflicts).
-- Set List entries are snapshots: if the source file changes later, the Set List does not update automatically. Remove+re-add if you need a refreshed version.
-- The last Set List is restored when you restart ABCarus (stored locally on this machine). Use `Clear` to remove it.
+- Newly added entries currently include their ABC snapshot, preserving the
+  existing self-contained Set List behavior. Saved documents also retain
+  Library identity and a content hash for explicit comparison/relink workflows.
+- An existing pre-document Set List is imported as an unsaved self-contained
+  document. Save it once as `*.abcarus-setlist.json` to complete the migration.
 - `Header…` lets you define Set List–specific abc2svg directives (for example `%%stretchlast 1`) that are added to exported Set List files and used for Set List print/PDF.
 
 ## 8) Playback (audio)

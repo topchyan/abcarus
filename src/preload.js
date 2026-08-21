@@ -37,6 +37,9 @@ contextBridge.exposeInMainWorld("api", {
   showOpenDialog: async () => ipcRenderer.invoke("dialog:open"),
   showSaveDialog: async (suggestedName, suggestedDir) =>
     ipcRenderer.invoke("dialog:save", suggestedName, suggestedDir),
+  showOpenSetListDialog: async () => ipcRenderer.invoke("dialog:set-list-open"),
+  showSaveSetListDialog: async (suggestedName, suggestedDir) =>
+    ipcRenderer.invoke("dialog:set-list-save", suggestedName, suggestedDir),
   confirmUnsavedChanges: async (contextLabel) =>
     ipcRenderer.invoke("dialog:confirm-unsaved", contextLabel),
   confirmOverwrite: async (filePath) =>

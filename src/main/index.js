@@ -3531,6 +3531,7 @@ async function runUiSmoke(win) {
       let modalBackdropSafe = false;
       let compactModalOk = false;
       let toolbarDomainsOk = false;
+      let setListDocumentUiOk = false;
       if (hook && typeof hook.dispatchAction === "function") {
         await hook.dispatchAction({ type: "fonts" });
         await wait(250);
@@ -3572,6 +3573,7 @@ async function runUiSmoke(win) {
           "aboutClose",
           "setListClose",
           "setListHeaderClose",
+          "setListTargetClose",
           "xIssuesClose",
           "printAllOptionsClose",
           "disclaimerClose",
@@ -3626,6 +3628,33 @@ async function runUiSmoke(win) {
           && compactClose
         );
         if (compactClose) compactClose.click();
+
+        await hook.dispatchAction({ type: "setList" });
+        await wait(80);
+        const setListModal = byId("setListModal");
+        const setListTitle = byId("setListTitle");
+        const setListSave = byId("setListSave");
+        const setListSaveAs = byId("setListSaveAs");
+        const setListTarget = byId("setListTargetModal");
+        if (setListTitle) {
+          setListTitle.value = "Smoke Set List";
+          setListTitle.dispatchEvent(new Event("change", { bubbles: true }));
+          await wait(30);
+        }
+        setListDocumentUiOk = Boolean(
+          setListModal
+          && setListModal.classList.contains("open")
+          && setListTitle
+          && setListTitle.value === "Smoke Set List *"
+          && setListSave
+          && !setListSave.disabled
+          && setListSaveAs
+          && !setListSaveAs.disabled
+          && setListTarget
+          && setListTarget.getAttribute("aria-hidden") === "true"
+        );
+        const setListClose = byId("setListClose");
+        if (setListClose) setListClose.click();
       }
       return {
         ok: errorsVisible
@@ -3652,7 +3681,8 @@ async function runUiSmoke(win) {
           && modalCloseButtonsOk
           && modalBackdropSafe
           && compactModalOk
-          && toolbarDomainsOk,
+          && toolbarDomainsOk
+          && setListDocumentUiOk,
         visualGapPx,
         togglesGapPx,
         libRadiusPx,
@@ -3683,6 +3713,7 @@ async function runUiSmoke(win) {
         modalBackdropSafe,
         compactModalOk,
         toolbarDomainsOk,
+        setListDocumentUiOk,
       };
     })()`,
     true
