@@ -322,6 +322,7 @@ const $setListNew = document.getElementById("setListNew");
 const $setListOpen = document.getElementById("setListOpen");
 const $setListSave = document.getElementById("setListSave");
 const $setListSaveAs = document.getElementById("setListSaveAs");
+const $setListAddCurrent = document.getElementById("setListAddCurrent");
 const $setListEmpty = document.getElementById("setListEmpty");
 const $setListItems = document.getElementById("setListItems");
 const $setListHeader = document.getElementById("setListHeader");
@@ -863,6 +864,7 @@ const setListFeature = createSetListFeature({
     openButton: $setListOpen,
     saveButton: $setListSave,
     saveAsButton: $setListSaveAs,
+    addCurrentButton: $setListAddCurrent,
     empty: $setListEmpty,
     itemsList: $setListItems,
     headerButton: $setListHeader,
@@ -895,6 +897,7 @@ const setListFeature = createSetListFeature({
     ? window.api.showSaveSetListDialog(name, dir)
     : Promise.resolve(null),
   getDefaultSaveDir,
+  getActiveTuneId: () => activeContext.getActiveTuneId(),
   safeBasename,
   buildItemForTuneId: setListRendererAdapter.buildItemForTuneId,
   renderItemToSvg: setListRendererAdapter.renderItemToSvg,

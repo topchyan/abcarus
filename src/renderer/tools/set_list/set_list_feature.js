@@ -39,6 +39,7 @@ function createSetListFeature({
   showOpenSetListDialog = async () => null,
   showSaveSetListDialog = async () => null,
   getDefaultSaveDir = () => "",
+  getActiveTuneId = () => "",
   safeBasename = (value) => String(value || "").split(/[\\/]/).pop() || "",
   buildItemForTuneId = async () => null,
   renderItemToSvg = async () => ({ ok: false, error: "Render unavailable." }),
@@ -91,6 +92,7 @@ function createSetListFeature({
       notice: legacyImported
         ? "Imported from the previous ABCarus Set List. Use Save As to keep it as a portable document."
         : "",
+      canAddCurrentTune: Boolean(String(getActiveTuneId() || "").trim()),
     };
   };
   const getHeaderText = () => getDocument().print.headerText;
@@ -125,6 +127,7 @@ function createSetListFeature({
     openButton: elements.openButton,
     saveButton: elements.saveButton,
     saveAsButton: elements.saveAsButton,
+    addCurrentButton: elements.addCurrentButton,
     empty: elements.empty,
     itemsList: elements.itemsList,
     headerButton: elements.headerButton,
@@ -176,6 +179,13 @@ function createSetListFeature({
     onOpen: () => { openSetList().catch(logError); },
     onSave: () => { saveSetList(false).catch(logError); },
     onSaveAs: () => { saveSetList(true).catch(logError); },
+    onAddCurrent: () => {
+      const tuneId = String(getActiveTuneId() || "").trim();
+      if (!tuneId) return;
+      addTuneById(tuneId).then((added) => {
+        if (added) showToast(`Added to ${getDocument().title}.`, 2400);
+      }).catch(logError);
+    },
     onSaveAbc: () => {
       exportAbc().catch(() => {});
     },

@@ -6,6 +6,7 @@ function createSetListController({
   openButton,
   saveButton,
   saveAsButton,
+  addCurrentButton,
   empty,
   itemsList,
   headerButton,
@@ -41,6 +42,7 @@ function createSetListController({
   onOpen,
   onSave,
   onSaveAs,
+  onAddCurrent,
   onSaveAbc,
   onExportPdf,
   onPrint,
@@ -71,6 +73,7 @@ function createSetListController({
       title: String(state.title || "Untitled Set List"),
       dirty: Boolean(state.dirty),
       notice: String(state.notice || ""),
+      canAddCurrentTune: Boolean(state.canAddCurrentTune),
     };
   }
 
@@ -125,6 +128,7 @@ function createSetListController({
       titleInput.title = state.notice;
     }
     if (saveButton) saveButton.disabled = !state.dirty;
+    if (addCurrentButton) addCurrentButton.disabled = !state.canAddCurrentTune;
 
     const disableActions = !hasItems;
     if (clearButton) clearButton.disabled = disableActions;
@@ -167,6 +171,9 @@ function createSetListController({
   if (openButton) openButton.addEventListener("click", () => { if (typeof onOpen === "function") onOpen(); });
   if (saveButton) saveButton.addEventListener("click", () => { if (typeof onSave === "function") onSave(); });
   if (saveAsButton) saveAsButton.addEventListener("click", () => { if (typeof onSaveAs === "function") onSaveAs(); });
+  if (addCurrentButton) addCurrentButton.addEventListener("click", () => {
+    if (typeof onAddCurrent === "function") onAddCurrent();
+  });
   if (titleInput) {
     titleInput.addEventListener("focus", () => {
       titleInput.value = titleInput.value.replace(/\s+\*$/, "");

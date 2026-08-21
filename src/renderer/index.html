@@ -780,6 +780,8 @@
 	        <details class="set-list-menu">
 	          <summary>Edit</summary>
 	          <div class="set-list-menu-popup" role="menu">
+	            <button id="setListAddCurrent" type="button" role="menuitem">Add Active Tune</button>
+	            <span class="set-list-menu-sep" aria-hidden="true"></span>
 	            <button id="setListHeader" type="button" role="menuitem">Set List Header…</button>
 	            <span class="set-list-menu-sep" aria-hidden="true"></span>
 	            <button id="setListClear" type="button" role="menuitem">Clear Set List</button>
@@ -814,7 +816,8 @@
 	      </nav>
 	      <div class="modal-body">
 	        <div id="setListEmpty" class="set-list-empty">
-	          Add tunes to build an ordered list, preview it, and export it as a new .abc file.
+	          Use Edit &gt; Add Active Tune to add the open tune to this Set List. To choose another tune,
+	          use Add to Set List from its Library context menu.
 	        </div>
 	        <div id="setListItems" class="set-list-items" hidden></div>
 	      </div>

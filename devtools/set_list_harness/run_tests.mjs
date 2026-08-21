@@ -137,6 +137,13 @@ await test("legacy Set List remains clean until the user changes it", async () =
   const feature = createSetListFeature({
     readStorage: (key) => key === "abcarus.setList.v1" ? legacyState : null,
     writeStorage: () => true,
+    getActiveTuneId: () => "/music/b.abc::1",
+    buildItemForTuneId: async () => ({
+      sourcePath: "/music/b.abc",
+      xNumber: "1",
+      title: "New Tune",
+      text: "X:1\nT:New Tune\nK:C\nD|\n",
+    }),
     confirmUnsavedChanges: async () => {
       confirmCalls += 1;
       return "cancel";
@@ -149,6 +156,12 @@ await test("legacy Set List remains clean until the user changes it", async () =
   feature.close();
   assert.equal(await feature.prepareToLeave("opening another Set List"), true);
   assert.equal(confirmCalls, 0);
+
+  assert.equal(await feature.addTuneById("/music/b.abc::1"), true);
+  assert.equal(feature.getState().items.length, 2);
+  assert.equal(feature.getState().dirty, true);
+  assert.equal(await feature.prepareToLeave("opening another Set List"), false);
+  assert.equal(confirmCalls, 1);
 });
 
 test("resolves exact content independently of its old path", () => {

@@ -143,6 +143,9 @@ Important notes:
 - Newly added entries currently include their ABC snapshot, preserving the
   existing self-contained Set List behavior. Saved documents also retain
   Library identity and a content hash for explicit comparison/relink workflows.
+- In the Set List window, use `Edit > Add Active Tune` to add the currently
+  open tune to the visible list. To choose a different tune, use `Add to Set
+  List` from that tune's Library context menu.
 - An existing pre-document Set List appears as a clean `Previous Set List`.
   Use `Save As…` to keep it as `*.abcarus-setlist.json`. Opening or creating a
   different Set List discards this one-time compatibility copy without an
