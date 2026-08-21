@@ -3,6 +3,8 @@ import { webcrypto } from "node:crypto";
 import fs from "node:fs";
 import { build } from "esbuild";
 
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
+
 async function importBundledModule(filePath) {
   const result = await build({ entryPoints: [filePath], bundle: true, format: "esm", platform: "node", write: false });
   const encoded = Buffer.from(result.outputFiles[0].text, "utf8").toString("base64");
@@ -27,6 +29,10 @@ const {
   createSetListSession,
   normalizeRecentPaths,
 } = await importBundledModule("src/renderer/tools/set_list/set_list_session.js");
+
+const {
+  createSetListFeature,
+} = await importBundledModule("src/renderer/tools/set_list/set_list_feature.js");
 
 function readFixture(name) {
   return JSON.parse(fs.readFileSync(`devtools/set_list_harness/fixtures/${name}`, "utf8"));
@@ -114,6 +120,35 @@ test("converts the current snapshot workspace without losing ABC", () => {
   assert.match(converted.items[0].embeddedAbc, /^X:7/m);
   assert.equal(converted.items[0].embeddedHeaderAbc, undefined);
   assert.equal(converted.items[0].tune.source.pathHint, "/music/a.abc");
+});
+
+await test("legacy Set List remains clean until the user changes it", async () => {
+  const legacyState = {
+    version: "1",
+    items: [{
+      id: "old-item",
+      sourcePath: "/music/a.abc",
+      xNumber: "7",
+      title: "Old Tune",
+      text: "X:7\nT:Old Tune\nK:C\nC|\n",
+    }],
+  };
+  let confirmCalls = 0;
+  const feature = createSetListFeature({
+    readStorage: (key) => key === "abcarus.setList.v1" ? legacyState : null,
+    writeStorage: () => true,
+    confirmUnsavedChanges: async () => {
+      confirmCalls += 1;
+      return "cancel";
+    },
+  });
+
+  assert.equal(feature.getState().title, "Previous Set List");
+  assert.equal(feature.getState().dirty, false);
+  feature.open();
+  feature.close();
+  assert.equal(await feature.prepareToLeave("opening another Set List"), true);
+  assert.equal(confirmCalls, 0);
 });
 
 test("resolves exact content independently of its old path", () => {

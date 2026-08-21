@@ -51,6 +51,17 @@ function createSetListController({
   let dragFromIndex = null;
   let targetChoiceResolve = null;
 
+  function closeDocumentMenus(except = null) {
+    if (!modal || typeof modal.querySelectorAll !== "function") return false;
+    let closed = false;
+    for (const menu of modal.querySelectorAll(".set-list-menu[open]")) {
+      if (menu === except) continue;
+      menu.removeAttribute("open");
+      closed = true;
+    }
+    return closed;
+  }
+
   function readState() {
     const state = typeof getState === "function" ? getState() : {};
     return {
@@ -59,6 +70,7 @@ function createSetListController({
       compact: Boolean(state.compact),
       title: String(state.title || "Untitled Set List"),
       dirty: Boolean(state.dirty),
+      notice: String(state.notice || ""),
     };
   }
 
@@ -110,6 +122,7 @@ function createSetListController({
     if (compactCheckbox) compactCheckbox.checked = state.compact;
     if (titleInput && document.activeElement !== titleInput) {
       titleInput.value = `${state.title}${state.dirty ? " *" : ""}`;
+      titleInput.title = state.notice;
     }
     if (saveButton) saveButton.disabled = !state.dirty;
 
@@ -160,7 +173,8 @@ function createSetListController({
       titleInput.select();
     });
     titleInput.addEventListener("change", () => {
-      if (typeof onTitleChange === "function") onTitleChange(titleInput.value.replace(/\s+\*$/, ""));
+      const nextTitle = titleInput.value.replace(/\s+\*$/, "");
+      if (nextTitle !== readState().title && typeof onTitleChange === "function") onTitleChange(nextTitle);
       render();
     });
   }
@@ -307,10 +321,23 @@ function createSetListController({
   }
 
   if (modal) {
+    modal.addEventListener("click", (e) => {
+      const target = e && e.target;
+      const menu = target && target.closest ? target.closest(".set-list-menu") : null;
+      const summary = target && target.closest ? target.closest(".set-list-menu > summary") : null;
+      if (summary && menu) {
+        closeDocumentMenus(menu);
+        return;
+      }
+      if (!menu || (target && target.closest && target.closest("button[role='menuitem']"))) {
+        closeDocumentMenus();
+      }
+    });
     modal.addEventListener("keydown", (e) => {
       if (!e || e.key !== "Escape") return;
       e.preventDefault();
       e.stopPropagation();
+      if (closeDocumentMenus()) return;
       close();
     });
     if (typeof enableDraggable === "function") enableDraggable(modal);

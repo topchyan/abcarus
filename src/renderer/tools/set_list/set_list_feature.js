@@ -70,7 +70,11 @@ function createSetListFeature({
   });
 
   const legacy = convertLegacySetListState(readStorage(storageKey), { makeId });
-  if (legacy && legacy.items.length) session.replaceDocument(legacy, { nextDirty: true });
+  let legacyImported = Boolean(legacy && legacy.items.length);
+  if (legacyImported) {
+    legacy.title = "Previous Set List";
+    session.replaceDocument(legacy, { nextDirty: false });
+  }
 
   const getDocumentState = () => session.getState();
   const getDocument = () => getDocumentState().document;
@@ -84,6 +88,9 @@ function createSetListFeature({
       title: state.document.title,
       dirty: state.dirty,
       filePath: state.filePath,
+      notice: legacyImported
+        ? "Imported from the previous ABCarus Set List. Use Save As to keep it as a portable document."
+        : "",
     };
   };
   const getHeaderText = () => getDocument().print.headerText;
@@ -396,6 +403,10 @@ function createSetListFeature({
 
   async function newSetList() {
     if (!await prepareToLeave("creating a new Set List")) return false;
+    if (legacyImported) {
+      writeStorage(storageKey, null);
+      legacyImported = false;
+    }
     session.newDocument();
     render();
     return true;
@@ -409,6 +420,10 @@ function createSetListFeature({
     if (!result.ok) {
       logError(result.error || "Unable to open Set List.");
       return false;
+    }
+    if (legacyImported) {
+      writeStorage(storageKey, null);
+      legacyImported = false;
     }
     render();
     return true;
@@ -428,6 +443,7 @@ function createSetListFeature({
       return false;
     }
     writeStorage(storageKey, null);
+    legacyImported = false;
     showToast(`Saved Set List: ${safeBasename(path)}`, 2800);
     render();
     return true;

@@ -143,8 +143,10 @@ Important notes:
 - Newly added entries currently include their ABC snapshot, preserving the
   existing self-contained Set List behavior. Saved documents also retain
   Library identity and a content hash for explicit comparison/relink workflows.
-- An existing pre-document Set List is imported as an unsaved self-contained
-  document. Save it once as `*.abcarus-setlist.json` to complete the migration.
+- An existing pre-document Set List appears as a clean `Previous Set List`.
+  Use `Save As…` to keep it as `*.abcarus-setlist.json`. Opening or creating a
+  different Set List discards this one-time compatibility copy without an
+  unsaved-changes warning unless you actually edited it first.
 - `Header…` lets you define Set List–specific abc2svg directives (for example `%%stretchlast 1`) that are added to exported Set List files and used for Set List print/PDF.
 
 ## 8) Playback (audio)
