@@ -4,9 +4,7 @@ import {
   hashSetListAbc,
   insertSetListDocumentItem,
   moveSetListDocumentItems,
-  normalizeSetListDocument,
   removeSetListDocumentItem,
-  serializeSetListDocument,
 } from "./set_list_document.js";
 import {
   createEmptySetListDocument,
@@ -43,6 +41,9 @@ function createSetListFeature({
   getActiveTuneId = () => "",
   safeBasename = (value) => String(value || "").split(/[\\/]/).pop() || "",
   buildItemForTuneId = async () => null,
+  activateItemSource = async () => ({ status: "MISSING", candidate: null }),
+  resolveItemSource = async () => ({ status: "MISSING", candidate: null }),
+  onPanelVisibilityChange = () => {},
   renderItemToSvg = async () => ({ ok: false, error: "Render unavailable." }),
   buildSourceLinkMarkup = async () => "",
   outputPrint = async () => ({ ok: false, error: "Print unavailable." }),
@@ -63,6 +64,8 @@ function createSetListFeature({
 } = {}) {
   const makeId = () => globalThis.crypto.randomUUID();
   let controller = null;
+  let activeItemId = "";
+  const itemResolutions = new Map();
   const session = createSetListSession({
     makeId,
     readFile,
@@ -95,6 +98,8 @@ function createSetListFeature({
         ? "Imported from the previous ABCarus Set List. Use Save As to keep it as a portable document."
         : "",
       canAddCurrentTune: Boolean(String(getActiveTuneId() || "").trim()),
+      activeItemId,
+      resolutions: Object.fromEntries(itemResolutions),
     };
   };
   const getHeaderText = () => getDocument().print.headerText;
@@ -145,6 +150,10 @@ function createSetListFeature({
     headerText: elements.headerText,
     headerResetButton: elements.headerResetButton,
     headerSaveButton: elements.headerSaveButton,
+    snapshotModal: elements.snapshotModal,
+    snapshotCloseButton: elements.snapshotCloseButton,
+    snapshotTitle: elements.snapshotTitle,
+    snapshotPreview: elements.snapshotPreview,
     targetModal: elements.targetModal,
     targetCloseButton: elements.targetCloseButton,
     targetSelect: elements.targetSelect,
@@ -160,11 +169,90 @@ function createSetListFeature({
       });
     },
     onRemoveItem: (index) => {
+      const item = getItems()[Number(index)];
       session.mutate((document) => { document.items = removeSetListDocumentItem(document.items, index); });
+      if (item) itemResolutions.delete(item.id);
+      if (item && activeItemId === item.id) activeItemId = "";
+    },
+    onDuplicateItem: (index) => {
+      const item = getItems()[Number(index)];
+      if (!item) return false;
+      const duplicate = structuredClone(item);
+      duplicate.id = makeId();
+      session.mutate((document) => {
+        document.items = insertSetListDocumentItem(document.items, duplicate, Number(index) + 1);
+      });
+      itemResolutions.set(duplicate.id, itemResolutions.get(item.id) || "");
+      activeItemId = duplicate.id;
+      return true;
+    },
+    onPreviewSnapshot: async (index) => {
+      const item = getItems()[Number(index)];
+      if (!item || !item.embeddedAbc) {
+        controller.openSnapshotPreview({ error: "This Set List item does not contain an embedded snapshot." });
+        return false;
+      }
+      const result = await renderItemToSvg({
+        abcText: item.embeddedAbc,
+        headerText: `${getFileHeaderText()}${item.embeddedHeaderAbc || ""}`,
+        tune: { id: item.id, title: item.tune.title || "Snapshot" },
+      });
+      controller.openSnapshotPreview({
+        title: `${item.tune.title || "Untitled"} - stored snapshot`,
+        svg: result && result.svg ? result.svg : "",
+        error: result && result.svg ? "" : (result && result.error ? result.error : "Unable to render snapshot."),
+      });
+      return Boolean(result && result.svg);
+    },
+    onUpdateSnapshot: async (index) => {
+      const item = getItems()[Number(index)];
+      if (!item) return false;
+      const resolution = await resolveItemSource(item);
+      if (!resolution || !resolution.candidate) {
+        showToast("The source tune could not be resolved. Snapshot was not changed.", 4000);
+        return false;
+      }
+      const replacement = await buildDocumentItem(resolution.candidate.tuneId);
+      if (!replacement) return false;
+      replacement.id = item.id;
+      replacement.performance = structuredClone(item.performance);
+      replacement.notes = item.notes;
+      replacement.links = structuredClone(item.links);
+      replacement.export = structuredClone(item.export);
+      session.mutate((document) => { document.items[Number(index)] = replacement; });
+      itemResolutions.set(item.id, "FOUND_EXACT");
+      showToast("Set List snapshot updated from the Library source.", 3000);
+      return true;
     },
     onAddTune: async (tuneId, options = {}) => {
       await addTuneById(tuneId, options);
     },
+    onActivateItem: async (index) => {
+      const item = getItems()[Number(index)];
+      if (!item) return false;
+      const result = await activateItemSource(item);
+      const status = String(result && result.status || "MISSING");
+      itemResolutions.set(item.id, status);
+      if (result && result.opened) {
+        activeItemId = item.id;
+        const source = item.tune && item.tune.source ? item.tune.source : {};
+        const sourceLabel = source.pathHint
+          ? `${safeBasename(source.pathHint)}${source.xNumberHint ? ` X:${source.xNumberHint}` : ""}`
+          : "Library source";
+        setStatus(`Set List: ${getDocument().title} · ${Number(index) + 1} of ${getItems().length} · source ${sourceLabel}`);
+        if (status === "FOUND_MODIFIED") showToast("Opened the Library source. It differs from the stored Set List snapshot.", 3600);
+        return true;
+      }
+      if (status === "FOUND_STRONG") {
+        showToast("A possible source was found, but it must be relinked explicitly.", 4200);
+      } else if (status === "AMBIGUOUS") {
+        showToast("Several possible Library sources were found. Relink is required.", 4200);
+      } else {
+        showToast("Library source not found. The stored snapshot remains available for export and recovery.", 4200);
+      }
+      return false;
+    },
+    onVisibilityChange: onPanelVisibilityChange,
     onClear: () => {
       session.mutate((document) => { document.items = []; });
     },
@@ -204,7 +292,21 @@ function createSetListFeature({
   });
 
   const render = () => controller.render();
-  const open = () => controller.open();
+  async function refreshItemResolutions() {
+    for (const item of getItems()) {
+      try {
+        const result = await resolveItemSource(item);
+        itemResolutions.set(item.id, String(result && result.status || "MISSING"));
+      } catch {
+        itemResolutions.set(item.id, "MISSING");
+      }
+    }
+    render();
+  }
+  const open = () => {
+    controller.open();
+    refreshItemResolutions().catch(() => {});
+  };
   const close = () => controller.close();
   const openHeaderEditor = () => controller.openHeaderEditor();
   const closeHeaderEditor = () => controller.closeHeaderEditor();
@@ -221,7 +323,13 @@ function createSetListFeature({
     if (!id) throw new Error("Missing tune id.");
     const item = await buildDocumentItem(id, options);
     if (!item) return false;
-    return insertItem(item, options.insertIndex);
+    const inserted = insertItem(item, options.insertIndex);
+    if (inserted) {
+      itemResolutions.set(item.id, "FOUND_EXACT");
+      activeItemId = item.id;
+      controller.open();
+    }
+    return inserted;
   }
 
   async function buildDocumentItem(tuneId, options = {}) {
@@ -429,6 +537,8 @@ function createSetListFeature({
       legacyImported = false;
     }
     session.newDocument();
+    activeItemId = "";
+    itemResolutions.clear();
     render();
     return true;
   }
@@ -446,6 +556,8 @@ function createSetListFeature({
       writeStorage(storageKey, null);
       legacyImported = false;
     }
+    activeItemId = "";
+    itemResolutions.clear();
     render();
     return true;
   }
@@ -500,26 +612,22 @@ function createSetListFeature({
       if (!result.ok) throw new Error(result.error || "Unable to save Set List.");
       writeStorage(storageKey, null);
       showToast(`Created ${document.title}.`, 2400);
+      open();
       return true;
     }
-    const item = await buildDocumentItem(String(tuneId || ""), options);
-    if (!item) return false;
-    const readResult = await readFile(choice);
-    if (!readResult || !readResult.ok) {
+    if (!await prepareToLeave("opening the selected Set List")) return false;
+    const opened = await session.open(choice);
+    if (!opened.ok) {
       session.forgetRecentPath(choice);
-      throw new Error(readResult && readResult.error ? readResult.error : "Unable to open target Set List.");
+      throw new Error(opened.error || "Unable to open target Set List.");
     }
-    let document;
-    try { document = normalizeSetListDocument(JSON.parse(String(readResult.data || "")), { makeId }); } catch {}
-    if (!document) throw new Error("Target is not a valid Set List document.");
-    document.items.push(item);
-    document.updatedAt = new Date().toISOString();
-    const serialized = serializeSetListDocument(document, { makeId });
-    const writeResult = await writeFile(choice, serialized, { expectedData: String(readResult.data || "") });
-    if (!writeResult || !writeResult.ok) throw new Error(writeResult && writeResult.error ? writeResult.error : "Unable to update target Set List.");
-    session.rememberRecentPath(choice);
-    showToast(`Added to ${document.title}.`, 2400);
-    return true;
+    legacyImported = false;
+    activeItemId = "";
+    itemResolutions.clear();
+    open();
+    const added = await addTuneById(tuneId, options);
+    if (added) showToast(`Added to ${getDocument().title}. Save the Set List to keep this change.`, 3200);
+    return added;
   }
 
   return {

@@ -200,6 +200,52 @@ await test("captures only the source file preamble as embedded header context", 
   assert.equal(captured.sourceFileModifiedAt, "2026-08-20T12:00:00.000Z");
 });
 
+await test("docked Set List activation uses the canonical Library tune pipeline", async () => {
+  const abc = "X:7\nT:Source Tune\nC:Composer\nK:C\nC|\n";
+  const contentHash = await hashSetListAbc(abc, webcrypto);
+  const tune = {
+    id: "/music/source.abc::0",
+    startOffset: 0,
+    endOffset: abc.length,
+    xNumber: "7",
+    title: "Source Tune",
+    composer: "Composer",
+  };
+  const file = { path: "/music/source.abc", tunes: [tune] };
+  const selected = [];
+  const adapter = createSetListRendererAdapter({
+    findTuneById: (id) => id === tune.id ? { tune, file } : null,
+    getLibraryIndex: () => ({ files: [file] }),
+    getTuneText: async () => abc,
+    selectTune: async (id) => { selected.push(id); return { ok: true }; },
+  });
+  const item = {
+    tune: {
+      title: "Source Tune",
+      composer: "Composer",
+      source: { locatorHint: tune.id, pathHint: file.path, xNumberHint: "7" },
+      contentHash,
+    },
+    embeddedAbc: abc,
+  };
+  const result = await adapter.activateItemSource(item);
+  assert.equal(result.status, SET_LIST_RESOLUTION.FOUND_EXACT);
+  assert.deepEqual(selected, [tune.id]);
+});
+
+await test("dirty source tune cannot be snapshotted without saving", async () => {
+  let reads = 0;
+  const adapter = createSetListRendererAdapter({
+    getCurrentDocDirty: () => true,
+    getActiveTuneId: () => "active",
+    confirmUnsavedChanges: async () => "dont_save",
+    findTuneById: () => ({ file: { path: "/music/a.abc" }, tune: { startOffset: 0, endOffset: 8, xNumber: "1" } }),
+    readFile: async () => { reads += 1; return { ok: true, data: "X:1\nK:C\n" }; },
+  });
+  assert.equal(await adapter.buildItemForTuneId("active"), null);
+  assert.equal(reads, 0);
+});
+
 test("converts the current snapshot workspace without losing ABC", () => {
   let id = 0;
   const converted = convertLegacySetListState({

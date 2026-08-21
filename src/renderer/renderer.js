@@ -316,6 +316,7 @@ const $aboutClose = document.getElementById("aboutClose");
 const $aboutInfo = document.getElementById("aboutInfo");
 const $aboutCopy = document.getElementById("aboutCopy");
 const $setListModal = document.getElementById("setListModal");
+const $setListDivider = document.getElementById("setListDivider");
 const $setListClose = document.getElementById("setListClose");
 const $setListTitle = document.getElementById("setListTitle");
 const $setListNew = document.getElementById("setListNew");
@@ -375,6 +376,10 @@ const $setListHeaderClose = document.getElementById("setListHeaderClose");
 const $setListHeaderText = document.getElementById("setListHeaderText");
 const $setListHeaderReset = document.getElementById("setListHeaderReset");
 const $setListHeaderSave = document.getElementById("setListHeaderSave");
+const $setListSnapshotModal = document.getElementById("setListSnapshotModal");
+const $setListSnapshotClose = document.getElementById("setListSnapshotClose");
+const $setListSnapshotTitle = document.getElementById("setListSnapshotTitle");
+const $setListSnapshotPreview = document.getElementById("setListSnapshotPreview");
 const $setListTargetModal = document.getElementById("setListTargetModal");
 const $setListTargetClose = document.getElementById("setListTargetClose");
 const $setListTargetSelect = document.getElementById("setListTargetSelect");
@@ -843,6 +848,9 @@ const setListRendererAdapter = createSetListRendererAdapter({
   confirmUnsavedChanges,
   performSaveFlow,
   findTuneById,
+  getLibraryIndex: libraryRuntime.getIndex,
+  getTuneText,
+  selectTune,
   readFile,
   writeFile,
   pathsEqual,
@@ -855,6 +863,24 @@ const setListRendererAdapter = createSetListRendererAdapter({
   showSaveError,
   withFileLock,
 });
+let setListPanelVisible = false;
+let setListPanelWidth = 300;
+
+function applySetListPanelVisibility(visible) {
+  setListPanelVisible = Boolean(visible);
+  document.body.classList.toggle("set-list-visible", setListPanelVisible);
+  if (libraryRuntime.isVisible()) {
+    const width = libraryUiStateController
+      ? libraryUiStateController.getLastSidebarWidth()
+      : ($sidebar.getBoundingClientRect().width || 280);
+    layoutController.setPaneSizes(width || 280);
+  } else {
+    $main.style.gridTemplateColumns = setListPanelVisible
+      ? `0px 0px ${setListPanelWidth}px 6px 1fr`
+      : "0px 0px 0px 0px 1fr";
+  }
+}
+
 const setListFeature = createSetListFeature({
   elements: {
     modal: $setListModal,
@@ -879,6 +905,10 @@ const setListFeature = createSetListFeature({
     headerText: $setListHeaderText,
     headerResetButton: $setListHeaderReset,
     headerSaveButton: $setListHeaderSave,
+    snapshotModal: $setListSnapshotModal,
+    snapshotCloseButton: $setListSnapshotClose,
+    snapshotTitle: $setListSnapshotTitle,
+    snapshotPreview: $setListSnapshotPreview,
     targetModal: $setListTargetModal,
     targetCloseButton: $setListTargetClose,
     targetSelect: $setListTargetSelect,
@@ -900,6 +930,9 @@ const setListFeature = createSetListFeature({
   getActiveTuneId: () => activeContext.getActiveTuneId(),
   safeBasename,
   buildItemForTuneId: setListRendererAdapter.buildItemForTuneId,
+  activateItemSource: setListRendererAdapter.activateItemSource,
+  resolveItemSource: setListRendererAdapter.resolveItemSource,
+  onPanelVisibilityChange: applySetListPanelVisibility,
   renderItemToSvg: setListRendererAdapter.renderItemToSvg,
   buildSourceLinkMarkup: (abcText) => sourceLinkFeature.buildPrintMarkup(abcText),
   outputPrint: setListRendererAdapter.outputPrint,
@@ -1265,6 +1298,8 @@ const layoutController = createLayoutController({
   minErrorPaneHeight: MIN_ERROR_PANE_HEIGHT,
   useErrorOverlay: USE_ERROR_OVERLAY,
   getLibraryVisible: libraryRuntime.isVisible,
+  getSetListVisible: () => setListPanelVisible,
+  getSetListPaneWidth: () => setListPanelWidth,
   getLatestSettings: settingsSnapshot.get,
   isNormalModeForSplitToggle,
   isRawMode: () => isRawModeActive(),
@@ -1277,6 +1312,33 @@ const layoutController = createLayoutController({
   },
   showToast,
 });
+
+if ($setListDivider && $setListModal) {
+  $setListDivider.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    $setListDivider.setPointerCapture(event.pointerId);
+    const startWidth = $setListModal.getBoundingClientRect().width || setListPanelWidth;
+    const startX = event.clientX;
+    const onMove = (moveEvent) => {
+      const libraryWidth = libraryRuntime.isVisible() ? ($sidebar.getBoundingClientRect().width || 0) : 0;
+      const maxWidth = Math.max(220, $main.clientWidth - libraryWidth - 320);
+      setListPanelWidth = Math.max(220, Math.min(startWidth + moveEvent.clientX - startX, maxWidth));
+      if (libraryRuntime.isVisible()) layoutController.setPaneSizes(libraryWidth || 280);
+      else $main.style.gridTemplateColumns = `0px 0px ${setListPanelWidth}px 6px 1fr`;
+    };
+    const onUp = () => {
+      $setListDivider.releasePointerCapture(event.pointerId);
+      $setListDivider.removeEventListener("pointermove", onMove);
+      $setListDivider.removeEventListener("pointerup", onUp);
+      $setListDivider.removeEventListener("pointercancel", onUp);
+      document.body.classList.remove("resizing");
+    };
+    document.body.classList.add("resizing");
+    $setListDivider.addEventListener("pointermove", onMove);
+    $setListDivider.addEventListener("pointerup", onUp);
+    $setListDivider.addEventListener("pointercancel", onUp);
+  });
+}
 
 function isNormalModeForSplitToggle() {
   return !isRawModeActive() && !isFocusModeEnabled();
@@ -1537,6 +1599,8 @@ const libraryUiDomain = createLibraryUiDomain({
   },
   state: {
     getLibraryVisible: libraryRuntime.isVisible,
+    getSetListVisible: () => setListPanelVisible,
+    getSetListPaneWidth: () => setListPanelWidth,
     setLibraryVisibleState: libraryRuntime.setVisible,
     isLibraryDisabled: () => chordProFeature.isEnabled(),
     getLibraryIndex: libraryRuntime.getIndex,

@@ -24,6 +24,9 @@ export function createLayoutController({
   minErrorPaneHeight = 120,
   useErrorOverlay = true,
   getLibraryVisible = () => false,
+  getSetListVisible = () => false,
+  getSetListPaneWidth = () => 300,
+  setListDividerWidth = 6,
   getLatestSettings = () => null,
   isNormalModeForSplitToggle = () => true,
   isRawMode = () => false,
@@ -57,10 +60,16 @@ export function createLayoutController({
     if (!main || !divider || !sidebar) return;
     const total = main.clientWidth;
     const dividerWidth = divider.offsetWidth || 6;
-    const min = Math.min(minPaneWidth, Math.max(0, (total - dividerWidth) / 2));
-    const clamped = Math.max(min, Math.min(leftWidth, total - min - dividerWidth));
+    const setListVisible = Boolean(getSetListVisible());
+    const setListPaneWidth = Math.max(220, Number(getSetListPaneWidth()) || 300);
+    const setListOccupied = setListVisible ? setListPaneWidth + setListDividerWidth : 0;
+    const available = Math.max(0, total - dividerWidth - setListOccupied);
+    const min = Math.min(minPaneWidth, Math.max(0, available / 2));
+    const clamped = Math.max(min, Math.min(leftWidth, available - min));
     setSidebarWidth(clamped);
-    main.style.gridTemplateColumns = `${clamped}px ${dividerWidth}px 1fr`;
+    main.style.gridTemplateColumns = setListVisible
+      ? `${clamped}px ${dividerWidth}px ${setListPaneWidth}px ${setListDividerWidth}px 1fr`
+      : `${clamped}px ${dividerWidth}px 0px 0px 1fr`;
     if (getLibraryVisible()) {
       saveLibraryPrefs({ libraryPaneWidth: Math.round(clamped) });
     }

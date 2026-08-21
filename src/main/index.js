@@ -3573,6 +3573,7 @@ async function runUiSmoke(win) {
           "aboutClose",
           "setListClose",
           "setListHeaderClose",
+          "setListSnapshotClose",
           "setListTargetClose",
           "xIssuesClose",
           "printAllOptionsClose",
@@ -3644,6 +3645,9 @@ async function runUiSmoke(win) {
         setListDocumentUiOk = Boolean(
           setListModal
           && setListModal.classList.contains("open")
+          && setListModal.classList.contains("set-list-panel")
+          && !setListModal.closest(".modal")
+          && document.body.classList.contains("set-list-visible")
           && setListTitle
           && setListTitle.value === "Smoke Set List *"
           && setListSave
@@ -3654,7 +3658,12 @@ async function runUiSmoke(win) {
           && setListTarget.getAttribute("aria-hidden") === "true"
         );
         const setListClose = byId("setListClose");
-        if (setListClose) setListClose.click();
+        if (setListClose) {
+          setListClose.click();
+          setListDocumentUiOk = setListDocumentUiOk
+            && !document.body.classList.contains("set-list-visible")
+            && setListTitle.value === "Smoke Set List *";
+        }
       }
       return {
         ok: errorsVisible

@@ -21,6 +21,10 @@ function createSetListController({
   headerText,
   headerResetButton,
   headerSaveButton,
+  snapshotModal,
+  snapshotCloseButton,
+  snapshotTitle,
+  snapshotPreview,
   targetModal,
   targetCloseButton,
   targetSelect,
@@ -32,7 +36,12 @@ function createSetListController({
   getHeaderText,
   onMoveItem,
   onRemoveItem,
+  onDuplicateItem,
+  onPreviewSnapshot,
+  onUpdateSnapshot,
   onAddTune,
+  onActivateItem,
+  onVisibilityChange,
   onClear,
   onPageBreaksChange,
   onCompactChange,
@@ -74,6 +83,8 @@ function createSetListController({
       dirty: Boolean(state.dirty),
       notice: String(state.notice || ""),
       canAddCurrentTune: Boolean(state.canAddCurrentTune),
+      activeItemId: String(state.activeItemId || ""),
+      resolutions: state.resolutions && typeof state.resolutions === "object" ? state.resolutions : {},
     };
   }
 
@@ -83,7 +94,7 @@ function createSetListController({
     const items = state.items;
     const hasItems = items.length > 0;
     empty.hidden = hasItems;
-    itemsList.hidden = !hasItems;
+    itemsList.hidden = false;
 
     itemsList.textContent = "";
     if (hasItems) {
@@ -92,7 +103,15 @@ function createSetListController({
         const row = document.createElement("div");
         row.className = "set-list-row";
         row.draggable = true;
+        row.tabIndex = 0;
         row.dataset.index = String(i);
+        const resolution = String(state.resolutions[item.id] || "");
+        if (resolution) row.dataset.resolution = resolution;
+        if (String(item.id || "") === state.activeItemId) row.classList.add("is-active");
+
+        const status = document.createElement("span");
+        status.className = "set-list-status";
+        status.title = resolution ? resolution.replaceAll("_", " ") : "Source not checked";
 
         const idx = document.createElement("div");
         idx.className = "set-list-idx";
@@ -106,17 +125,7 @@ function createSetListController({
         meta.className = "set-list-meta";
         meta.textContent = item.composer ? String(item.composer) : "";
 
-        const actions = document.createElement("div");
-        actions.className = "set-list-actions";
-        const upDisabled = i === 0;
-        const downDisabled = i === items.length - 1;
-        actions.innerHTML = `
-          <button type="button" class="set-list-btn" data-action="up" data-index="${i}" aria-label="Move up" ${upDisabled ? "disabled" : ""}>&uarr;</button>
-          <button type="button" class="set-list-btn" data-action="down" data-index="${i}" aria-label="Move down" ${downDisabled ? "disabled" : ""}>&darr;</button>
-          <button type="button" class="set-list-btn" data-action="remove" data-index="${i}" aria-label="Remove">&times;</button>
-        `;
-
-        row.append(idx, title, meta, actions);
+        row.append(status, idx, title, meta);
         itemsList.append(row);
       }
     }
@@ -142,13 +151,14 @@ function createSetListController({
     render();
     modal.classList.add("open");
     modal.setAttribute("aria-hidden", "false");
-    if (pageBreaksSelect) pageBreaksSelect.focus();
+    if (typeof onVisibilityChange === "function") onVisibilityChange(true);
   }
 
   function close() {
     if (!modal) return;
     modal.classList.remove("open");
     modal.setAttribute("aria-hidden", "true");
+    if (typeof onVisibilityChange === "function") onVisibilityChange(false);
   }
 
   function openHeaderEditor() {
@@ -163,6 +173,23 @@ function createSetListController({
     if (!headerModal) return;
     headerModal.classList.remove("open");
     headerModal.setAttribute("aria-hidden", "true");
+  }
+
+  function openSnapshotPreview({ title = "Snapshot Preview", svg = "", error = "" } = {}) {
+    if (!snapshotModal || !snapshotPreview) return;
+    if (snapshotTitle) snapshotTitle.textContent = String(title || "Snapshot Preview");
+    snapshotPreview.innerHTML = error
+      ? `<div class="set-list-empty"></div>`
+      : String(svg || "");
+    if (error && snapshotPreview.firstElementChild) snapshotPreview.firstElementChild.textContent = String(error);
+    snapshotModal.classList.add("open");
+    snapshotModal.setAttribute("aria-hidden", "false");
+  }
+
+  function closeSnapshotPreview() {
+    if (!snapshotModal) return;
+    snapshotModal.classList.remove("open");
+    snapshotModal.setAttribute("aria-hidden", "true");
   }
 
   if (closeButton) closeButton.addEventListener("click", close);
@@ -230,6 +257,22 @@ function createSetListController({
   }
 
   if (itemsList) {
+    let contextMenu = null;
+    const closeItemContextMenu = () => {
+      if (contextMenu) contextMenu.remove();
+      contextMenu = null;
+    };
+    const runItemAction = (action, index) => {
+      if (action === "open" && typeof onActivateItem === "function") return onActivateItem(index);
+      if (action === "preview" && typeof onPreviewSnapshot === "function") return onPreviewSnapshot(index);
+      if (action === "update" && typeof onUpdateSnapshot === "function") return onUpdateSnapshot(index);
+      if (action === "duplicate" && typeof onDuplicateItem === "function") return onDuplicateItem(index);
+      if (action === "remove" && typeof onRemoveItem === "function") return onRemoveItem(index);
+      if (action === "up" && typeof onMoveItem === "function") return onMoveItem(index, index - 1);
+      if (action === "down" && typeof onMoveItem === "function") return onMoveItem(index, index + 1);
+      return null;
+    };
+
     itemsList.addEventListener("dragstart", (e) => {
       const row = e && e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
       if (!row) return;
@@ -307,7 +350,17 @@ function createSetListController({
 
     itemsList.addEventListener("click", (e) => {
       const btn = e && e.target && e.target.closest ? e.target.closest(".set-list-btn") : null;
-      if (!btn || btn.disabled) return;
+      if (!btn) {
+        const row = e && e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
+        const index = row && row.dataset ? Number(row.dataset.index) : NaN;
+        if (Number.isInteger(index) && typeof onActivateItem === "function") {
+          onActivateItem(index).then(render).catch((err) => {
+            if (typeof showToast === "function") showToast(err && err.message ? err.message : String(err), 5000);
+          });
+        }
+        return;
+      }
+      if (btn.disabled) return;
       const action = btn.dataset ? btn.dataset.action : "";
       const index = btn.dataset ? btn.dataset.index : "";
       if (action === "remove") {
@@ -324,6 +377,59 @@ function createSetListController({
         if (typeof onMoveItem === "function") onMoveItem(index, Number(index) + 1);
         render();
       }
+    });
+
+    itemsList.addEventListener("keydown", (e) => {
+      const row = e && e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
+      const index = row && row.dataset ? Number(row.dataset.index) : NaN;
+      if (!Number.isInteger(index)) return;
+      let action = "";
+      if (e.key === "Enter") action = "open";
+      else if (e.key === "Delete" || e.key === "Backspace") action = "remove";
+      else if (e.altKey && e.key === "ArrowUp") action = "up";
+      else if (e.altKey && e.key === "ArrowDown") action = "down";
+      if (!action) return;
+      e.preventDefault();
+      Promise.resolve(runItemAction(action, index)).then(render).catch(() => {});
+    });
+
+    itemsList.addEventListener("contextmenu", (e) => {
+      const row = e && e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
+      const index = row && row.dataset ? Number(row.dataset.index) : NaN;
+      if (!Number.isInteger(index) || !modal) return;
+      e.preventDefault();
+      closeItemContextMenu();
+      contextMenu = document.createElement("div");
+      contextMenu.className = "set-list-item-menu";
+      const actions = [
+        ["open", "Open Source Tune"],
+        ["preview", "Preview Snapshot"],
+        ["update", "Update Snapshot from Source"],
+        ["duplicate", "Duplicate Occurrence"],
+        ["up", "Move Up"],
+        ["down", "Move Down"],
+        ["remove", "Remove from Set List"],
+      ];
+      for (const [action, label] of actions) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = label;
+        button.disabled = (action === "up" && index === 0)
+          || (action === "down" && index === readState().items.length - 1);
+        button.addEventListener("click", () => {
+          closeItemContextMenu();
+          Promise.resolve(runItemAction(action, index)).then(render).catch(() => {});
+        });
+        contextMenu.appendChild(button);
+      }
+      modal.appendChild(contextMenu);
+      const panelRect = modal.getBoundingClientRect();
+      contextMenu.style.left = `${Math.max(4, Math.min(e.clientX - panelRect.left, panelRect.width - 190))}px`;
+      contextMenu.style.top = `${Math.max(4, Math.min(e.clientY - panelRect.top, panelRect.height - 180))}px`;
+    });
+
+    document.addEventListener("pointerdown", (e) => {
+      if (contextMenu && !contextMenu.contains(e.target)) closeItemContextMenu();
     });
   }
 
@@ -347,10 +453,18 @@ function createSetListController({
       if (closeDocumentMenus()) return;
       close();
     });
-    if (typeof enableDraggable === "function") enableDraggable(modal);
   }
 
   if (headerCloseButton) headerCloseButton.addEventListener("click", closeHeaderEditor);
+  if (snapshotCloseButton) snapshotCloseButton.addEventListener("click", closeSnapshotPreview);
+
+  if (snapshotModal) {
+    snapshotModal.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      closeSnapshotPreview();
+    });
+  }
 
   if (headerModal) {
     headerModal.addEventListener("keydown", (e) => {
@@ -436,6 +550,7 @@ function createSetListController({
     chooseTarget,
     open,
     openHeaderEditor,
+    openSnapshotPreview,
     render,
   };
 }

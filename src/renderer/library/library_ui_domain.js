@@ -79,6 +79,8 @@ function createLibraryUiDomain({
       isLibraryDisabled: () => (typeof state.isLibraryDisabled === "function" ? state.isLibraryDisabled() : false),
       getLastSidebarWidth: () => uiStateController ? uiStateController.getLastSidebarWidth() : 280,
       getLibraryIndex: () => (typeof state.getLibraryIndex === "function" ? state.getLibraryIndex() : null),
+      getSetListVisible: () => (typeof state.getSetListVisible === "function" ? state.getSetListVisible() : false),
+      getSetListPaneWidth: () => (typeof state.getSetListPaneWidth === "function" ? state.getSetListPaneWidth() : 300),
     },
     actions: {
       ensureSafeToAbandonCurrentDoc: actions.ensureSafeToAbandonCurrentDoc,
