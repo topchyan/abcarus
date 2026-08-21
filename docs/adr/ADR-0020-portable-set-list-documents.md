@@ -32,6 +32,10 @@ One Set List is stored as one readable JSON file:
 schema: abcarus.setlist.v1
 ```
 
+The normative field and compatibility contract is documented in
+`docs/set-list-format.md`; its canonical strict-write JSON Schema is
+`docs/schemas/abcarus.setlist.v1.schema.json`.
+
 The format is platform-neutral and contains no Electron or DOM state. Desktop
 and mobile implementations must use the same field semantics and compatibility
 fixtures.

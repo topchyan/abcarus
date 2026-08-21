@@ -119,6 +119,10 @@ Filesystem time is informational only. A multi-tune ABC file changes its mtime
 when any contained tune is saved, and timestamps may be preserved or rounded by
 copy and filesystem operations.
 
+Hash input normalization and the exact scope of `embeddedHeaderAbc` are defined
+by the shared format contract in `docs/set-list-format.md`. Desktop and mobile
+must use that same contract and its fixtures.
+
 The domain keeps the resolution states defined by ADR-0020:
 
 ```text

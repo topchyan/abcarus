@@ -14,10 +14,15 @@
       "rhythm": "",
       "origin": "",
       "groups": [],
-      "source": { "pathHint": "/old/festival.abc", "xNumberHint": "12" },
-      "contentHash": "sha256:song-a-v1"
+      "source": { "tuneIdHint": "/old/festival.abc::12", "pathHint": "/old/festival.abc", "xNumberHint": "12" },
+      "contentHash": "sha256:bae9426e48b6d89b810ac0c01b7a565dd4d1bf33814f25925fb9150c4c7cc162"
     },
     "embeddedAbc": "X:12\nT:Song A\nC:Composer\nK:D\nD E F G|\n",
+    "embeddedHeaderAbc": "%%stretchlast 1\n",
+    "snapshot": {
+      "capturedAt": "2026-08-20T12:00:00.000Z",
+      "sourceFileModifiedAt": "2026-08-20T11:55:00.000Z"
+    },
     "performance": { "transposeSemitones": 2, "tempoScale": 0.92 },
     "notes": "Use saved arrangement.",
     "links": [{ "kind": "youtube", "url": "https://youtu.be/example", "label": "Reference" }],

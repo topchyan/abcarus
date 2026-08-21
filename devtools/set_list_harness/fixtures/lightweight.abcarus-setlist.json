@@ -14,8 +14,8 @@
       "rhythm": "Reel",
       "origin": "Ireland",
       "groups": ["Session"],
-      "source": { "pathHint": "/music/session.abc", "xNumberHint": "1" },
-      "contentHash": "sha256:cooleys-v1"
+      "source": { "tuneIdHint": "/music/session.abc::1", "pathHint": "/music/session.abc", "xNumberHint": "1" },
+      "contentHash": "sha256:9018cb45d56c0dabe624305ef59dffc56e66fedb264d3eea32ab51d05e396b97"
     },
     "performance": { "transposeSemitones": 0, "tempoScale": 1 },
     "notes": "Open the second set.",

@@ -1,0 +1,25 @@
+{
+  "baseText": "X:1\nT:Café Երևան\nK:C\nC|\n",
+  "equivalentLineEndings": [
+    "X:1\r\nT:Café Երևան\r\nK:C\r\nC|\r\n",
+    "X:1\rT:Café Երևան\rK:C\rC|\r"
+  ],
+  "expectedHash": "sha256:ef0b420bac8d7d3f4d5c1c62bb04bb05b89a6ac010d8a9d59d29b2139ebd6079",
+  "significantVariants": [
+    {
+      "name": "no final newline",
+      "text": "X:1\nT:Café Երևան\nK:C\nC|",
+      "expectedHash": "sha256:915738b0ef3bad34f0b8ea68d3174d1cc403de7b7faf8cc687093114ba6a4dda"
+    },
+    {
+      "name": "trailing space",
+      "text": "X:1\nT:Café Երևան \nK:C\nC|\n",
+      "expectedHash": "sha256:8a78be2fa2b169b296b5df399bde4e5cbd9fd570de02a9c4988e42a9c41c3989"
+    },
+    {
+      "name": "UTF-8 BOM",
+      "text": "﻿X:1\nT:Café Երևան\nK:C\nC|\n",
+      "expectedHash": "sha256:4983e3460407ab112df2ddf3af7800b8d01979d3e9b2e0539e06c88b2c77a799"
+    }
+  ]
+}

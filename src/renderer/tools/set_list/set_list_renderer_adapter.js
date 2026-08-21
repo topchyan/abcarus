@@ -75,6 +75,9 @@ function createSetListRendererAdapter({
       groups: Array.isArray(res.tune.groups)
         ? res.tune.groups.slice()
         : (res.tune.group ? [res.tune.group] : []),
+      sourceFileModifiedAt: Number.isFinite(Number(res.file.updatedAtMs)) && Number(res.file.updatedAtMs) > 0
+        ? new Date(Number(res.file.updatedAtMs)).toISOString()
+        : "",
       headerText: entryHeader,
       text: slice,
     };

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { webcrypto } from "node:crypto";
 import fs from "node:fs";
 import { build } from "esbuild";
+import Ajv2020 from "ajv/dist/2020.js";
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
@@ -67,8 +68,20 @@ test("accepts lightweight and self-contained portable documents", () => {
   assert.equal(lightweight.schema, SET_LIST_SCHEMA);
   assert.equal("embeddedAbc" in lightweight.items[0], false);
   assert.match(contained.items[0].embeddedAbc, /^X:12/m);
+  assert.equal(contained.items[0].snapshot.capturedAt, "2026-08-20T12:00:00.000Z");
+  assert.equal(contained.items[0].snapshot.sourceFileModifiedAt, "2026-08-20T11:55:00.000Z");
   assert.equal(contained.items[0].performance.transposeSemitones, 2);
   assert.equal(contained.items[0].export.pageBreakBefore, true);
+});
+
+test("canonical portable documents satisfy the shared JSON Schema", () => {
+  const schema = readFixture("../../../docs/schemas/abcarus.setlist.v1.schema.json");
+  const ajv = new Ajv2020({ allErrors: true, strict: true, validateFormats: false });
+  const validate = ajv.compile(schema);
+  for (const name of ["lightweight.abcarus-setlist.json", "self-contained.abcarus-setlist.json"]) {
+    const canonical = JSON.parse(serializeSetListDocument(readFixture(name)));
+    assert.equal(validate(canonical), true, `${name}: ${ajv.errorsText(validate.errors)}`);
+  }
 });
 
 test("keeps duplicate tune occurrences as independent items", () => {
@@ -143,7 +156,9 @@ await test("legacy Set List remains clean until the user changes it", async () =
       xNumber: "1",
       title: "New Tune",
       text: "X:1\nT:New Tune\nK:C\nD|\n",
+      sourceFileModifiedAt: "2026-08-20T11:55:00.000Z",
     }),
+    nowIso: () => "2026-08-20T12:00:00.000Z",
     confirmUnsavedChanges: async () => {
       confirmCalls += 1;
       return "cancel";
@@ -171,7 +186,7 @@ test("resolves exact content independently of its old path", () => {
     xNumber: "18",
     title: "Cooley's",
     composer: "Traditional",
-    contentHash: "sha256:cooleys-v1",
+    contentHash: item.tune.contentHash,
   }]);
   assert.equal(result.status, SET_LIST_RESOLUTION.FOUND_EXACT);
   assert.equal(result.candidate.sourcePath, "/moved/session.abc");
@@ -192,10 +207,17 @@ test("rejects unknown Set List schema versions", () => {
 });
 
 await test("hashes ABC portably across line endings", async () => {
-  const lf = await hashSetListAbc("X:1\nK:C\nC|\n", webcrypto);
-  const crlf = await hashSetListAbc("X:1\r\nK:C\r\nC|\r\n", webcrypto);
-  assert.equal(lf, crlf);
-  assert.match(lf, /^sha256:[0-9a-f]{64}$/);
+  const fixture = readFixture("hash-contract.json");
+  const base = await hashSetListAbc(fixture.baseText, webcrypto);
+  assert.equal(base, fixture.expectedHash);
+  for (const equivalent of fixture.equivalentLineEndings) {
+    assert.equal(await hashSetListAbc(equivalent, webcrypto), base);
+  }
+  for (const variant of fixture.significantVariants) {
+    const hash = await hashSetListAbc(variant.text, webcrypto);
+    assert.equal(hash, variant.expectedHash, variant.name);
+    assert.notEqual(hash, base, variant.name);
+  }
 });
 
 test("normalizes recent Set List paths without duplicate documents", () => {

@@ -58,6 +58,7 @@ function createSetListFeature({
   confirm = (message) => window.confirm(message),
   confirmUnsavedChanges = async () => "cancel",
   enableDraggable = null,
+  nowIso = () => new Date().toISOString(),
 } = {}) {
   const makeId = () => globalThis.crypto.randomUUID();
   let controller = null;
@@ -243,6 +244,10 @@ function createSetListFeature({
       },
       embeddedAbc: source.text || "",
       embeddedHeaderAbc: source.headerText || "",
+      snapshot: {
+        capturedAt: nowIso(),
+        ...(source.sourceFileModifiedAt ? { sourceFileModifiedAt: source.sourceFileModifiedAt } : {}),
+      },
       performance: { transposeSemitones: 0, tempoScale: 1 },
       notes: "",
       links: [],

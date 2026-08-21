@@ -77,6 +77,16 @@ function normalizeLinks(links) {
   }).filter((link) => link.url);
 }
 
+function normalizeSnapshotObservation(snapshot) {
+  const raw = snapshot && typeof snapshot === "object" ? snapshot : {};
+  const capturedAt = text(raw.capturedAt);
+  if (!capturedAt) return null;
+  const normalized = { capturedAt };
+  const sourceFileModifiedAt = text(raw.sourceFileModifiedAt);
+  if (sourceFileModifiedAt) normalized.sourceFileModifiedAt = sourceFileModifiedAt;
+  return normalized;
+}
+
 function moveSetListDocumentItems(items, fromIndex, toIndex) {
   const source = Array.isArray(items) ? items : [];
   const from = Number(fromIndex);
@@ -134,6 +144,8 @@ function normalizeSetListDocumentItem(item, options = {}) {
   if (typeof item.embeddedHeaderAbc === "string" && item.embeddedHeaderAbc.trim()) {
     normalized.embeddedHeaderAbc = item.embeddedHeaderAbc;
   }
+  const snapshot = normalizeSnapshotObservation(item.snapshot);
+  if (snapshot) normalized.snapshot = snapshot;
   return normalized;
 }
 
@@ -203,6 +215,7 @@ function convertLegacySetListState(legacy, options = {}) {
       },
       embeddedAbc: text(item && item.text),
       embeddedHeaderAbc: text(item && item.headerText),
+      snapshot: { capturedAt: timestamp },
       performance: { transposeSemitones: 0, tempoScale: 1 },
       notes: "",
       links: [],
