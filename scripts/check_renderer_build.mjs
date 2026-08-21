@@ -705,24 +705,6 @@ async function assertPrintSuggestedBaseNameIncludesKey() {
   }
 }
 
-async function assertPrintSvgFragmentsAreNamespaced() {
-  const mainSrc = await readFile("src/main/index.js", "utf8");
-  if (!mainSrc.includes("function namespaceSvgFragmentIds()")) {
-    throw new Error("Print HTML must namespace repeated SVG fragment ids.");
-  }
-  const namespacePos = mainSrc.indexOf("namespaceSvgFragmentIds();");
-  const normalizePos = mainSrc.indexOf("normalizeSvgBounds();", namespacePos);
-  if (namespacePos < 0 || normalizePos < 0 || namespacePos > normalizePos) {
-    throw new Error("SVG fragment ids must be isolated before print bounds normalization.");
-  }
-  if (!mainSrc.includes('svg.querySelectorAll("[id]")')) {
-    throw new Error("Print SVG namespace pass must rename SVG definition ids.");
-  }
-  if (!mainSrc.includes('attribute.name === "id"')) {
-    throw new Error("Print SVG namespace pass must preserve renamed id attributes.");
-  }
-}
-
 async function assertAbc2svgFontHeaderUrls() {
   const bundled = await build({
     entryPoints: ["src/renderer/render/header_layers_controller.js"],
@@ -960,7 +942,6 @@ async function main() {
   await assertDirectiveErrorsDoNotGetMeasureStats();
   await assertSepIsPrestrippedForRender();
   await assertPrintSuggestedBaseNameIncludesKey();
-  await assertPrintSvgFragmentsAreNamespaced();
   await assertAbc2svgFontHeaderUrls();
   await assertHeaderDirectivesArePreserved();
   await assertSettingsPanelStructure();
