@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Set Lists are now portable, self-contained JSON documents with tune snapshots, source resolution, print/export settings, and explicit snapshot update actions.
+- Set Lists open as a docked, hideable workspace beside the Library and use the same Editor/Score pipeline as Library navigation.
+
+### Changed
+- Set List drag-and-drop now distinguishes Library copies from internal reordering and provides deterministic before/after placement feedback.
+- `Reset View` now adapts to Split orientation, gives the Score a larger share of the available space, fits notation to the available width, and centers the rendered score.
+- Toggling Library or Set List recalculates the layout and score fit; Set List source-status dots are no longer shown in every row.
+
+### Fixed
+- The Editor/Score pane remains visible when the Set List workspace is hidden.
+- Dragging a Library tune after reordering a Set List no longer accidentally reorders the Set List.
 
 
 ## [1.6.1] - 2026-08-20
