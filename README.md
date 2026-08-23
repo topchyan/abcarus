@@ -111,7 +111,7 @@ For users:
 - Changelog (what changed): [CHANGELOG.md](CHANGELOG.md)
 
 For contributors:
-- Quick workflow (dev + release): [WORKFLOW.md](WORKFLOW.md)
+- Quick workflow (dev + release): [docs/WORKFLOW.md](docs/WORKFLOW.md)
 - Developer documentation index: [docs/README.md](docs/README.md)
 - Detailed release checklist: [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)
 - Product + engineering invariants: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)

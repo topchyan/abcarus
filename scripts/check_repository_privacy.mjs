@@ -38,8 +38,8 @@ for (const file of trackedFiles) {
   if (forbiddenTrackedRoots.some((root) => file.startsWith(root))) {
     failures.push(`${file}: private/local path must not be tracked`);
   }
-  if (file.startsWith("kitchen/") && file !== "kitchen/README.md") {
-    failures.push(`${file}: only kitchen/README.md may be tracked`);
+  if (file.startsWith("kitchen/")) {
+    failures.push(`${file}: kitchen is local-only and must not be tracked`);
   }
 }
 

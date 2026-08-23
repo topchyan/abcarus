@@ -6,8 +6,8 @@ This documentation is based on the current codebase and does not assume features
 
 ## Start here
 
-- Day-to-day workflow (dev + release): [WORKFLOW.md](../WORKFLOW.md) (repo root)
-- Project orientation + invariants: [ORIENTATION.md](../ORIENTATION.md) (repo root)
+- Day-to-day workflow (dev + release): [WORKFLOW.md](WORKFLOW.md)
+- Project orientation + invariants: [ORIENTATION.md](ORIENTATION.md)
 - User-facing overview: [README.md](../README.md) (repo root)
 - User guide (how to use the app): [docs/USER_GUIDE.md](USER_GUIDE.md)
 

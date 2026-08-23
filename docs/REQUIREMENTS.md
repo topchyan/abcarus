@@ -88,5 +88,5 @@ Playback must be deterministic and must stay in sync between editor and rendered
 - [docs/architecture.md](architecture.md) (where responsibilities live)
 - [docs/adr/ADR-0001-library-store-renderer-library-service-main.md](adr/ADR-0001-library-store-renderer-library-service-main.md)
 - [docs/adr/ADR-0002-incremental-full-scan-gated.md](adr/ADR-0002-incremental-full-scan-gated.md)
-- [WORKFLOW.md](../WORKFLOW.md)
+- [WORKFLOW.md](WORKFLOW.md)
 - [docs/RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)

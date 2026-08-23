@@ -33,7 +33,7 @@ This comes up often (UI titles, GitHub issues, and JS RegExp):
 
 ## Release (gated sequence)
 
-1) Update [CHANGELOG.md](CHANGELOG.md) under `## [Unreleased]` and commit that documentation change **before any release or deploy command**.
+1) Update [CHANGELOG.md](../CHANGELOG.md) under `## [Unreleased]` and commit that documentation change **before any release or deploy command**.
 2) Run the release command (pick one). It checks the changelog, package versions, and that the next tag is unused before running preflight; it then bumps versions, creates the release commit, creates the annotated tag, and verifies that the tag points to that commit:
 
 ```bash
@@ -65,7 +65,7 @@ Guards:
 - Refuses to run unless you are on `master`.
 - Requires a clean working tree.
 - Requires `master` to match `origin/master` before preparing the release.
-- Requires [CHANGELOG.md](CHANGELOG.md) `## [Unreleased]` to be non-empty.
+- Requires [CHANGELOG.md](../CHANGELOG.md) `## [Unreleased]` to be non-empty.
 
 Do not run `npm run publish:*` after `npm run release:*`: the release command has already created the version commit and tag. In that case, push the generated commit and tag manually, then let the tag workflow publish the assets.
 
@@ -77,7 +77,7 @@ git push
 git push origin v0.19.2
 ```
 
-For the detailed checklist see [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md).
+For the detailed checklist see [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
 
 ## Release Channels: Stable vs RC (Unstable)
 
@@ -108,11 +108,11 @@ npm run test:settings
 npm run test:truth-scale
 ```
 
-Details + checklist live in [docs/third-party-review.md](docs/third-party-review.md).
-The boundary rule is documented in [docs/third-party-policy.md](docs/third-party-policy.md):
+Details + checklist live in [third-party-review.md](third-party-review.md).
+The boundary rule is documented in [third-party-policy.md](third-party-policy.md):
 `third_party/**` is read-only except for coherent upstream upgrades, provenance/license metadata, and deterministic runtime locks.
 For a repeatable end-to-end “pipeline” (including required manual smoke tests and patch policy), use:
-- [docs/abc2svg-upgrade-playbook.md](docs/abc2svg-upgrade-playbook.md)
+- [abc2svg-upgrade-playbook.md](abc2svg-upgrade-playbook.md)
 
 ## Verify release via `gh` (no browser)
 
@@ -154,7 +154,7 @@ ABCarus avoids this for releases by uploading binaries to **GitHub Releases** vi
 
 If `npm run release:*` fails due to git permissions or an “EPERM” error, do the minimal manual fallback:
 
-1) Ensure [CHANGELOG.md](CHANGELOG.md) has a filled `## [Unreleased]` section.
+1) Ensure [CHANGELOG.md](../CHANGELOG.md) has a filled `## [Unreleased]` section.
 2) Manually bump `package.json` (+ `package-lock.json` if present) to the target version.
 3) Commit:
 

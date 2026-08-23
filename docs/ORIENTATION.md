@@ -31,7 +31,7 @@ ABCarus is a small Electron desktop app for working with ABC notation:
 
 1) [AGENTS.md](AGENTS.md) — repo-specific agent notes + constraints.
 2) [WORKFLOW.md](WORKFLOW.md) — day-to-day workflow, release flow, debug flags, “what not to commit”.
-3) [README.md](README.md) — user-facing overview and quick commands.
+3) [README.md](../README.md) — user-facing overview and quick commands.
 4) `docs/` — deeper docs and release notes/checklists.
 5) `docs/midi2abc-microtones.md` — microtone behavior in abc2svg and
    converter constraints for future `MIDI -> ABC` work.
@@ -145,13 +145,13 @@ By policy (see [WORKFLOW.md](WORKFLOW.md) and `.gitignore`):
 ## Releases (patch/minor/major)
 
 ABCarus uses `scripts/release.mjs` (via `npm run release:*`) to prepare releases.
-It requires a clean git working tree and a non-empty [CHANGELOG.md](CHANGELOG.md) `## [Unreleased]` section.
+It requires a clean git working tree and a non-empty [CHANGELOG.md](../CHANGELOG.md) `## [Unreleased]` section.
 
 **Patch release sequence (typical)**
 - Ensure `master` is up to date and clean:
   - `git checkout master && git pull`
   - `npm run test:settings && npm run test:measures`
-- Add release notes to [CHANGELOG.md](CHANGELOG.md) under `## [Unreleased]` (must be non-empty), then commit:
+- Add release notes to [CHANGELOG.md](../CHANGELOG.md) under `## [Unreleased]` (must be non-empty), then commit:
   - `git add CHANGELOG.md && git commit -m "docs: add unreleased notes for next patch"`
 - Prepare the release (bumps version, moves changelog entry, creates tag):
   - `npm run release:patch`

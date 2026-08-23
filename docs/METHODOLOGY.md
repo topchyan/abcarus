@@ -4,7 +4,7 @@ This project is developed iteratively via chat sessions. To prevent “context l
 
 ## Quick workflow
 For the day-to-day “how we work” commands (dev + release), what we commit vs keep local, and the key debug env vars, see:
-- [WORKFLOW.md](../WORKFLOW.md)
+- [WORKFLOW.md](WORKFLOW.md)
 
 ## Sources of truth (ordered)
 1) Code + `git` history (canonical).
@@ -49,7 +49,7 @@ Rules of thumb:
 There are no full automated UI tests. Validation is primarily manual and scenario-driven.
 
 Required checks when touching file operations, rename/move, or persistence:
-- Follow [WORKFLOW.md](../WORKFLOW.md) and [docs/RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
+- Follow [WORKFLOW.md](WORKFLOW.md) and [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
 - Specifically test:
   - read-only files / permission errors
   - file modified on disk between index and write

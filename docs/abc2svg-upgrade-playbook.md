@@ -10,7 +10,7 @@ Principles:
 
 Related docs:
 - Upgrade review framework: [docs/third-party-review.md](third-party-review.md)
-- Workflow quick reference: [WORKFLOW.md](../WORKFLOW.md)
+- Workflow quick reference: [WORKFLOW.md](WORKFLOW.md)
 
 ---
 

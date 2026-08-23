@@ -4,7 +4,7 @@ contact_links:
     url: https://github.com/topchyan/abcarus/blob/master/docs/USER_GUIDE.md
     about: How to use ABCarus (tunes, library, save/append, import/export).
   - name: Workflow / release notes
-    url: https://github.com/topchyan/abcarus/blob/master/WORKFLOW.md
+    url: https://github.com/topchyan/abcarus/blob/master/docs/WORKFLOW.md
     about: Dev + release workflow, debug flags, common gotchas.
   - name: ABC notation reference
     url: https://abcnotation.com/
