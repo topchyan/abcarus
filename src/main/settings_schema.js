@@ -411,7 +411,7 @@ function getSettingsSchema() {
       groupOrder: 10,
       label: "xml2abc flags",
       help: "Space-separated flags passed to xml2abc.",
-      ui: { input: "text", placeholder: "-x -y=value" },
+      ui: { input: "text", placeholder: "-x -b 3" },
       advanced: true,
     },
     {

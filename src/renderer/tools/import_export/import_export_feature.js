@@ -19,6 +19,18 @@ function countTunesByX(text) {
   }
 }
 
+export function hasXml2abcBarsPerLineFlag(value) {
+  const text = String(value || "");
+  if (!text.trim()) return false;
+  const tokens = [];
+  const re = /"([^"]*)"|'([^']*)'|[^\s]+/g;
+  let match;
+  while ((match = re.exec(text)) !== null) {
+    tokens.push(match[1] ?? match[2] ?? match[0]);
+  }
+  return tokens.some((token) => /^-b(?:$|=|\d)/.test(String(token || "")));
+}
+
 function createImportExportFeature({
   api,
   windowRef = typeof window !== "undefined" ? window : null,
@@ -100,7 +112,10 @@ function createImportExportFeature({
         .join("\n");
     }
     if (settings.autoFormatImportedAbc !== false) {
-      prepared = normalizeMeasuresLineBreaks(transformMeasuresPerLine(prepared, 4));
+      const preserveXml2abcWrapping = hasXml2abcBarsPerLineFlag(settings.xml2abcArgs);
+      prepared = preserveXml2abcWrapping
+        ? normalizeMeasuresLineBreaks(prepared)
+        : normalizeMeasuresLineBreaks(transformMeasuresPerLine(prepared, 4));
       const aligned = alignBarsInText(prepared);
       return aligned || prepared;
     }
