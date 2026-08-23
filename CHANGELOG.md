@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- MusicXML import now preserves `xml2abc -b` bar-per-line wrapping instead of overriding it with ABCarus auto-formatting.
 
 
 ## [1.7.1] - 2026-08-21
