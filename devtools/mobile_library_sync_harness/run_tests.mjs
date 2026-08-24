@@ -63,6 +63,17 @@ try {
   assert.deepEqual(batch.files.map((file) => file.path), ["one.abc", "nested/two.ABC"]);
   assert.match(batch.files[0].content, /T:One/);
 
+  const restarted = await server.start(tempRoot, {
+    code: "replacement password",
+    port: info.port,
+    serverId: info.serverId,
+  });
+  assert.equal(restarted.port, info.port);
+  assert.equal((await fetch(`${base}/v1/info`, { headers })).status, 401);
+  assert.equal((await fetch(`${base}/v1/info`, {
+    headers: { "X-ABCarus-Credential": encodeCredential(restarted.code) },
+  })).status, 200);
+
   console.log("mobile library sync harness: all tests passed");
 } finally {
   await server.stop();

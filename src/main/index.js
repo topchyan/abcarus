@@ -34,6 +34,7 @@ const {
 registerSoundfontScheme(protocol);
 const soundfontProtocol = createSoundfontProtocol({ protocol, fs, path });
 const mobileLibraryServer = createMobileLibraryServer({ fs });
+let mobileLibrarySettingsRevision = 0;
 
 let mainWindow = null;
 let splashWindow = null;
@@ -1850,7 +1851,33 @@ function applySettingsPatch(patch) {
 }
 
 function updateSettings(patch) {
-  return applySettingsPatch(patch);
+  const previous = appState.settings || getDefaultSettings();
+  const sharingInfo = mobileLibraryServer.info();
+  const next = applySettingsPatch(patch);
+  const sharingConfigChanged = Boolean(patch) && (
+    Object.prototype.hasOwnProperty.call(patch, "mobileLibraryPort")
+    || Object.prototype.hasOwnProperty.call(patch, "mobileLibraryCode")
+  ) && (
+    previous.mobileLibraryPort !== next.mobileLibraryPort
+    || previous.mobileLibraryCode !== next.mobileLibraryCode
+  );
+  if (sharingInfo.active && sharingConfigChanged) {
+    const revision = ++mobileLibrarySettingsRevision;
+    mobileLibraryServer.start(sharingInfo.root, {
+      code: next.mobileLibraryCode,
+      serverId: next.mobileLibraryId,
+      port: next.mobileLibraryPort,
+    }).then((info) => {
+      if (revision !== mobileLibrarySettingsRevision) return;
+      const generated = {};
+      if (next.mobileLibraryCode !== info.code) generated.mobileLibraryCode = info.code;
+      if (next.mobileLibraryId !== info.serverId) generated.mobileLibraryId = info.serverId;
+      if (Object.keys(generated).length) applySettingsPatch(generated);
+    }).catch((error) => {
+      console.warn("Unable to apply mobile sharing settings:", error && error.message ? error.message : error);
+    });
+  }
+  return next;
 }
 
 async function importProfileSnapshot(document) {
