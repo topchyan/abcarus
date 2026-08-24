@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- MusicXML import now uses the saved `xml2abc` flags in the desktop import workflow. Imports with `-b N` retain the converter's requested measures-per-line layout and then apply Align Bars without reflowing to four measures per line.
+
 
 
 ## [1.7.2] - 2026-08-23

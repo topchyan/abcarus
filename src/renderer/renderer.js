@@ -2473,6 +2473,7 @@ const importExportFeature = createImportExportFeature({
   getActiveFileEntry,
   getActiveTuneMeta: () => activeContext.getActiveTuneMeta(),
   buildConversionHeaderPrefix: (entryHeader, tuneText) => headerLayersController.buildConversionHeaderPrefix(entryHeader, tuneText),
+  getSettings: settingsSnapshot.get,
   getPlaybackPayload,
   ensureSafeToAbandonCurrentDoc,
   requireCleanForFileOp,

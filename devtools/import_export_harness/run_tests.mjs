@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { build } from "esbuild";
+import { readFile } from "node:fs/promises";
 
 const bundled = await build({
   entryPoints: ["src/renderer/tools/import_export/import_export_feature.js"],
@@ -73,6 +74,17 @@ assert.equal(hasXml2abcBarsPerLineFlag("-x -b=3"), true);
 assert.equal(hasXml2abcBarsPerLineFlag("-x"), false);
 
 {
+  const rendererSource = await readFile("src/renderer/renderer.js", "utf8");
+  const featureWiring = rendererSource.match(/const importExportFeature = createImportExportFeature\(\{([\s\S]*?)\n\}\);/);
+  assert(featureWiring, "renderer must construct the import/export feature");
+  assert.match(
+    featureWiring[1],
+    /getSettings:\s*settingsSnapshot\.get/,
+    "MusicXML import must receive the current persisted settings"
+  );
+}
+
+{
   const result = await runImportWithArgs("-x");
   assert.equal(result.transformCalled, true);
   assert.equal(result.normalizeCalled, true);
@@ -83,8 +95,8 @@ assert.equal(hasXml2abcBarsPerLineFlag("-x"), false);
 {
   const result = await runImportWithArgs("-x -b 3");
   assert.equal(result.transformCalled, false);
-  assert.equal(result.normalizeCalled, false);
-  assert.equal(result.alignCalled, false);
+  assert.equal(result.normalizeCalled, true);
+  assert.equal(result.alignCalled, true);
   assert.doesNotMatch(result.capturedText, /% transformed 4/);
 }
 
