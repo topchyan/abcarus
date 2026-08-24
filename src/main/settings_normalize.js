@@ -15,6 +15,15 @@ function normalizeMicrotonalSettings(next, patch) {
   return next;
 }
 
+function normalizeConversionToolSettings(next) {
+  if (!next || typeof next !== "object") return next;
+  for (const key of ["abc2xmlArgs", "xml2abcArgs", "midi2abcArgs"]) {
+    next[key] = String(next[key] == null ? "" : next[key]);
+  }
+  return next;
+}
+
 module.exports = {
+  normalizeConversionToolSettings,
   normalizeMicrotonalSettings,
 };

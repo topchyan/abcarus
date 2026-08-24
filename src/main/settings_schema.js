@@ -398,8 +398,8 @@ function getSettingsSchema() {
       group: "ABC <-> MusicXML",
       groupOrder: 10,
       label: "abc2xml flags",
-      help: "Space-separated flags passed to abc2xml.",
-      ui: { input: "text", placeholder: "-x -y=value" },
+      help: "Space-separated flags passed to abc2xml. Placeholder text is only an example; type flags here to use them.",
+      ui: { input: "text", placeholder: "e.g. -x -y <value>" },
       advanced: true,
     },
     {
@@ -410,8 +410,8 @@ function getSettingsSchema() {
       group: "ABC <-> MusicXML",
       groupOrder: 10,
       label: "xml2abc flags",
-      help: "Space-separated flags passed to xml2abc.",
-      ui: { input: "text", placeholder: "-x -b 3" },
+      help: "Space-separated flags passed to xml2abc. To preserve three bars per line on import, type -x -b 3.",
+      ui: { input: "text", placeholder: "e.g. -x -b 3" },
       advanced: true,
     },
     {

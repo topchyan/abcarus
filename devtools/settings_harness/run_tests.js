@@ -18,7 +18,7 @@ function main() {
   // eslint-disable-next-line global-require, import/no-dynamic-require
   const { getSettingsSchema, getDefaultSettings } = require(schemaPath);
   // eslint-disable-next-line global-require, import/no-dynamic-require
-  const { normalizeMicrotonalSettings } = require(normalizePath);
+  const { normalizeConversionToolSettings, normalizeMicrotonalSettings } = require(normalizePath);
   // eslint-disable-next-line global-require, import/no-dynamic-require
   const { encodePropertiesFromSchema, parseSettingsPatchFromProperties } = require(propertiesPath);
   // eslint-disable-next-line global-require, import/no-dynamic-require
@@ -55,6 +55,8 @@ function main() {
     playbackSelectionMutedVoices: "",
     stripImportedMeasureComments: true,
     autoFormatImportedAbc: true,
+    abc2xmlArgs: "",
+    xml2abcArgs: "",
     printPageMargins: "standard",
   };
   for (const [key, expected] of Object.entries(requiredDefaults)) {
@@ -74,6 +76,40 @@ function main() {
     const entry = schema.find((item) => item && item.key === key);
     assert(entry && entry.ui && entry.ui.input === "select", `${key} must use a user-facing selector`);
     assert(entry.ui.options === "interfaceFonts", `${key} must use the shared interface font catalog`);
+  }
+
+  {
+    const abc2xml = schema.find((item) => item && item.key === "abc2xmlArgs");
+    const xml2abc = schema.find((item) => item && item.key === "xml2abcArgs");
+    assert(abc2xml && abc2xml.ui && abc2xml.ui.placeholder === "e.g. -x -y <value>", "abc2xml placeholder must be an explicit example");
+    assert(xml2abc && xml2abc.ui && xml2abc.ui.placeholder === "e.g. -x -b 3", "xml2abc placeholder must be an explicit example");
+    assert(/Placeholder text is only an example/i.test(String(abc2xml.help || "")), "abc2xml help must distinguish placeholder from active flags");
+    assert(/type -x -b 3/i.test(String(xml2abc.help || "")), "xml2abc help must explain that flags must be typed");
+  }
+
+  {
+    const next = {
+      abc2xmlArgs: "-x -y value",
+      xml2abcArgs: "-x -b 3",
+      midi2abcArgs: "--meter 4/4",
+    };
+    normalizeConversionToolSettings(next);
+    assert(next.abc2xmlArgs === "-x -y value", "abc2xml flags must survive settings normalization");
+    assert(next.xml2abcArgs === "-x -b 3", "xml2abc flags must survive settings normalization");
+    assert(next.midi2abcArgs === "--meter 4/4", "midi2abc flags must survive settings normalization");
+  }
+
+  {
+    const exported = encodePropertiesFromSchema({
+      ...defaults,
+      abc2xmlArgs: "-x -y value",
+      xml2abcArgs: "-x -b 3",
+    }, schema);
+    assert(exported.includes("abc2xmlArgs=-x -y value"), "abc2xml flags must export to properties");
+    assert(exported.includes("xml2abcArgs=-x -b 3"), "xml2abc flags must export to properties");
+    const parsed = parseSettingsPatchFromProperties(exported, schema);
+    assert(parsed.abc2xmlArgs === "-x -y value", "abc2xml flags must import from properties");
+    assert(parsed.xml2abcArgs === "-x -b 3", "xml2abc flags must import from properties");
   }
 
   {

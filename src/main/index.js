@@ -9,7 +9,7 @@ const { registerIpcHandlers } = require("./ipc");
 const { createSoundfontProtocol, registerSoundfontScheme } = require("./soundfontProtocol");
 const { resolveThirdPartyRoot } = require("./conversion");
 const { getSettingsSchema, getDefaultSettings: getDefaultSettingsFromSchema } = require("./settings_schema");
-const { normalizeMicrotonalSettings } = require("./settings_normalize");
+const { normalizeConversionToolSettings, normalizeMicrotonalSettings } = require("./settings_normalize");
 const { parseSettingsPatchFromProperties } = require("./properties");
 const {
   PORTABLE_MARKER_FILE,
@@ -1751,6 +1751,7 @@ function applySettingsPatch(patch) {
   next.editorLyricsBold = Boolean(next.editorLyricsBold);
   next.confirmAppendToActiveFile = Boolean(next.confirmAppendToActiveFile);
   next.autoAlignBarsAfterTransforms = Boolean(next.autoAlignBarsAfterTransforms);
+  normalizeConversionToolSettings(next);
   next.stripImportedMeasureComments = Boolean(next.stripImportedMeasureComments);
   next.autoFormatImportedAbc = Boolean(next.autoFormatImportedAbc);
   next.editorHelpEnabled = Boolean(next.editorHelpEnabled);
