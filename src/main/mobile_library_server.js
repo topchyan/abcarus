@@ -22,6 +22,10 @@ function normalizeRelativePath(value) {
   return normalized;
 }
 
+function encodeCredential(value) {
+  return Buffer.from(String(value || ""), "utf8").toString("base64url");
+}
+
 function localIpv4Addresses(networkInterfaces = os.networkInterfaces()) {
   const addresses = [];
   for (const entries of Object.values(networkInterfaces || {})) {
@@ -122,7 +126,9 @@ function createMobileLibraryServer({ fs, port = DEFAULT_PORT, networkInterfaces 
 
   async function handleRequest(request, response) {
     try {
-      if (String(request.headers["x-abcarus-code"] || "") !== code) {
+      const credential = String(request.headers["x-abcarus-credential"] || "");
+      const legacyCode = String(request.headers["x-abcarus-code"] || "");
+      if (credential !== encodeCredential(code) && legacyCode !== code) {
         sendJson(response, 401, { error: "Invalid connection code" });
         return;
       }
@@ -179,12 +185,14 @@ function createMobileLibraryServer({ fs, port = DEFAULT_PORT, networkInterfaces 
     const requestedRoot = await fs.promises.realpath(path.resolve(String(rootDir || "")));
     const stat = await fs.promises.stat(requestedRoot);
     if (!stat.isDirectory()) throw new Error("The current library folder is unavailable.");
-    if (server && root === requestedRoot) return info();
+    const requestedCode = String(options.code || "").trim() || crypto.randomBytes(5).toString("hex").toUpperCase();
+    const requestedPort = Number.isInteger(Number(options.port))
+      ? Math.min(65535, Math.max(0, Number(options.port)))
+      : port;
+    if (server && root === requestedRoot && code === requestedCode && listeningPort === requestedPort) return info();
     await stop();
     root = requestedRoot;
-    code = /^[0-9A-F]{10}$/.test(String(options.code || "").toUpperCase())
-      ? String(options.code).toUpperCase()
-      : crypto.randomBytes(5).toString("hex").toUpperCase();
+    code = requestedCode;
     serverId = /^[0-9a-f-]{36}$/i.test(String(options.serverId || ""))
       ? String(options.serverId).toLowerCase()
       : crypto.randomUUID();
@@ -203,7 +211,7 @@ function createMobileLibraryServer({ fs, port = DEFAULT_PORT, networkInterfaces 
         };
         server.once("error", onError);
         server.once("listening", onListening);
-        server.listen(port, "0.0.0.0");
+        server.listen(requestedPort, "0.0.0.0");
       });
     } catch (error) {
       server = null;
@@ -244,6 +252,7 @@ function createMobileLibraryServer({ fs, port = DEFAULT_PORT, networkInterfaces 
 module.exports = {
   DEFAULT_PORT,
   createMobileLibraryServer,
+  encodeCredential,
   localIpv4Addresses,
   normalizeRelativePath,
 };

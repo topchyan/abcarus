@@ -1669,6 +1669,7 @@ async function startMobileLibrarySharing(rootDir, { remember = false } = {}) {
   const info = await mobileLibraryServer.start(rootDir, {
     code: settings.mobileLibraryCode,
     serverId: settings.mobileLibraryId,
+    port: settings.mobileLibraryPort,
   });
   const patch = {};
   if (settings.mobileLibraryCode !== info.code) patch.mobileLibraryCode = info.code;
@@ -1707,7 +1708,7 @@ async function shareLibraryWithMobile(rootDir) {
       defaultId: 0,
       cancelId: 0,
       message: "Library is available to ABCarus Mobile",
-      detail: `On the tablet choose Desktop ABCarus and enter:\n\nAddress\n${addresses}\n\nConnection code\n${info.code}\n\nShared folder\n${info.root}`,
+      detail: `On the tablet choose Desktop ABCarus and enter:\n\nAddress\n${addresses}\n\nPassword\n${info.code}\n\nShared folder\n${info.root}`,
     });
     if (result.response === 1) {
       await mobileLibraryServer.stop();
@@ -1804,6 +1805,8 @@ function applySettingsPatch(patch) {
   next.uiFontFamily = String(next.uiFontFamily || "").trim() || defaultUiFontFamily;
   next.libraryUiFontSize = Math.min(40, Math.max(10, Number(next.libraryUiFontSize) || (Math.max(10, Math.round(next.uiFontSize) - 1))));
   next.libraryUiFontFamily = String(next.libraryUiFontFamily || "").trim() || next.uiFontFamily;
+  next.mobileLibraryPort = Math.min(65535, Math.max(1024, Math.round(Number(next.mobileLibraryPort) || 43821)));
+  next.mobileLibraryCode = String(next.mobileLibraryCode || "").trim().slice(0, 128);
   next.editorNotesBold = Boolean(next.editorNotesBold);
   next.editorLyricsBold = Boolean(next.editorLyricsBold);
   next.confirmAppendToActiveFile = Boolean(next.confirmAppendToActiveFile);

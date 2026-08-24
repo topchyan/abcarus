@@ -5,7 +5,11 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { createMobileLibraryServer, normalizeRelativePath } = require("../../src/main/mobile_library_server.js");
+const {
+  createMobileLibraryServer,
+  encodeCredential,
+  normalizeRelativePath,
+} = require("../../src/main/mobile_library_server.js");
 
 const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "abcarus-mobile-sync-"));
 const outsideRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "abcarus-mobile-sync-outside-"));
@@ -21,7 +25,6 @@ try {
 
 const server = createMobileLibraryServer({
   fs,
-  port: 0,
   networkInterfaces: () => ({
     wifi: [{ address: "192.168.1.25", family: "IPv4", internal: false }],
   }),
@@ -32,7 +35,8 @@ try {
   assert.equal(normalizeRelativePath("nested/two.ABC"), "nested/two.ABC");
 
   const info = await server.start(tempRoot, {
-    code: "A1B2C3D4E5",
+    code: "easy пароль 42",
+    port: 0,
     serverId: "12345678-1234-1234-1234-123456789abc",
   });
   const base = `http://127.0.0.1:${info.port}`;
@@ -41,7 +45,7 @@ try {
   const unauthorized = await fetch(`${base}/v1/info`);
   assert.equal(unauthorized.status, 401);
 
-  const headers = { "X-ABCarus-Code": info.code };
+  const headers = { "X-ABCarus-Credential": encodeCredential(info.code) };
   const serverInfo = await (await fetch(`${base}/v1/info`, { headers })).json();
   assert.equal(serverInfo.protocol, "abcarus-library-v1");
   assert.equal(serverInfo.serverId, "12345678-1234-1234-1234-123456789abc");
