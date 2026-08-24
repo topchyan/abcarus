@@ -57,6 +57,7 @@
     "test:library-lifecycle": "node devtools/library_lifecycle_harness/run_tests.mjs",
     "test:library-move": "node devtools/library_move_harness/run_tests.mjs",
     "test:library-append": "node devtools/library_append_harness/run_tests.mjs",
+    "test:mobile-library-sync": "node devtools/mobile_library_sync_harness/run_tests.mjs",
     "test:new-file-action": "node devtools/new_file_action_harness/run_tests.mjs",
     "test:render-domain": "node devtools/render_domain_harness/run_tests.mjs",
     "test:playback-domain": "node devtools/playback_domain_harness/run_tests.mjs",

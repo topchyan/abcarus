@@ -14,6 +14,8 @@ function getSettingsSchema() {
     { key: "layoutSplitRatioHorizontal", type: "number", default: 0.5 },
     { key: "layoutRenderZoomVertical", type: "number", default: 1 },
     { key: "layoutRenderZoomHorizontal", type: "number", default: 1 },
+    { key: "mobileLibraryCode", type: "string", default: "" },
+    { key: "mobileLibraryId", type: "string", default: "" },
     {
       key: "renderZoom",
       type: "number",

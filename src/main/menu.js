@@ -161,6 +161,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
         accelerator: "CmdOrCtrl+Shift+O",
         click: () => sendMenuAction("openFolder"),
       },
+      { label: "Share Library with Mobile…", click: () => sendMenuAction("shareLibraryWithMobile") },
       {
         label: "Import",
         submenu: [

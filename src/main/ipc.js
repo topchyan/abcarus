@@ -466,6 +466,7 @@ function registerIpcHandlers(ctx) {
 	    showOpenError,
 	    scanLibrary,
 	    scanLibraryDiscover,
+      shareLibraryWithMobile,
     cancelLibraryScan,
     parseSingleFile,
     withMainPrintMode,
@@ -1542,6 +1543,12 @@ function registerIpcHandlers(ctx) {
     if (!filePath) return { root: "", files: [] };
     const res = await parseSingleFile(filePath, event.sender, options);
     return res || { root: "", files: [] };
+  });
+  ipcMain.handle("mobile-library:share", async (_event, rootDir) => {
+    if (typeof shareLibraryWithMobile !== "function") {
+      return { ok: false, error: "Mobile library sharing is unavailable." };
+    }
+    return shareLibraryWithMobile(rootDir);
   });
 
   ipcMain.handle("templates:get-info", async () => {

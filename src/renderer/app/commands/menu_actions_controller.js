@@ -192,6 +192,7 @@ function createMenuActionsController({
     }
     else if (actionType === "open") await actions.fileOpen();
     else if (actionType === "openFolder") await actions.scanAndLoadLibrary();
+    else if (actionType === "shareLibraryWithMobile") await actions.shareLibraryWithMobile();
     else if (actionType === "importMusicXml") await actions.importMusicXml();
     else if (actionType === "importMidi") await actions.importMidi();
     else if (actionType === "save") await actions.fileSave();

@@ -7,6 +7,7 @@ const { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell, Menu, screen, p
 const { applyMenu } = require("./menu");
 const { registerIpcHandlers } = require("./ipc");
 const { createSoundfontProtocol, registerSoundfontScheme } = require("./soundfontProtocol");
+const { createMobileLibraryServer } = require("./mobile_library_server");
 const { resolveThirdPartyRoot } = require("./conversion");
 const { getSettingsSchema, getDefaultSettings: getDefaultSettingsFromSchema } = require("./settings_schema");
 const { normalizeConversionToolSettings, normalizeMicrotonalSettings } = require("./settings_normalize");
@@ -32,6 +33,7 @@ const {
 
 registerSoundfontScheme(protocol);
 const soundfontProtocol = createSoundfontProtocol({ protocol, fs, path });
+const mobileLibraryServer = createMobileLibraryServer({ fs });
 
 let mainWindow = null;
 let splashWindow = null;
@@ -1660,6 +1662,35 @@ async function withMainPrintMode(action) {
 
 function refreshMenu() {
   applyMenu(appState, sendMenuAction);
+}
+
+async function shareLibraryWithMobile(rootDir) {
+  try {
+    const settings = appState.settings || {};
+    const info = await mobileLibraryServer.start(rootDir, {
+      code: settings.mobileLibraryCode,
+      serverId: settings.mobileLibraryId,
+    });
+    if (settings.mobileLibraryCode !== info.code || settings.mobileLibraryId !== info.serverId) {
+      updateSettings({ mobileLibraryCode: info.code, mobileLibraryId: info.serverId });
+    }
+    const addresses = info.addresses.length
+      ? info.addresses.map((address) => `${address}:${info.port}`).join("\n")
+      : `Computer address unavailable (port ${info.port})`;
+    const parent = getDialogParent();
+    const result = await dialog.showMessageBox(parent || undefined, {
+      type: "info",
+      buttons: ["Close", "Stop Sharing"],
+      defaultId: 0,
+      cancelId: 0,
+      message: "Library is available to ABCarus Mobile",
+      detail: `On the tablet choose Desktop ABCarus and enter:\n\nAddress\n${addresses}\n\nConnection code\n${info.code}\n\nShared folder\n${info.root}`,
+    });
+    if (result.response === 1) await mobileLibraryServer.stop();
+    return { ok: true, active: mobileLibraryServer.info().active };
+  } catch (error) {
+    return { ok: false, error: error && error.message ? error.message : String(error) };
+  }
 }
 
 function clampZoom(value) {
@@ -3883,6 +3914,10 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
+app.on("will-quit", () => {
+  mobileLibraryServer.stop().catch(() => {});
+});
+
 registerIpcHandlers({
   ipcMain,
   BrowserWindow,
@@ -3900,6 +3935,7 @@ registerIpcHandlers({
   showOpenError,
   scanLibrary,
   scanLibraryDiscover,
+  shareLibraryWithMobile,
   cancelLibraryScan,
   parseSingleFile,
   withMainPrintMode,

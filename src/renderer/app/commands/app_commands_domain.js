@@ -169,6 +169,7 @@ function createAppCommandsDomain({
       runPrintAction: actions.runPrintAction,
       runPrintAllAction: actions.runPrintAllAction,
       scanAndLoadLibrary: actions.scanAndLoadLibrary,
+      shareLibraryWithMobile: actions.shareLibraryWithMobile,
       setNoteTypingPreview: setNoteTypingPreviewCommand,
       setSplitOrientation: actions.setSplitOrientation,
       setStatus: actions.setStatus,

@@ -3020,6 +3020,18 @@ async function scanAndLoadLibrary() {
   return libraryShellController.scanAndLoadLibrary();
 }
 
+async function shareLibraryWithMobile() {
+  const root = libraryRuntime.getRoot();
+  if (!root) {
+    showToast("Load a library folder first.", 2400);
+    return;
+  }
+  const result = await window.api.shareLibraryWithMobile(root);
+  if (!result || !result.ok) {
+    showToast(result && result.error ? result.error : "Unable to share the library.", 3200);
+  }
+}
+
 async function refreshLibraryIndex() {
   return libraryMetadataController.refreshLibraryIndex();
 }
@@ -3692,6 +3704,7 @@ appCommandsDomain = createAppCommandsDomain({
     runPrintAction: (type) => printCurrentFeature.runAction(type),
     runPrintAllAction: (type) => printAllFeature.runAction(type),
     scanAndLoadLibrary,
+    shareLibraryWithMobile,
     setChordProFullView: (next) => chordProFeature.setFullView(next),
     setErrorsEnabled,
     setFollowPlayback: playbackDomain.setFollowEnabled,
