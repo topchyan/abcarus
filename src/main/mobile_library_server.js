@@ -129,7 +129,7 @@ function createMobileLibraryServer({ fs, port = DEFAULT_PORT, networkInterfaces 
       const credential = String(request.headers["x-abcarus-credential"] || "");
       const legacyCode = String(request.headers["x-abcarus-code"] || "");
       if (credential !== encodeCredential(code) && legacyCode !== code) {
-        sendJson(response, 401, { error: "Invalid connection code" });
+        sendJson(response, 401, { error: "Invalid connection password" });
         return;
       }
       const url = new URL(request.url || "/", "http://localhost");
