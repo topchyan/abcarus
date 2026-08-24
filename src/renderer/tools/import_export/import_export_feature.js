@@ -113,9 +113,8 @@ function createImportExportFeature({
     }
     if (settings.autoFormatImportedAbc !== false) {
       const preserveXml2abcWrapping = hasXml2abcBarsPerLineFlag(settings.xml2abcArgs);
-      prepared = preserveXml2abcWrapping
-        ? normalizeMeasuresLineBreaks(prepared)
-        : normalizeMeasuresLineBreaks(transformMeasuresPerLine(prepared, 4));
+      if (preserveXml2abcWrapping) return prepared;
+      prepared = normalizeMeasuresLineBreaks(transformMeasuresPerLine(prepared, 4));
       const aligned = alignBarsInText(prepared);
       return aligned || prepared;
     }

@@ -14,6 +14,8 @@ const { createImportExportFeature, hasXml2abcBarsPerLineFlag } = await import(`d
 async function runImportWithArgs(xml2abcArgs) {
   let capturedText = "";
   let transformCalled = false;
+  let normalizeCalled = false;
+  let alignCalled = false;
   const feature = createImportExportFeature({
     api: {
       pickMusicXmlFiles: async () => ({ ok: true, paths: ["/tmp/example.xml"] }),
@@ -43,12 +45,18 @@ async function runImportWithArgs(xml2abcArgs) {
     confirmImportTarget: async () => "current_file",
     readFile: async () => ({ ok: true, data: "" }),
     writeFile: async () => ({ ok: true }),
-    normalizeMeasuresLineBreaks: (text) => text,
+    normalizeMeasuresLineBreaks: (text) => {
+      normalizeCalled = true;
+      return text;
+    },
     transformMeasuresPerLine: (text, measuresPerLine) => {
       transformCalled = true;
       return `${text}\n% transformed ${measuresPerLine}`;
     },
-    alignBarsInText: (text) => text,
+    alignBarsInText: (text) => {
+      alignCalled = true;
+      return text;
+    },
     refreshLibraryFile: async () => null,
     withFileLock: async (_filePath, operation) => operation(),
     setActiveTuneText: (text) => {
@@ -56,7 +64,7 @@ async function runImportWithArgs(xml2abcArgs) {
     },
   });
   await feature.importMusicXml();
-  return { capturedText, transformCalled };
+  return { capturedText, transformCalled, normalizeCalled, alignCalled };
 }
 
 assert.equal(hasXml2abcBarsPerLineFlag("-x -b 3"), true);
@@ -67,12 +75,16 @@ assert.equal(hasXml2abcBarsPerLineFlag("-x"), false);
 {
   const result = await runImportWithArgs("-x");
   assert.equal(result.transformCalled, true);
+  assert.equal(result.normalizeCalled, true);
+  assert.equal(result.alignCalled, true);
   assert.match(result.capturedText, /% transformed 4/);
 }
 
 {
   const result = await runImportWithArgs("-x -b 3");
   assert.equal(result.transformCalled, false);
+  assert.equal(result.normalizeCalled, false);
+  assert.equal(result.alignCalled, false);
   assert.doesNotMatch(result.capturedText, /% transformed 4/);
 }
 
