@@ -1664,16 +1664,39 @@ function refreshMenu() {
   applyMenu(appState, sendMenuAction);
 }
 
+async function startMobileLibrarySharing(rootDir, { remember = false } = {}) {
+  const settings = appState.settings || {};
+  const info = await mobileLibraryServer.start(rootDir, {
+    code: settings.mobileLibraryCode,
+    serverId: settings.mobileLibraryId,
+  });
+  const patch = {};
+  if (settings.mobileLibraryCode !== info.code) patch.mobileLibraryCode = info.code;
+  if (settings.mobileLibraryId !== info.serverId) patch.mobileLibraryId = info.serverId;
+  if (remember && settings.mobileLibrarySharingEnabled !== true) {
+    patch.mobileLibrarySharingEnabled = true;
+  }
+  if (remember && settings.mobileLibraryRoot !== info.root) {
+    patch.mobileLibraryRoot = info.root;
+  }
+  if (Object.keys(patch).length) updateSettings(patch);
+  return info;
+}
+
+async function restoreMobileLibrarySharing() {
+  const settings = appState.settings || {};
+  const root = String(settings.mobileLibraryRoot || "").trim();
+  if (!settings.mobileLibrarySharingEnabled || !root) return;
+  try {
+    await startMobileLibrarySharing(root);
+  } catch (error) {
+    console.warn("Unable to restore mobile library sharing:", error && error.message ? error.message : error);
+  }
+}
+
 async function shareLibraryWithMobile(rootDir) {
   try {
-    const settings = appState.settings || {};
-    const info = await mobileLibraryServer.start(rootDir, {
-      code: settings.mobileLibraryCode,
-      serverId: settings.mobileLibraryId,
-    });
-    if (settings.mobileLibraryCode !== info.code || settings.mobileLibraryId !== info.serverId) {
-      updateSettings({ mobileLibraryCode: info.code, mobileLibraryId: info.serverId });
-    }
+    const info = await startMobileLibrarySharing(rootDir, { remember: true });
     const addresses = info.addresses.length
       ? info.addresses.map((address) => `${address}:${info.port}`).join("\n")
       : `Computer address unavailable (port ${info.port})`;
@@ -1686,7 +1709,10 @@ async function shareLibraryWithMobile(rootDir) {
       message: "Library is available to ABCarus Mobile",
       detail: `On the tablet choose Desktop ABCarus and enter:\n\nAddress\n${addresses}\n\nConnection code\n${info.code}\n\nShared folder\n${info.root}`,
     });
-    if (result.response === 1) await mobileLibraryServer.stop();
+    if (result.response === 1) {
+      await mobileLibraryServer.stop();
+      updateSettings({ mobileLibrarySharingEnabled: false });
+    }
     return { ok: true, active: mobileLibraryServer.info().active };
   } catch (error) {
     return { ok: false, error: error && error.message ? error.message : String(error) };
@@ -3888,6 +3914,7 @@ app.whenReady().then(async () => {
   updateSplashStatus("Migrating state…");
   await migrateStatePaths();
   logStartupPerf("migrateStatePaths() done");
+  await restoreMobileLibrarySharing();
   logStartupPerf("clearDevRuntimeCaches() start");
   updateSplashStatus("Preparing runtime cache…");
   await clearDevRuntimeCaches();

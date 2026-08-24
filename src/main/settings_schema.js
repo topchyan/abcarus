@@ -16,6 +16,8 @@ function getSettingsSchema() {
     { key: "layoutRenderZoomHorizontal", type: "number", default: 1 },
     { key: "mobileLibraryCode", type: "string", default: "" },
     { key: "mobileLibraryId", type: "string", default: "" },
+    { key: "mobileLibrarySharingEnabled", type: "boolean", default: false },
+    { key: "mobileLibraryRoot", type: "string", default: "" },
     {
       key: "renderZoom",
       type: "number",
