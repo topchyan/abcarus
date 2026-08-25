@@ -91,6 +91,9 @@ contextBridge.exposeInMainWorld("api", {
   checkConversionTools: async () => ipcRenderer.invoke("tools:check"),
   readFile: async (filePath) => ipcRenderer.invoke("file:read", filePath),
   writeFile: async (filePath, data, options) => ipcRenderer.invoke("file:write", filePath, data, options || {}),
+  publishSetListForMobile: async (document, filePath) =>
+    ipcRenderer.invoke("set-list-sync:publish", document, filePath),
+  listMobileSetLists: async () => ipcRenderer.invoke("set-list-sync:list"),
   renameFile: async (oldPath, newPath) => ipcRenderer.invoke("file:rename", oldPath, newPath),
   fileExists: async (filePath) => ipcRenderer.invoke("file:exists", filePath),
   mkdirp: async (dirPath) => ipcRenderer.invoke("file:mkdirp", dirPath),

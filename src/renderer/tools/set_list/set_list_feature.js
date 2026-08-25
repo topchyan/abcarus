@@ -37,6 +37,8 @@ function createSetListFeature({
   writeStorage = () => false,
   readFile = async () => ({ ok: false, error: "Read unavailable." }),
   writeFile = async () => ({ ok: false, error: "Write unavailable." }),
+  publishSetList = async () => ({ ok: false }),
+  listSyncedSetLists = async () => ({ ok: false, entries: [] }),
   showOpenSetListDialog = async () => null,
   showSaveSetListDialog = async () => null,
   getDefaultSaveDir = () => "",
@@ -112,6 +114,21 @@ function createSetListFeature({
   const getSuggestedBaseName = () => (
     sanitizeFileBaseName(getDocument().title || "Untitled Set List") || "Untitled Set List"
   );
+
+  async function publishCurrentSetList() {
+    const state = getDocumentState();
+    if (!state.filePath || state.dirty) return false;
+    const result = await publishSetList(state.document, state.filePath);
+    if (!result || !result.ok) return false;
+    if (result.remoteWon && result.document) {
+      session.replaceDocument(result.document, {
+        nextFilePath: result.filePath || state.filePath,
+        nextDiskText: `${JSON.stringify(result.document, null, 2)}\n`,
+        nextDirty: false,
+      });
+    }
+    return true;
+  }
 
   function getExportItems() {
     return getItems().map((item) => ({
@@ -555,6 +572,7 @@ function createSetListFeature({
       logError(result.error || "Unable to open Set List.");
       return false;
     }
+    await publishCurrentSetList();
     if (legacyImported) {
       writeStorage(storageKey, null);
       legacyImported = false;
@@ -567,10 +585,17 @@ function createSetListFeature({
 
   async function restoreLastSetList() {
     if (legacyImported) return false;
+    const synced = await listSyncedSetLists();
+    if (synced && synced.ok && Array.isArray(synced.entries)) {
+      for (const entry of synced.entries) {
+        if (entry && entry.filePath) session.rememberRecentPath(entry.filePath);
+      }
+    }
     const paths = getDocumentState().recentPaths.slice();
     for (const path of paths) {
       const result = await session.open(path);
       if (result.ok) {
+        await publishCurrentSetList();
         activeItemId = "";
         itemResolutions.clear();
         render();
@@ -594,6 +619,7 @@ function createSetListFeature({
         : (result.error || "Unable to save Set List."));
       return false;
     }
+    await publishCurrentSetList();
     writeStorage(storageKey, null);
     legacyImported = false;
     showToast(`Saved Set List: ${safeBasename(path)}`, 2800);
@@ -629,6 +655,7 @@ function createSetListFeature({
       session.replaceDocument(document, { nextDirty: true });
       const result = await session.save(path);
       if (!result.ok) throw new Error(result.error || "Unable to save Set List.");
+      await publishCurrentSetList();
       writeStorage(storageKey, null);
       showToast(`Created ${document.title}.`, 2400);
       open();

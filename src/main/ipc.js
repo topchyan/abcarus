@@ -467,6 +467,8 @@ function registerIpcHandlers(ctx) {
 	    scanLibrary,
 	    scanLibraryDiscover,
       shareLibraryWithMobile,
+      publishSetListForMobile,
+      listMobileSetLists,
     cancelLibraryScan,
     parseSingleFile,
     withMainPrintMode,
@@ -1431,6 +1433,20 @@ function registerIpcHandlers(ctx) {
         return { ok: true, data: decodeAbcTextFromBuffer(raw).text };
       }
       return { ok: true, data: raw.toString("utf8") };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+  ipcMain.handle("set-list-sync:publish", async (_e, document, filePath) => {
+    try {
+      return { ok: true, ...(await publishSetListForMobile(document, filePath)) };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+  });
+  ipcMain.handle("set-list-sync:list", async () => {
+    try {
+      return { ok: true, entries: await listMobileSetLists() };
     } catch (e) {
       return { ok: false, error: e && e.message ? e.message : String(e) };
     }

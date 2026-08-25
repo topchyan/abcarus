@@ -7,7 +7,7 @@ const path = require("path");
 
 const DEFAULT_PORT = 43821;
 const MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
-const MAX_REQUEST_BYTES = 64 * 1024;
+const MAX_REQUEST_BYTES = 32 * 1024 * 1024;
 
 function isWithinRoot(root, candidate) {
   return candidate === root || candidate.startsWith(`${root}${path.sep}`);
@@ -99,7 +99,12 @@ async function listAbcFiles(fs, root) {
   return files;
 }
 
-function createMobileLibraryServer({ fs, port = DEFAULT_PORT, networkInterfaces } = {}) {
+function createMobileLibraryServer({
+  fs,
+  port = DEFAULT_PORT,
+  networkInterfaces,
+  syncSetLists = async () => [],
+} = {}) {
   if (!fs || !fs.promises) throw new Error("A filesystem implementation is required.");
 
   let server = null;
@@ -169,6 +174,12 @@ function createMobileLibraryServer({ fs, port = DEFAULT_PORT, networkInterfaces 
           files.push({ path: relativePath, content });
         }
         sendJson(response, 200, { files });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/v1/set-lists/sync") {
+        const payload = await readJsonBody(request);
+        const setLists = await syncSetLists(Array.isArray(payload.setLists) ? payload.setLists : []);
+        sendJson(response, 200, { setLists: Array.isArray(setLists) ? setLists : [] });
         return;
       }
       if (request.method !== "GET" && request.method !== "POST") {

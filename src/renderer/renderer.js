@@ -929,6 +929,12 @@ const setListFeature = createSetListFeature({
   writeStorage: safeWriteJsonLocalStorage,
   readFile,
   writeFile,
+  publishSetList: (document, filePath) => window.api && typeof window.api.publishSetListForMobile === "function"
+    ? window.api.publishSetListForMobile(document, filePath)
+    : Promise.resolve({ ok: false }),
+  listSyncedSetLists: () => window.api && typeof window.api.listMobileSetLists === "function"
+    ? window.api.listMobileSetLists()
+    : Promise.resolve({ ok: false, entries: [] }),
   showOpenSetListDialog: () => window.api && typeof window.api.showOpenSetListDialog === "function"
     ? window.api.showOpenSetListDialog()
     : Promise.resolve(null),

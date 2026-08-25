@@ -10,10 +10,13 @@ const {
   encodeCredential,
   normalizeRelativePath,
 } = require("../../src/main/mobile_library_server.js");
+const { createMobileSetListSyncStore } = require("../../src/main/mobile_set_list_sync_store.js");
 
 const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "abcarus-mobile-sync-"));
 const outsideRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "abcarus-mobile-sync-outside-"));
 const nested = path.join(tempRoot, "nested");
+const syncRoot = path.join(tempRoot, "sync-state");
+const setListRoot = path.join(tempRoot, "set-lists");
 await fs.promises.mkdir(nested);
 await fs.promises.writeFile(path.join(tempRoot, "one.abc"), "X:1\nT:One\nK:C\nC|\n", "utf8");
 await fs.promises.writeFile(path.join(nested, "two.ABC"), "X:2\nT:Two\nK:G\nG|\n", "utf8");
@@ -23,8 +26,15 @@ try {
   await fs.promises.symlink(path.join(outsideRoot, "secret.abc"), path.join(tempRoot, "linked.abc"));
 } catch {}
 
+const setListStore = createMobileSetListSyncStore({
+  fs,
+  path,
+  getStoreDir: () => syncRoot,
+  getDefaultDir: () => setListRoot,
+});
 const server = createMobileLibraryServer({
   fs,
+  syncSetLists: (documents) => setListStore.sync(documents),
   networkInterfaces: () => ({
     wifi: [{ address: "192.168.1.25", family: "IPv4", internal: false }],
   }),
@@ -62,6 +72,37 @@ try {
   const batch = await batchResponse.json();
   assert.deepEqual(batch.files.map((file) => file.path), ["one.abc", "nested/two.ABC"]);
   assert.match(batch.files[0].content, /T:One/);
+
+  const setList = {
+    schema: "abcarus.setlist.v1",
+    id: "gig-id",
+    title: "Friday Gig",
+    createdAt: "2026-08-20T12:00:00.000Z",
+    updatedAt: "2026-08-21T12:00:00.000Z",
+    print: { headerText: "", pageBreaks: "perTune", compact: false },
+    items: [],
+  };
+  const syncResponse = await fetch(`${base}/v1/set-lists/sync`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ setLists: [setList] }),
+  });
+  assert.equal(syncResponse.status, 200);
+  const synced = await syncResponse.json();
+  assert.equal(synced.setLists[0].title, "Friday Gig");
+  const entries = await setListStore.list();
+  assert.equal(entries.length, 1);
+  assert.equal(JSON.parse(await fs.promises.readFile(entries[0].filePath, "utf8")).id, "gig-id");
+
+  const newerDesktop = { ...setList, title: "Desktop order", updatedAt: "2026-08-22T12:00:00.000Z" };
+  await setListStore.publish(newerDesktop, entries[0].filePath);
+  await setListStore.sync([{ ...setList, title: "Stale tablet order" }]);
+  assert.equal((await setListStore.list())[0].document.title, "Desktop order");
+
+  const newestTablet = { ...setList, title: "Tablet order", updatedAt: "2026-08-23T12:00:00.000Z" };
+  await setListStore.sync([newestTablet]);
+  assert.equal((await setListStore.list())[0].document.title, "Tablet order");
+  assert.equal(JSON.parse(await fs.promises.readFile(entries[0].filePath, "utf8")).title, "Tablet order");
 
   const restarted = await server.start(tempRoot, {
     code: "replacement password",

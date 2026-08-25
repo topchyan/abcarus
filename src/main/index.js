@@ -8,6 +8,7 @@ const { applyMenu } = require("./menu");
 const { registerIpcHandlers } = require("./ipc");
 const { createSoundfontProtocol, registerSoundfontScheme } = require("./soundfontProtocol");
 const { createMobileLibraryServer } = require("./mobile_library_server");
+const { createMobileSetListSyncStore } = require("./mobile_set_list_sync_store");
 const { resolveThirdPartyRoot } = require("./conversion");
 const { getSettingsSchema, getDefaultSettings: getDefaultSettingsFromSchema } = require("./settings_schema");
 const { normalizeConversionToolSettings, normalizeMicrotonalSettings } = require("./settings_normalize");
@@ -33,7 +34,16 @@ const {
 
 registerSoundfontScheme(protocol);
 const soundfontProtocol = createSoundfontProtocol({ protocol, fs, path });
-const mobileLibraryServer = createMobileLibraryServer({ fs });
+const mobileSetListSyncStore = createMobileSetListSyncStore({
+  fs,
+  path,
+  getStoreDir: () => path.join(app.getPath("userData"), "set-list-sync"),
+  getDefaultDir: () => path.join(app.getPath("documents"), "ABCarus", "Set Lists"),
+});
+const mobileLibraryServer = createMobileLibraryServer({
+  fs,
+  syncSetLists: (documents) => mobileSetListSyncStore.sync(documents),
+});
 let mobileLibrarySettingsRevision = 0;
 
 let mainWindow = null;
@@ -3993,6 +4003,8 @@ registerIpcHandlers({
   scanLibrary,
   scanLibraryDiscover,
   shareLibraryWithMobile,
+  publishSetListForMobile: (document, filePath) => mobileSetListSyncStore.publish(document, filePath),
+  listMobileSetLists: () => mobileSetListSyncStore.list(),
   cancelLibraryScan,
   parseSingleFile,
   withMainPrintMode,
