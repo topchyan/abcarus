@@ -447,6 +447,19 @@ await test("legacy Set List remains clean until the user changes it", async () =
   assert.equal(confirmCalls, 1);
 });
 
+test("practice notes remain visible and editable in the Set List state", () => {
+  const feature = createSetListFeature({
+    readStorage: (key) => key === "abcarus.setList.v1" ? {
+      version: "1",
+      items: [{ id: "item", sourcePath: "/music/a.abc", xNumber: "1", title: "Tune", text: "X:1\nK:C\nC|\n" }],
+    } : null,
+    writeStorage: () => true,
+  });
+  assert.equal(feature.updatePracticeNote(0, "  Start softly.  "), true);
+  assert.equal(feature.getState().items[0].notes, "Start softly.");
+  assert.equal(feature.getState().dirty, true);
+});
+
 test("resolves exact content independently of its old path", () => {
   const item = readFixture("lightweight.abcarus-setlist.json").items[0];
   const result = resolveSetListItem(item, [{

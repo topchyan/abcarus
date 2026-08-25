@@ -382,6 +382,12 @@ const $setListSnapshotModal = document.getElementById("setListSnapshotModal");
 const $setListSnapshotClose = document.getElementById("setListSnapshotClose");
 const $setListSnapshotTitle = document.getElementById("setListSnapshotTitle");
 const $setListSnapshotPreview = document.getElementById("setListSnapshotPreview");
+const $setListNoteModal = document.getElementById("setListNoteModal");
+const $setListNoteClose = document.getElementById("setListNoteClose");
+const $setListNoteTitle = document.getElementById("setListNoteTitle");
+const $setListNoteText = document.getElementById("setListNoteText");
+const $setListNoteCancel = document.getElementById("setListNoteCancel");
+const $setListNoteSave = document.getElementById("setListNoteSave");
 const $setListTargetModal = document.getElementById("setListTargetModal");
 const $setListTargetClose = document.getElementById("setListTargetClose");
 const $setListTargetSelect = document.getElementById("setListTargetSelect");
@@ -918,6 +924,12 @@ const setListFeature = createSetListFeature({
     snapshotCloseButton: $setListSnapshotClose,
     snapshotTitle: $setListSnapshotTitle,
     snapshotPreview: $setListSnapshotPreview,
+    noteModal: $setListNoteModal,
+    noteCloseButton: $setListNoteClose,
+    noteTitle: $setListNoteTitle,
+    noteText: $setListNoteText,
+    noteCancelButton: $setListNoteCancel,
+    noteSaveButton: $setListNoteSave,
     targetModal: $setListTargetModal,
     targetCloseButton: $setListTargetClose,
     targetSelect: $setListTargetSelect,

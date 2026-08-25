@@ -9,6 +9,7 @@ const { registerIpcHandlers } = require("./ipc");
 const { createSoundfontProtocol, registerSoundfontScheme } = require("./soundfontProtocol");
 const { createMobileLibraryServer } = require("./mobile_library_server");
 const { createMobileSetListSyncStore } = require("./mobile_set_list_sync_store");
+const { enrichMobileSetListDocuments } = require("./mobile_set_list_enrichment");
 const { resolveThirdPartyRoot } = require("./conversion");
 const { getSettingsSchema, getDefaultSettings: getDefaultSettingsFromSchema } = require("./settings_schema");
 const { normalizeConversionToolSettings, normalizeMicrotonalSettings } = require("./settings_normalize");
@@ -50,7 +51,19 @@ const mobileSetListSyncStore = createMobileSetListSyncStore({
 });
 const mobileLibraryServer = createMobileLibraryServer({
   fs,
-  syncSetLists: (documents) => mobileSetListSyncStore.sync(documents),
+  syncSetLists: async (documents, context = {}) => {
+    const enriched = await enrichMobileSetListDocuments({
+      documents,
+      rootDir: context.root,
+      fs,
+      path,
+      parseFile: async (filePath) => {
+        const parsed = await parseSingleFile(filePath, null);
+        return parsed && parsed.files && parsed.files[0] ? parsed.files[0] : null;
+      },
+    });
+    return mobileSetListSyncStore.sync(enriched);
+  },
 });
 let mobileLibrarySettingsRevision = 0;
 

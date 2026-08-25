@@ -140,6 +140,7 @@ function createSetListFeature({
       composer: item.tune.composer,
       originalKey: item.tune.key,
       transposeSemitones: Number(item.performance && item.performance.transposeSemitones) || 0,
+      notes: item.notes || "",
       headerText: item.embeddedHeaderAbc || "",
       text: item.embeddedAbc || "",
       export: { ...item.export },
@@ -147,6 +148,15 @@ function createSetListFeature({
   }
 
   const getFileHeaderText = () => getSetListFileHeaderText(getHeaderText());
+
+  function updatePracticeNote(index, value) {
+    const target = Number(index);
+    if (!Number.isInteger(target) || !getItems()[target]) return false;
+    session.mutate((document) => {
+      document.items[target].notes = String(value || "").trim();
+    }, { reason: "practice notes" });
+    return true;
+  }
 
   controller = createSetListController({
     modal: elements.modal,
@@ -209,6 +219,7 @@ function createSetListFeature({
       activeItemId = duplicate.id;
       return true;
     },
+    onNotesChange: updatePracticeNote,
     onPreviewSnapshot: async (index) => {
       const item = getItems()[Number(index)];
       if (!item || !item.embeddedAbc) {
@@ -697,6 +708,7 @@ function createSetListFeature({
     runPrintAction,
     saveSetList,
     toggle,
+    updatePracticeNote,
   };
 }
 

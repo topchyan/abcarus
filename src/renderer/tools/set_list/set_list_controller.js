@@ -62,6 +62,12 @@ function createSetListController({
   snapshotCloseButton,
   snapshotTitle,
   snapshotPreview,
+  noteModal,
+  noteCloseButton,
+  noteTitle,
+  noteText,
+  noteCancelButton,
+  noteSaveButton,
   targetModal,
   targetCloseButton,
   targetSelect,
@@ -74,6 +80,7 @@ function createSetListController({
   onMoveItem,
   onRemoveItem,
   onDuplicateItem,
+  onNotesChange,
   onPreviewSnapshot,
   onUpdateSnapshot,
   onAddTune,
@@ -99,6 +106,7 @@ function createSetListController({
 } = {}) {
   let dragFromIndex = null;
   let targetChoiceResolve = null;
+  let noteEditIndex = null;
 
   function closeDocumentMenus(except = null) {
     if (!modal || typeof modal.querySelectorAll !== "function") return false;
@@ -178,6 +186,15 @@ function createSetListController({
           details.className = "set-list-details";
           details.textContent = detailsText;
           content.appendChild(details);
+        }
+        if (item.notes) {
+          const note = document.createElement("button");
+          note.type = "button";
+          note.className = "set-list-note";
+          note.dataset.index = String(i);
+          note.title = "Edit practice note";
+          note.textContent = `Practice: ${String(item.notes)}`;
+          content.appendChild(note);
         }
 
         row.append(idx, content);
@@ -264,6 +281,27 @@ function createSetListController({
     if (!snapshotModal) return;
     snapshotModal.classList.remove("open");
     snapshotModal.setAttribute("aria-hidden", "true");
+  }
+
+  function openNoteEditor(index) {
+    const target = Number(index);
+    const item = readState().items[target];
+    if (!noteModal || !noteText || !item) return;
+    noteEditIndex = target;
+    if (noteTitle) noteTitle.textContent = `${item.title || "Untitled"} - Practice Note`;
+    noteText.value = String(item.notes || "");
+    noteModal.classList.add("open");
+    noteModal.setAttribute("aria-hidden", "false");
+    noteText.focus();
+    noteText.select();
+  }
+
+  function closeNoteEditor() {
+    if (noteModal) {
+      noteModal.classList.remove("open");
+      noteModal.setAttribute("aria-hidden", "true");
+    }
+    noteEditIndex = null;
   }
 
   if (closeButton) closeButton.addEventListener("click", close);
@@ -358,6 +396,7 @@ function createSetListController({
     };
     const runItemAction = (action, index) => {
       if (action === "open" && typeof onActivateItem === "function") return onActivateItem(index);
+      if (action === "note") return openNoteEditor(index);
       if (action === "preview" && typeof onPreviewSnapshot === "function") return onPreviewSnapshot(index);
       if (action === "update" && typeof onUpdateSnapshot === "function") return onUpdateSnapshot(index);
       if (action === "duplicate" && typeof onDuplicateItem === "function") return onDuplicateItem(index);
@@ -445,6 +484,13 @@ function createSetListController({
     });
 
     itemsList.addEventListener("click", (e) => {
+      const note = e && e.target && e.target.closest ? e.target.closest(".set-list-note") : null;
+      if (note) {
+        e.preventDefault();
+        e.stopPropagation();
+        openNoteEditor(note.dataset ? Number(note.dataset.index) : NaN);
+        return;
+      }
       const btn = e && e.target && e.target.closest ? e.target.closest(".set-list-btn") : null;
       if (!btn) {
         const row = e && e.target && e.target.closest ? e.target.closest(".set-list-row") : null;
@@ -497,8 +543,10 @@ function createSetListController({
       closeItemContextMenu();
       contextMenu = document.createElement("div");
       contextMenu.className = "set-list-item-menu";
+      const selectedItem = readState().items[index] || {};
       const actions = [
         ["open", "Open Source Tune"],
+        ["note", selectedItem.notes ? "Edit Practice Note…" : "Add Practice Note…"],
         ["preview", "Preview Snapshot"],
         ["update", "Update Snapshot from Source"],
         ["duplicate", "Duplicate Occurrence"],
@@ -553,6 +601,15 @@ function createSetListController({
 
   if (headerCloseButton) headerCloseButton.addEventListener("click", closeHeaderEditor);
   if (snapshotCloseButton) snapshotCloseButton.addEventListener("click", closeSnapshotPreview);
+  if (noteCloseButton) noteCloseButton.addEventListener("click", closeNoteEditor);
+  if (noteCancelButton) noteCancelButton.addEventListener("click", closeNoteEditor);
+  if (noteSaveButton) noteSaveButton.addEventListener("click", () => {
+    if (Number.isInteger(noteEditIndex) && typeof onNotesChange === "function") {
+      onNotesChange(noteEditIndex, noteText ? noteText.value : "");
+    }
+    closeNoteEditor();
+    render();
+  });
 
   if (snapshotModal) {
     snapshotModal.addEventListener("keydown", (event) => {
@@ -560,6 +617,15 @@ function createSetListController({
       event.preventDefault();
       closeSnapshotPreview();
     });
+  }
+
+  if (noteModal) {
+    noteModal.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      closeNoteEditor();
+    });
+    if (typeof enableDraggable === "function") enableDraggable(noteModal);
   }
 
   if (headerModal) {

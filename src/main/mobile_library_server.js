@@ -178,7 +178,10 @@ function createMobileLibraryServer({
       }
       if (request.method === "POST" && url.pathname === "/v1/set-lists/sync") {
         const payload = await readJsonBody(request);
-        const setLists = await syncSetLists(Array.isArray(payload.setLists) ? payload.setLists : []);
+        const setLists = await syncSetLists(
+          Array.isArray(payload.setLists) ? payload.setLists : [],
+          { root },
+        );
         sendJson(response, 200, { setLists: Array.isArray(setLists) ? setLists : [] });
         return;
       }

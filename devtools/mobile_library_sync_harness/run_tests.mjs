@@ -11,6 +11,7 @@ const {
   normalizeRelativePath,
 } = require("../../src/main/mobile_library_server.js");
 const { createMobileSetListSyncStore } = require("../../src/main/mobile_set_list_sync_store.js");
+const { enrichMobileSetListDocuments } = require("../../src/main/mobile_set_list_enrichment.js");
 
 const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "abcarus-mobile-sync-"));
 const outsideRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "abcarus-mobile-sync-outside-"));
@@ -44,6 +45,42 @@ const server = createMobileLibraryServer({
 try {
   assert.equal(normalizeRelativePath("../secret.abc"), "");
   assert.equal(normalizeRelativePath("nested/two.ABC"), "nested/two.ABC");
+
+  const enrichedDocuments = await enrichMobileSetListDocuments({
+    documents: [{
+      schema: "abcarus.setlist.v1",
+      id: "enrichment",
+      title: "Enrichment",
+      updatedAt: "2026-08-24T12:00:00.000Z",
+      items: [{
+        id: "item",
+        tune: {
+          title: "One",
+          composer: "",
+          key: "",
+          rhythm: "",
+          origin: "",
+          groups: [],
+          source: { pathHint: "one.abc", xNumberHint: "1" },
+        },
+      }],
+    }],
+    rootDir: tempRoot,
+    fs,
+    path,
+    parseFile: async () => ({
+      tunes: [{ xNumber: "1", title: "One", composer: "Composer", key: "C", rhythm: "reel", origin: "Ireland", groups: ["Session"] }],
+    }),
+  });
+  assert.deepEqual(enrichedDocuments[0].items[0].tune, {
+    title: "One",
+    composer: "Composer",
+    key: "C",
+    rhythm: "reel",
+    origin: "Ireland",
+    groups: ["Session"],
+    source: { pathHint: "one.abc", xNumberHint: "1" },
+  });
 
   const info = await server.start(tempRoot, {
     code: "easy пароль 42",

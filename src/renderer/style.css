@@ -3315,6 +3315,39 @@ body.set-list-visible .set-list-divider {
   white-space: nowrap;
 }
 
+.set-list-row .set-list-note {
+  display: block;
+  width: 100%;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted-text);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.set-list-row .set-list-note:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.set-list-note-card {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.set-list-note-card textarea {
+  width: 100%;
+  min-height: 130px;
+  resize: vertical;
+}
+
 .set-list-item-menu {
   position: absolute;
   z-index: 12;
