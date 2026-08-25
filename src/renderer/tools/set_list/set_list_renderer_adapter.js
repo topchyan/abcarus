@@ -1,5 +1,5 @@
 import { buildPrintTuneLabel } from "../../print/error_markup.js";
-import { hashSetListAbc, resolveSetListItem } from "./set_list_document.js";
+import { hashSetListAbc, resolveSetListItem, sourcePathsEquivalent } from "./set_list_document.js";
 
 function createSetListRendererAdapter({
   getCurrentDocDirty = () => false,
@@ -57,7 +57,8 @@ function createSetListRendererAdapter({
           file: direct.file,
         }]
       : all.filter((candidate) => source.pathHint && source.xNumberHint
-        && pathsEqual(candidate.sourcePath, source.pathHint)
+        && (pathsEqual(candidate.sourcePath, source.pathHint)
+          || sourcePathsEquivalent(candidate.sourcePath, source.pathHint))
         && candidate.xNumber === String(source.xNumberHint));
 
     if (!candidates.length) {
@@ -83,7 +84,8 @@ function createSetListRendererAdapter({
   async function activateItemSource(item) {
     const resolution = await resolveItemSource(item);
     if (!resolution || !resolution.candidate) return resolution;
-    if (!["FOUND_EXACT", "FOUND_MODIFIED"].includes(resolution.status)) return resolution;
+    const trustedSourceMatch = resolution.status === "FOUND_STRONG" && resolution.matchedBy === "source";
+    if (!["FOUND_EXACT", "FOUND_MODIFIED"].includes(resolution.status) && !trustedSourceMatch) return resolution;
     const opened = await selectTune(resolution.candidate.tuneId);
     return { ...resolution, opened: opened !== false };
   }

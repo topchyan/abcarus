@@ -254,10 +254,17 @@ function convertLegacySetListState(legacy, options = {}) {
   }, { makeId, nowIso });
 }
 
+function sourcePathsEquivalent(left, right) {
+  const a = text(left).replace(/\\/g, "/").replace(/\/+$/, "");
+  const b = text(right).replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!a || !b) return false;
+  return a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
+}
+
 function sameSource(snapshot, candidate) {
   const source = snapshot.source || {};
   return Boolean(source.pathHint && source.xNumberHint
-    && text(candidate.sourcePath) === source.pathHint
+    && sourcePathsEquivalent(candidate.sourcePath, source.pathHint)
     && text(candidate.xNumber) === source.xNumberHint);
 }
 
@@ -270,12 +277,12 @@ function resolveSetListItem(item, candidates) {
   if (sourceMatches.length === 1) {
     const candidateHash = text(sourceMatches[0].contentHash);
     if (hash && candidateHash === hash) {
-      return { status: SET_LIST_RESOLUTION.FOUND_EXACT, candidate: sourceMatches[0], candidates: sourceMatches };
+      return { status: SET_LIST_RESOLUTION.FOUND_EXACT, candidate: sourceMatches[0], candidates: sourceMatches, matchedBy: "source" };
     }
     if (hash && candidateHash && candidateHash !== hash) {
-      return { status: SET_LIST_RESOLUTION.FOUND_MODIFIED, candidate: sourceMatches[0], candidates: sourceMatches };
+      return { status: SET_LIST_RESOLUTION.FOUND_MODIFIED, candidate: sourceMatches[0], candidates: sourceMatches, matchedBy: "source" };
     }
-    return { status: SET_LIST_RESOLUTION.FOUND_STRONG, candidate: sourceMatches[0], candidates: sourceMatches };
+    return { status: SET_LIST_RESOLUTION.FOUND_STRONG, candidate: sourceMatches[0], candidates: sourceMatches, matchedBy: "source" };
   }
   if (sourceMatches.length > 1) {
     return { status: SET_LIST_RESOLUTION.AMBIGUOUS, candidate: null, candidates: sourceMatches };
@@ -284,7 +291,7 @@ function resolveSetListItem(item, candidates) {
   if (hash) {
     const hashMatches = pool.filter((candidate) => text(candidate.contentHash) === hash);
     if (hashMatches.length === 1) {
-      return { status: SET_LIST_RESOLUTION.FOUND_EXACT, candidate: hashMatches[0], candidates: hashMatches };
+      return { status: SET_LIST_RESOLUTION.FOUND_EXACT, candidate: hashMatches[0], candidates: hashMatches, matchedBy: "hash" };
     }
     if (hashMatches.length > 1) {
       return { status: SET_LIST_RESOLUTION.AMBIGUOUS, candidate: null, candidates: hashMatches };
@@ -299,7 +306,7 @@ function resolveSetListItem(item, candidates) {
     return normalizedIdentityText(candidate.composer) === composer;
   });
   if (metadataMatches.length === 1) {
-    return { status: SET_LIST_RESOLUTION.FOUND_STRONG, candidate: metadataMatches[0], candidates: metadataMatches };
+    return { status: SET_LIST_RESOLUTION.FOUND_STRONG, candidate: metadataMatches[0], candidates: metadataMatches, matchedBy: "metadata" };
   }
   if (metadataMatches.length > 1) {
     return { status: SET_LIST_RESOLUTION.AMBIGUOUS, candidate: null, candidates: metadataMatches };
@@ -319,6 +326,7 @@ export {
   normalizeSetListDocument,
   normalizeSetListDocumentItem,
   resolveSetListItem,
+  sourcePathsEquivalent,
   removeSetListDocumentItem,
   serializeSetListDocument,
 };

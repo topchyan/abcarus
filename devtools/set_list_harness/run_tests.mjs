@@ -340,6 +340,29 @@ await test("docked Set List activation uses the canonical Library tune pipeline"
   assert.deepEqual(selected, [tune.id]);
 });
 
+await test("mobile relative source paths activate the matching Desktop tune", async () => {
+  const abc = "X:35\nT:Նազանի\nK:C\nC|\n";
+  const tune = { id: "/music/Armenian_Tunes.abc::35", xNumber: "35", title: "Նազանի", composer: "" };
+  const file = { path: "/music/Armenian_Tunes.abc", tunes: [tune] };
+  const selected = [];
+  const adapter = createSetListRendererAdapter({
+    getLibraryIndex: () => ({ files: [file] }),
+    getTuneText: async () => abc,
+    selectTune: async (id) => { selected.push(id); return { ok: true }; },
+  });
+  const result = await adapter.activateItemSource({
+    tune: {
+      title: "Նազանի",
+      composer: "",
+      source: { pathHint: "Armenian_Tunes.abc", xNumberHint: "35" },
+      contentHash: "",
+    },
+  });
+  assert.equal(result.status, SET_LIST_RESOLUTION.FOUND_STRONG);
+  assert.equal(result.matchedBy, "source");
+  assert.deepEqual(selected, [tune.id]);
+});
+
 await test("dirty source tune cannot be snapshotted without saving", async () => {
   let reads = 0;
   const adapter = createSetListRendererAdapter({
