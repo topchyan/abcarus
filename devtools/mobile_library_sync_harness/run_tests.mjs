@@ -105,6 +105,13 @@ try {
   assert.equal((await setListStore.list())[0].document.title, "Tablet order");
   assert.equal(JSON.parse(await fs.promises.readFile(entries[0].filePath, "utf8")).title, "Tablet order");
 
+  const enrichedTablet = {
+    ...newestTablet,
+    items: [{ id: "tune-1", tune: { title: "One", composer: "Composer" } }],
+  };
+  await setListStore.sync([enrichedTablet]);
+  assert.equal((await setListStore.list())[0].document.items[0].tune.composer, "Composer");
+
   selectedSetListRoot = path.join(tempRoot, "custom-set-lists");
   const secondSetList = {
     ...setList,

@@ -103,7 +103,7 @@ function createMobileSetListSyncStore({ fs, path, getStoreDir, getDefaultDir } =
       if (!validDocument(document)) continue;
       const id = String(document.id);
       const existing = state.entries[id];
-      if (existing && parseTime(existing.document.updatedAt) >= parseTime(document.updatedAt)) continue;
+      if (existing && parseTime(existing.document.updatedAt) > parseTime(document.updatedAt)) continue;
       const target = String(existing && existing.filePath || "").trim()
         || await chooseNewPath(document, state.entries);
       const copy = structuredClone(document);
