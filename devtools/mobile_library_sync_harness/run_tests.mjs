@@ -17,6 +17,7 @@ const outsideRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "abcarus-mo
 const nested = path.join(tempRoot, "nested");
 const syncRoot = path.join(tempRoot, "sync-state");
 const setListRoot = path.join(tempRoot, "set-lists");
+let selectedSetListRoot = setListRoot;
 await fs.promises.mkdir(nested);
 await fs.promises.writeFile(path.join(tempRoot, "one.abc"), "X:1\nT:One\nK:C\nC|\n", "utf8");
 await fs.promises.writeFile(path.join(nested, "two.ABC"), "X:2\nT:Two\nK:G\nG|\n", "utf8");
@@ -30,7 +31,7 @@ const setListStore = createMobileSetListSyncStore({
   fs,
   path,
   getStoreDir: () => syncRoot,
-  getDefaultDir: () => setListRoot,
+  getDefaultDir: () => selectedSetListRoot,
 });
 const server = createMobileLibraryServer({
   fs,
@@ -103,6 +104,22 @@ try {
   await setListStore.sync([newestTablet]);
   assert.equal((await setListStore.list())[0].document.title, "Tablet order");
   assert.equal(JSON.parse(await fs.promises.readFile(entries[0].filePath, "utf8")).title, "Tablet order");
+
+  selectedSetListRoot = path.join(tempRoot, "custom-set-lists");
+  const secondSetList = {
+    ...setList,
+    id: "second-gig-id",
+    title: "Saturday Gig",
+    updatedAt: "2026-08-24T12:00:00.000Z",
+  };
+  await setListStore.sync([secondSetList]);
+  const relocatedEntries = await setListStore.list();
+  const originalEntry = relocatedEntries.find((entry) => entry.document.id === setList.id);
+  const secondEntry = relocatedEntries.find((entry) => entry.document.id === secondSetList.id);
+  assert(originalEntry);
+  assert(secondEntry);
+  assert.equal(path.dirname(originalEntry.filePath), setListRoot);
+  assert.equal(path.dirname(secondEntry.filePath), selectedSetListRoot);
 
   const restarted = await server.start(tempRoot, {
     code: "replacement password",

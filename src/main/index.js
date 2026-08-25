@@ -38,7 +38,15 @@ const mobileSetListSyncStore = createMobileSetListSyncStore({
   fs,
   path,
   getStoreDir: () => path.join(app.getPath("userData"), "set-list-sync"),
-  getDefaultDir: () => path.join(app.getPath("documents"), "ABCarus", "Set Lists"),
+  getDefaultDir: () => {
+    const configured = String(appState.settings && appState.settings.mobileSetListFolder || "").trim();
+    if (!configured) return path.join(app.getPath("documents"), "ABCarus", "Set Lists");
+    if (configured === "~") return app.getPath("home");
+    if (configured.startsWith(`~${path.sep}`) || configured.startsWith("~/") || configured.startsWith("~\\")) {
+      return path.resolve(app.getPath("home"), configured.slice(2));
+    }
+    return path.resolve(configured);
+  },
 });
 const mobileLibraryServer = createMobileLibraryServer({
   fs,
@@ -1818,6 +1826,7 @@ function applySettingsPatch(patch) {
   next.libraryUiFontFamily = String(next.libraryUiFontFamily || "").trim() || next.uiFontFamily;
   next.mobileLibraryPort = Math.min(65535, Math.max(1024, Math.round(Number(next.mobileLibraryPort) || 43821)));
   next.mobileLibraryCode = String(next.mobileLibraryCode || "").trim().slice(0, 128);
+  next.mobileSetListFolder = String(next.mobileSetListFolder || "").trim();
   next.editorNotesBold = Boolean(next.editorNotesBold);
   next.editorLyricsBold = Boolean(next.editorLyricsBold);
   next.confirmAppendToActiveFile = Boolean(next.confirmAppendToActiveFile);

@@ -15,6 +15,7 @@ import {
   rectangularSelection,
 } from "../../third_party/codemirror/cm.js";
 import { createSettingsStore } from "./settings_store.js";
+import { createSettingsFolderControl } from "./app/ui/settings_folder_control.js";
 import {
   buildUserFontFaceCss,
   createInterfaceFontControl,
@@ -678,7 +679,7 @@ export function initSettings(api) {
           meta.el.value = String(value || "");
         }
         if (typeof meta.updateRemoveEnabled === "function") meta.updateRemoveEnabled();
-      } else if ((kind === "number" || kind === "text") && meta.el) {
+      } else if ((kind === "number" || kind === "text" || kind === "folder") && meta.el) {
         meta.el.value = String(value == null ? "" : value);
       }
     }
@@ -949,6 +950,13 @@ export function initSettings(api) {
         stageSetting(entry.key, input.value || "");
       });
       row.appendChild(input);
+      controlByKey.set(entry.key, { entry, el: input });
+      return row;
+    }
+    if (kind === "folder") {
+      const { control, input: folderInput } = createSettingsFolderControl({ api, entry, onChange: (value) => stageSetting(entry.key, value) });
+      input = folderInput;
+      row.appendChild(control);
       controlByKey.set(entry.key, { entry, el: input });
       return row;
     }

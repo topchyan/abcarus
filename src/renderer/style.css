@@ -3855,6 +3855,24 @@ button.primary:not(:disabled):hover {
   justify-self: start;
 }
 
+.settings-folder-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  width: 100%;
+  max-width: 520px;
+  align-items: center;
+}
+
+.settings-folder-control input[type="text"] {
+  width: 100%;
+  max-width: none;
+}
+
+.settings-folder-browse {
+  white-space: nowrap;
+}
+
 .settings-row select {
   width: 100%;
   max-width: 360px;

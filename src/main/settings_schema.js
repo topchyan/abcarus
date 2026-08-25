@@ -1006,6 +1006,20 @@ function getSettingsSchema() {
       ui: { input: "text", placeholder: "Choose a password" },
     },
     {
+      key: "mobileSetListFolder",
+      type: "string",
+      default: "",
+      section: "Library",
+      group: "Mobile sharing",
+      groupOrder: 20,
+      label: "Mobile Set Lists folder",
+      help: "Folder for new Set Lists received from ABCarus Mobile. Existing linked Set List files keep their current locations. Leave empty to use Documents/ABCarus/Set Lists.",
+      ui: {
+        input: "folder",
+        placeholder: "Default: Documents/ABCarus/Set Lists",
+      },
+    },
+    {
       key: "templatesFolder",
       type: "string",
       default: "",

@@ -58,6 +58,7 @@ function main() {
     abc2xmlArgs: "",
     xml2abcArgs: "",
     printPageMargins: "standard",
+    mobileSetListFolder: "",
   };
   for (const [key, expected] of Object.entries(requiredDefaults)) {
     assert(seen.has(key), `missing schema key: ${key}`);
@@ -70,6 +71,11 @@ function main() {
       actual === expected,
       `unexpected default for ${key}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`
     );
+  }
+
+  {
+    const entry = schema.find((item) => item && item.key === "mobileSetListFolder");
+    assert(entry && entry.ui && entry.ui.input === "folder", "mobile Set List location must use a folder picker");
   }
 
   for (const key of ["uiFontFamily", "libraryUiFontFamily"]) {
