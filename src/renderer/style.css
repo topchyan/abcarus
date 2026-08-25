@@ -3274,7 +3274,20 @@ body.set-list-visible .set-list-divider {
   font-variant-numeric: tabular-nums;
 }
 
+.set-list-row-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.set-list-row-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
 .set-list-row .set-list-title {
+  flex: 1 1 auto;
   font-weight: 600;
   min-width: 0;
   overflow: hidden;
@@ -3283,10 +3296,20 @@ body.set-list-visible .set-list-divider {
 }
 
 .set-list-row .set-list-meta {
-  margin-left: auto;
+  flex: 0 1 42%;
   color: var(--muted-text);
   font-size: 12px;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.set-list-row .set-list-details {
+  margin-top: 1px;
+  color: var(--muted-text);
+  font-size: 11px;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

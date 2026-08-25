@@ -138,6 +138,8 @@ function createSetListFeature({
       xNumber: item.tune.source.xNumberHint,
       title: item.tune.title,
       composer: item.tune.composer,
+      originalKey: item.tune.key,
+      transposeSemitones: Number(item.performance && item.performance.transposeSemitones) || 0,
       headerText: item.embeddedHeaderAbc || "",
       text: item.embeddedAbc || "",
       export: { ...item.export },

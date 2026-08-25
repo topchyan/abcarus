@@ -161,7 +161,26 @@ function createSetListController({
         meta.className = "set-list-meta";
         meta.textContent = item.composer ? String(item.composer) : "";
 
-        row.append(idx, title, meta);
+        const main = document.createElement("div");
+        main.className = "set-list-row-main";
+        main.append(title, meta);
+
+        const transpose = Number(item.transposeSemitones) || 0;
+        const detailsText = [
+          item.originalKey ? `Original ${item.originalKey}` : "",
+          transpose ? `Transposed ${transpose > 0 ? "+" : ""}${transpose}` : "",
+        ].filter(Boolean).join(" · ");
+        const content = document.createElement("div");
+        content.className = "set-list-row-content";
+        content.appendChild(main);
+        if (detailsText) {
+          const details = document.createElement("div");
+          details.className = "set-list-details";
+          details.textContent = detailsText;
+          content.appendChild(details);
+        }
+
+        row.append(idx, content);
         itemsList.append(row);
       }
     }
