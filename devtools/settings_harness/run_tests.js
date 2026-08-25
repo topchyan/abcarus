@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 const path = require("path");
+const fs = require("fs");
 
 function fail(msg) {
   throw new Error(msg);
@@ -103,6 +104,24 @@ function main() {
     assert(next.abc2xmlArgs === "-x -y value", "abc2xml flags must survive settings normalization");
     assert(next.xml2abcArgs === "-x -b 3", "xml2abc flags must survive settings normalization");
     assert(next.midi2abcArgs === "--meter 4/4", "midi2abc flags must survive settings normalization");
+  }
+
+  {
+    const rendererSettingsSource = fs.readFileSync(
+      path.resolve(__dirname, "../../src/renderer/settings.js"),
+      "utf8"
+    );
+    const mainSource = fs.readFileSync(
+      path.resolve(__dirname, "../../src/main/index.js"), "utf8"
+    );
+    assert(
+      /input\.addEventListener\("input", \(\) => \{\s*stageSetting\(entry\.key, input\.value \|\| ""\);/s.test(rendererSettingsSource),
+      "text settings must stage their value while the user types"
+    );
+    assert(
+      /async function updateSettings\(patch\) \{[\s\S]*?await saveState\(\);/s.test(mainSource),
+      "settings:update must wait for profile persistence"
+    );
   }
 
   {

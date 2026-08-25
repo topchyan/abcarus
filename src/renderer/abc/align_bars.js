@@ -199,9 +199,10 @@ function alignBarsInTune(lines, tuneText) {
     const aligned = alignLines(tuneText, group.map((c) => c.line), true);
     for (let i = 0; i < group.length; i += 1) {
       out[group[i].idx] = aligned[i];
-      const lyricIdx = group[i].idx + 1;
-      if (lyricIdx < out.length && /^\s*w:/.test(out[lyricIdx] || "")) {
+      let lyricIdx = group[i].idx + 1;
+      while (lyricIdx < out.length && /^\s*w:/.test(out[lyricIdx] || "")) {
         out[lyricIdx] = alignLyricLineToMusicLine(out[lyricIdx], aligned[i]);
+        lyricIdx += 1;
       }
     }
   }

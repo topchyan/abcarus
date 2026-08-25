@@ -13,6 +13,13 @@ const {
 const { createMobileSetListSyncStore } = require("../../src/main/mobile_set_list_sync_store.js");
 const { enrichMobileSetListDocuments } = require("../../src/main/mobile_set_list_enrichment.js");
 
+function request(url, options = {}) {
+  return fetch(url, {
+    ...options,
+    headers: { ...(options.headers || {}), Connection: "close" },
+  });
+}
+
 const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "abcarus-mobile-sync-"));
 const outsideRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "abcarus-mobile-sync-outside-"));
 const nested = path.join(tempRoot, "nested");
@@ -90,18 +97,18 @@ try {
   const base = `http://127.0.0.1:${info.port}`;
   assert.deepEqual(info.addresses, ["192.168.1.25"]);
 
-  const unauthorized = await fetch(`${base}/v1/info`);
+  const unauthorized = await request(`${base}/v1/info`);
   assert.equal(unauthorized.status, 401);
 
   const headers = { "X-ABCarus-Credential": encodeCredential(info.code) };
-  const serverInfo = await (await fetch(`${base}/v1/info`, { headers })).json();
+  const serverInfo = await (await request(`${base}/v1/info`, { headers })).json();
   assert.equal(serverInfo.protocol, "abcarus-library-v1");
   assert.equal(serverInfo.serverId, "12345678-1234-1234-1234-123456789abc");
 
-  const manifest = await (await fetch(`${base}/v1/files`, { headers })).json();
+  const manifest = await (await request(`${base}/v1/files`, { headers })).json();
   assert.deepEqual(manifest.files.map((file) => file.path), ["nested/two.ABC", "one.abc"]);
 
-  const batchResponse = await fetch(`${base}/v1/batch`, {
+  const batchResponse = await request(`${base}/v1/batch`, {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({ paths: ["one.abc", "nested/two.ABC", "../secret.abc", "linked.abc"] }),
@@ -120,7 +127,7 @@ try {
     print: { headerText: "", pageBreaks: "perTune", compact: false },
     items: [],
   };
-  const syncResponse = await fetch(`${base}/v1/set-lists/sync`, {
+  const syncResponse = await request(`${base}/v1/set-lists/sync`, {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({ setLists: [setList] }),
@@ -171,8 +178,8 @@ try {
     serverId: info.serverId,
   });
   assert.equal(restarted.port, info.port);
-  assert.equal((await fetch(`${base}/v1/info`, { headers })).status, 401);
-  assert.equal((await fetch(`${base}/v1/info`, {
+  assert.equal((await request(`${base}/v1/info`, { headers })).status, 401);
+  assert.equal((await request(`${base}/v1/info`, {
     headers: { "X-ABCarus-Credential": encodeCredential(restarted.code) },
   })).status, 200);
 

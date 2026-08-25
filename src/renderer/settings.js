@@ -946,7 +946,7 @@ export function initSettings(api) {
       input.type = "text";
       if (entry.section === "Fonts" && entry.help) input.title = String(entry.help);
       if (entry.ui.placeholder) input.placeholder = String(entry.ui.placeholder);
-      input.addEventListener("change", () => {
+      input.addEventListener("input", () => {
         stageSetting(entry.key, input.value || "");
       });
       row.appendChild(input);

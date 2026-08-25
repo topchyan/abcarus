@@ -1218,7 +1218,7 @@ async function confirmAppendToFile(filePath, tuneLabel) {
   const doNotShowAgain = Boolean(res && res.checkboxChecked);
   if (response === 0) {
     if (doNotShowAgain) {
-      try { updateSettings({ confirmAppendToActiveFile: false }); } catch {}
+      try { updateSettings({ confirmAppendToActiveFile: false }).catch(() => {}); } catch {}
     }
     return "append";
   }
@@ -1712,7 +1712,7 @@ async function startMobileLibrarySharing(rootDir, { remember = false } = {}) {
   if (remember && settings.mobileLibraryRoot !== info.root) {
     patch.mobileLibraryRoot = info.root;
   }
-  if (Object.keys(patch).length) updateSettings(patch);
+  if (Object.keys(patch).length) await updateSettings(patch);
   return info;
 }
 
@@ -1744,7 +1744,7 @@ async function shareLibraryWithMobile(rootDir) {
     });
     if (result.response === 1) {
       await mobileLibraryServer.stop();
-      updateSettings({ mobileLibrarySharingEnabled: false });
+      await updateSettings({ mobileLibrarySharingEnabled: false });
     }
     return { ok: true, active: mobileLibraryServer.info().active };
   } catch (error) {
@@ -1865,7 +1865,6 @@ function applySettingsPatch(patch) {
   // Errors feature is intentionally session-only and always persisted as off.
   next.errorsEnabled = false;
   appState.settings = next;
-  saveState();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("settings:changed", withDevSoundfont(next));
   }
@@ -1882,7 +1881,7 @@ function applySettingsPatch(patch) {
   return next;
 }
 
-function updateSettings(patch) {
+async function updateSettings(patch) {
   const previous = appState.settings || getDefaultSettings();
   const sharingInfo = mobileLibraryServer.info();
   const next = applySettingsPatch(patch);
@@ -1904,11 +1903,13 @@ function updateSettings(patch) {
       const generated = {};
       if (next.mobileLibraryCode !== info.code) generated.mobileLibraryCode = info.code;
       if (next.mobileLibraryId !== info.serverId) generated.mobileLibraryId = info.serverId;
-      if (Object.keys(generated).length) applySettingsPatch(generated);
+      if (Object.keys(generated).length) updateSettings(generated).catch(() => {});
     }).catch((error) => {
       console.warn("Unable to apply mobile sharing settings:", error && error.message ? error.message : error);
     });
   }
+  const saved = await saveState();
+  if (!saved) throw new Error("Unable to save application settings.");
   return next;
 }
 
