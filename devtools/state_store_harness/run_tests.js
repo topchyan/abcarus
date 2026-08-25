@@ -65,6 +65,18 @@ async function main() {
 
     const legacyPath = path.join(dir, "state.json");
     const migratedPath = path.join(dir, "fresh-profile.json");
+    const settingsPath = path.join(dir, "settings-profile.json");
+    const settingsDocument = composeStateDocument({
+      settings: {
+        abc2xmlArgs: "-x -y value",
+        xml2abcArgs: "-x -b 3",
+      },
+    });
+    await saveStateDocument({ fs, path, filePath: settingsPath, data: settingsDocument });
+    const settingsReloaded = await loadProfileDocument({ fs, profilePath: settingsPath, legacyStatePath: legacyPath });
+    assert.equal(settingsReloaded.data.settings.abc2xmlArgs, "-x -y value", "abc2xml flags must survive a profile write/read cycle");
+    assert.equal(settingsReloaded.data.settings.xml2abcArgs, "-x -b 3", "xml2abc flags must survive a profile write/read cycle");
+
     fs.writeFileSync(legacyPath, JSON.stringify({ stateVersion: 1, settings: { renderZoom: 1.4 } }), "utf8");
     const legacyLoaded = await loadProfileDocument({ fs, profilePath: migratedPath, legacyStatePath: legacyPath });
     assert.equal(legacyLoaded.legacy, true);

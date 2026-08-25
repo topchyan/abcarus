@@ -1184,7 +1184,7 @@ async function confirmAppendToFile(filePath, tuneLabel) {
   const doNotShowAgain = Boolean(res && res.checkboxChecked);
   if (response === 0) {
     if (doNotShowAgain) {
-      try { updateSettings({ confirmAppendToActiveFile: false }); } catch {}
+      try { updateSettings({ confirmAppendToActiveFile: false }).catch(() => {}); } catch {}
     }
     return "append";
   }
@@ -1772,7 +1772,6 @@ function applySettingsPatch(patch) {
   // Errors feature is intentionally session-only and always persisted as off.
   next.errorsEnabled = false;
   appState.settings = next;
-  saveState();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("settings:changed", withDevSoundfont(next));
   }
@@ -1789,8 +1788,11 @@ function applySettingsPatch(patch) {
   return next;
 }
 
-function updateSettings(patch) {
-  return applySettingsPatch(patch);
+async function updateSettings(patch) {
+  const next = applySettingsPatch(patch);
+  const saved = await saveState();
+  if (!saved) throw new Error("Unable to save application settings.");
+  return next;
 }
 
 async function importProfileSnapshot(document) {

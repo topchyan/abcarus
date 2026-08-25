@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- MusicXML converter flags entered in Settings are now staged immediately and Settings completion waits until the application profile is written to disk. This makes `xml2abc` and `abc2xml` flags persist reliably across restarts.
+- Align Bars now formats every consecutive lyric (`w:`) line belonging to a music line, including multi-verse MusicXML imports.
+
 
 
 ## [1.7.3] - 2026-08-24
