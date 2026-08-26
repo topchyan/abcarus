@@ -150,5 +150,11 @@ if (Test-Path $requirementsFile) {
   Write-Host "Installing Python dependencies from $requirementsFile"
   try { & $pythonExe -m ensurepip --upgrade | Out-Null } catch {}
   & $pythonExe -m pip install --upgrade pip
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to upgrade pip in the bundled Python runtime."
+  }
   & $pythonExe -m pip install -r $requirementsFile
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to install bundled Python dependencies from $requirementsFile."
+  }
 }

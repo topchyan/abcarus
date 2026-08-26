@@ -17,6 +17,7 @@ export function createEditorExtensionRuntime({
   const hoverCompartment = new Compartment();
   const tuningModeCompartment = new Compartment();
   const payloadReadOnlyCompartment = new Compartment();
+  const setListReadOnlyCompartment = new Compartment();
 
   const completionExtensions = () => [
     autocompletion({
@@ -33,6 +34,7 @@ export function createEditorExtensionRuntime({
       hoverCompartment.of([]),
       tuningModeCompartment.of([]),
       payloadReadOnlyCompartment.of([]),
+      setListReadOnlyCompartment.of([]),
     ];
   }
 
@@ -63,6 +65,7 @@ export function createEditorExtensionRuntime({
   return {
     getInitialExtensions,
     payloadReadOnlyCompartment,
+    setListReadOnlyCompartment,
     reconfigure,
   };
 }

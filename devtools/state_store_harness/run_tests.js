@@ -26,6 +26,51 @@ async function main() {
     await saveStateDocument({ fs, path, filePath, data: second });
     assert.equal(JSON.parse(fs.readFileSync(`${filePath}.bak`, "utf8")).lastFolder, "/music");
 
+    const retryPath = path.join(dir, "retry-profile.json");
+    fs.writeFileSync(retryPath, JSON.stringify(first), "utf8");
+    let transientRenameFailures = 0;
+    const retryFs = {
+      ...fs,
+      promises: {
+        ...fs.promises,
+        rename: async (from, to) => {
+          if (to === retryPath && transientRenameFailures < 2) {
+            transientRenameFailures += 1;
+            const error = new Error("simulated Windows file lock");
+            error.code = "EPERM";
+            throw error;
+          }
+          return fs.promises.rename(from, to);
+        },
+      },
+    };
+    await saveStateDocument({ fs: retryFs, path, filePath: retryPath, data: second });
+    assert.equal(transientRenameFailures, 2, "transient profile replacement failures must be retried");
+    assert.equal(JSON.parse(fs.readFileSync(retryPath, "utf8")).lastFolder, "/scores");
+
+    const lockedBackupPath = path.join(dir, "locked-backup-profile.json");
+    fs.writeFileSync(lockedBackupPath, JSON.stringify(first), "utf8");
+    const lockedBackupFs = {
+      ...fs,
+      promises: {
+        ...fs.promises,
+        writeFile: async (target, ...args) => {
+          if (String(target).includes(`${path.basename(lockedBackupPath)}.bak`)) {
+            const error = new Error("simulated locked backup");
+            error.code = "EACCES";
+            throw error;
+          }
+          return fs.promises.writeFile(target, ...args);
+        },
+      },
+    };
+    await saveStateDocument({ fs: lockedBackupFs, path, filePath: lockedBackupPath, data: second });
+    assert.equal(
+      JSON.parse(fs.readFileSync(lockedBackupPath, "utf8")).lastFolder,
+      "/scores",
+      "a locked backup must not block the canonical profile write",
+    );
+
     fs.writeFileSync(filePath, "{ broken", "utf8");
     const recovered = await loadStateDocument({ fs, filePath });
     assert.equal(recovered.recovered, true);

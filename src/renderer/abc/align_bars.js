@@ -1,14 +1,51 @@
 import {
   BAR_SEP_NO_SPACE,
-  getDefaultLen,
-  getMetre,
-  isLikelyAnacrusis,
   splitLineIntoParts,
 } from "./bar_metrics.js";
 
+function splitMusicTokens(text) {
+  const tokens = [];
+  let token = "";
+  let quote = false;
+  let decoration = false;
+  let escaped = false;
+  for (const ch of String(text || "").trim()) {
+    if (escaped) {
+      token += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      token += ch;
+      escaped = true;
+      continue;
+    }
+    if (ch === '"' && !decoration) {
+      quote = !quote;
+      token += ch;
+      continue;
+    }
+    if (ch === "!" && !quote) {
+      decoration = !decoration;
+      token += ch;
+      continue;
+    }
+    if (/\s/.test(ch) && !quote && !decoration) {
+      if (token) {
+        tokens.push(token);
+        token = "";
+      }
+      continue;
+    }
+    token += ch;
+  }
+  if (token) tokens.push(token);
+  return tokens;
+}
+
 function alignBeams(bars) {
   if (!bars || !bars.length) return bars || [];
-  const barParts = bars.map((b) => b.split(/ +/));
+  const barParts = bars.map(splitMusicTokens);
   const lengths = barParts.map((p) => p.length);
   const numParts = lengths.length ? Math.min(...lengths) : 0;
   if (!Number.isFinite(numParts) || numParts <= 0) return bars;
@@ -22,85 +59,104 @@ function alignBeams(bars) {
   return barParts.map((p) => p.join(" "));
 }
 
-function alignBars(bars, alignInsideBarsToo) {
-  let aligned = bars.slice();
-  if (BAR_SEP_NO_SPACE.test(bars[0])) {
-    aligned = aligned.map((b) => ` ${b.trim()} `);
-  } else if (alignInsideBarsToo) {
-    aligned = alignBeams(aligned);
+function parseGridLine(line) {
+  const cells = [];
+  const separators = [];
+  let cell = "";
+  for (const part of splitLineIntoParts(String(line || "").trim())) {
+    if (BAR_SEP_NO_SPACE.test(part || "")) {
+      cells.push(cell.trim());
+      separators.push(String(part || "").trim());
+      cell = "";
+    } else {
+      cell += part;
+    }
   }
-  const maxLen = Math.max(...aligned.map((b) => b.length));
-  return aligned.map((b) => b.padEnd(maxLen, " "));
+  cells.push(cell.trim());
+  let prefix = "";
+  if (!cells[0] && separators.length) {
+    prefix = `${separators.shift()} `;
+    cells.shift();
+  }
+  return { cells, separators, prefix };
 }
 
-function alignBarSeparators(barSeps) {
-  let bars = barSeps.map((b) => ` ${b.trim()} `);
-  const useRjust = bars.some((b) => b.includes(":|"));
-  if (bars.some((b) => b.includes("|"))) {
-    const maxPos = Math.max(...bars.map((b) => b.lastIndexOf("|")));
-    bars = bars.map((b) => {
-      const p = b.lastIndexOf("|");
-      if (p >= 0 && p < maxPos) return " ".repeat(maxPos - p) + b;
-      return b;
-    });
-    const maxLen = Math.max(...bars.map((b) => b.length));
-    return bars.map((b) => b.padEnd(maxLen, " "));
+function separatorLayout(rows, separatorIndex) {
+  const tokens = rows
+    .map((row) => row.separators[separatorIndex])
+    .filter(Boolean);
+  let maxPipeOffset = 0;
+  let maxAfterPipe = 0;
+  for (const token of tokens) {
+    const pipeOffset = token.lastIndexOf("|");
+    maxPipeOffset = Math.max(maxPipeOffset, Math.max(0, pipeOffset));
+    maxAfterPipe = Math.max(maxAfterPipe, pipeOffset >= 0 ? token.length - pipeOffset - 1 : token.length);
   }
-  const maxLen = Math.max(...bars.map((b) => b.length));
-  return useRjust ? bars.map((b) => b.padStart(maxLen, " ")) : bars.map((b) => b.padEnd(maxLen, " "));
+  return { maxPipeOffset, maxAfterPipe };
 }
 
-function alignLines(wholeAbc, lines, alignInsideBarsToo) {
-  const n = lines.length;
-  if (!n) return lines;
-  const lineParts = lines.map((line) => splitLineIntoParts(line.trim()));
-  const lengths = lineParts.map((lp) => lp.length);
-  const maxLen = lengths.length ? Math.max(...lengths) : 0;
-  const numBars = maxLen + 1;
-  if (!Number.isFinite(numBars) || numBars <= 0) return lines;
-  for (let lineNo = 0; lineNo < lineParts.length; lineNo += 1) {
-    lineParts[lineNo].push("");
-    if (lineParts[lineNo].length < numBars) {
-      lineParts[lineNo].push(...Array(numBars - lineParts[lineNo].length).fill(""));
-    }
+function formatSeparator(token, layout) {
+  const text = String(token || "");
+  const pipeOffset = text.lastIndexOf("|");
+  if (pipeOffset < 0) {
+    const width = layout.maxPipeOffset + 1 + layout.maxAfterPipe;
+    return text.padEnd(Math.max(text.length, width), " ");
   }
+  const left = " ".repeat(Math.max(0, layout.maxPipeOffset - pipeOffset));
+  const right = " ".repeat(Math.max(0, layout.maxAfterPipe - (text.length - pipeOffset - 1)));
+  return `${left}${text}${right}`;
+}
 
-  const defaultLen = getDefaultLen(wholeAbc);
-  const metre = getMetre(wholeAbc);
-  let firstBarHandled = false;
+function alignLines(_wholeAbc, lines, alignInsideBarsToo) {
+  if (!lines.length) return lines;
+  const rows = lines.map((line) => ({
+    ...parseGridLine(line),
+    lyric: /^\s*w:/.test(String(line || "")),
+  }));
+  for (const row of rows) {
+    if (row.lyric) row.cells = row.cells.map((cell) => String(cell || "").replace(/\s+/g, " ").trim());
+  }
+  const maxCells = Math.max(...rows.map((row) => row.cells.length));
+  const cellWidths = Array(maxCells).fill(0);
 
-  for (let i = 0; i < numBars; i += 1) {
-    if (!firstBarHandled && lineParts.some((lp) => /[a-gA-Gxz]/.test(lp[i] || ""))) {
-      firstBarHandled = true;
-      const isAna = lineParts.map((lp) => isLikelyAnacrusis(lp[i], defaultLen, metre));
-      if (isAna.some(Boolean) && !isAna.every(Boolean)) {
-        for (let lineNo = 0; lineNo < n; lineNo += 1) {
-          if (!isAna[lineNo]) lineParts[lineNo].splice(i, 0, "");
-        }
+  for (let cellIndex = 0; cellIndex < maxCells; cellIndex += 1) {
+    if (alignInsideBarsToo) {
+      const musicRows = rows.filter((row) => !row.lyric && cellIndex < row.cells.length);
+      const alignedMusic = alignBeams(musicRows.map((row) => row.cells[cellIndex]));
+      for (let i = 0; i < musicRows.length; i += 1) {
+        musicRows[i].cells[cellIndex] = alignedMusic[i];
       }
     }
-
-    const anyIsBarSep = lineParts.some((lp) => BAR_SEP_NO_SPACE.test(lp[i] || ""));
-    if (anyIsBarSep) {
-      for (let lineNo = 0; lineNo < n; lineNo += 1) {
-        if (!BAR_SEP_NO_SPACE.test(lineParts[lineNo][i] || "")) {
-          lineParts[lineNo].splice(i, 0, "");
-        }
-      }
-    }
-
-    const bars = lineParts.map((lp) => lp[i]);
-    const aligned = anyIsBarSep
-      ? alignBarSeparators(bars)
-      : alignBars(bars, alignInsideBarsToo);
-    for (let lineNo = 0; lineNo < n; lineNo += 1) {
-      lineParts[lineNo][i] = aligned[lineNo];
-    }
+    cellWidths[cellIndex] = Math.max(
+      0,
+      ...rows.map((row) => (
+        String(row.cells[cellIndex] || "").length
+        + (cellIndex === 0 ? String(row.prefix || "").length : 0)
+      )),
+    );
   }
 
-  let out = lineParts.map((parts) => parts.join(""));
-  if (out.every((l) => l.startsWith(" "))) out = out.map((l) => l.slice(1));
-  return out;
+  const maxSeparators = Math.max(...rows.map((row) => row.separators.length));
+  const separatorLayouts = Array.from(
+    { length: maxSeparators },
+    (_unused, index) => separatorLayout(rows, index),
+  );
+
+  return rows.map((row) => {
+    let out = "";
+    for (let i = 0; i < row.cells.length; i += 1) {
+      const cell = `${i === 0 ? row.prefix : ""}${String(row.cells[i] || "")}`;
+      if (i < row.separators.length) {
+        const cellWidth = cellWidths[i] + 1;
+        out += cell.padEnd(cellWidth, " ");
+        out += formatSeparator(row.separators[i], separatorLayouts[i]);
+        if (i + 1 < row.cells.length) out += " ";
+      } else {
+        out += cell;
+      }
+    }
+    return out.trimEnd();
+  });
 }
 
 function getBarSeparatorColumns(line) {
@@ -115,37 +171,27 @@ function getBarSeparatorColumns(line) {
   return cols;
 }
 
-function alignLyricLineToMusicLine(lyricLine, alignedMusicLine) {
-  const m = String(lyricLine || "").match(/^(\s*w:\s*)([\s\S]*)$/);
-  if (!m) return lyricLine;
-  const prefix = m[1] || "";
-  const body = m[2] || "";
-  const parts = splitLineIntoParts(body);
-  const lyricSepCount = parts.filter((p) => BAR_SEP_NO_SPACE.test(p || "")).length;
-  const musicCols = getBarSeparatorColumns(alignedMusicLine);
-  if (!lyricSepCount || !musicCols.length) return lyricLine;
-  if (lyricSepCount < musicCols.length - 1 || lyricSepCount > musicCols.length) return lyricLine;
-  const leadingSpaces = String(alignedMusicLine || "").match(/^\s*/)?.[0]?.length || 0;
-  const firstMusicSepIsLeading = musicCols[0] === leadingSpaces
-    && BAR_SEP_NO_SPACE.test(String(alignedMusicLine || "").slice(leadingSpaces));
-  const musicColOffset = lyricSepCount === musicCols.length - 1 && firstMusicSepIsLeading ? 1 : 0;
-
-  let out = prefix;
-  let sepIndex = 0;
+function getBarSeparatorVisualColumns(line) {
+  const parts = splitLineIntoParts(String(line || ""));
+  const cols = [];
+  let offset = 0;
   for (const part of parts) {
-    if (BAR_SEP_NO_SPACE.test(part || "")) {
-      const target = musicCols[sepIndex + musicColOffset];
-      if (!Number.isFinite(target)) return lyricLine;
-      if (out.length < target) out += " ".repeat(target - out.length);
-      else if (/\S$/.test(out)) out += " ";
-      out += String(part || "").trim();
-      if (/\s$/.test(String(part || "")) || sepIndex < lyricSepCount - 1) out += " ";
-      sepIndex += 1;
-    } else {
-      out += part;
+    const text = String(part || "");
+    const m = text.match(BAR_SEP_NO_SPACE);
+    if (m) {
+      const pipeOffset = m[0].lastIndexOf("|");
+      cols.push(offset + m.index + Math.max(0, pipeOffset));
     }
+    offset += text.length;
   }
-  return out;
+  return cols;
+}
+
+function hasStableBarGrid(lines) {
+  const columns = lines.map(getBarSeparatorVisualColumns);
+  if (columns.length < 2 || !columns[0].length) return false;
+  if (!columns.every((cols) => cols.length === columns[0].length)) return false;
+  return columns.every((cols) => cols.every((col, i) => col === columns[0][i]));
 }
 
 function alignBarsInTune(lines, tuneText) {
@@ -196,14 +242,21 @@ function alignBarsInTune(lines, tuneText) {
 
   if (!groups.length) return out;
   for (const group of groups) {
-    const aligned = alignLines(tuneText, group.map((c) => c.line), true);
-    for (let i = 0; i < group.length; i += 1) {
-      out[group[i].idx] = aligned[i];
-      let lyricIdx = group[i].idx + 1;
-      while (lyricIdx < out.length && /^\s*w:/.test(out[lyricIdx] || "")) {
-        out[lyricIdx] = alignLyricLineToMusicLine(out[lyricIdx], aligned[i]);
+    const gridEntries = [];
+    for (const candidate of group) {
+      gridEntries.push({ idx: candidate.idx, line: candidate.line });
+      let lyricIdx = candidate.idx + 1;
+      while (lyricIdx < lines.length && /^\s*w:/.test(lines[lyricIdx] || "")) {
+        gridEntries.push({ idx: lyricIdx, line: lines[lyricIdx] });
         lyricIdx += 1;
       }
+    }
+    const gridLines = gridEntries.map((entry) => entry.line);
+    if (hasStableBarGrid(gridLines)) continue;
+
+    const aligned = alignLines(tuneText, gridLines, true);
+    for (let i = 0; i < gridEntries.length; i += 1) {
+      out[gridEntries[i].idx] = aligned[i];
     }
   }
   return out;

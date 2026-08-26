@@ -90,6 +90,7 @@ function createAppCommandsDomain({
     },
     actions: {
       alignBarsInEditor: actions.alignBarsInEditor,
+      checkLyricFitInEditor: actions.checkLyricFitInEditor,
       applyAbc2abcTransform: actions.applyAbc2abcTransform,
       clearLibraryFilter: actions.clearLibraryFilter,
       confirmReloadFromDisk: actions.confirmReloadFromDisk,

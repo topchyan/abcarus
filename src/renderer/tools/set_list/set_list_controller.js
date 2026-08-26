@@ -38,6 +38,7 @@ function createSetListController({
   closeButton,
   titleInput,
   dirtySummary,
+  quickSaveButton,
   newButton,
   openButton,
   saveButton,
@@ -68,6 +69,13 @@ function createSetListController({
   noteText,
   noteCancelButton,
   noteSaveButton,
+  performanceModal,
+  performanceCloseButton,
+  performanceTitle,
+  performanceTranspose,
+  performanceResetButton,
+  performanceCancelButton,
+  performanceSaveButton,
   targetModal,
   targetCloseButton,
   targetSelect,
@@ -81,8 +89,10 @@ function createSetListController({
   onRemoveItem,
   onDuplicateItem,
   onNotesChange,
+  onPerformanceChange,
   onPreviewSnapshot,
   onUpdateSnapshot,
+  onCopyTuneList,
   onAddTune,
   onActivateItem,
   onVisibilityChange,
@@ -107,6 +117,7 @@ function createSetListController({
   let dragFromIndex = null;
   let targetChoiceResolve = null;
   let noteEditIndex = null;
+  let performanceEditIndex = null;
 
   function closeDocumentMenus(except = null) {
     if (!modal || typeof modal.querySelectorAll !== "function") return false;
@@ -134,6 +145,29 @@ function createSetListController({
       activeItemId: String(state.activeItemId || ""),
       resolutions: state.resolutions && typeof state.resolutions === "object" ? state.resolutions : {},
     };
+  }
+
+  function closePerformanceEditor() {
+    performanceEditIndex = null;
+    if (!performanceModal) return;
+    performanceModal.classList.remove("open");
+    performanceModal.setAttribute("aria-hidden", "true");
+  }
+
+  function openPerformanceEditor(index) {
+    const item = readState().items[Number(index)];
+    if (!item || !performanceModal) return false;
+    performanceEditIndex = Number(index);
+    if (performanceTitle) performanceTitle.textContent = `${item.title || "Untitled"} - Performance`;
+    if (performanceTranspose) performanceTranspose.value = String(Number(item.transposeSemitones) || 0);
+    performanceModal.classList.add("open");
+    performanceModal.setAttribute("aria-hidden", "false");
+    requestAnimationFrame(() => {
+      if (!performanceTranspose) return;
+      performanceTranspose.focus();
+      try { performanceTranspose.select(); } catch {}
+    });
+    return true;
   }
 
   function render() {
@@ -218,6 +252,7 @@ function createSetListController({
       titleInput.title = [state.notice, dirtyLabel].filter(Boolean).join("\n");
     }
     if (saveButton) saveButton.disabled = !state.dirty;
+    if (quickSaveButton) quickSaveButton.disabled = !state.dirty;
     if (addCurrentButton) addCurrentButton.disabled = !state.canAddCurrentTune;
 
     const disableActions = !hasItems;
@@ -289,11 +324,16 @@ function createSetListController({
     if (!noteModal || !noteText || !item) return;
     noteEditIndex = target;
     if (noteTitle) noteTitle.textContent = `${item.title || "Untitled"} - Practice Note`;
+    noteText.disabled = false;
+    noteText.readOnly = false;
     noteText.value = String(item.notes || "");
     noteModal.classList.add("open");
     noteModal.setAttribute("aria-hidden", "false");
-    noteText.focus();
-    noteText.select();
+    requestAnimationFrame(() => {
+      noteText.focus();
+      noteText.setSelectionRange(noteText.value.length, noteText.value.length);
+    });
+    return true;
   }
 
   function closeNoteEditor() {
@@ -304,11 +344,26 @@ function createSetListController({
     noteEditIndex = null;
   }
 
+  function saveNoteEditor() {
+    if (!Number.isInteger(noteEditIndex) || typeof onNotesChange !== "function") return false;
+    const changed = onNotesChange(noteEditIndex, noteText ? noteText.value : "");
+    if (changed === false) return false;
+    closeNoteEditor();
+    render();
+    return true;
+  }
+
+  function commitPendingNoteEdit() {
+    if (!noteModal || !noteModal.classList.contains("open")) return false;
+    return saveNoteEditor();
+  }
+
   if (closeButton) closeButton.addEventListener("click", close);
   if (headerButton) headerButton.addEventListener("click", openHeaderEditor);
   if (newButton) newButton.addEventListener("click", () => { if (typeof onNew === "function") onNew(); });
   if (openButton) openButton.addEventListener("click", () => { if (typeof onOpen === "function") onOpen(); });
   if (saveButton) saveButton.addEventListener("click", () => { if (typeof onSave === "function") onSave(); });
+  if (quickSaveButton) quickSaveButton.addEventListener("click", () => { if (typeof onSave === "function") onSave(); });
   if (saveAsButton) saveAsButton.addEventListener("click", () => { if (typeof onSaveAs === "function") onSaveAs(); });
   if (addCurrentButton) addCurrentButton.addEventListener("click", () => {
     if (typeof onAddCurrent === "function") onAddCurrent();
@@ -397,8 +452,10 @@ function createSetListController({
     const runItemAction = (action, index) => {
       if (action === "open" && typeof onActivateItem === "function") return onActivateItem(index);
       if (action === "note") return openNoteEditor(index);
+      if (action === "performance") return openPerformanceEditor(index);
       if (action === "preview" && typeof onPreviewSnapshot === "function") return onPreviewSnapshot(index);
       if (action === "update" && typeof onUpdateSnapshot === "function") return onUpdateSnapshot(index);
+      if (action === "copyTuneList" && typeof onCopyTuneList === "function") return onCopyTuneList();
       if (action === "duplicate" && typeof onDuplicateItem === "function") return onDuplicateItem(index);
       if (action === "remove" && typeof onRemoveItem === "function") return onRemoveItem(index);
       if (action === "up" && typeof onMoveItem === "function") return onMoveItem(index, index - 1);
@@ -545,10 +602,12 @@ function createSetListController({
       contextMenu.className = "set-list-item-menu";
       const selectedItem = readState().items[index] || {};
       const actions = [
-        ["open", "Open Source Tune"],
+        ["open", "Open Set List View (Read Only)"],
         ["note", selectedItem.notes ? "Edit Practice Note…" : "Add Practice Note…"],
+        ["performance", "Performance Transposition…"],
         ["preview", "Preview Snapshot"],
         ["update", "Update Snapshot from Source"],
+        ["copyTuneList", "Copy Tune List…"],
         ["duplicate", "Duplicate Occurrence"],
         ["up", "Move Up"],
         ["down", "Move Down"],
@@ -568,8 +627,9 @@ function createSetListController({
       }
       modal.appendChild(contextMenu);
       const panelRect = modal.getBoundingClientRect();
-      contextMenu.style.left = `${Math.max(4, Math.min(e.clientX - panelRect.left, panelRect.width - 190))}px`;
-      contextMenu.style.top = `${Math.max(4, Math.min(e.clientY - panelRect.top, panelRect.height - 180))}px`;
+      const menuRect = contextMenu.getBoundingClientRect();
+      contextMenu.style.left = `${Math.max(4, Math.min(e.clientX - panelRect.left, panelRect.width - menuRect.width - 4))}px`;
+      contextMenu.style.top = `${Math.max(4, Math.min(e.clientY - panelRect.top, panelRect.height - menuRect.height - 4))}px`;
     });
 
     document.addEventListener("pointerdown", (e) => {
@@ -603,12 +663,28 @@ function createSetListController({
   if (snapshotCloseButton) snapshotCloseButton.addEventListener("click", closeSnapshotPreview);
   if (noteCloseButton) noteCloseButton.addEventListener("click", closeNoteEditor);
   if (noteCancelButton) noteCancelButton.addEventListener("click", closeNoteEditor);
-  if (noteSaveButton) noteSaveButton.addEventListener("click", () => {
-    if (Number.isInteger(noteEditIndex) && typeof onNotesChange === "function") {
-      onNotesChange(noteEditIndex, noteText ? noteText.value : "");
+  if (noteSaveButton) noteSaveButton.addEventListener("click", saveNoteEditor);
+  if (performanceCloseButton) performanceCloseButton.addEventListener("click", closePerformanceEditor);
+  if (performanceCancelButton) performanceCancelButton.addEventListener("click", closePerformanceEditor);
+  if (performanceResetButton) performanceResetButton.addEventListener("click", () => {
+    if (performanceTranspose) performanceTranspose.value = "0";
+  });
+  if (performanceSaveButton) performanceSaveButton.addEventListener("click", async () => {
+    let saved = false;
+    if (Number.isInteger(performanceEditIndex) && typeof onPerformanceChange === "function") {
+      performanceSaveButton.disabled = true;
+      try {
+        saved = await onPerformanceChange(performanceEditIndex, {
+          transposeSemitones: performanceTranspose ? Number(performanceTranspose.value) : 0,
+        });
+      } finally {
+        performanceSaveButton.disabled = false;
+      }
     }
-    closeNoteEditor();
-    render();
+    if (saved) {
+      closePerformanceEditor();
+      render();
+    }
   });
 
   if (snapshotModal) {
@@ -621,11 +697,28 @@ function createSetListController({
 
   if (noteModal) {
     noteModal.addEventListener("keydown", (event) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      closeNoteEditor();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeNoteEditor();
+      } else if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        saveNoteEditor();
+      }
     });
     if (typeof enableDraggable === "function") enableDraggable(noteModal);
+  }
+
+  if (performanceModal) {
+    performanceModal.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closePerformanceEditor();
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        if (performanceSaveButton) performanceSaveButton.click();
+      }
+    });
+    if (typeof enableDraggable === "function") enableDraggable(performanceModal);
   }
 
   if (headerModal) {
@@ -713,9 +806,24 @@ function createSetListController({
     });
   }
 
+  const shortcutDocument = modal && modal.ownerDocument
+    ? modal.ownerDocument
+    : (typeof document !== "undefined" ? document : null);
+  if (shortcutDocument) {
+    shortcutDocument.addEventListener("keydown", (event) => {
+      if (!event || event.defaultPrevented || !isOpen()) return;
+      if (!(event.ctrlKey || event.metaKey) || !event.altKey || event.shiftKey) return;
+      if (String(event.key || "").toLowerCase() !== "s") return;
+      if (noteModal && noteModal.classList.contains("open")) return;
+      event.preventDefault();
+      if (quickSaveButton && !quickSaveButton.disabled) quickSaveButton.click();
+    });
+  }
+
   return {
     close,
     closeHeaderEditor,
+    commitPendingNoteEdit,
     chooseTarget,
     isOpen,
     open,

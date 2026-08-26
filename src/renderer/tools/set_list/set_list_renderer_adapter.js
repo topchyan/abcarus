@@ -86,7 +86,7 @@ function createSetListRendererAdapter({
     if (!resolution || !resolution.candidate) return resolution;
     const trustedSourceMatch = resolution.status === "FOUND_STRONG" && resolution.matchedBy === "source";
     if (!["FOUND_EXACT", "FOUND_MODIFIED"].includes(resolution.status) && !trustedSourceMatch) return resolution;
-    const opened = await selectTune(resolution.candidate.tuneId);
+    const opened = await selectTune(resolution.candidate.tuneId, { origin: "set-list" });
     return { ...resolution, opened: opened !== false };
   }
 

@@ -354,6 +354,10 @@ function buildMenuTemplate(appState, sendMenuAction) {
             accelerator: "CmdOrCtrl+Shift+A",
             click: () => sendMenuAction("alignBars"),
           },
+          {
+            label: "Check Lyric Fit…",
+            click: () => sendMenuAction("checkLyricFit"),
+          },
         ],
       },
       { type: "separator" },

@@ -15,7 +15,7 @@ function createToolStatusController({
       const entries = [
         ["abc2xml", "abc2xml"],
         ["xml2abc", "xml2abc"],
-        ["midi2xml", "midi2xml"],
+        // midi2xml/music21 is optional; Auto import falls back to bundled midi2abc.
         ["midi2abc", "midi2abc"],
         ["python", "Python"],
       ];

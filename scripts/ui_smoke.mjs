@@ -18,11 +18,8 @@ const env = { ...process.env };
 env.ABCARUS_DEV_UI_SMOKE = "1";
 env.ABCARUS_DEV_NO_MAXIMIZE = "1";
 if (args.has("--playback")) env.ABCARUS_DEV_PLAYBACK_SMOKE = "1";
-let tempUserData = "";
-if (env.ABCARUS_DEV_SOUNDFONT_SMOKE === "1") {
-  tempUserData = mkdtempSync(path.join(os.tmpdir(), "abcarus-soundfont-smoke-"));
-  env.ABCARUS_DEV_USER_DATA = tempUserData;
-}
+const tempUserData = mkdtempSync(path.join(os.tmpdir(), "abcarus-ui-smoke-"));
+env.ABCARUS_DEV_USER_DATA = tempUserData;
 if (args.has("--payload")) env.ABCARUS_DEV_PAYLOAD_SMOKE = "1";
 if (args.has("--close")) env.ABCARUS_DEV_CLOSE_SMOKE = "1";
 if (args.has("--transform")) env.ABCARUS_DEV_TRANSFORM_SMOKE = "1";

@@ -192,6 +192,9 @@ jobs:
       - name: Install bundled Python (PBS)
         run: bash devtools/pbs/pbs-install-unix.sh darwin-arm64
 
+      - name: Verify bundled Python runtime
+        run: node scripts/check_pbs_runtime.mjs --platform=darwin-arm64
+
       - name: Build macOS artifact
         run: npx electron-builder --mac --arm64 --publish never
 
@@ -246,6 +249,9 @@ jobs:
 
       - name: Install bundled Python (PBS)
         run: bash devtools/pbs/pbs-install-unix.sh darwin-x64
+
+      - name: Verify bundled Python runtime
+        run: node scripts/check_pbs_runtime.mjs --platform=darwin-x64
 
       - name: Build macOS artifact
         run: npx electron-builder --mac --x64 --publish never
@@ -304,6 +310,9 @@ jobs:
 
       - name: Install bundled Python (PBS)
         run: pwsh -ExecutionPolicy Bypass -File devtools/pbs/pbs-install-windows.ps1 -Platform win-x64
+
+      - name: Verify bundled Python runtime
+        run: node scripts/check_pbs_runtime.mjs --platform=win-x64
 
       - name: Build Windows artifact
         run: npx electron-builder --win --x64 --publish never

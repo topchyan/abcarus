@@ -457,6 +457,7 @@ function registerIpcHandlers(ctx) {
     showOpenFolderDialog,
 	    showSaveDialog,
 	    confirmUnsavedChanges,
+	    confirmSetListPerformanceSave,
 	    confirmOverwrite,
 	    confirmAppendToFile,
 	    confirmImportMusicXmlTarget,
@@ -720,6 +721,9 @@ function registerIpcHandlers(ctx) {
   });
   ipcMain.handle("dialog:confirm-unsaved", async (event, contextLabel) =>
     confirmUnsavedChanges(contextLabel, event)
+  );
+  ipcMain.handle("dialog:confirm-set-list-performance-save", async (event, details) =>
+    confirmSetListPerformanceSave(details || {}, event)
   );
   ipcMain.handle("dialog:confirm-overwrite", async (event, filePath) =>
     confirmOverwrite(filePath, event)

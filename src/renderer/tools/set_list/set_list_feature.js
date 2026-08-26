@@ -23,8 +23,14 @@ import {
   buildPrintErrorCard,
   buildPrintErrorSummary,
 } from "../../print/error_markup.js";
+import {
+  buildSetListPerformanceView,
+  clampSetListTransposeSemitones,
+  mergeSetListSnapshotAfterSourceSave,
+} from "./set_list_performance_model.js";
 
 const DEFAULT_STORAGE_KEY = "abcarus.setList.v1";
+const DEFAULT_PANEL_VISIBILITY_STORAGE_KEY = "abcarus.setList.panelVisible.v1";
 
 function hasItems(items) {
   return Array.isArray(items) && items.length > 0;
@@ -33,6 +39,7 @@ function hasItems(items) {
 function createSetListFeature({
   elements = {},
   storageKey = DEFAULT_STORAGE_KEY,
+  panelVisibilityStorageKey = DEFAULT_PANEL_VISIBILITY_STORAGE_KEY,
   readStorage = () => null,
   writeStorage = () => false,
   readFile = async () => ({ ok: false, error: "Read unavailable." }),
@@ -47,6 +54,12 @@ function createSetListFeature({
   buildItemForTuneId = async () => null,
   activateItemSource = async () => ({ status: "MISSING", candidate: null }),
   resolveItemSource = async () => ({ status: "MISSING", candidate: null }),
+  onCopyTuneList = () => {},
+  onPerformanceOverrideChange = () => {},
+  applyPerformanceView = async () => false,
+  savePerformanceToSource = async () => false,
+  confirmPerformanceSave = async () => "cancel",
+  onPerformanceViewStateChange = () => {},
   onPanelVisibilityChange = () => {},
   getPrintPageMargins = () => "standard",
   setPrintPageMargins = async () => {},
@@ -71,6 +84,7 @@ function createSetListFeature({
   const makeId = () => globalThis.crypto.randomUUID();
   let controller = null;
   let activeItemId = "";
+  let activePerformanceContext = null;
   const itemResolutions = new Map();
   const session = createSetListSession({
     makeId,
@@ -158,11 +172,180 @@ function createSetListFeature({
     return true;
   }
 
+  async function showPerformanceView(index, item, sourceTuneId = "", requestedSemitones = null) {
+    const semitones = requestedSemitones == null
+      ? clampSetListTransposeSemitones(item && item.performance && item.performance.transposeSemitones)
+      : clampSetListTransposeSemitones(requestedSemitones);
+    const source = await buildItemForTuneId(sourceTuneId || item?.tune?.source?.locatorHint || "");
+    if (!source) return false;
+    const view = buildSetListPerformanceView({
+      sourceText: source.text,
+      headerText: source.headerText,
+      transposeSemitones: semitones,
+    });
+    if (!view.ok) {
+      showToast(view.error || "Unable to build the Set List performance view.", 4200);
+      activePerformanceContext = null;
+      onPerformanceViewStateChange(null);
+      return false;
+    }
+    const applied = await applyPerformanceView({
+      text: view.text,
+      sourceText: source.text,
+      headerText: source.headerText,
+      itemId: item.id,
+      itemIndex: Number(index),
+      sourceTuneId: sourceTuneId || item?.tune?.source?.locatorHint || "",
+      transposeSemitones: view.transposeSemitones,
+    });
+    if (applied === false) return false;
+    activePerformanceContext = {
+      itemId: item.id,
+      itemIndex: Number(index),
+      sourceTuneId: sourceTuneId || item?.tune?.source?.locatorHint || "",
+      sourceText: source.text,
+      headerText: source.headerText,
+      text: view.text,
+      transposeSemitones: view.transposeSemitones,
+    };
+    onPerformanceViewStateChange({ ...activePerformanceContext });
+    return true;
+  }
+
+  async function savePerformanceInSetList(index, transposeSemitones) {
+    const item = getItems()[index];
+    if (!item) return false;
+    let sourceTuneId = activeItemId === item.id
+      ? (activePerformanceContext?.sourceTuneId || item.tune.source.locatorHint)
+      : "";
+    if (!sourceTuneId) {
+      const resolution = await activateItemSource(item);
+      if (!resolution || !resolution.opened || !resolution.candidate) {
+        showToast("The source tune could not be opened. Nothing was changed.", 4000);
+        return false;
+      }
+      sourceTuneId = String(resolution.candidate.tuneId || item.tune.source.locatorHint || "");
+    }
+    activeItemId = item.id;
+    if (!await showPerformanceView(index, item, sourceTuneId, transposeSemitones)) return false;
+    session.mutate((document) => {
+      document.items[index].performance.transposeSemitones = transposeSemitones;
+    }, { reason: "performance" });
+    onPerformanceOverrideChange();
+    const saved = await saveSetList(false);
+    if (saved) {
+      showToast(
+        transposeSemitones
+          ? `Saved ${transposeSemitones > 0 ? "+" : ""}${transposeSemitones} semitones in this Set List.`
+          : "This Set List now uses the original key.",
+        3000,
+      );
+    }
+    return saved;
+  }
+
+  async function savePerformanceInOriginal(index, transposeSemitones) {
+    const item = getItems()[index];
+    if (!item) return false;
+    const resolution = await activateItemSource(item);
+    if (!resolution || !resolution.opened || !resolution.candidate) {
+      showToast("The source tune could not be opened. Nothing was changed.", 4000);
+      return false;
+    }
+    const sourceTuneId = String(resolution.candidate.tuneId || item.tune.source.locatorHint || "");
+    const source = await buildItemForTuneId(sourceTuneId);
+    if (!source) return false;
+    const view = buildSetListPerformanceView({
+      sourceText: source.text,
+      headerText: source.headerText,
+      transposeSemitones,
+    });
+    if (!view.ok) {
+      showToast(view.error || "Unable to transpose the source tune.", 4200);
+      return false;
+    }
+    const sourceSaved = await savePerformanceToSource({
+      text: view.text,
+      sourceText: source.text,
+      itemId: item.id,
+      sourceTuneId,
+      transposeSemitones,
+    });
+    if (!sourceSaved) return false;
+
+    const refreshedTuneId = String(getActiveTuneId() || sourceTuneId);
+    const replacement = await buildDocumentItem(refreshedTuneId);
+    const synchronized = mergeSetListSnapshotAfterSourceSave(item, replacement);
+    if (!synchronized) {
+      showToast("Original tune saved, but the Set List snapshot could not be rebuilt.", 4200);
+      return false;
+    }
+    session.mutate((document) => {
+      document.items[index] = synchronized;
+    }, { reason: "snapshot" });
+    activeItemId = synchronized.id;
+    activePerformanceContext = null;
+    onPerformanceViewStateChange(null);
+    itemResolutions.set(synchronized.id, "FOUND_EXACT");
+    onPerformanceOverrideChange();
+    const setListSaved = await saveSetList(false);
+    if (!setListSaved) {
+      showToast("Original tune was saved. The synchronized Set List is still unsaved.", 4400);
+      return false;
+    }
+    showToast("Original tune saved and Set List synchronized.", 3200);
+    return true;
+  }
+
+  async function updatePerformance(index, value = {}) {
+    const target = Number(index);
+    if (!Number.isInteger(target) || !getItems()[target]) return false;
+    const item = getItems()[target];
+    const transposeSemitones = clampSetListTransposeSemitones(value.transposeSemitones);
+    const destination = await confirmPerformanceSave({
+      title: item.tune.title || "Untitled",
+      transposeSemitones,
+    });
+    if (destination === "original") return savePerformanceInOriginal(target, transposeSemitones);
+    if (destination === "set_list") return savePerformanceInSetList(target, transposeSemitones);
+    return false;
+  }
+
+  async function activateItemAtIndex(index) {
+    const target = Number(index);
+    const item = getItems()[target];
+    if (!item) return false;
+    const result = await activateItemSource(item);
+    const status = String(result && result.status || "MISSING");
+    itemResolutions.set(item.id, status);
+    if (result && result.opened) {
+      activeItemId = item.id;
+      const sourceTuneId = String(result.candidate && result.candidate.tuneId || "");
+      if (!await showPerformanceView(target, item, sourceTuneId)) return false;
+      const source = item.tune && item.tune.source ? item.tune.source : {};
+      const sourceLabel = source.pathHint
+        ? `${safeBasename(source.pathHint)}${source.xNumberHint ? ` X:${source.xNumberHint}` : ""}`
+        : "Library source";
+      setStatus(`Set List: ${getDocument().title} · ${target + 1} of ${getItems().length} · source ${sourceLabel}`);
+      if (status === "FOUND_MODIFIED") showToast("Opened the Library source. It differs from the stored Set List snapshot.", 3600);
+      return true;
+    }
+    if (status === "FOUND_STRONG") {
+      showToast("A possible source was found, but it must be relinked explicitly.", 4200);
+    } else if (status === "AMBIGUOUS") {
+      showToast("Several possible Library sources were found. Relink is required.", 4200);
+    } else {
+      showToast("Library source not found. The stored snapshot remains available for export and recovery.", 4200);
+    }
+    return false;
+  }
+
   controller = createSetListController({
     modal: elements.modal,
     closeButton: elements.closeButton,
     titleInput: elements.titleInput,
     dirtySummary: elements.dirtySummary,
+    quickSaveButton: elements.quickSaveButton,
     newButton: elements.newButton,
     openButton: elements.openButton,
     saveButton: elements.saveButton,
@@ -187,6 +370,19 @@ function createSetListFeature({
     snapshotCloseButton: elements.snapshotCloseButton,
     snapshotTitle: elements.snapshotTitle,
     snapshotPreview: elements.snapshotPreview,
+    noteModal: elements.noteModal,
+    noteCloseButton: elements.noteCloseButton,
+    noteTitle: elements.noteTitle,
+    noteText: elements.noteText,
+    noteCancelButton: elements.noteCancelButton,
+    noteSaveButton: elements.noteSaveButton,
+    performanceModal: elements.performanceModal,
+    performanceCloseButton: elements.performanceCloseButton,
+    performanceTitle: elements.performanceTitle,
+    performanceTranspose: elements.performanceTranspose,
+    performanceResetButton: elements.performanceResetButton,
+    performanceCancelButton: elements.performanceCancelButton,
+    performanceSaveButton: elements.performanceSaveButton,
     targetModal: elements.targetModal,
     targetCloseButton: elements.targetCloseButton,
     targetSelect: elements.targetSelect,
@@ -206,6 +402,7 @@ function createSetListFeature({
       session.mutate((document) => { document.items = removeSetListDocumentItem(document.items, index); }, { reason: "items" });
       if (item) itemResolutions.delete(item.id);
       if (item && activeItemId === item.id) activeItemId = "";
+      if (item && activePerformanceContext?.itemId === item.id) activePerformanceContext = null;
     },
     onDuplicateItem: (index) => {
       const item = getItems()[Number(index)];
@@ -220,6 +417,7 @@ function createSetListFeature({
       return true;
     },
     onNotesChange: updatePracticeNote,
+    onPerformanceChange: updatePerformance,
     onPreviewSnapshot: async (index) => {
       const item = getItems()[Number(index)];
       if (!item || !item.embeddedAbc) {
@@ -258,35 +456,15 @@ function createSetListFeature({
       showToast("Set List snapshot updated from the Library source.", 3000);
       return true;
     },
+    onCopyTuneList,
     onAddTune: async (tuneId, options = {}) => {
       await addTuneById(tuneId, options);
     },
-    onActivateItem: async (index) => {
-      const item = getItems()[Number(index)];
-      if (!item) return false;
-      const result = await activateItemSource(item);
-      const status = String(result && result.status || "MISSING");
-      itemResolutions.set(item.id, status);
-      if (result && result.opened) {
-        activeItemId = item.id;
-        const source = item.tune && item.tune.source ? item.tune.source : {};
-        const sourceLabel = source.pathHint
-          ? `${safeBasename(source.pathHint)}${source.xNumberHint ? ` X:${source.xNumberHint}` : ""}`
-          : "Library source";
-        setStatus(`Set List: ${getDocument().title} · ${Number(index) + 1} of ${getItems().length} · source ${sourceLabel}`);
-        if (status === "FOUND_MODIFIED") showToast("Opened the Library source. It differs from the stored Set List snapshot.", 3600);
-        return true;
-      }
-      if (status === "FOUND_STRONG") {
-        showToast("A possible source was found, but it must be relinked explicitly.", 4200);
-      } else if (status === "AMBIGUOUS") {
-        showToast("Several possible Library sources were found. Relink is required.", 4200);
-      } else {
-        showToast("Library source not found. The stored snapshot remains available for export and recovery.", 4200);
-      }
-      return false;
+    onActivateItem: activateItemAtIndex,
+    onVisibilityChange: (visible) => {
+      writeStorage(panelVisibilityStorageKey, Boolean(visible));
+      onPanelVisibilityChange(Boolean(visible));
     },
-    onVisibilityChange: onPanelVisibilityChange,
     onClear: () => {
       session.mutate((document) => { document.items = []; }, { reason: "items" });
     },
@@ -368,6 +546,23 @@ function createSetListFeature({
       controller.open();
     }
     return inserted;
+  }
+
+  function clearActiveItem() {
+    activeItemId = "";
+    activePerformanceContext = null;
+    onPerformanceViewStateChange(null);
+    render();
+  }
+
+  function getActivePerformanceOverride() {
+    return activePerformanceContext ? { ...activePerformanceContext } : null;
+  }
+
+  function isPerformanceViewActive() {
+    if (!activePerformanceContext) return false;
+    const activeTuneId = String(getActiveTuneId() || "");
+    return Boolean(activeTuneId && activeTuneId === String(activePerformanceContext.sourceTuneId || ""));
   }
 
   async function buildDocumentItem(tuneId, options = {}) {
@@ -555,6 +750,7 @@ function createSetListFeature({
   }
 
   async function prepareToLeave(contextLabel = "continuing") {
+    if (controller) controller.commitPendingNoteEdit();
     if (!getDocumentState().dirty) return true;
     const choice = await confirmUnsavedChanges(`${contextLabel} (Set List)`);
     if (choice === "cancel") return false;
@@ -571,6 +767,7 @@ function createSetListFeature({
     }
     session.newDocument();
     activeItemId = "";
+    activePerformanceContext = null;
     itemResolutions.clear();
     render();
     return true;
@@ -591,6 +788,7 @@ function createSetListFeature({
       legacyImported = false;
     }
     activeItemId = "";
+    activePerformanceContext = null;
     itemResolutions.clear();
     render();
     return true;
@@ -610,6 +808,7 @@ function createSetListFeature({
       if (result.ok) {
         await publishCurrentSetList();
         activeItemId = "";
+        activePerformanceContext = null;
         itemResolutions.clear();
         render();
         return true;
@@ -617,6 +816,12 @@ function createSetListFeature({
       session.forgetRecentPath(path);
     }
     return false;
+  }
+
+  function restorePanelVisibility() {
+    if (readStorage(panelVisibilityStorageKey) !== true) return false;
+    open();
+    return true;
   }
 
   async function saveSetList(forceSaveAs = false) {
@@ -682,6 +887,7 @@ function createSetListFeature({
     }
     legacyImported = false;
     activeItemId = "";
+    activePerformanceContext = null;
     itemResolutions.clear();
     open();
     const added = await addTuneById(tuneId, options);
@@ -690,13 +896,17 @@ function createSetListFeature({
   }
 
   return {
+    activateItemAtIndex,
     addTuneById,
     addTuneWithTargetChoice,
     buildExportAbc,
+    clearActiveItem,
     close,
     closeHeaderEditor,
     exportAbc,
+    getActivePerformanceOverride,
     getState,
+    isPerformanceViewActive,
     newSetList,
     openSetList,
     open,
@@ -705,9 +915,11 @@ function createSetListFeature({
     render,
     renderSvgMarkupForPrint,
     restoreLastSetList,
+    restorePanelVisibility,
     runPrintAction,
     saveSetList,
     toggle,
+    updatePerformance,
     updatePracticeNote,
   };
 }

@@ -51,6 +51,7 @@ const RAW_BLOCKED_ACTIONS = new Set([
   "transformTurkishToBolahenk",
   "transformMeasures",
   "alignBars",
+  "checkLyricFit",
   "printPreview",
   "print",
   "printAll",
@@ -280,6 +281,7 @@ function createMenuActionsController({
     }
     else if (actionType === "transformLinebreakMarkers") await actions.applyAbc2abcTransform({ linebreakMarker: true });
     else if (actionType === "alignBars") actions.alignBarsInEditor();
+    else if (actionType === "checkLyricFit") await actions.checkLyricFitInEditor();
     else if (actionType === "openIntonationExplorer") actions.openIntonationExplorer();
     else if (actionType === "dumpDebug") actions.dumpDebug();
     else if (actionType === "settings") actions.openSettings();

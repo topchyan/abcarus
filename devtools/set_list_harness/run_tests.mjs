@@ -54,6 +54,12 @@ const {
   createSetListRendererAdapter,
 } = await importBundledModule("src/renderer/tools/set_list/set_list_renderer_adapter.js");
 
+const {
+  buildSetListPerformanceView,
+  clampSetListTransposeSemitones,
+  mergeSetListSnapshotAfterSourceSave,
+} = await importBundledModule("src/renderer/tools/set_list/set_list_performance_model.js");
+
 function readFixture(name) {
   return JSON.parse(fs.readFileSync(`devtools/set_list_harness/fixtures/${name}`, "utf8"));
 }
@@ -460,6 +466,209 @@ test("practice notes remain visible and editable in the Set List state", () => {
   assert.equal(feature.getState().dirty, true);
 });
 
+await test("clearing a practice note is saved before leaving the Set List", async () => {
+  const sourcePath = "/sets/practice.abcarus-setlist.json";
+  const source = serializeSetListDocument({
+    schema: SET_LIST_SCHEMA,
+    id: "practice-list",
+    title: "Practice",
+    createdAt: "2026-08-25T10:00:00.000Z",
+    updatedAt: "2026-08-25T10:00:00.000Z",
+    print: { headerText: "", pageBreaks: "perTune", compact: false },
+    items: [{
+      id: "practice-item",
+      tune: {
+        title: "Tune",
+        composer: "",
+        key: "C",
+        source: { locatorHint: "/music/a.abc::1", pathHint: "/music/a.abc", xNumberHint: "1" },
+        contentHash: "",
+      },
+      performance: { transposeSemitones: 0, tempoScale: 1 },
+      notes: "Start softly.",
+      links: [],
+      export: { includeInPdf: true, pageBreakBefore: false },
+    }],
+  });
+  let written = "";
+  const feature = createSetListFeature({
+    showOpenSetListDialog: async () => sourcePath,
+    readFile: async () => ({ ok: true, data: source }),
+    writeFile: async (_path, data) => { written = data; return { ok: true }; },
+    confirmUnsavedChanges: async () => "save",
+  });
+
+  assert.equal(await feature.openSetList(), true);
+  assert.equal(feature.updatePracticeNote(0, ""), true);
+  assert.equal(feature.getState().dirty, true);
+  assert.equal(await feature.prepareToLeave("quitting"), true);
+  assert.equal(JSON.parse(written).items[0].notes, "");
+  assert.equal(feature.getState().dirty, false);
+});
+
+await test("Set List performance transposition is saved per occurrence", async () => {
+  const files = new Map();
+  let applied = null;
+  const feature = createSetListFeature({
+    readStorage: (key) => key === "abcarus.setList.v1" ? {
+      version: "1",
+      items: [{ id: "item", sourcePath: "/music/a.abc", xNumber: "1", title: "Tune", text: "X:1\nK:C\nC|\n" }],
+    } : null,
+    writeStorage: () => true,
+    showSaveSetListDialog: async () => "/sets/performance.abcarus-setlist.json",
+    writeFile: async (path, data) => { files.set(path, data); return { ok: true }; },
+    confirmPerformanceSave: async () => "set_list",
+    activateItemSource: async () => ({
+      status: "FOUND_EXACT",
+      opened: true,
+      candidate: { tuneId: "/music/a.abc::1" },
+    }),
+    buildItemForTuneId: async () => ({
+      sourcePath: "/music/a.abc",
+      xNumber: "1",
+      title: "Tune",
+      text: "X:1\nK:C\nC|\n",
+      headerText: "",
+    }),
+    applyPerformanceView: async (view) => { applied = view; return true; },
+  });
+  assert.equal(await feature.updatePerformance(0, { transposeSemitones: 3 }), true);
+  assert.equal(feature.getState().items[0].transposeSemitones, 3);
+  assert.equal(applied.transposeSemitones, 3);
+  assert.match(applied.text, /^K:Eb$/m);
+  assert.equal(feature.getState().dirty, false);
+  assert.match(files.get("/sets/performance.abcarus-setlist.json"), /"transposeSemitones": 3/);
+  await feature.updatePerformance(0, { transposeSemitones: 200 });
+  assert.equal(feature.getState().items[0].transposeSemitones, 48);
+});
+
+test("Set List performance view transposes notation and has a reversible original key", () => {
+  const source = "X:1\nT:Tune\nK:C\n\"C\" C D E F|\n";
+  const raised = buildSetListPerformanceView({ sourceText: source, transposeSemitones: 2 });
+  assert.equal(raised.ok, true);
+  assert.match(raised.text, /^K:D$/m);
+  assert.match(raised.text, /"D" D E F G\|/);
+  const original = buildSetListPerformanceView({ sourceText: source, transposeSemitones: 0 });
+  assert.equal(original.text, source);
+  assert.equal(clampSetListTransposeSemitones(200), 48);
+});
+
+test("saving performance to the original resets the override and preserves occurrence metadata", () => {
+  const previous = {
+    id: "occurrence",
+    performance: { transposeSemitones: 3, tempoScale: 1.25 },
+    notes: "Start softly",
+    links: [{ kind: "web", url: "https://example.com" }],
+    export: { includeInPdf: false, pageBreakBefore: true },
+  };
+  const replacement = {
+    id: "new-id",
+    tune: { title: "Transposed" },
+    embeddedAbc: "X:1\nK:D\nD|\n",
+    performance: { transposeSemitones: 0, tempoScale: 1 },
+    notes: "",
+    links: [],
+    export: { includeInPdf: true, pageBreakBefore: false },
+  };
+  const merged = mergeSetListSnapshotAfterSourceSave(previous, replacement);
+  assert.equal(merged.id, "occurrence");
+  assert.equal(merged.performance.transposeSemitones, 0);
+  assert.equal(merged.performance.tempoScale, 1.25);
+  assert.equal(merged.notes, "Start softly");
+  assert.deepEqual(merged.export, previous.export);
+});
+
+await test("opening a Set List occurrence applies one derived view to Editor Score and playback source", async () => {
+  let applied = null;
+  const performanceViewStates = [];
+  const document = readFixture("self-contained.abcarus-setlist.json");
+  document.items = [document.items[0]];
+  document.items[0].id = "item";
+  document.items[0].tune.source = {
+    locatorHint: "/music/a.abc::1",
+    pathHint: "/music/a.abc",
+    xNumberHint: "1",
+  };
+  document.items[0].performance.transposeSemitones = 2;
+  const feature = createSetListFeature({
+    readStorage: (key) => key === "abcarus.setList.recentPaths.v1" ? ["/sets/performance.json"] : null,
+    writeStorage: () => true,
+    readFile: async (path) => path === "/sets/performance.json"
+      ? { ok: true, data: serializeSetListDocument(document) }
+      : { ok: false, error: "missing" },
+    getActiveTuneId: () => "/music/a.abc::1",
+    activateItemSource: async () => ({
+      status: "FOUND_EXACT",
+      opened: true,
+      candidate: { tuneId: "/music/a.abc::1" },
+    }),
+    buildItemForTuneId: async () => ({
+      sourcePath: "/music/a.abc",
+      xNumber: "1",
+      title: "Tune",
+      text: "X:1\nT:Tune\nK:C\nC D|\n",
+      headerText: "",
+    }),
+    applyPerformanceView: async (view) => { applied = view; return true; },
+    onPerformanceViewStateChange: (context) => performanceViewStates.push(context),
+  });
+  assert.equal(await feature.restoreLastSetList(), true);
+  assert.equal(await feature.activateItemAtIndex(0), true);
+  assert.equal(applied.transposeSemitones, 2);
+  assert.match(applied.text, /^K:D$/m);
+  assert.match(applied.text, /D E\|/);
+  assert.equal(feature.getActivePerformanceOverride().text, applied.text);
+  assert.equal(feature.isPerformanceViewActive(), true);
+  assert.equal(performanceViewStates.length, 1);
+  assert.equal(performanceViewStates[0].sourceTuneId, "/music/a.abc::1");
+  feature.clearActiveItem();
+  assert.equal(feature.isPerformanceViewActive(), false);
+  assert.equal(performanceViewStates.at(-1), null);
+});
+
+await test("Original Tune saves source then synchronizes and saves the Set List", async () => {
+  let sourceText = "X:1\nT:Tune\nK:C\nC D|\n";
+  let sourceSaveCalls = 0;
+  const files = new Map();
+  const feature = createSetListFeature({
+    readStorage: (key) => key === "abcarus.setList.v1" ? {
+      version: "1",
+      items: [{ id: "item", sourcePath: "/music/a.abc", xNumber: "1", title: "Tune", text: sourceText }],
+    } : null,
+    writeStorage: () => true,
+    getActiveTuneId: () => "/music/a.abc::1",
+    activateItemSource: async () => ({
+      status: "FOUND_EXACT",
+      opened: true,
+      candidate: { tuneId: "/music/a.abc::1" },
+    }),
+    buildItemForTuneId: async () => ({
+      sourcePath: "/music/a.abc",
+      xNumber: "1",
+      title: "Tune",
+      text: sourceText,
+      headerText: "",
+      sourceFileModifiedAt: "2026-08-25T12:00:00.000Z",
+    }),
+    savePerformanceToSource: async ({ text }) => {
+      sourceSaveCalls += 1;
+      sourceText = text;
+      return true;
+    },
+    confirmPerformanceSave: async () => "original",
+    showSaveSetListDialog: async () => "/sets/performance.abcarus-setlist.json",
+    writeFile: async (path, data) => { files.set(path, data); return { ok: true }; },
+    nowIso: () => "2026-08-25T12:00:00.000Z",
+  });
+  assert.equal(await feature.updatePerformance(0, { transposeSemitones: 2 }), true);
+  assert.equal(sourceSaveCalls, 1);
+  assert.match(sourceText, /^K:D$/m);
+  const savedSetList = JSON.parse(files.get("/sets/performance.abcarus-setlist.json"));
+  assert.equal(savedSetList.items[0].performance.transposeSemitones, 0);
+  assert.match(savedSetList.items[0].embeddedAbc, /^K:D$/m);
+  assert.equal(feature.getState().dirty, false);
+});
+
 test("resolves exact content independently of its old path", () => {
   const item = readFixture("lightweight.abcarus-setlist.json").items[0];
   const result = resolveSetListItem(item, [{
@@ -553,6 +762,41 @@ await test("Set List session opens a canonical portable document", async () => {
   assert.equal(result.ok, true);
   assert.equal(session.getState().document.title, "Saved Performance");
   assert.equal(session.getState().dirty, false);
+});
+
+await test("Set List panel visibility is persisted and restored", () => {
+  const classes = new Set();
+  const stored = new Map([["abcarus.setList.panelVisible.v1", true]]);
+  const visibilityChanges = [];
+  const feature = createSetListFeature({
+    elements: {
+      modal: {
+        classList: {
+          add: (name) => classes.add(name),
+          remove: (name) => classes.delete(name),
+          contains: (name) => classes.has(name),
+        },
+        addEventListener: () => {},
+        setAttribute: () => {},
+      },
+    },
+    readStorage: (key) => stored.get(key) ?? null,
+    writeStorage: (key, value) => {
+      stored.set(key, value);
+      return true;
+    },
+    onPanelVisibilityChange: (visible) => visibilityChanges.push(visible),
+  });
+
+  assert.equal(feature.restorePanelVisibility(), true);
+  assert.equal(classes.has("open"), true);
+  assert.deepEqual(visibilityChanges, [true]);
+
+  feature.close();
+  assert.equal(classes.has("open"), false);
+  assert.equal(stored.get("abcarus.setList.panelVisible.v1"), false);
+  assert.deepEqual(visibilityChanges, [true, false]);
+  assert.equal(feature.restorePanelVisibility(), false);
 });
 
 await test("restores the last Set List and uses its title for print and ABC export", async () => {

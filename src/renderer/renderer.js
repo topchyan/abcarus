@@ -59,6 +59,11 @@ import { fileExists, mkdirp, readFile, renameFile, safeBasename, safeDirname, wr
 import { createFileOperationLocks } from "./io/file_runtime.js";
 import { createActiveTuneContextStore } from "./app/document/active_tune_context_store.js";
 import {
+  createTuneListExportController,
+  extractTuneListItemsFromAbc,
+  parseTuneHeaderFields,
+} from "./app/ui/tune_list_export_controller.js";
+import {
   alignBarsInText,
 } from "./abc/align_bars.js";
 import {
@@ -237,6 +242,7 @@ const $btnLibraryClearFilter = document.getElementById("btnLibraryClearFilter");
 const $btnToggleLibrary = document.getElementById("btnToggleLibrary");
 const $libraryToolbarMenu = document.getElementById("libraryToolbarMenu");
 const $btnLibraryCatalog = document.getElementById("btnLibraryCatalog");
+const $btnCopyActiveFileTuneList = document.getElementById("btnCopyActiveFileTuneList");
 const $btnOpenFolderAsLibrary = document.getElementById("btnOpenFolderAsLibrary");
 const $btnFileNew = document.getElementById("btnFileNew");
 const $btnFileOpen = document.getElementById("btnFileOpen");
@@ -320,6 +326,7 @@ const $setListDivider = document.getElementById("setListDivider");
 const $setListClose = document.getElementById("setListClose");
 const $setListTitle = document.getElementById("setListTitle");
 const $setListDirtySummary = document.getElementById("setListDirtySummary");
+const $setListQuickSave = document.getElementById("setListQuickSave");
 const $setListNew = document.getElementById("setListNew");
 const $setListOpen = document.getElementById("setListOpen");
 const $setListSave = document.getElementById("setListSave");
@@ -330,6 +337,7 @@ const $setListItems = document.getElementById("setListItems");
 const $setListHeader = document.getElementById("setListHeader");
 const $setListClear = document.getElementById("setListClear");
 const $setListSaveAbc = document.getElementById("setListSaveAbc");
+const $setListCopyTuneList = document.getElementById("setListCopyTuneList");
 const $setListExportPdf = document.getElementById("setListExportPdf");
 const editorRuntime = createEditorRuntime({
   logError: (...args) => console.error(...args),
@@ -388,12 +396,32 @@ const $setListNoteTitle = document.getElementById("setListNoteTitle");
 const $setListNoteText = document.getElementById("setListNoteText");
 const $setListNoteCancel = document.getElementById("setListNoteCancel");
 const $setListNoteSave = document.getElementById("setListNoteSave");
+const $setListPerformanceModal = document.getElementById("setListPerformanceModal");
+const $setListPerformanceClose = document.getElementById("setListPerformanceClose");
+const $setListPerformanceTitle = document.getElementById("setListPerformanceTitle");
+const $setListPerformanceTranspose = document.getElementById("setListPerformanceTranspose");
+const $setListPerformanceReset = document.getElementById("setListPerformanceReset");
+const $setListPerformanceCancel = document.getElementById("setListPerformanceCancel");
+const $setListPerformanceSave = document.getElementById("setListPerformanceSave");
+const $setListPerformanceBar = document.getElementById("setListPerformanceBar");
+const $setListOpenSourceForEditing = document.getElementById("setListOpenSourceForEditing");
 const $setListTargetModal = document.getElementById("setListTargetModal");
 const $setListTargetClose = document.getElementById("setListTargetClose");
 const $setListTargetSelect = document.getElementById("setListTargetSelect");
 const $setListTargetNew = document.getElementById("setListTargetNew");
 const $setListTargetCancel = document.getElementById("setListTargetCancel");
 const $setListTargetAdd = document.getElementById("setListTargetAdd");
+const $tuneListExportModal = document.getElementById("tuneListExportModal");
+const $tuneListExportClose = document.getElementById("tuneListExportClose");
+const $tuneListExportSource = document.getElementById("tuneListExportSource");
+const $tuneListExportOrder = document.getElementById("tuneListExportOrder");
+const $tuneListExportDirection = document.getElementById("tuneListExportDirection");
+const $tuneListExportFormat = document.getElementById("tuneListExportFormat");
+const $tuneListExportColumns = document.getElementById("tuneListExportColumns");
+const $tuneListExportPreview = document.getElementById("tuneListExportPreview");
+const $tuneListExportCancel = document.getElementById("tuneListExportCancel");
+const $tuneListExportFile = document.getElementById("tuneListExportFile");
+const $tuneListExportCopy = document.getElementById("tuneListExportCopy");
 const $disclaimerModal = document.getElementById("disclaimerModal");
 const $disclaimerClose = document.getElementById("disclaimerClose");
 const $disclaimerOk = document.getElementById("disclaimerOk");
@@ -620,6 +648,28 @@ const payloadModeEditorAdapter = createPayloadModeEditorAdapter({
   EditorState,
   EditorView,
 });
+
+const setListEditorAdapter = createPayloadModeEditorAdapter({
+  getEditorView: editorRuntime.getView,
+  readOnlyCompartment: editorExtensionRuntime.setListReadOnlyCompartment,
+  EditorState,
+  EditorView,
+});
+
+function setSetListPerformanceReadOnly(enabled) {
+  const readonly = Boolean(enabled);
+  setListEditorAdapter.setEditorReadOnly(readonly);
+  if ($setListPerformanceBar) $setListPerformanceBar.hidden = !readonly;
+  const editorPane = $editorHost && $editorHost.closest ? $editorHost.closest(".editor-pane") : null;
+  if (editorPane) editorPane.classList.toggle("set-list-readonly", readonly);
+  if ($btnFileSave) {
+    if (readonly) $btnFileSave.disabled = true;
+    else {
+      $btnFileSave.disabled = false;
+      setDirtyIndicator(isCurrentDocumentDirty());
+    }
+  }
+}
 
 const payloadModeFeature = createPayloadModeFeature({
   elements: {
@@ -900,6 +950,7 @@ const setListFeature = createSetListFeature({
     closeButton: $setListClose,
     titleInput: $setListTitle,
     dirtySummary: $setListDirtySummary,
+    quickSaveButton: $setListQuickSave,
     newButton: $setListNew,
     openButton: $setListOpen,
     saveButton: $setListSave,
@@ -930,6 +981,13 @@ const setListFeature = createSetListFeature({
     noteText: $setListNoteText,
     noteCancelButton: $setListNoteCancel,
     noteSaveButton: $setListNoteSave,
+    performanceModal: $setListPerformanceModal,
+    performanceCloseButton: $setListPerformanceClose,
+    performanceTitle: $setListPerformanceTitle,
+    performanceTranspose: $setListPerformanceTranspose,
+    performanceResetButton: $setListPerformanceReset,
+    performanceCancelButton: $setListPerformanceCancel,
+    performanceSaveButton: $setListPerformanceSave,
     targetModal: $setListTargetModal,
     targetCloseButton: $setListTargetClose,
     targetSelect: $setListTargetSelect,
@@ -959,6 +1017,17 @@ const setListFeature = createSetListFeature({
   buildItemForTuneId: setListRendererAdapter.buildItemForTuneId,
   activateItemSource: setListRendererAdapter.activateItemSource,
   resolveItemSource: setListRendererAdapter.resolveItemSource,
+  onCopyTuneList: () => openActiveSetListTuneListExport(),
+  onPerformanceOverrideChange: () => {
+    if (isPlaybackBusy()) stopPlaybackTransport();
+    resetPlaybackState();
+  },
+  applyPerformanceView: applySetListPerformanceView,
+  savePerformanceToSource: saveSetListPerformanceToSource,
+  confirmPerformanceSave: (details) => window.api && typeof window.api.confirmSetListPerformanceSave === "function"
+    ? window.api.confirmSetListPerformanceSave(details)
+    : Promise.resolve("cancel"),
+  onPerformanceViewStateChange: (context) => setSetListPerformanceReadOnly(Boolean(context)),
   onPanelVisibilityChange: applySetListPanelVisibility,
   getPrintPageMargins: () => String(settingsSnapshot.get()?.printPageMargins || "standard"),
   setPrintPageMargins: async (value) => {
@@ -983,7 +1052,91 @@ const setListFeature = createSetListFeature({
   confirmUnsavedChanges,
   enableDraggable: enableDraggableModal,
 });
-setListFeature.restoreLastSetList().catch(logErr);
+
+const tuneListExportController = createTuneListExportController({
+  modal: $tuneListExportModal,
+  closeButton: $tuneListExportClose,
+  sourceLabel: $tuneListExportSource,
+  orderSelect: $tuneListExportOrder,
+  directionSelect: $tuneListExportDirection,
+  formatSelect: $tuneListExportFormat,
+  columnsContainer: $tuneListExportColumns,
+  preview: $tuneListExportPreview,
+  cancelButton: $tuneListExportCancel,
+  copyButton: $tuneListExportCopy,
+  exportButton: $tuneListExportFile,
+  clipboard: navigator.clipboard,
+  exportText: async ({ content, suggestedName }) => {
+    const filePath = await showSaveDialog(sanitizeFileBaseName(suggestedName), getDefaultSaveDir());
+    if (!filePath) return false;
+    const result = await writeFile(filePath, content);
+    if (!result || !result.ok) {
+      showSaveError(result && result.error ? result.error : "Unable to export tune list.");
+      return false;
+    }
+    return true;
+  },
+  showToast,
+});
+
+async function openFileTuneListExport(filePath = "") {
+  const libraryIndex = libraryRuntime.getIndex();
+  const requestedPath = String(filePath || "");
+  const file = requestedPath && libraryIndex && Array.isArray(libraryIndex.files)
+    ? libraryIndex.files.find((entry) => pathsEqual(entry.path, requestedPath))
+    : getActiveFileEntry();
+  if (!file || !Array.isArray(file.tunes) || !file.tunes.length) {
+    showToast(requestedPath ? "No tunes found in this file." : "Open a Library tune first.", 2400);
+    return false;
+  }
+  const readResult = await readFile(file.path);
+  if (!readResult || !readResult.ok) {
+    showToast(readResult && readResult.error ? readResult.error : "Unable to read active file.", 3200);
+    return false;
+  }
+  const sourceName = safeBasename(file.path || file.basename || "Active file");
+  tuneListExportController.open({
+    title: sourceName.replace(/\.[^.]+$/, ""),
+    items: extractTuneListItemsFromAbc(readResult.data, { sourceFile: sourceName }),
+  });
+  return true;
+}
+
+function openActiveSetListTuneListExport() {
+  const state = setListFeature.getState();
+  if (!state.items.length) {
+    showToast("No tunes in Set List.", 2400);
+    return false;
+  }
+  const items = state.items.map((item) => ({
+    ...item,
+    fields: item.text ? parseTuneHeaderFields(item.text) : {},
+  }));
+  tuneListExportController.open({ title: state.title, items });
+  return true;
+}
+
+$btnCopyActiveFileTuneList?.addEventListener("click", () => {
+  if ($libraryToolbarMenu) $libraryToolbarMenu.removeAttribute("open");
+  openFileTuneListExport().catch(logErr);
+});
+
+$setListCopyTuneList?.addEventListener("click", openActiveSetListTuneListExport);
+$setListOpenSourceForEditing?.addEventListener("click", async () => {
+  const context = setListFeature.getActivePerformanceOverride();
+  const tuneId = String(context && context.sourceTuneId || "");
+  if (!tuneId) return;
+  setSetListPerformanceReadOnly(false);
+  const opened = await selectTune(tuneId, { origin: "library" });
+  if (opened === false) {
+    setSetListPerformanceReadOnly(true);
+    return;
+  }
+  showToast("Opened the Library source for editing.", 2400);
+});
+setListFeature.restoreLastSetList()
+  .catch(logErr)
+  .finally(() => { setListFeature.restorePanelVisibility(); });
 
 function isPayloadMode() {
   return payloadModeFeature.isEnabled();
@@ -1651,6 +1804,7 @@ const libraryUiDomain = createLibraryUiDomain({
   },
   actions: {
     addTuneToSetList: (tuneId, options = {}) => setListFeature.addTuneWithTargetChoice(tuneId, options),
+    copyFileTuneList: (filePath) => openFileTuneListExport(filePath),
     buildTemplatesPreviewContextMenuItems: (target) => templatesFeature.buildPreviewContextMenuItems(target),
     confirmReloadFromDisk,
     copyTuneById,
@@ -2568,6 +2722,7 @@ abcTransformFeature = createAbcTransformFeature({
   setEditorTextForSmoke: (text) => editorRuntime.setTextClean(String(text || "")),
   applyTransformedText,
   showTransformError,
+  showLyricFitReport: async (message) => window.alert(String(message || "")),
   setStatus,
   logError: logErr,
   alignBarsInText,
@@ -3011,23 +3166,31 @@ function markActiveTuneButton(tuneId) {
 }
 
 async function selectTune(tuneId, options = {}) {
-  return libraryLifecycleController.selectTune(tuneId, options);
+  const result = await libraryLifecycleController.selectTune(tuneId, options);
+  if (options.origin !== "set-list" && result !== false) setListFeature.clearActiveItem();
+  return result;
 }
 
 // Canonical Library Tree open entrypoint: `selectTune(tuneId)`.
 // This wrapper reuses the same loading/confirm logic for the modal.
 async function openTuneFromLibrarySelection(selection) {
-  return libraryLifecycleController.openTuneFromLibrarySelection(selection);
+  const result = await libraryLifecycleController.openTuneFromLibrarySelection(selection);
+  if (result && result.ok) setListFeature.clearActiveItem();
+  return result;
 }
 
 window.openTuneFromLibrarySelection = openTuneFromLibrarySelection;
 
 async function openRecentTune(entry) {
-  return libraryLifecycleController.openRecentTune(entry);
+  const result = await libraryLifecycleController.openRecentTune(entry);
+  if (result !== false && (!result || result.ok !== false)) setListFeature.clearActiveItem();
+  return result;
 }
 
 async function openRecentFile(entry) {
-  return libraryLifecycleController.openRecentFile(entry);
+  const result = await libraryLifecycleController.openRecentFile(entry);
+  if (result !== false && (!result || result.ok !== false)) setListFeature.clearActiveItem();
+  return result;
 }
 
 async function openRecentFolder(entry) {
@@ -3063,11 +3226,17 @@ async function loadSingleLibraryFile(filePath, options = {}) {
 }
 
 async function loadLibraryFileIntoEditor(filePath, options = {}) {
-  return libraryLifecycleController.loadLibraryFileIntoEditor(filePath, options);
+  const result = await libraryLifecycleController.loadLibraryFileIntoEditor(filePath, options);
+  if (options.origin !== "set-list" && result !== false && (!result || result.ok !== false)) {
+    setListFeature.clearActiveItem();
+  }
+  return result;
 }
 
 async function requestLoadLibraryFile(filePath) {
-  return libraryLifecycleController.requestLoadLibraryFile(filePath);
+  const result = await libraryLifecycleController.requestLoadLibraryFile(filePath);
+  if (result !== false && (!result || result.ok !== false)) setListFeature.clearActiveItem();
+  return result;
 }
 
 libraryUiDomain.wireControls();
@@ -3167,8 +3336,34 @@ function applyTransformedText(text, options = {}) {
   scheduleRenderNow({ clearOutput: true });
 }
 
+async function applySetListPerformanceView({ text } = {}) {
+  if (!getCurrentDocument()) return false;
+  resetTransposePreviewState();
+  editorRuntime.setTextClean(String(text || ""));
+  patchCurrentDocument({ content: String(text || ""), dirty: false }, { create: false });
+  setDirtyIndicator(false);
+  scheduleRenderNow({ clearOutput: true, source: "set-list-performance" });
+  sourceLinkFeature.update();
+  return true;
+}
+
+async function saveSetListPerformanceToSource({ text } = {}) {
+  if (!getCurrentDocument()) return false;
+  resetTransposePreviewState();
+  editorRuntime.setTextClean(String(text || ""));
+  patchCurrentDocument({ content: String(text || ""), dirty: true }, { create: false });
+  setDirtyIndicator(true);
+  scheduleRenderNow({ clearOutput: true, source: "set-list-performance-source" });
+  const saved = await saveFlowController.performSaveFlow();
+  return Boolean(saved);
+}
+
 function alignBarsInEditor() {
   abcTransformFeature.alignBars();
+}
+
+async function checkLyricFitInEditor() {
+  await abcTransformFeature.checkLyricFit();
 }
 
 function clearErrors() {
@@ -3464,6 +3659,10 @@ async function ensureSafeToAbandonCurrentDoc(actionLabel) {
 }
 
 async function performSaveFlow() {
+  if (setListFeature && setListFeature.isPerformanceViewActive()) {
+    showToast("Set List performance view is derived. The original tune was not changed.", 3600);
+    return false;
+  }
   return saveFlowController.performSaveFlow();
 }
 
@@ -3572,6 +3771,9 @@ async function requestCloseDocument() {
 }
 
 async function requestQuitApplication() {
+  if (window.api && typeof window.api.cancelQuitRequest === "function") {
+    try { await window.api.cancelQuitRequest(); } catch {}
+  }
   if (setListFeature && !await setListFeature.prepareToLeave("quitting")) return;
   if (documentSessionController) await documentSessionController.requestQuitApplication();
 }
@@ -3673,6 +3875,7 @@ appCommandsDomain = createAppCommandsDomain({
   },
   actions: {
     alignBarsInEditor,
+    checkLyricFitInEditor,
     applyAbc2abcTransform,
     clearLibraryFilter,
     confirmReloadFromDisk,

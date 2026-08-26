@@ -31,6 +31,7 @@
 	              <summary aria-label="Library actions" title="Library actions"><span aria-hidden="true">▾</span></summary>
 	              <div class="toolbar-dropdown-menu" role="menu" aria-label="Library actions">
 	                <button id="btnLibraryCatalog" type="button" role="menuitem">Library Catalog…</button>
+	                <button id="btnCopyActiveFileTuneList" type="button" role="menuitem">Copy Active File Tune List…</button>
 	                <button id="btnOpenFolderAsLibrary" type="button" role="menuitem">Open Folder as Library…</button>
 	              </div>
 	            </details>
@@ -323,6 +324,7 @@
 	      <div class="set-list-panel-header">
 	        <input class="set-list-title-input" id="setListTitle" type="text" value="Untitled Set List" aria-label="Set List name" />
 	        <span class="set-list-dirty-summary" id="setListDirtySummary" hidden></span>
+	        <button id="setListQuickSave" type="button" aria-label="Save Set List" title="Save Set List (Ctrl+Alt+S)">Save</button>
 	        <button class="set-list-panel-close" id="setListClose" type="button" aria-label="Hide Set List" title="Hide Set List">&times;</button>
 	      </div>
 	      <nav class="set-list-menubar" aria-label="Set List menu">
@@ -332,7 +334,7 @@
 	            <button id="setListNew" type="button" role="menuitem">New Set List</button>
 	            <button id="setListOpen" type="button" role="menuitem">Open…</button>
 	            <span class="set-list-menu-sep" aria-hidden="true"></span>
-	            <button id="setListSave" type="button" role="menuitem">Save</button>
+	            <button id="setListSave" class="set-list-menu-command" type="button" role="menuitem"><span>Save</span><span class="set-list-menu-shortcut">Ctrl+Alt+S</span></button>
 	            <button id="setListSaveAs" type="button" role="menuitem">Save As…</button>
 	          </div>
 	        </details>
@@ -375,6 +377,8 @@
 	        <details class="set-list-menu">
 	          <summary>Export</summary>
 	          <div class="set-list-menu-popup" role="menu">
+	            <button id="setListCopyTuneList" type="button" role="menuitem">Copy Tune List…</button>
+	            <span class="set-list-menu-sep" aria-hidden="true"></span>
 	            <button id="setListSaveAbc" type="button" role="menuitem">Export ABC…</button>
 	            <button id="setListExportPdf" type="button" role="menuitem">Export PDF…</button>
 	            <span class="set-list-menu-sep" aria-hidden="true"></span>
@@ -459,6 +463,10 @@
               <button id="payloadModeCopy" type="button">Copy</button>
               <button id="payloadModeExit" type="button">Exit</button>
             </div>
+          </div>
+          <div id="setListPerformanceBar" class="set-list-performance-bar" role="status" hidden>
+            <span><strong>Set List view</strong> · Read only</span>
+            <button id="setListOpenSourceForEditing" type="button">Open Source for Editing</button>
           </div>
           <div id="abc-editor"></div>
         </div>
@@ -891,11 +899,37 @@
         <button class="modal-close" id="setListNoteClose" type="button" aria-label="Close Practice Note" title="Close">&times;</button>
       </div>
       <div class="modal-body">
-        <textarea id="setListNoteText" rows="7" placeholder="Cue, arrangement, fingering, reminder…"></textarea>
+        <textarea id="setListNoteText" rows="7" placeholder="Cue, arrangement, fingering, reminder…" title="Enter saves; Shift+Enter inserts a new line"></textarea>
       </div>
       <div class="modal-footer">
         <button id="setListNoteCancel" type="button">Cancel</button>
         <button id="setListNoteSave" class="primary" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="setListPerformanceModal" aria-hidden="true">
+    <div class="modal-card set-list-performance-card" role="dialog" aria-modal="true" aria-label="Set List Performance Transposition">
+      <div class="modal-header">
+        <div class="modal-title" id="setListPerformanceTitle">Set List Playback</div>
+        <button class="modal-close" id="setListPerformanceClose" type="button" aria-label="Close Playback Transposition" title="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label class="set-list-performance-field" for="setListPerformanceTranspose">
+          <span>Transpose performance</span>
+          <span class="set-list-performance-input">
+            <input id="setListPerformanceTranspose" type="number" min="-48" max="48" step="1" value="0" />
+            <span>semitones</span>
+          </span>
+        </label>
+        <div class="set-list-performance-help">The Editor, Score, and playback use this key. Apply will ask whether to update the original tune or only this Set List.</div>
+      </div>
+      <div class="modal-footer">
+        <div class="modal-footer-left">
+          <button id="setListPerformanceReset" type="button">Original key</button>
+        </div>
+        <button id="setListPerformanceCancel" type="button">Cancel</button>
+        <button id="setListPerformanceSave" class="primary" type="button">Apply</button>
       </div>
     </div>
   </div>
@@ -913,6 +947,49 @@
 	        <button id="xIssuesAutoFix" type="button">Auto-fix: Renumber X…</button>
 	        <button id="xIssuesJump" type="button">Jump</button>
 	        <button id="xIssuesCopy" type="button">Copy</button>
+	      </div>
+	    </div>
+	  </div>
+
+	  <div class="modal" id="tuneListExportModal" aria-hidden="true">
+	    <div class="modal-card tune-list-export-card" role="dialog" aria-modal="true" aria-label="Copy Tune List">
+	      <div class="modal-header">
+	        <div class="modal-title">Copy Tune List</div>
+	        <button class="modal-close" id="tuneListExportClose" type="button" aria-label="Close Copy Tune List" title="Close">&times;</button>
+	      </div>
+	      <div class="modal-body">
+	        <div class="tune-list-export-source" id="tuneListExportSource"></div>
+	        <div class="tune-list-export-controls">
+	          <label>
+	            <span>Order</span>
+	            <select id="tuneListExportOrder"><option value="original">Current order</option></select>
+	          </label>
+	          <label>
+	            <span>Direction</span>
+	            <select id="tuneListExportDirection" disabled>
+	              <option value="asc">Ascending</option>
+	              <option value="desc">Descending</option>
+	            </select>
+	          </label>
+	          <label>
+	            <span>Format</span>
+	            <select id="tuneListExportFormat">
+	              <option value="csv" selected>CSV</option>
+	              <option value="tsv">TSV</option>
+	              <option value="plain">Plain text</option>
+	            </select>
+	          </label>
+	        </div>
+	        <fieldset class="tune-list-export-columns">
+	          <legend>Columns</legend>
+	          <div id="tuneListExportColumns"></div>
+	        </fieldset>
+	        <textarea id="tuneListExportPreview" rows="14" readonly spellcheck="false"></textarea>
+	      </div>
+	      <div class="modal-footer">
+	        <button id="tuneListExportCancel" type="button">Cancel</button>
+	        <button id="tuneListExportFile" type="button">Export…</button>
+	        <button id="tuneListExportCopy" class="primary" type="button">Copy</button>
 	      </div>
 	    </div>
 	  </div>

@@ -1127,6 +1127,24 @@ function showSaveDialog(suggestedName, suggestedDir, senderOrEvent) {
   });
   const ext = path.extname(defaultName || "").replace(/^\./, "").trim().toLowerCase();
   const filters = (() => {
+    if (ext === "csv") {
+      return [
+        { name: "CSV", extensions: ["csv"] },
+        { name: "All Files", extensions: ["*"] },
+      ];
+    }
+    if (ext === "tsv") {
+      return [
+        { name: "Tab-separated values", extensions: ["tsv"] },
+        { name: "All Files", extensions: ["*"] },
+      ];
+    }
+    if (ext === "txt") {
+      return [
+        { name: "Text", extensions: ["txt"] },
+        { name: "All Files", extensions: ["*"] },
+      ];
+    }
     if (ext === "json") {
       return [
         { name: "JSON", extensions: ["json"] },
@@ -1165,6 +1183,24 @@ function confirmUnsavedChanges(contextLabel, senderOrEvent) {
   });
   if (response === 0) return "save";
   if (response === 1) return "dont_save";
+  return "cancel";
+}
+
+function confirmSetListPerformanceSave(details = {}, senderOrEvent) {
+  const parent = prepareDialogParent(senderOrEvent, "confirm-set-list-performance-save");
+  const semitones = Number(details && details.transposeSemitones) || 0;
+  const amount = semitones > 0 ? `+${semitones}` : String(semitones);
+  const title = String(details && details.title || "this tune");
+  const response = dialog.showMessageBoxSync(parent || undefined, {
+    type: "question",
+    buttons: ["Original Tune", "This Set List", "Cancel"],
+    defaultId: 1,
+    cancelId: 2,
+    message: "Where should this transposition be saved?",
+    detail: `${title}\nTransposition: ${amount} semitones\n\nOriginal Tune updates the source ABC and synchronizes this Set List. This Set List leaves the source unchanged.`,
+  });
+  if (response === 0) return "original";
+  if (response === 1) return "set_list";
   return "cancel";
 }
 
@@ -3480,6 +3516,10 @@ async function runUiSmoke(win) {
   }
 
   // Keep this smoke tiny and deterministic: verify the exact UI contracts we keep regressing.
+  const setListFixturePath = path.resolve(
+    __dirname,
+    "../../devtools/transpose_harness/fixtures/cooleys_original.abc",
+  );
   const result = await win.webContents.executeJavaScript(
     `(async () => {
       const byId = (id) => document.getElementById(id);
@@ -3691,7 +3731,11 @@ async function runUiSmoke(win) {
       let modalBackdropSafe = false;
       let compactModalOk = false;
       let toolbarDomainsOk = false;
+      let settingsSaveUiOk = false;
+      let settingsSaveUiDiagnostics = null;
       let setListDocumentUiOk = false;
+      let setListPracticeNoteUiOk = false;
+      const setListPracticeNoteDiagnostics = {};
       let resetViewLayoutOk = false;
       let scoreCenteredAfterReset = false;
       let resetViewRatio = null;
@@ -3756,8 +3800,34 @@ async function runUiSmoke(win) {
           settingsModal.dispatchEvent(new MouseEvent("click", { bubbles: true }));
           await wait(30);
           modalBackdropSafe = settingsModal.classList.contains("open");
-          const cancel = byId("settingsCancel");
-          if (cancel) cancel.click();
+          const xml2abcInput = Array.from(settingsModal.querySelectorAll("input"))
+            .find((input) => input.placeholder === "e.g. -x -b 3");
+          const abc2xmlInput = Array.from(settingsModal.querySelectorAll("input"))
+            .find((input) => input.placeholder === "e.g. -x -y <value>");
+          if (xml2abcInput && abc2xmlInput) {
+            xml2abcInput.value = "-x -b 3";
+            xml2abcInput.dispatchEvent(new Event("input", { bubbles: true }));
+            abc2xmlInput.value = "-x -y value";
+            abc2xmlInput.dispatchEvent(new Event("input", { bubbles: true }));
+            const okButton = byId("settingsOk");
+            if (okButton) okButton.click();
+            await wait(350);
+            const persisted = await window.api.getSettings();
+            settingsSaveUiDiagnostics = {
+              modalClosed: !settingsModal.classList.contains("open"),
+              xml2abcArgs: persisted && persisted.xml2abcArgs,
+              abc2xmlArgs: persisted && persisted.abc2xmlArgs,
+            };
+            settingsSaveUiOk = Boolean(
+              settingsSaveUiDiagnostics.modalClosed
+              && settingsSaveUiDiagnostics.xml2abcArgs === "-x -b 3"
+              && settingsSaveUiDiagnostics.abc2xmlArgs === "-x -y value"
+            );
+          }
+          if (settingsModal.classList.contains("open")) {
+            const cancel = byId("settingsCancel");
+            if (cancel) cancel.click();
+          }
         }
 
         const rawButton = byId("btnToggleRaw");
@@ -3794,11 +3864,21 @@ async function runUiSmoke(win) {
         );
         if (compactClose) compactClose.click();
 
+        await hook.dispatchAction({
+          type: "openRecentFile",
+          entry: {
+            path: ${JSON.stringify(setListFixturePath)},
+            basename: "cooleys_original.abc",
+            forceReload: true,
+          },
+        });
+        await wait(220);
         await hook.dispatchAction({ type: "setList" });
         await wait(80);
         const setListPanel = byId("setListPanel");
         const setListTitle = byId("setListTitle");
         const setListSave = byId("setListSave");
+        const setListQuickSave = byId("setListQuickSave");
         const setListSaveAs = byId("setListSaveAs");
         const setListTarget = byId("setListTargetModal");
         if (setListTitle) {
@@ -3816,11 +3896,66 @@ async function runUiSmoke(win) {
           && setListTitle.value === "Smoke Set List *"
           && setListSave
           && !setListSave.disabled
+          && setListQuickSave
+          && !setListQuickSave.disabled
+          && String(setListQuickSave.title || "").includes("Ctrl+Alt+S")
           && setListSaveAs
           && !setListSaveAs.disabled
           && setListTarget
           && setListTarget.getAttribute("aria-hidden") === "true"
         );
+        const setListAddCurrent = byId("setListAddCurrent");
+        setListPracticeNoteDiagnostics.addCurrentPresent = Boolean(setListAddCurrent);
+        setListPracticeNoteDiagnostics.addCurrentEnabled = Boolean(setListAddCurrent && !setListAddCurrent.disabled);
+        if (setListAddCurrent && !setListAddCurrent.disabled) {
+          setListAddCurrent.click();
+          await wait(180);
+          const row = document.querySelector("#setListItems .set-list-row");
+          setListPracticeNoteDiagnostics.rowPresent = Boolean(row);
+          if (row) {
+            row.dispatchEvent(new MouseEvent("contextmenu", {
+              bubbles: true,
+              cancelable: true,
+              clientX: 120,
+              clientY: 180,
+            }));
+            await wait(30);
+            const noteAction = Array.from(document.querySelectorAll(".set-list-item-menu button"))
+              .find((button) => /Practice Note/.test(String(button.textContent || "")));
+            setListPracticeNoteDiagnostics.noteActionPresent = Boolean(noteAction);
+            if (noteAction) noteAction.click();
+            await wait(80);
+            const noteModal = byId("setListNoteModal");
+            const noteText = byId("setListNoteText");
+            const noteSave = byId("setListNoteSave");
+            if (noteModal && noteText && noteSave) {
+              setListPracticeNoteDiagnostics.modalOpen = noteModal.classList.contains("open");
+              setListPracticeNoteDiagnostics.textDisabled = noteText.disabled;
+              setListPracticeNoteDiagnostics.textReadOnly = noteText.readOnly;
+              noteText.value = "Smoke practice note";
+              noteText.dispatchEvent(new Event("input", { bubbles: true }));
+              noteText.dispatchEvent(new KeyboardEvent("keydown", {
+                key: "Enter",
+                code: "Enter",
+                bubbles: true,
+                cancelable: true,
+              }));
+              await wait(60);
+              const visibleNote = document.querySelector("#setListItems .set-list-note");
+              setListPracticeNoteDiagnostics.modalClosedAfterSave = !noteModal.classList.contains("open");
+              setListPracticeNoteDiagnostics.visibleNoteText = visibleNote
+                ? String(visibleNote.textContent || "")
+                : "";
+              setListPracticeNoteUiOk = Boolean(
+                !noteText.disabled
+                && !noteText.readOnly
+                && !noteModal.classList.contains("open")
+                && visibleNote
+                && /Smoke practice note/.test(String(visibleNote.textContent || ""))
+              );
+            }
+          }
+        }
         const setListClose = byId("setListClose");
         if (setListClose) {
           setListClose.click();
@@ -3886,10 +4021,12 @@ async function runUiSmoke(win) {
           && modalBackdropSafe
           && compactModalOk
           && toolbarDomainsOk
+          && settingsSaveUiOk
           && normalRightPaneVisible
           && resetViewLayoutOk
           && scoreCenteredAfterReset
-          && setListDocumentUiOk,
+          && setListDocumentUiOk
+          && setListPracticeNoteUiOk,
         visualGapPx,
         togglesGapPx,
         libRadiusPx,
@@ -3920,6 +4057,8 @@ async function runUiSmoke(win) {
         modalBackdropSafe,
         compactModalOk,
         toolbarDomainsOk,
+        settingsSaveUiOk,
+        settingsSaveUiDiagnostics,
         normalRightPaneVisible,
         normalRightPaneWidthPx,
         resetViewLayoutOk,
@@ -3927,6 +4066,8 @@ async function runUiSmoke(win) {
         scoreCenteredAfterReset,
         scoreCenterGeometry,
         setListDocumentUiOk,
+        setListPracticeNoteUiOk,
+        setListPracticeNoteDiagnostics,
       };
     })()`,
     true
@@ -4020,6 +4161,7 @@ registerIpcHandlers({
   showOpenFolderDialog,
   showSaveDialog,
   confirmUnsavedChanges,
+  confirmSetListPerformanceSave,
   confirmOverwrite,
   showSaveError,
   showOpenError,

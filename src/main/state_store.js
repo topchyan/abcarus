@@ -97,6 +97,25 @@ function temporaryPath(path, filePath, suffix) {
   );
 }
 
+function isTransientFileError(error) {
+  const code = error && error.code ? String(error.code) : "";
+  return code === "EPERM" || code === "EBUSY" || code === "EACCES";
+}
+
+async function retryTransientFileOperation(operation, { attempts = 5 } = {}) {
+  let lastError = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (!isTransientFileError(error) || attempt === attempts - 1) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+    }
+  }
+  throw lastError || new Error("File operation failed.");
+}
+
 async function replaceFileAtomically(fs, path, filePath, data) {
   const dir = path.dirname(filePath);
   const tmpPath = temporaryPath(path, filePath, "tmp");
@@ -105,16 +124,16 @@ async function replaceFileAtomically(fs, path, filePath, data) {
   await syncFile(fs, tmpPath);
 
   try {
-    await fs.promises.rename(tmpPath, filePath);
+    await retryTransientFileOperation(() => fs.promises.rename(tmpPath, filePath));
   } catch (initialRenameError) {
     let displaced = false;
     try {
-      await fs.promises.rename(filePath, displacedPath);
+      await retryTransientFileOperation(() => fs.promises.rename(filePath, displacedPath));
       displaced = true;
-      await fs.promises.rename(tmpPath, filePath);
+      await retryTransientFileOperation(() => fs.promises.rename(tmpPath, filePath));
     } catch (replaceError) {
       if (displaced) {
-        try { await fs.promises.rename(displacedPath, filePath); } catch {}
+        try { await retryTransientFileOperation(() => fs.promises.rename(displacedPath, filePath)); } catch {}
       }
       try { await fs.promises.unlink(tmpPath); } catch {}
       throw replaceError || initialRenameError;
@@ -136,7 +155,11 @@ async function saveStateDocument({ fs, path, filePath, data, skipBackup = false 
       const previous = await fs.promises.readFile(filePath);
       await replaceFileAtomically(fs, path, backupPath, previous);
     } catch (err) {
-      if (!isMissingFileError(err)) throw err;
+      // A stale/locked backup must not prevent writing the canonical profile.
+      // The primary replacement below still has its own atomicity and retries.
+      if (!isMissingFileError(err) && process.env.ABCARUS_DEBUG_SETTINGS === "1") {
+        console.warn("Unable to refresh profile backup:", err && err.message ? err.message : err);
+      }
     }
   }
 

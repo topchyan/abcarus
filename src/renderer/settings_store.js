@@ -24,7 +24,9 @@ export function createSettingsStore(api) {
     },
     async update(patch) {
       if (!api || typeof api.updateSettings !== "function") return null;
-      return api.updateSettings(patch || {});
+      const result = await api.updateSettings(patch || {});
+      if (!result) throw new Error("The application did not confirm that the profile was written.");
+      return result;
     },
     subscribe(fn) {
       if (typeof fn !== "function") return () => {};
@@ -33,4 +35,3 @@ export function createSettingsStore(api) {
     },
   };
 }
-

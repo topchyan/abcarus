@@ -86,6 +86,16 @@ An item contains a metadata snapshot and source hints:
 }
 ```
 
+`performance.transposeSemitones` is a performance-view override for this Set
+List occurrence. The Editor, Score, and playback are derived from the current
+Library source at that transposition. Saving it to the Set List leaves the
+source ABC unchanged. Choosing **Original Tune** physically transposes the
+source, refreshes the embedded snapshot, and resets the override to `0` so the
+transposition is not applied twice. A value of `0` uses the source pitch.
+While this derived performance view is active, the application's ordinary
+Save command does not write its displayed text into the source file. Source
+mutation is available only through the explicit **Original Tune** choice.
+
 Source hints assist resolution but are neither durable identity nor editing
 authority. `locatorHint` is an application-derived locator, not a tune ID.
 `pathHint` may be absolute or relative and may use platform-specific syntax. A

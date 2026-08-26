@@ -37,6 +37,7 @@ function createLibraryContextMenu({
   renumberXInActiveFile = async () => {},
   openMoveTuneModal = () => {},
   addTuneToSetList = async () => {},
+  copyFileTuneList = async () => {},
   appendTuneToActiveFile = async () => {},
   buildTemplatesPreviewContextMenuItems = () => [],
   handleTemplatesContextMenuAction = async () => false,
@@ -84,6 +85,11 @@ function createLibraryContextMenu({
           showToast("Copied.");
         }
       } catch {}
+      return;
+    }
+    if (action === "copyFileTuneList" && menuTarget && menuTarget.type === "file") {
+      hide();
+      await copyFileTuneList(menuTarget.filePath);
       return;
     }
     if (action === "reloadFileFromDisk" && menuTarget && menuTarget.type === "file") {
@@ -287,6 +293,7 @@ function createLibraryContextMenu({
       const fileDirty = Boolean(target.filePath) && (globalDirty || hasUnsavedChangesForFile(target.filePath));
       const items = [
         { label: "Load", action: "loadFile", disabled: !target.filePath },
+        { label: "Copy Tune List…", action: "copyFileTuneList", disabled: !target.filePath },
         { label: "Copy Path", action: "copyFilePath", disabled: !target.filePath },
         { separator: true },
         { label: "Refresh Library", action: "refreshLibrary" },

@@ -423,6 +423,7 @@ function createLibraryUiDomain({
     renumberXInActiveFile: actions.renumberXInActiveFile,
     openMoveTuneModal,
     addTuneToSetList: actions.addTuneToSetList,
+    copyFileTuneList: actions.copyFileTuneList,
     appendTuneToActiveFile: (tuneId) => appendTuneToActiveFileAction.run(tuneId),
     buildTemplatesPreviewContextMenuItems: actions.buildTemplatesPreviewContextMenuItems,
     handleTemplatesContextMenuAction: actions.handleTemplatesContextMenuAction,

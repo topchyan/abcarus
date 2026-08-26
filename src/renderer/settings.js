@@ -501,7 +501,7 @@ export function initSettings(api) {
   async function applyDraftPatch() {
     const patch = draftPatch || {};
     if (!patch || Object.keys(patch).length === 0) return true;
-    const next = await store.update(patch).catch(() => null);
+    const next = await store.update(patch).catch((error) => { alert(`Unable to save settings.\n\n${error && error.message ? error.message : String(error || "Unknown error")}`); return null; });
     if (!next) return false;
     setDraftPatch({});
     applySettings(next);

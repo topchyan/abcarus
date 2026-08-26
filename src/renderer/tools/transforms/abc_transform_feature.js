@@ -11,6 +11,7 @@ import {
   transformLengthScaling,
   transformAbcUnitScaling,
 } from "../../abc/text_transforms.js";
+import { analyzeLyricFitInText } from "../../abc/lyric_fit.js";
 
 function prepareTurkishNotationFor12Edo(text) {
   const originalTemperamentLines = [];
@@ -51,6 +52,7 @@ function createAbcTransformFeature({
   setEditorTextForSmoke = () => {},
   applyTransformedText = () => {},
   showTransformError = async () => {},
+  showLyricFitReport = async () => {},
   setStatus = () => {},
   logError = () => {},
   alignBarsInText = (text) => text,
@@ -254,6 +256,34 @@ function createAbcTransformFeature({
     setStatus("OK");
   }
 
+  async function checkLyricFit() {
+    const text = getEditorText();
+    if (!text.trim()) {
+      setStatus("No notation to check.");
+      return;
+    }
+    const report = analyzeLyricFitInText(text);
+    if (!report.checkedBars) {
+      await showLyricFitReport("No explicit music/lyrics bar pairs were found.");
+      return;
+    }
+    if (!report.mismatches.length) {
+      await showLyricFitReport(`Lyric fit looks consistent in ${report.checkedBars} checked bar(s).`);
+      return;
+    }
+    const shown = report.mismatches.slice(0, 16);
+    const detail = shown.map((item) => (
+      `Line ${item.line}, bar ${item.bar}: ${item.notes} note anchor(s), `
+      + `${item.lyrics} lyric advance(s); ${item.suggestion}.`
+    )).join("\n");
+    const remaining = report.mismatches.length - shown.length;
+    await showLyricFitReport(
+      `${report.mismatches.length} possible lyric-fit mismatch(es):\n\n${detail}`
+      + (remaining > 0 ? `\n\n…and ${remaining} more.` : "")
+      + "\n\nThis is a conservative check. Review ties, melismas, and unsung notes before editing.",
+    );
+  }
+
   function installDevSmoke() {
     if (!devConfig || devConfig.ABCARUS_DEV_TRANSFORM_SMOKE !== "1") return false;
     const win = windowRef;
@@ -280,6 +310,7 @@ function createAbcTransformFeature({
 
   return {
     alignBars,
+    checkLyricFit,
     apply,
     installDevSmoke,
     installTurkishNotationMacro,
