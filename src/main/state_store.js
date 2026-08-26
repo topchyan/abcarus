@@ -68,7 +68,8 @@ function isMissingFileError(err) {
 async function syncFile(fs, filePath) {
   let handle = null;
   try {
-    handle = await fs.promises.open(filePath, "r");
+    // Windows rejects fsync on a handle opened read-only.
+    handle = await fs.promises.open(filePath, "r+");
     await handle.sync();
   } finally {
     if (handle) await handle.close();
@@ -124,41 +125,23 @@ async function replaceFileAtomically(fs, path, filePath, data) {
   await syncFile(fs, tmpPath);
 
   try {
+    await retryTransientFileOperation(() => fs.promises.rename(tmpPath, filePath));
+  } catch (initialRenameError) {
+    let displaced = false;
     try {
+      await retryTransientFileOperation(() => fs.promises.rename(filePath, displacedPath));
+      displaced = true;
       await retryTransientFileOperation(() => fs.promises.rename(tmpPath, filePath));
-    } catch (initialRenameError) {
-      let displaced = false;
-      try {
-        await retryTransientFileOperation(() => fs.promises.rename(filePath, displacedPath));
-        displaced = true;
-        await retryTransientFileOperation(() => fs.promises.rename(tmpPath, filePath));
-      } catch (replaceError) {
-        if (displaced) {
-          try { await retryTransientFileOperation(() => fs.promises.rename(displacedPath, filePath)); } catch {}
-        }
-        throw replaceError || initialRenameError;
-      }
+    } catch (replaceError) {
       if (displaced) {
-        try { await fs.promises.unlink(displacedPath); } catch {}
+        try { await retryTransientFileOperation(() => fs.promises.rename(displacedPath, filePath)); } catch {}
       }
-    }
-  } catch (atomicError) {
-    if (!isTransientFileError(atomicError)) {
       try { await fs.promises.unlink(tmpPath); } catch {}
-      throw atomicError;
+      throw replaceError || initialRenameError;
     }
-    try {
-      // Windows virus scanners and sync clients can permit writes while briefly
-      // denying rename-based replacement. Keep settings usable in that case.
-      await retryTransientFileOperation(() => fs.promises.writeFile(filePath, data));
-      await syncFile(fs, filePath);
-    } catch (writeError) {
-      try { await fs.promises.unlink(tmpPath); } catch {}
+    if (displaced) {
       try { await fs.promises.unlink(displacedPath); } catch {}
-      throw writeError;
     }
-    try { await fs.promises.unlink(tmpPath); } catch {}
-    try { await fs.promises.unlink(displacedPath); } catch {}
   }
   await syncDirectory(fs, dir);
 }

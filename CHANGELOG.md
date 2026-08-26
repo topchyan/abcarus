@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.8.1] - 2026-08-26
 ### Fixed
-- Application settings can still be saved when Windows permits writing the profile but temporarily blocks rename-based atomic replacement, as can happen with virus scanners or file-sync clients.
+- Application settings now persist on Windows; profile durability checks use a writable file handle instead of attempting `fsync` through a read-only handle rejected by Windows.
 - Windows release builds now run profile write-and-restart persistence tests before packaging.
 
 ## [1.8.0] - 2026-08-26

@@ -48,32 +48,6 @@ async function main() {
     assert.equal(transientRenameFailures, 2, "transient profile replacement failures must be retried");
     assert.equal(JSON.parse(fs.readFileSync(retryPath, "utf8")).lastFolder, "/scores");
 
-    const directFallbackPath = path.join(dir, "direct-fallback-profile.json");
-    fs.writeFileSync(directFallbackPath, JSON.stringify(first), "utf8");
-    let blockedCanonicalRenames = 0;
-    const directFallbackFs = {
-      ...fs,
-      promises: {
-        ...fs.promises,
-        rename: async (from, to) => {
-          if (to === directFallbackPath) {
-            blockedCanonicalRenames += 1;
-            const error = new Error("simulated persistent Windows rename lock");
-            error.code = "EACCES";
-            throw error;
-          }
-          return fs.promises.rename(from, to);
-        },
-      },
-    };
-    await saveStateDocument({ fs: directFallbackFs, path, filePath: directFallbackPath, data: second });
-    assert(blockedCanonicalRenames >= 5, "persistent rename locks must exhaust atomic replacement retries");
-    assert.equal(
-      JSON.parse(fs.readFileSync(directFallbackPath, "utf8")).lastFolder,
-      "/scores",
-      "a writable Windows profile must fall back to direct replacement when rename stays locked",
-    );
-
     const lockedBackupPath = path.join(dir, "locked-backup-profile.json");
     fs.writeFileSync(lockedBackupPath, JSON.stringify(first), "utf8");
     const lockedBackupFs = {
