@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [1.8.0] - 2026-08-26
 ### Added
 - Set List occurrences can store a performance transposition without changing the source ABC. The Editor, Score, and playback show the derived performance version, while an explicit Original Tune action can apply it permanently and synchronize the Set List snapshot.
 - Set List practice notes are editable and saved with the portable Set List document.
@@ -20,7 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Optional `midi2xml`/music21 availability no longer appears as a general missing-tool failure when bundled `midi2abc` can provide MIDI import fallback.
 - Windows and macOS release jobs now verify the bundled Python dependencies after installation; Windows packaging also fails immediately when `pip` cannot install them.
-
 
 ## [1.7.4] - 2026-08-25
 ### Fixed
