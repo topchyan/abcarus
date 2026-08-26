@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Set List occurrences can store a performance transposition without changing the source ABC. The Editor, Score, and playback show the derived performance version, while an explicit Original Tune action can apply it permanently and synchronize the Set List snapshot.
+- Set List practice notes are editable and saved with the portable Set List document.
+- Library files and Set Lists can export configurable, sortable tune inventories, including repeated namespaced metadata, as CSV or plain text.
+- Desktop Library and saved Set Lists can be shared with ABCarus Mobile over the local network, with configurable access credentials and portable Set List synchronization.
+
+### Changed
+- Tunes opened from a Set List use a visibly read-only performance view until the user explicitly chooses to edit the Library source.
+- Align Bars now fits consecutive lyric lines to their music rows, preserves already aligned manual grids, handles repeat separators consistently, and formats MusicXML imports immediately after conversion.
+- Set List panel visibility, the active Set List, performance overrides, and cleared practice notes persist reliably across restarts and application shutdown.
+
+### Fixed
+- Optional `midi2xml`/music21 availability no longer appears as a general missing-tool failure when bundled `midi2abc` can provide MIDI import fallback.
+- Windows and macOS release jobs now verify the bundled Python dependencies after installation; Windows packaging also fails immediately when `pip` cannot install them.
 
 
 ## [1.7.4] - 2026-08-25
