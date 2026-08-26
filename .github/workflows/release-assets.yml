@@ -314,6 +314,11 @@ jobs:
       - name: Verify bundled Python runtime
         run: node scripts/check_pbs_runtime.mjs --platform=win-x64
 
+      - name: Verify Windows settings persistence
+        run: |
+          npm run -s test:state-store
+          npm run -s test:settings-persistence
+
       - name: Build Windows artifact
         run: npx electron-builder --win --x64 --publish never
 

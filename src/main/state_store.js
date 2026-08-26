@@ -124,23 +124,41 @@ async function replaceFileAtomically(fs, path, filePath, data) {
   await syncFile(fs, tmpPath);
 
   try {
-    await retryTransientFileOperation(() => fs.promises.rename(tmpPath, filePath));
-  } catch (initialRenameError) {
-    let displaced = false;
     try {
-      await retryTransientFileOperation(() => fs.promises.rename(filePath, displacedPath));
-      displaced = true;
       await retryTransientFileOperation(() => fs.promises.rename(tmpPath, filePath));
-    } catch (replaceError) {
-      if (displaced) {
-        try { await retryTransientFileOperation(() => fs.promises.rename(displacedPath, filePath)); } catch {}
+    } catch (initialRenameError) {
+      let displaced = false;
+      try {
+        await retryTransientFileOperation(() => fs.promises.rename(filePath, displacedPath));
+        displaced = true;
+        await retryTransientFileOperation(() => fs.promises.rename(tmpPath, filePath));
+      } catch (replaceError) {
+        if (displaced) {
+          try { await retryTransientFileOperation(() => fs.promises.rename(displacedPath, filePath)); } catch {}
+        }
+        throw replaceError || initialRenameError;
       }
+      if (displaced) {
+        try { await fs.promises.unlink(displacedPath); } catch {}
+      }
+    }
+  } catch (atomicError) {
+    if (!isTransientFileError(atomicError)) {
       try { await fs.promises.unlink(tmpPath); } catch {}
-      throw replaceError || initialRenameError;
+      throw atomicError;
     }
-    if (displaced) {
+    try {
+      // Windows virus scanners and sync clients can permit writes while briefly
+      // denying rename-based replacement. Keep settings usable in that case.
+      await retryTransientFileOperation(() => fs.promises.writeFile(filePath, data));
+      await syncFile(fs, filePath);
+    } catch (writeError) {
+      try { await fs.promises.unlink(tmpPath); } catch {}
       try { await fs.promises.unlink(displacedPath); } catch {}
+      throw writeError;
     }
+    try { await fs.promises.unlink(tmpPath); } catch {}
+    try { await fs.promises.unlink(displacedPath); } catch {}
   }
   await syncDirectory(fs, dir);
 }
