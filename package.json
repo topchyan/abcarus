@@ -1,6 +1,6 @@
 {
   "name": "abcarus",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "description": "Desktop application for working with music in ABC notation.",
   "main": "src/main/index.js",
   "private": true,
