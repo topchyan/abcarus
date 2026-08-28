@@ -65,6 +65,7 @@ export function createPlaybackComposition({
     isRawMode: host.isRawMode,
     isPayloadMode: host.isPayloadMode,
     isPlaying: domain.isPlaying,
+    getPlaybackRange: domain.getRange,
     getActivePlaybackRange: domain.getActiveRange,
     setPlaybackRange: domain.setRange,
     startPlaybackFromRange: domain.startFromRange,
