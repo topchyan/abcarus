@@ -77,6 +77,14 @@ function createAppCommandsDomain({
     try { call(actions.showToast, next ? "Typing note preview enabled." : "Typing note preview disabled.", 1800); } catch {}
   }
 
+  async function setSelectionLoopCommand(enabled) {
+    const next = Boolean(enabled);
+    if (api && typeof api.updateSettings === "function") {
+      await api.updateSettings({ playbackSelectionLoopEnabled: next });
+    }
+    try { call(actions.showToast, next ? "Selection loop enabled." : "Selection loop disabled.", 1800); } catch {}
+  }
+
   const menuActionsController = createMenuActionsController({
     api,
     windowRef,
@@ -172,6 +180,7 @@ function createAppCommandsDomain({
       scanAndLoadLibrary: actions.scanAndLoadLibrary,
       shareLibraryWithMobile: actions.shareLibraryWithMobile,
       setNoteTypingPreview: setNoteTypingPreviewCommand,
+      setSelectionLoop: setSelectionLoopCommand,
       setSplitOrientation: actions.setSplitOrientation,
       setStatus: actions.setStatus,
       showSaveError: actions.showSaveError,
@@ -181,6 +190,7 @@ function createAppCommandsDomain({
       toggleFocusMode: actions.toggleFocusMode,
       toggleLibrary: actions.toggleLibrary,
       togglePlayPauseEffective: actions.togglePlayPauseEffective,
+      stopPlayback: actions.stopPlaybackTransport,
       toggleSplitOrientation: actions.toggleSplitOrientation,
       transportStartOver: actions.transportStartOver,
       wirePayloadMode: actions.wirePayloadMode,

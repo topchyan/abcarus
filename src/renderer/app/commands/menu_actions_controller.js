@@ -11,6 +11,7 @@ const BUSY_ALLOWED_ACTIONS = new Set([
   "toggleDebugMessages",
   "toggleAutoDump",
   "toggleNoteTypingPreview",
+  "toggleSelectionLoop",
   "openIntonationExplorer",
   "toggleSetList",
 ]);
@@ -32,6 +33,7 @@ const PAYLOAD_ALLOWED_ACTIONS = new Set([
   "toggleDebugMessages",
   "toggleAutoDump",
   "toggleNoteTypingPreview",
+  "toggleSelectionLoop",
   "openKeyboardHelp",
   "openSettings",
   "openSettingsFolder",
@@ -254,10 +256,15 @@ function createMenuActionsController({
     else if (actionType === "clearLibraryFilter") actions.clearLibraryFilter();
     else if (actionType === "playStart") await actions.transportStartOver();
     else if (actionType === "playToggle") await actions.togglePlayPauseEffective();
+    else if (actionType === "stopPlayback") actions.stopPlayback();
     else if (actionType === "playGotoMeasure") await actions.goToMeasureFromMenu();
     else if (actionType === "toggleNoteTypingPreview") {
       const next = Boolean(action && action.value);
       actions.setNoteTypingPreview(next);
+    }
+    else if (actionType === "toggleSelectionLoop") {
+      const next = Boolean(action && action.value);
+      await actions.setSelectionLoop(next);
     }
     else if (actionType === "resetLayout") actions.resetLayout();
     else if (actionType === "helpGuide") await actions.openExternal("https://abcplus.sourceforge.net/abcplus_en.pdf");

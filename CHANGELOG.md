@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Application menus now group Library, Set List, File Header, and split-view controls under View; Set List printing is under File, and ABC Helpers is under Tools.
+- Split orientation has one menu command, playback exposes Stop and Loop Selection consistently, and menu labels match the toolbar terminology for Reset View and font settings.
+
+### Fixed
+- Score ranges selected by double-clicking measures now start and loop from the selected passage instead of falling back to normal playback.
 
 
 ## [1.8.1] - 2026-08-26

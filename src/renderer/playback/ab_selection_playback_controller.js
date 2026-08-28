@@ -7,6 +7,7 @@ function createAbSelectionPlaybackController({
   isRawMode,
   isPayloadMode,
   isPlaying,
+  getPlaybackRange,
   getActivePlaybackRange,
   setPlaybackRange,
   startPlaybackFromRange,
@@ -184,7 +185,18 @@ function createAbSelectionPlaybackController({
     const end = Math.max(start + 1, Math.min(max, range.endOffset));
     const sel = editorView.state.selection.main;
     const text = typeof getEditorText === "function" ? getEditorText() : "";
-    if (typeof hasIntentionalSelectionPlaybackSpan === "function" && !hasIntentionalSelectionPlaybackSpan(text, start, end)) return false;
+    const pendingRange = typeof getPlaybackRange === "function" ? getPlaybackRange() : null;
+    const isExplicitScoreSelection = Boolean(
+      pendingRange
+      && pendingRange.origin === "selection"
+      && Number(pendingRange.startOffset) === start
+      && Number(pendingRange.endOffset) === end
+    );
+    if (
+      !isExplicitScoreSelection
+      && typeof hasIntentionalSelectionPlaybackSpan === "function"
+      && !hasIntentionalSelectionPlaybackSpan(text, start, end)
+    ) return false;
     selectionPlaybackRuntime.captureSelection(sel);
     if (selectionSettings.mutedVoices && selectionSettings.mutedVoices.length) {
       selectionPlaybackRuntime.setAbMutedVoiceIds(selectionSettings.mutedVoices);

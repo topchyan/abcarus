@@ -27,6 +27,12 @@ const { createPlaybackTransportState } = await importBundledModule(
 const { createPlaybackTransportController } = await importBundledModule(
   "src/renderer/playback/playback_transport_controller.js",
 );
+const { createAbSelectionPlaybackController } = await importBundledModule(
+  "src/renderer/playback/ab_selection_playback_controller.js",
+);
+const { hasIntentionalSelectionPlaybackSpan } = await importBundledModule(
+  "src/renderer/playback/selection_playback_model.js",
+);
 const {
   advanceFocusScoreSelection,
   advanceScoreRenderSelection,
@@ -77,6 +83,69 @@ const scoreMeasureIndex = {
 assert.equal(resolveFocusMeasureNumberAtRenderOffset(scoreMeasureIndex, 100), 1);
 assert.equal(resolveFocusMeasureNumberAtRenderOffset(scoreMeasureIndex, 179), 2);
 assert.equal(resolveFocusMeasureNumberAtRenderOffset(scoreMeasureIndex, 220), 3);
+
+{
+  const playbackStarts = [];
+  const playbackRanges = [];
+  let pendingRange = {
+    startOffset: 10,
+    endOffset: 14,
+    origin: "selection",
+    loop: true,
+  };
+  const editorView = {
+    state: {
+      doc: { length: 30 },
+      selection: { main: { anchor: 10, head: 14 } },
+    },
+  };
+  const selectionRuntime = {
+    captureSelection: () => {},
+    clearAbMutedVoices: () => {},
+    setAbMutedVoiceIds: () => {},
+  };
+  const scoreSelectionController = createAbSelectionPlaybackController({
+    selectionPlaybackRuntime: selectionRuntime,
+    getSettings: () => ({ playbackSelectionLoopEnabled: true }),
+    getEditorView: () => editorView,
+    getEditorText: () => "X:1\nK:C\nCDEF GABc\n",
+    isRawMode: () => false,
+    isPayloadMode: () => false,
+    getPlaybackRange: () => pendingRange,
+    setPlaybackRange: (range) => playbackRanges.push(range),
+    startPlaybackFromRange: async (range) => playbackStarts.push(range),
+    parseMutedVoiceSetting: () => [],
+    hasIntentionalSelectionPlaybackSpan,
+  });
+
+  assert.equal(
+    await scoreSelectionController.playSelectionOnce(),
+    true,
+    "an explicit score selection must not require a barline inside its editor span",
+  );
+  assert.equal(playbackStarts.length, 1);
+  assert.deepEqual(playbackRanges[0], {
+    startOffset: 10,
+    endOffset: 14,
+    origin: "selection",
+    loop: true,
+  });
+
+  playbackStarts.length = 0;
+  playbackRanges.length = 0;
+  pendingRange = {
+    startOffset: 10,
+    endOffset: 14,
+    origin: "cursor",
+    loop: false,
+  };
+  assert.equal(
+    await scoreSelectionController.playSelectionOnce(),
+    false,
+    "an accidental short editor selection must keep the existing intent gate",
+  );
+  assert.equal(playbackStarts.length, 0);
+}
 
 const endState = createPlaybackTransportState();
 endState.activePlaybackRange = { startOffset: 0, endOffset: null, origin: "transport", loop: false };

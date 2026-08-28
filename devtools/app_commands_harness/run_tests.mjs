@@ -38,6 +38,7 @@ const documentRef = {
   activeElement: null,
   addEventListener() {},
 };
+const settingsPatches = [];
 let newTuneCalls = 0;
 let newFromTemplateCalls = 0;
 let templatesCalls = 0;
@@ -47,8 +48,13 @@ let openFolderCalls = 0;
 let libraryMetadataCalls = 0;
 let toggleSetListCalls = 0;
 let printSetListCalls = 0;
+let stopPlaybackCalls = 0;
 
 const domain = createAppCommandsDomain({
+  api: {
+    onMenuAction() {},
+    updateSettings: async (patch) => { settingsPatches.push(patch); },
+  },
   documentRef,
   elements: {
     newTuneButton,
@@ -71,6 +77,7 @@ const domain = createAppCommandsDomain({
     openLibraryMetadata: () => { libraryMetadataCalls += 1; },
     toggleSetList: () => { toggleSetListCalls += 1; },
     printSetList: async () => { printSetListCalls += 1; },
+    stopPlaybackTransport: () => { stopPlaybackCalls += 1; },
   },
 });
 
@@ -97,7 +104,11 @@ await domain.dispatch("libraryMetadata");
 assert.equal(libraryMetadataCalls, 1, "Tools -> Library Metadata must dispatch its feature action");
 await domain.dispatch("toggleSetList");
 await domain.dispatch("printSetList");
-assert.equal(toggleSetListCalls, 1, "Tools -> Set List must toggle the docked panel");
-assert.equal(printSetListCalls, 1, "Tools -> Set List must print the active Set List");
+await domain.dispatch("stopPlayback");
+await domain.dispatch({ type: "toggleSelectionLoop", value: true });
+assert.equal(toggleSetListCalls, 1, "View -> Show/Hide Set List Panel must toggle the docked panel");
+assert.equal(printSetListCalls, 1, "File -> Print Active Set List must print the active Set List");
+assert.equal(stopPlaybackCalls, 1, "Play -> Stop must stop playback");
+assert.deepEqual(settingsPatches.at(-1), { playbackSelectionLoopEnabled: true }, "Play -> Options -> Loop Selection must persist its setting");
 
 console.log("app commands harness: all tests passed");
