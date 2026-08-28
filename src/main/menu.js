@@ -165,7 +165,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
       {
         label: "Import",
         submenu: [
-          { label: "MusicXML…", click: () => sendMenuAction("importMusicXml") },
+          { label: "MusicXML / MXL…", click: () => sendMenuAction("importMusicXml") },
           { label: "MIDI…", click: () => sendMenuAction("importMidi") },
         ],
       },
@@ -187,6 +187,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
         }]),
       { label: "Print…", accelerator: "CmdOrCtrl+P", click: () => sendMenuAction("print") },
       { label: "Print All Tunes…", click: () => sendMenuAction("printAll") },
+      { label: "Print Active Set List…", accelerator: "CmdOrCtrl+Alt+P", click: () => sendMenuAction("printSetList") },
       {
         label: "Export",
         submenu: [
@@ -215,7 +216,6 @@ function buildMenuTemplate(appState, sendMenuAction) {
       { label: "Replace…", accelerator: replaceAccel, click: () => sendMenuAction("replace") },
       { label: "Go to Line…", accelerator: "CmdOrCtrl+G", click: () => sendMenuAction("gotoLine") },
       { label: "Toggle Comment", accelerator: "CmdOrCtrl+/", click: () => sendMenuAction("toggleComment") },
-      { label: "ABC Helpers…", accelerator: "Ctrl+F2", click: () => sendMenuAction("abcHelpers") },
       { type: "separator" },
       { role: "cut" },
       { role: "copy" },
@@ -227,7 +227,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
         : [
           { type: "separator" },
           { label: "Settings…", accelerator: "CmdOrCtrl+,", click: () => sendMenuAction("settings") },
-          { label: "Fonts…", accelerator: "F9", click: () => sendMenuAction("fonts") },
+          { label: "Font Settings…", accelerator: "F9", click: () => sendMenuAction("fonts") },
         ]),
     ],
   };
@@ -236,38 +236,45 @@ function buildMenuTemplate(appState, sendMenuAction) {
     label: "View",
     submenu: [
       ...(isMac ? [{ role: "togglefullscreen" }, { type: "separator" }] : []),
+      { label: "Show/Hide Library Panel", accelerator: "CmdOrCtrl+L", click: () => sendMenuAction("toggleLibrary") },
       { label: "Library Catalog…", accelerator: "CmdOrCtrl+Shift+L", click: () => sendMenuAction("libraryList") },
-      { label: "Toggle Library", accelerator: "CmdOrCtrl+L", click: () => sendMenuAction("toggleLibrary") },
-      { label: "Toggle File Header", accelerator: "CmdOrCtrl+Alt+H", click: () => sendMenuAction("toggleFileHeader") },
-      { label: "Toggle Split Orientation", accelerator: "CmdOrCtrl+Alt+\\", click: () => sendMenuAction("toggleSplitOrientation") },
-      {
-        label: "Split Orientation",
-        submenu: [
-          { label: "Vertical", click: () => sendMenuAction({ type: "setSplitOrientation", value: "vertical" }) },
-          { label: "Horizontal", click: () => sendMenuAction({ type: "setSplitOrientation", value: "horizontal" }) },
-        ],
-      },
+      { label: "Show/Hide Set List Panel", accelerator: "F6", click: () => sendMenuAction("toggleSetList") },
+      { label: "Show/Hide File Header", accelerator: "CmdOrCtrl+Alt+H", click: () => sendMenuAction("toggleFileHeader") },
+      { type: "separator" },
+      { label: "Switch Split Orientation", accelerator: "CmdOrCtrl+Alt+\\", click: () => sendMenuAction("toggleSplitOrientation") },
       { type: "separator" },
       { label: "Zoom In", accelerator: "CmdOrCtrl+=", click: () => sendMenuAction("zoomIn") },
       { label: "Zoom Out", accelerator: "CmdOrCtrl+-", click: () => sendMenuAction("zoomOut") },
       { label: "Reset Zoom", accelerator: "CmdOrCtrl+0", click: () => sendMenuAction("zoomReset") },
-      { label: "Reset Layout", accelerator: "F8", click: () => sendMenuAction("resetLayout") },
+      { label: "Reset View", accelerator: "F8", click: () => sendMenuAction("resetLayout") },
     ],
   };
 
   const playMenu = {
     label: "Play",
     submenu: [
-      { label: "Start Over", accelerator: "F4", click: () => sendMenuAction("playStart") },
       { label: "Play / Pause", accelerator: "F5", click: () => sendMenuAction("playToggle") },
-      { label: "Focus Mode", accelerator: "F7", click: () => sendMenuAction("toggleFocusMode") },
+      { label: "Stop", click: () => sendMenuAction("stopPlayback") },
+      { label: "Start Over", accelerator: "F4", click: () => sendMenuAction("playStart") },
+      { type: "separator" },
       { label: "Go to Measure…", accelerator: "CmdOrCtrl+Shift+G", click: () => sendMenuAction("playGotoMeasure") },
+      { label: "Focus Mode", accelerator: "F7", click: () => sendMenuAction("toggleFocusMode") },
       { type: "separator" },
       {
         label: "Options",
         submenu: [
           {
-            label: "Notes While Typing",
+            label: "Loop Selection",
+            type: "checkbox",
+            checked: Boolean(appState && appState.settings && appState.settings.playbackSelectionLoopEnabled),
+            click: (item) => {
+              const next = Boolean(item && item.checked);
+              if (appState && appState.settings) appState.settings.playbackSelectionLoopEnabled = next;
+              sendMenuAction({ type: "toggleSelectionLoop", value: next });
+            },
+          },
+          {
+            label: "Preview Notes While Typing",
             type: "checkbox",
             checked: Boolean(appState && appState.settings && appState.settings.noteTypingPreviewEnabled),
             click: (item) => {
@@ -284,6 +291,8 @@ function buildMenuTemplate(appState, sendMenuAction) {
   const toolsMenu = {
     label: "Tools",
     submenu: [
+      { label: "ABC Helpers…", accelerator: "Ctrl+F2", click: () => sendMenuAction("abcHelpers") },
+      { type: "separator" },
       {
         label: "Transpose",
         submenu: [
@@ -360,47 +369,19 @@ function buildMenuTemplate(appState, sendMenuAction) {
           },
         ],
       },
-      { type: "separator" },
-      { label: "Library Metadata…", click: () => sendMenuAction("libraryMetadata") },
-      {
-        label: "Set List",
-        submenu: [
-          {
-            label: "Show/Hide Panel",
-            accelerator: "F6",
-            click: () => sendMenuAction("toggleSetList"),
-          },
-          {
-            label: "Print Active Set List…",
-            accelerator: "CmdOrCtrl+Alt+P",
-            click: () => sendMenuAction("printSetList"),
-          },
-        ],
-      },
-      {
-        label: "Source Links",
-        submenu: [
-          { label: "Update YouTube Metadata (Active File)…", click: () => sendMenuAction("updateYouTubeMetadata") },
-        ],
-      },
-      ...((appState && appState.settings && (appState.settings.supportMicrotonalNotation || appState.settings.makamToolsEnabled || appState.settings.studyToolsEnabled))
-        ? [
-            {
-              label: "Study",
-              submenu: [
-                {
-                  label: "Intonation Explorer…",
-                  click: () => sendMenuAction("openIntonationExplorer"),
-                },
-              ],
-            },
-          ]
-        : []),
       {
         label: "Renumber X (Active File)…",
         accelerator: "CmdOrCtrl+Shift+X",
         click: () => sendMenuAction("renumberXInFile"),
       },
+      { type: "separator" },
+      { label: "Library Metadata…", click: () => sendMenuAction("libraryMetadata") },
+      { label: "Update YouTube Metadata (Active File)…", click: () => sendMenuAction("updateYouTubeMetadata") },
+      ...((appState && appState.settings && (appState.settings.supportMicrotonalNotation || appState.settings.makamToolsEnabled || appState.settings.studyToolsEnabled))
+        ? [
+            { label: "Intonation Explorer…", click: () => sendMenuAction("openIntonationExplorer") },
+          ]
+        : []),
     ],
   };
 
@@ -430,7 +411,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
 	        { role: "about", label: "About ABCarus" },
 	        { type: "separator" },
 	        { label: "Settings…", accelerator: "Cmd+,", click: () => sendMenuAction("settings") },
-	        { label: "Fonts…", accelerator: "F9", click: () => sendMenuAction("fonts") },
+	        { label: "Font Settings…", accelerator: "F9", click: () => sendMenuAction("fonts") },
 	        { type: "separator" },
 	        { role: "services" },
 	        { type: "separator" },
@@ -478,4 +459,4 @@ function applyMenu(appState, sendMenuAction) {
   Menu.setApplicationMenu(Menu.buildFromTemplate(buildMenuTemplate(appState, sendMenuAction)));
 }
 
-module.exports = { applyMenu };
+module.exports = { applyMenu, buildMenuTemplate };

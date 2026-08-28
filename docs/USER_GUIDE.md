@@ -46,7 +46,7 @@ If you already have `.abc` files, the fastest “ABCarus way” is:
 
 Tips:
 - The dropdown beside the toolbar `Library` button exposes both `Library Catalog…` and `Open Folder as Library…`.
-- Use `View → Toggle Library` to show/hide the library sidebar.
+- Use `View → Show/Hide Library Panel` to show/hide the library sidebar.
 - Use `View → Library Catalog…` for a list-style browser of tunes.
 
 ## 3) Navigating the library
@@ -90,7 +90,7 @@ If the active tune is not file-backed (for example, a new draft), `File → Save
 
 Related actions:
 - `File → Save As…` writes the current tune to a new file/location.
-- `File → Append to Active File…` is an explicit “append” flow.
+- A Library tune's context menu exposes `Append to Active File…` when another file is active.
 
 If there is no selected target file when an append-save is needed, ABCarus shows an error instead of guessing.
 
@@ -122,7 +122,7 @@ Set List is a portable performance document containing an ordered selection of
 tunes. Save one program per `*.abcarus-setlist.json` file; use `Export ABC…`,
 `Export PDF…`, or `Print…` to create derived output.
 
-- Open: `View → Set List…`
+- Open: `View → Show/Hide Set List Panel` (`F6`).
 - Add tunes:
   - Library tree: right-click a tune → `Add to Set List`
   - Library Catalog: select a row → `Add to Set List`
@@ -156,6 +156,7 @@ Important notes:
 
 - The score toolbar above the rendered notation contains Play/Pause, Stop, Start Over, and runtime tempo controls.
 - Menu: `Play → Play / Pause` (`F5`)
+- Menu: `Play → Stop` (`Esc`)
 - Menu: `Play → Start Over` (`F4`)
 - Menu: `Play → Go to Measure…`
 
@@ -174,6 +175,7 @@ The tempo slider and `−`/`+` buttons adjust playback without changing `Q:` or 
 - Playback is selection-first.
 - If text is selected in the editor, Play runs that selected range.
 - The `Loop selection` control above the score appears only while text is selected.
+- The same setting remains available at `Play → Options → Loop Selection` even when no selection is active.
 - If nothing is selected, Play runs from normal transport context.
 - Loop/repeat/mute behavior for selection playback is configured in Settings:
   - `Playback -> Selection -> Loop selection`
@@ -195,7 +197,7 @@ PDF / print:
 
 Source links:
 - A valid `F:https://…` field is shown as a source action and can be included in print/PDF output.
-- `Tools → Source Links → Update YouTube Metadata (Active File)…` reads YouTube titles and channels for all YouTube `F:` links in the active file.
+- `Tools → Update YouTube Metadata (Active File)…` reads YouTube titles and channels for all YouTube `F:` links in the active file.
 - After confirmation, ABCarus writes managed `D:[YouTube title]` and `D:[YouTube channel]` discography lines immediately after each corresponding `F:` line.
 
 ### Library metadata
@@ -206,7 +208,7 @@ Current Tune updates the editor and becomes an ordinary unsaved change. All Tune
 - Existing user-authored `N:` fields are preserved. YouTube metadata written previously as managed `N:` lines is migrated to `D:` on update. Unavailable links are reported but are not written into the ABC file.
 
 MusicXML:
-- Import: `File → Import → MusicXML…`
+- Import: `File → Import → MusicXML / MXL…`
 - Export: `File → Export → MusicXML…`
 - Export every tune in the active ABC file: `File → Export → MusicXML (All Tunes)…`. ABCarus creates a new `File name - MusicXML` folder containing one standard `.musicxml` file per tune. Existing export folders are never overwritten.
 - Batch MusicXML export applies the same enabled Global Header hierarchy and File Header to each tune, with tune-level directives taking precedence. ABCarus runtime font paths are intentionally excluded.
@@ -233,11 +235,11 @@ When exporting/printing all tunes, ABCarus processes each tune and includes erro
 
 Transform tools edit the ABC text in-place (conservatively):
 
-- `Tools → Transform → Transpose → Up Semitone / Down Semitone`
-- `Tools → Transform → Note Lengths → Double / Half`
-- `Tools → Transform → Measures per Line → 1…9`
+- `Tools → Transpose → Up Semitone / Down Semitone`
+- `Tools → Note Lengths → Double / Half`
+- `Tools → Bar Layout → Measures per Line → 1…9`
 - `Tools → Renumber X (Active File)…`
-- `Tools → Align Bars`
+- `Tools → Bar Layout → Align Bars`
 
 ## 11) Settings and fonts
 
@@ -247,7 +249,7 @@ Transform tools edit the ABC text in-place (conservatively):
 - Playback selection options are in `Settings -> Playback -> Selection`.
 
 ### Fonts
-- Menu: `Fonts…` (`F9`)
+- Menu: `Font Settings…` (`F9`)
 - Notation fonts (SMuFL / abc2svg) and text fonts can be selected here.
 - User-installed fonts are stored under `<userData>/fonts/notation/` and appear in font dropdowns.
 
@@ -259,15 +261,15 @@ Soundfonts are managed separately (SF2), and can also be installed locally.
 - `Help → ABC Guide (F1)` opens a general ABC notation guide.
 - `Help → abc2svg / abcm2ps Reference (Jef Moine)` opens directive/reference docs (including `%%MIDI` keywords).
 - `Help → Diagnostics → Save Debug Dump…` saves a JSON dump useful for bug reports. The dump includes the active ABC/header text and local file paths; review or redact it before sharing it publicly.
-- `Help → Open Settings Folder` opens the folder that stores app settings and user-installed assets.
+- `Help → Diagnostics → Open Settings Folder` opens the folder that stores app settings and user-installed assets.
 
 ## 13) Templates (quick practical use)
 
 Templates are reusable ABC snippets you can insert as a starting point (for example, playback directives) without manually rebuilding boilerplate each time.
 
 Where:
-- `Tools → Templates → Templates Library…`
-- or `File → New Tune From Template`
+- `File → Templates → Templates Library…`
+- or `File → Templates → New Tune From Template`
 
 Typical use for playback overrides:
 - Put your preferred `%%MIDI` lines in a template.
@@ -317,7 +319,9 @@ These are the default menu shortcuts:
 - Replace: `Ctrl+H` (Windows/Linux) or `Cmd+Alt+F` (macOS)
 - Start Over: `F4`
 - Play/Pause: `F5`
-- Fonts: `F9`
+- Show/Hide Set List Panel: `F6`
+- Reset View: `F8`
+- Font Settings: `F9`
 
 ## 16) Command-line startup options
 
