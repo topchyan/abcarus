@@ -141,6 +141,7 @@ body.focus-mode .editor-pane {
 
 /* Focus mode UI trim: keep only playback-relevant controls in the top bar. */
 body.focus-mode .library-split-control,
+body.focus-mode #btnToggleSetList,
 body.focus-mode #btnFileNew,
 body.focus-mode #btnFileOpen,
 body.focus-mode #btnFileSave,
@@ -1365,6 +1366,29 @@ body.chordpro-mode #btnToggleGlobals {
   padding: 10px 12px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   font-weight: 600;
+}
+
+.templates-preview-score {
+  box-sizing: border-box;
+  min-height: 150px;
+  max-height: 210px;
+  padding: 8px 10px;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  color: var(--muted-text);
+  font-size: var(--font-size-sm);
+  background: #fff;
+}
+
+.templates-preview-score:empty {
+  display: none;
+}
+
+.templates-preview-score svg {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
 }
 
 .templates-preview-text {

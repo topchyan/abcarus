@@ -82,6 +82,7 @@ function createSetListController({
   targetNewButton,
   targetCancelButton,
   targetAddButton,
+  refreshSourcesButton,
   defaultHeaderText = "",
   getState,
   getHeaderText,
@@ -107,6 +108,7 @@ function createSetListController({
   onSave,
   onSaveAs,
   onAddCurrent,
+  onRefreshSources,
   onSaveAbc,
   onExportPdf,
   onPrint,
@@ -209,8 +211,9 @@ function createSetListController({
 
         const transpose = Number(item.transposeSemitones) || 0;
         const detailsText = [
-          item.originalKey ? `Original ${item.originalKey}` : "",
-          transpose ? `Transposed ${transpose > 0 ? "+" : ""}${transpose}` : "",
+          item.performanceKey ? `Play in ${item.performanceKey}` : "",
+          transpose && item.originalKey ? `Original ${item.originalKey}` : "",
+          transpose ? `Shift ${transpose > 0 ? "+" : ""}${transpose}` : "",
         ].filter(Boolean).join(" · ");
         const content = document.createElement("div");
         content.className = "set-list-row-content";
@@ -368,6 +371,9 @@ function createSetListController({
   if (addCurrentButton) addCurrentButton.addEventListener("click", () => {
     if (typeof onAddCurrent === "function") onAddCurrent();
   });
+  if (refreshSourcesButton) refreshSourcesButton.addEventListener("click", () => {
+    if (typeof onRefreshSources === "function") onRefreshSources();
+  });
   if (titleInput) {
     titleInput.addEventListener("focus", () => {
       titleInput.value = titleInput.value.replace(/\s+\*$/, "");
@@ -455,6 +461,7 @@ function createSetListController({
       if (action === "performance") return openPerformanceEditor(index);
       if (action === "preview" && typeof onPreviewSnapshot === "function") return onPreviewSnapshot(index);
       if (action === "update" && typeof onUpdateSnapshot === "function") return onUpdateSnapshot(index);
+      if (action === "refresh" && typeof onRefreshSources === "function") return onRefreshSources();
       if (action === "copyTuneList" && typeof onCopyTuneList === "function") return onCopyTuneList();
       if (action === "duplicate" && typeof onDuplicateItem === "function") return onDuplicateItem(index);
       if (action === "remove" && typeof onRemoveItem === "function") return onRemoveItem(index);
@@ -607,6 +614,7 @@ function createSetListController({
         ["performance", "Performance Transposition…"],
         ["preview", "Preview Snapshot"],
         ["update", "Update Snapshot from Source"],
+        ["refresh", "Refresh"],
         ["copyTuneList", "Copy Tune List…"],
         ["duplicate", "Duplicate Occurrence"],
         ["up", "Move Up"],

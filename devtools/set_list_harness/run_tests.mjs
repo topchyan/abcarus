@@ -346,6 +346,150 @@ await test("docked Set List activation uses the canonical Library tune pipeline"
   assert.deepEqual(selected, [tune.id]);
 });
 
+await test("opening a modified Library source refreshes the Set List key", async () => {
+  const sourceTuneId = "/music/source.abc::0";
+  const feature = createSetListFeature({
+    readStorage: (key) => key === "abcarus.setList.v1" ? {
+      version: "1",
+      items: [{
+        id: "item",
+        sourcePath: "/music/source.abc",
+        xNumber: "1",
+        title: "Source Tune",
+        key: "none",
+        text: "X:1\nT:Source Tune\nK:none\nC|\n",
+      }],
+    } : null,
+    writeStorage: () => true,
+    activateItemSource: async () => ({
+      status: "FOUND_MODIFIED",
+      opened: true,
+      candidate: { tuneId: sourceTuneId },
+    }),
+    buildItemForTuneId: async () => ({
+      sourcePath: "/music/source.abc",
+      xNumber: "1",
+      title: "Source Tune",
+      key: "D",
+      text: "X:1\nT:Source Tune\nK:D\nD|\n",
+      headerText: "",
+    }),
+    applyPerformanceView: async () => true,
+  });
+
+  assert.equal(await feature.activateItemAtIndex(0), true);
+  assert.equal(feature.getState().items[0].originalKey, "D");
+  assert.equal(feature.getState().items[0].performanceKey, "D");
+  assert.equal(feature.getState().dirty, true);
+});
+
+await test("Refresh from Library updates modified Set List sources on demand", async () => {
+  const feature = createSetListFeature({
+    readStorage: (key) => key === "abcarus.setList.v1" ? {
+      version: "1",
+      items: [{
+        id: "item",
+        sourcePath: "/music/source.abc",
+        xNumber: "1",
+        title: "Source Tune",
+        key: "none",
+        text: "X:1\nT:Source Tune\nK:none\nC|\n",
+      }],
+    } : null,
+    writeStorage: () => true,
+    resolveItemSource: async () => ({
+      status: "FOUND_MODIFIED",
+      candidate: { tuneId: "/music/source.abc::0" },
+    }),
+    buildItemForTuneId: async () => ({
+      sourcePath: "/music/source.abc",
+      xNumber: "1",
+      title: "Source Tune",
+      key: "D",
+      text: "X:1\nT:Source Tune\nK:D\nD|\n",
+      headerText: "",
+    }),
+  });
+
+  assert.deepEqual(await feature.refreshFromLibrarySources(), { updated: 1, missing: 0 });
+  assert.equal(feature.getState().items[0].originalKey, "D");
+  assert.equal(feature.getState().items[0].performanceKey, "D");
+  assert.equal(feature.getState().dirty, true);
+});
+
+await test("Refresh saves an opened Set List automatically", async () => {
+  const setListPath = "/sets/current.abcarus-setlist.json";
+  const portable = normalizeSetListDocument(readFixture("self-contained.abcarus-setlist.json"));
+  portable.items = [portable.items[0]];
+  portable.items[0].tune.source = {
+    locatorHint: "/music/source.abc::0",
+    pathHint: "/music/source.abc",
+    xNumberHint: "1",
+  };
+  portable.items[0].tune.key = "none";
+  portable.items[0].embeddedAbc = "X:1\nT:Source Tune\nK:none\nC|\n";
+  let written = "";
+  const feature = createSetListFeature({
+    readStorage: (key) => key === "abcarus.setList.recentPaths.v1" ? [setListPath] : null,
+    writeStorage: () => true,
+    readFile: async (path) => path === setListPath
+      ? { ok: true, data: serializeSetListDocument(portable) }
+      : { ok: false, error: "missing" },
+    writeFile: async (_path, data) => { written = data; return { ok: true }; },
+    resolveItemSource: async () => ({
+      status: "FOUND_MODIFIED",
+      candidate: { tuneId: "/music/source.abc::0" },
+    }),
+    buildItemForTuneId: async () => ({
+      sourcePath: "/music/source.abc",
+      xNumber: "1",
+      title: "Source Tune",
+      key: "D",
+      text: "X:1\nT:Source Tune\nK:D\nD|\n",
+      headerText: "",
+    }),
+  });
+
+  assert.equal(await feature.restoreLastSetList(), true);
+  assert.deepEqual(await feature.refreshFromLibrarySources(), { updated: 1, missing: 0 });
+  assert.match(written, /"key": "D"/);
+  assert.equal(feature.getState().dirty, false);
+});
+
+await test("Refresh promotes a trusted lightweight path and X match to a current snapshot", async () => {
+  const feature = createSetListFeature({
+    readStorage: (key) => key === "abcarus.setList.v1" ? {
+      version: "1",
+      items: [{
+        id: "mobile-item",
+        sourcePath: "Armenian_Tunes.abc",
+        xNumber: "12",
+        title: "Զանգեզուրի Պար",
+        key: "none",
+        text: "",
+      }],
+    } : null,
+    writeStorage: () => true,
+    resolveItemSource: async () => ({
+      status: "FOUND_STRONG",
+      matchedBy: "source",
+      candidate: { tuneId: "/music/Armenian_Tunes.abc::120" },
+    }),
+    buildItemForTuneId: async () => ({
+      sourcePath: "/music/Armenian_Tunes.abc",
+      xNumber: "12",
+      title: "Զանգեզուրի Պար",
+      key: "D",
+      text: "X:12\nT:Զանգեզուրի Պար\nK:D\nD|\n",
+      headerText: "",
+    }),
+  });
+
+  assert.deepEqual(await feature.refreshFromLibrarySources(), { updated: 1, missing: 0 });
+  assert.equal(feature.getState().items[0].originalKey, "D");
+  assert.equal(feature.getState().items[0].performanceKey, "D");
+});
+
 await test("mobile relative source paths activate the matching Desktop tune", async () => {
   const abc = "X:35\nT:Նազանի\nK:C\nC|\n";
   const tune = { id: "/music/Armenian_Tunes.abc::35", xNumber: "35", title: "Նազանի", composer: "" };
@@ -509,6 +653,7 @@ await test("clearing a practice note is saved before leaving the Set List", asyn
 await test("Set List performance transposition is saved per occurrence", async () => {
   const files = new Map();
   let applied = null;
+  let sourceKey = "C";
   const feature = createSetListFeature({
     readStorage: (key) => key === "abcarus.setList.v1" ? {
       version: "1",
@@ -517,7 +662,6 @@ await test("Set List performance transposition is saved per occurrence", async (
     writeStorage: () => true,
     showSaveSetListDialog: async () => "/sets/performance.abcarus-setlist.json",
     writeFile: async (path, data) => { files.set(path, data); return { ok: true }; },
-    confirmPerformanceSave: async () => "set_list",
     activateItemSource: async () => ({
       status: "FOUND_EXACT",
       opened: true,
@@ -527,17 +671,25 @@ await test("Set List performance transposition is saved per occurrence", async (
       sourcePath: "/music/a.abc",
       xNumber: "1",
       title: "Tune",
-      text: "X:1\nK:C\nC|\n",
+      key: sourceKey,
+      text: `X:1\nK:${sourceKey}\n${sourceKey}|\n`,
       headerText: "",
     }),
     applyPerformanceView: async (view) => { applied = view; return true; },
   });
   assert.equal(await feature.updatePerformance(0, { transposeSemitones: 3 }), true);
   assert.equal(feature.getState().items[0].transposeSemitones, 3);
+  assert.equal(feature.getState().items[0].performanceKey, "Eb");
   assert.equal(applied.transposeSemitones, 3);
   assert.match(applied.text, /^K:Eb$/m);
   assert.equal(feature.getState().dirty, false);
   assert.match(files.get("/sets/performance.abcarus-setlist.json"), /"transposeSemitones": 3/);
+  sourceKey = "D";
+  assert.equal(await feature.updatePerformance(0, { transposeSemitones: 0 }), true);
+  assert.equal(feature.getState().items[0].originalKey, "D");
+  assert.equal(feature.getState().items[0].performanceKey, "D");
+  assert.equal(feature.getState().items[0].transposeSemitones, 0);
+  assert.match(files.get("/sets/performance.abcarus-setlist.json"), /"key": "D"/);
   await feature.updatePerformance(0, { transposeSemitones: 200 });
   assert.equal(feature.getState().items[0].transposeSemitones, 48);
 });
@@ -553,7 +705,7 @@ test("Set List performance view transposes notation and has a reversible origina
   assert.equal(clampSetListTransposeSemitones(200), 48);
 });
 
-test("saving performance to the original resets the override and preserves occurrence metadata", () => {
+test("refreshing a Set List snapshot resets its override and preserves occurrence metadata", () => {
   const previous = {
     id: "occurrence",
     performance: { transposeSemitones: 3, tempoScale: 1.25 },
@@ -576,6 +728,56 @@ test("saving performance to the original resets the override and preserves occur
   assert.equal(merged.performance.tempoScale, 1.25);
   assert.equal(merged.notes, "Start softly");
   assert.deepEqual(merged.export, previous.export);
+});
+
+await test("saving a Library source refreshes matching Set List items and preserves occurrence overrides", async () => {
+  let sourceKey = "none";
+  const portable = normalizeSetListDocument(readFixture("self-contained.abcarus-setlist.json"));
+  portable.items = [structuredClone(portable.items[0]), structuredClone(portable.items[0])];
+  portable.items[0].id = "first";
+  portable.items[1].id = "second";
+  for (const item of portable.items) {
+    item.tune.title = "Tune";
+    item.tune.key = "none";
+    item.tune.source = {
+      locatorHint: "/music/a.abc::0",
+      pathHint: "/music/a.abc",
+      xNumberHint: "12",
+    };
+    item.embeddedAbc = "X:12\nT:Tune\nK:none\nC|\n";
+  }
+  portable.items[0].performance.transposeSemitones = 2;
+  portable.items[0].notes = "Practice slowly";
+  const feature = createSetListFeature({
+    readStorage: (key) => key === "abcarus.setList.recentPaths.v1" ? ["/sets/current.json"] : null,
+    writeStorage: () => true,
+    readFile: async (path) => path === "/sets/current.json"
+      ? { ok: true, data: serializeSetListDocument(portable) }
+      : { ok: false, error: "missing" },
+    buildItemForTuneId: async (tuneId) => ({
+      sourcePath: "/music/a.abc",
+      xNumber: "12",
+      title: "Tune",
+      key: sourceKey,
+      text: `X:12\nT:Tune\nK:${sourceKey}\nD|\n`,
+      headerText: "",
+      sourceTuneId: tuneId,
+    }),
+  });
+
+  assert.equal(await feature.restoreLastSetList(), true);
+  sourceKey = "D";
+  assert.equal(await feature.syncSourceTuneAfterSave("/music/a.abc::new", {
+    previousTuneId: "/music/a.abc::0",
+  }), true);
+  const state = feature.getState();
+  assert.equal(state.items[0].originalKey, "D");
+  assert.equal(state.items[0].performanceKey, "E");
+  assert.equal(state.items[0].transposeSemitones, 2);
+  assert.equal(state.items[0].notes, "Practice slowly");
+  assert.equal(state.items[1].originalKey, "D");
+  assert.equal(state.dirty, true);
+  assert.deepEqual(state.dirtyReasons, ["source updates"]);
 });
 
 await test("opening a Set List occurrence applies one derived view to Editor Score and playback source", async () => {
@@ -626,10 +828,10 @@ await test("opening a Set List occurrence applies one derived view to Editor Sco
   assert.equal(performanceViewStates.at(-1), null);
 });
 
-await test("Original Tune saves source then synchronizes and saves the Set List", async () => {
-  let sourceText = "X:1\nT:Tune\nK:C\nC D|\n";
-  let sourceSaveCalls = 0;
-  const files = new Map();
+await test("read-only Set List transpose changes only the occurrence", async () => {
+  const sourceText = "X:1\nT:Tune\nK:C\nC D|\n";
+  let applied = null;
+  let overrideChanges = 0;
   const feature = createSetListFeature({
     readStorage: (key) => key === "abcarus.setList.v1" ? {
       version: "1",
@@ -646,27 +848,23 @@ await test("Original Tune saves source then synchronizes and saves the Set List"
       sourcePath: "/music/a.abc",
       xNumber: "1",
       title: "Tune",
+      key: "C",
       text: sourceText,
       headerText: "",
       sourceFileModifiedAt: "2026-08-25T12:00:00.000Z",
     }),
-    savePerformanceToSource: async ({ text }) => {
-      sourceSaveCalls += 1;
-      sourceText = text;
-      return true;
-    },
-    confirmPerformanceSave: async () => "original",
-    showSaveSetListDialog: async () => "/sets/performance.abcarus-setlist.json",
-    writeFile: async (path, data) => { files.set(path, data); return { ok: true }; },
+    applyPerformanceView: async (view) => { applied = view; return true; },
+    onPerformanceOverrideChange: () => { overrideChanges += 1; },
     nowIso: () => "2026-08-25T12:00:00.000Z",
   });
-  assert.equal(await feature.updatePerformance(0, { transposeSemitones: 2 }), true);
-  assert.equal(sourceSaveCalls, 1);
-  assert.match(sourceText, /^K:D$/m);
-  const savedSetList = JSON.parse(files.get("/sets/performance.abcarus-setlist.json"));
-  assert.equal(savedSetList.items[0].performance.transposeSemitones, 0);
-  assert.match(savedSetList.items[0].embeddedAbc, /^K:D$/m);
-  assert.equal(feature.getState().dirty, false);
+  assert.equal(await feature.activateItemAtIndex(0), true);
+  assert.equal(await feature.adjustActivePerformanceTranspose(-1), true);
+  assert.equal(feature.getState().items[0].transposeSemitones, -1);
+  assert.equal(feature.getState().dirty, true);
+  assert.equal(applied.transposeSemitones, -1);
+  assert.match(applied.text, /^K:B$/m);
+  assert.match(sourceText, /^K:C$/m);
+  assert.equal(overrideChanges, 1);
 });
 
 test("resolves exact content independently of its old path", () => {

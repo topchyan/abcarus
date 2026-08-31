@@ -42,8 +42,6 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("dialog:set-list-save", suggestedName, suggestedDir),
   confirmUnsavedChanges: async (contextLabel) =>
     ipcRenderer.invoke("dialog:confirm-unsaved", contextLabel),
-  confirmSetListPerformanceSave: async (details) =>
-    ipcRenderer.invoke("dialog:confirm-set-list-performance-save", details || {}),
   confirmOverwrite: async (filePath) =>
     ipcRenderer.invoke("dialog:confirm-overwrite", filePath),
   confirmAppendToFile: async (filePath) =>

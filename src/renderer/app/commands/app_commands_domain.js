@@ -234,6 +234,7 @@ function createAppCommandsDomain({
   function wireTopToolbar() {
     const {
       toggleLibraryButton,
+      toggleSetListButton,
       libraryToolbarMenu,
       libraryCatalogButton,
       openFolderAsLibraryButton,
@@ -252,6 +253,11 @@ function createAppCommandsDomain({
     if (toggleLibraryButton) {
       toggleLibraryButton.addEventListener("click", () => {
         call(actions.toggleLibrary);
+      });
+    }
+    if (toggleSetListButton) {
+      toggleSetListButton.addEventListener("click", () => {
+        call(actions.toggleSetList);
       });
     }
 

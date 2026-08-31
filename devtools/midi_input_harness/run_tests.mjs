@@ -13,6 +13,14 @@ async function importRendererModule(filePath) {
 const { createMidiEditorAdapter } = await importRendererModule(
   resolve("src/renderer/tools/midi_input/midi_editor_adapter.js"),
 );
+const { shouldShowMidiStatusButton } = await importRendererModule(
+  resolve("src/renderer/tools/midi_input/midi_input_popover_controller.js"),
+);
+
+assert.equal(shouldShowMidiStatusButton({ enabled: false, devices: 0 }), false);
+assert.equal(shouldShowMidiStatusButton({ enabled: false, devices: 1 }), false);
+assert.equal(shouldShowMidiStatusButton({ enabled: true, devices: 0 }), true);
+assert.equal(shouldShowMidiStatusButton({ enabled: true, devices: 1 }), true);
 
 function createView(selection) {
   const calls = [];

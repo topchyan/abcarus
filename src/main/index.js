@@ -1186,24 +1186,6 @@ function confirmUnsavedChanges(contextLabel, senderOrEvent) {
   return "cancel";
 }
 
-function confirmSetListPerformanceSave(details = {}, senderOrEvent) {
-  const parent = prepareDialogParent(senderOrEvent, "confirm-set-list-performance-save");
-  const semitones = Number(details && details.transposeSemitones) || 0;
-  const amount = semitones > 0 ? `+${semitones}` : String(semitones);
-  const title = String(details && details.title || "this tune");
-  const response = dialog.showMessageBoxSync(parent || undefined, {
-    type: "question",
-    buttons: ["Original Tune", "This Set List", "Cancel"],
-    defaultId: 1,
-    cancelId: 2,
-    message: "Where should this transposition be saved?",
-    detail: `${title}\nTransposition: ${amount} semitones\n\nOriginal Tune updates the source ABC and synchronizes this Set List. This Set List leaves the source unchanged.`,
-  });
-  if (response === 0) return "original";
-  if (response === 1) return "set_list";
-  return "cancel";
-}
-
 function confirmOverwrite(filePath, senderOrEvent) {
   const parent = prepareDialogParent(senderOrEvent, "confirm-overwrite");
   const response = dialog.showMessageBoxSync(parent || undefined, {
@@ -4161,7 +4143,6 @@ registerIpcHandlers({
   showOpenFolderDialog,
   showSaveDialog,
   confirmUnsavedChanges,
-  confirmSetListPerformanceSave,
   confirmOverwrite,
   showSaveError,
   showOpenError,

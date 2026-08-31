@@ -229,7 +229,7 @@ export function createSaveFlowController({
       setDirtyIndicator(false);
       setActiveFilePath(p);
       const updatedFile = await refreshLibraryFile(p, { force: true });
-      reconcileActiveTuneAfterSave(p, updatedFile);
+      await reconcileActiveTuneAfterSave(p, updatedFile);
       updateLibraryStatus();
       scheduleRenderLibraryTree();
       updateFileHeaderPanel();

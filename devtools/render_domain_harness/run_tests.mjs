@@ -144,13 +144,13 @@ const { createHeaderLayersController } = await importBundledModule(
     dataset: { start: "120", end: "125" },
   };
   assert.equal(controller.handleOutputClick({ target }), true);
-  assert.deepEqual(origins, ["svg"]);
+  assert.deepEqual(origins, ["score-note"]);
   assert.deepEqual(selections, [[20, 25]]);
   assert.deepEqual(playbackRanges, [{
     startOffset: 20,
-    endOffset: 25,
-    origin: "svg",
-    loop: true,
+    endOffset: null,
+    origin: "score-note",
+    loop: false,
   }]);
   assert.equal(typeof listeners.get("click"), "function");
   assert.equal(typeof listeners.get("dblclick"), "function");

@@ -26,6 +26,7 @@ import {
 import {
   buildSetListPerformanceView,
   clampSetListTransposeSemitones,
+  extractSetListPerformanceKey,
   mergeSetListSnapshotAfterSourceSave,
 } from "./set_list_performance_model.js";
 
@@ -57,8 +58,6 @@ function createSetListFeature({
   onCopyTuneList = () => {},
   onPerformanceOverrideChange = () => {},
   applyPerformanceView = async () => false,
-  savePerformanceToSource = async () => false,
-  confirmPerformanceSave = async () => "cancel",
   onPerformanceViewStateChange = () => {},
   onPanelVisibilityChange = () => {},
   getPrintPageMargins = () => "standard",
@@ -86,6 +85,7 @@ function createSetListFeature({
   let activeItemId = "";
   let activePerformanceContext = null;
   const itemResolutions = new Map();
+  const performanceKeyCache = new WeakMap();
   const session = createSetListSession({
     makeId,
     readFile,
@@ -144,6 +144,24 @@ function createSetListFeature({
     return true;
   }
 
+  function getPerformanceKey(item) {
+    const originalKey = String(item && item.tune && item.tune.key || "").trim();
+    const semitones = Number(item && item.performance && item.performance.transposeSemitones) || 0;
+    if (!semitones) return originalKey;
+    const cached = performanceKeyCache.get(item);
+    if (cached && cached.semitones === semitones) return cached.key;
+    const view = buildSetListPerformanceView({
+      sourceText: String(item && item.embeddedAbc || ""),
+      headerText: String(item && item.embeddedHeaderAbc || ""),
+      transposeSemitones: semitones,
+    });
+    const key = view && view.ok
+      ? extractSetListPerformanceKey(view.text, originalKey)
+      : originalKey;
+    performanceKeyCache.set(item, { semitones, key });
+    return key;
+  }
+
   function getExportItems() {
     return getItems().map((item) => ({
       id: item.id,
@@ -153,6 +171,7 @@ function createSetListFeature({
       title: item.tune.title,
       composer: item.tune.composer,
       originalKey: item.tune.key,
+      performanceKey: getPerformanceKey(item),
       transposeSemitones: Number(item.performance && item.performance.transposeSemitones) || 0,
       notes: item.notes || "",
       headerText: item.embeddedHeaderAbc || "",
@@ -227,10 +246,19 @@ function createSetListFeature({
       sourceTuneId = String(resolution.candidate.tuneId || item.tune.source.locatorHint || "");
     }
     activeItemId = item.id;
+    const replacement = await buildDocumentItem(sourceTuneId);
+    const synchronized = mergeSetListSnapshotAfterSourceSave(item, replacement);
+    if (!synchronized) {
+      showToast("The Set List performance changed, but its source snapshot could not be refreshed.", 4200);
+      return false;
+    }
+    synchronized.performance.transposeSemitones = transposeSemitones;
     if (!await showPerformanceView(index, item, sourceTuneId, transposeSemitones)) return false;
     session.mutate((document) => {
-      document.items[index].performance.transposeSemitones = transposeSemitones;
+      document.items[index] = synchronized;
     }, { reason: "performance" });
+    activeItemId = synchronized.id;
+    itemResolutions.set(synchronized.id, "FOUND_EXACT");
     onPerformanceOverrideChange();
     const saved = await saveSetList(false);
     if (saved) {
@@ -244,76 +272,46 @@ function createSetListFeature({
     return saved;
   }
 
-  async function savePerformanceInOriginal(index, transposeSemitones) {
-    const item = getItems()[index];
-    if (!item) return false;
-    const resolution = await activateItemSource(item);
-    if (!resolution || !resolution.opened || !resolution.candidate) {
-      showToast("The source tune could not be opened. Nothing was changed.", 4000);
-      return false;
-    }
-    const sourceTuneId = String(resolution.candidate.tuneId || item.tune.source.locatorHint || "");
-    const source = await buildItemForTuneId(sourceTuneId);
-    if (!source) return false;
-    const view = buildSetListPerformanceView({
-      sourceText: source.text,
-      headerText: source.headerText,
-      transposeSemitones,
-    });
-    if (!view.ok) {
-      showToast(view.error || "Unable to transpose the source tune.", 4200);
-      return false;
-    }
-    const sourceSaved = await savePerformanceToSource({
-      text: view.text,
-      sourceText: source.text,
-      itemId: item.id,
-      sourceTuneId,
-      transposeSemitones,
-    });
-    if (!sourceSaved) return false;
-
-    const refreshedTuneId = String(getActiveTuneId() || sourceTuneId);
-    const replacement = await buildDocumentItem(refreshedTuneId);
-    const synchronized = mergeSetListSnapshotAfterSourceSave(item, replacement);
-    if (!synchronized) {
-      showToast("Original tune saved, but the Set List snapshot could not be rebuilt.", 4200);
-      return false;
-    }
-    session.mutate((document) => {
-      document.items[index] = synchronized;
-    }, { reason: "snapshot" });
-    activeItemId = synchronized.id;
-    activePerformanceContext = null;
-    onPerformanceViewStateChange(null);
-    itemResolutions.set(synchronized.id, "FOUND_EXACT");
-    onPerformanceOverrideChange();
-    const setListSaved = await saveSetList(false);
-    if (!setListSaved) {
-      showToast("Original tune was saved. The synchronized Set List is still unsaved.", 4400);
-      return false;
-    }
-    showToast("Original tune saved and Set List synchronized.", 3200);
-    return true;
-  }
-
   async function updatePerformance(index, value = {}) {
     const target = Number(index);
     if (!Number.isInteger(target) || !getItems()[target]) return false;
-    const item = getItems()[target];
     const transposeSemitones = clampSetListTransposeSemitones(value.transposeSemitones);
-    const destination = await confirmPerformanceSave({
-      title: item.tune.title || "Untitled",
-      transposeSemitones,
-    });
-    if (destination === "original") return savePerformanceInOriginal(target, transposeSemitones);
-    if (destination === "set_list") return savePerformanceInSetList(target, transposeSemitones);
-    return false;
+    return savePerformanceInSetList(target, transposeSemitones);
+  }
+
+  async function adjustActivePerformanceTranspose(delta) {
+    if (!activePerformanceContext || !activeItemId) return false;
+    const target = getItems().findIndex((item) => item && item.id === activeItemId);
+    if (target < 0) return false;
+    const item = getItems()[target];
+    const sourceTuneId = String(activePerformanceContext.sourceTuneId || item.tune.source.locatorHint || "");
+    const nextTranspose = clampSetListTransposeSemitones(
+      Number(activePerformanceContext.transposeSemitones || 0) + Number(delta || 0),
+    );
+    const replacement = await buildDocumentItem(sourceTuneId);
+    const synchronized = mergeSetListSnapshotAfterSourceSave(item, replacement);
+    if (!synchronized) {
+      showToast("The Set List transposition could not refresh its source snapshot.", 4200);
+      return false;
+    }
+    synchronized.performance.transposeSemitones = nextTranspose;
+    if (!await showPerformanceView(target, item, sourceTuneId, nextTranspose)) return false;
+    session.mutate((document) => {
+      document.items[target] = synchronized;
+    }, { reason: "performance" });
+    activeItemId = synchronized.id;
+    itemResolutions.set(synchronized.id, "FOUND_EXACT");
+    onPerformanceOverrideChange();
+    showToast(
+      `Set List transposition: ${nextTranspose > 0 ? "+" : ""}${nextTranspose}. Save the Set List to keep it.`,
+      3000,
+    );
+    return true;
   }
 
   async function activateItemAtIndex(index) {
     const target = Number(index);
-    const item = getItems()[target];
+    let item = getItems()[target];
     if (!item) return false;
     const result = await activateItemSource(item);
     const status = String(result && result.status || "MISSING");
@@ -321,13 +319,19 @@ function createSetListFeature({
     if (result && result.opened) {
       activeItemId = item.id;
       const sourceTuneId = String(result.candidate && result.candidate.tuneId || "");
+      const trustedSourceMatch = status === "FOUND_STRONG" && result.matchedBy === "source";
+      if ((status === "FOUND_MODIFIED" || trustedSourceMatch) && sourceTuneId) {
+        await syncSourceTuneAfterSave(sourceTuneId, {
+          previousTuneId: item.tune && item.tune.source ? item.tune.source.locatorHint : "",
+        });
+        item = getItems()[target] || item;
+      }
       if (!await showPerformanceView(target, item, sourceTuneId)) return false;
       const source = item.tune && item.tune.source ? item.tune.source : {};
       const sourceLabel = source.pathHint
         ? `${safeBasename(source.pathHint)}${source.xNumberHint ? ` X:${source.xNumberHint}` : ""}`
         : "Library source";
       setStatus(`Set List: ${getDocument().title} · ${target + 1} of ${getItems().length} · source ${sourceLabel}`);
-      if (status === "FOUND_MODIFIED") showToast("Opened the Library source. It differs from the stored Set List snapshot.", 3600);
       return true;
     }
     if (status === "FOUND_STRONG") {
@@ -389,6 +393,7 @@ function createSetListFeature({
     targetNewButton: elements.targetNewButton,
     targetCancelButton: elements.targetCancelButton,
     targetAddButton: elements.targetAddButton,
+    refreshSourcesButton: elements.refreshSourcesButton,
     defaultHeaderText: DEFAULT_SET_LIST_HEADER_TEXT,
     getState,
     getHeaderText,
@@ -492,6 +497,9 @@ function createSetListFeature({
         if (added) showToast(`Added to ${getDocument().title}.`, 2400);
       }).catch(logError);
     },
+    onRefreshSources: () => {
+      refreshFromLibrarySources().catch(logError);
+    },
     onSaveAbc: () => {
       exportAbc().catch(() => {});
     },
@@ -546,6 +554,102 @@ function createSetListFeature({
       controller.open();
     }
     return inserted;
+  }
+
+  async function syncSourceTuneAfterSave(tuneId, { previousTuneId = "" } = {}) {
+    const currentTuneId = String(tuneId || "").trim();
+    const priorTuneId = String(previousTuneId || "").trim();
+    if (!currentTuneId || !getItems().length) return false;
+
+    const replacement = await buildDocumentItem(currentTuneId);
+    if (!replacement) return false;
+    const replacementSource = replacement.tune && replacement.tune.source
+      ? replacement.tune.source
+      : {};
+    const matchingIndexes = [];
+    getItems().forEach((item, index) => {
+      const source = item && item.tune && item.tune.source ? item.tune.source : {};
+      const locator = String(source.locatorHint || "");
+      const locatorMatches = locator === currentTuneId || (priorTuneId && locator === priorTuneId);
+      const sourceMatches = Boolean(
+        replacementSource.pathHint
+        && replacementSource.xNumberHint
+        && String(source.pathHint || "") === String(replacementSource.pathHint)
+        && String(source.xNumberHint || "") === String(replacementSource.xNumberHint)
+      );
+      if (locatorMatches || sourceMatches) matchingIndexes.push(index);
+    });
+    if (!matchingIndexes.length) return false;
+
+    session.mutate((document) => {
+      for (const index of matchingIndexes) {
+        const previous = document.items[index];
+        document.items[index] = mergeSetListSnapshotAfterSourceSave(previous, replacement, {
+          preserveTranspose: true,
+        });
+      }
+    }, { reason: "source updates" });
+    for (const index of matchingIndexes) {
+      const item = getItems()[index];
+      if (item) itemResolutions.set(item.id, "FOUND_EXACT");
+    }
+    showToast(
+      matchingIndexes.length === 1
+        ? "Updated the Set List item from its saved Library source."
+        : `Updated ${matchingIndexes.length} Set List items from their saved Library source.`,
+      2800,
+    );
+    if (getDocumentState().filePath) await saveSetList(false);
+    return true;
+  }
+
+  async function refreshFromLibrarySources() {
+    const items = getItems().slice();
+    if (!items.length) {
+      showToast("No tunes in Set List.", 2200);
+      return { updated: 0, missing: 0 };
+    }
+
+    const updates = new Map();
+    let missing = 0;
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
+      try {
+        const resolution = await resolveItemSource(item);
+        const status = String(resolution && resolution.status || "MISSING");
+        itemResolutions.set(item.id, status);
+        const trustedSourceMatch = status === "FOUND_STRONG" && resolution.matchedBy === "source";
+        if ((status !== "FOUND_MODIFIED" && !trustedSourceMatch) || !resolution.candidate) {
+          if (!["FOUND_EXACT", "FOUND_STRONG"].includes(status)) missing += 1;
+          continue;
+        }
+        const replacement = await buildDocumentItem(String(resolution.candidate.tuneId || ""));
+        const synchronized = mergeSetListSnapshotAfterSourceSave(item, replacement, {
+          preserveTranspose: true,
+        });
+        if (!synchronized) continue;
+        updates.set(index, synchronized);
+        itemResolutions.set(item.id, "FOUND_EXACT");
+      } catch {
+        itemResolutions.set(item.id, "MISSING");
+        missing += 1;
+      }
+    }
+
+    if (updates.size) {
+      session.mutate((document) => {
+        for (const [index, item] of updates) document.items[index] = item;
+      }, { reason: "source updates" });
+    } else {
+      render();
+    }
+    const updated = updates.size;
+    if (updated) await saveSetList(false);
+    const summary = updated
+      ? `Updated ${updated} Set List ${updated === 1 ? "item" : "items"} from Library.`
+      : "Set List sources are up to date.";
+    showToast(missing ? `${summary} ${missing} unavailable.` : summary, 3200);
+    return { updated, missing };
   }
 
   function clearActiveItem() {
@@ -899,6 +1003,7 @@ function createSetListFeature({
     activateItemAtIndex,
     addTuneById,
     addTuneWithTargetChoice,
+    adjustActivePerformanceTranspose,
     buildExportAbc,
     clearActiveItem,
     close,
@@ -914,10 +1019,12 @@ function createSetListFeature({
     prepareToLeave,
     render,
     renderSvgMarkupForPrint,
+    refreshFromLibrarySources,
     restoreLastSetList,
     restorePanelVisibility,
     runPrintAction,
     saveSetList,
+    syncSourceTuneAfterSave,
     toggle,
     updatePerformance,
     updatePracticeNote,

@@ -95,14 +95,13 @@ export function createScoreInteractionController({
     const editorStart = Math.max(0, mapRenderIdxToEditorOffset(start));
     const editorEndRaw = Number.isFinite(end) && end > start ? end : start + 1;
     const editorEnd = Math.max(editorStart, mapRenderIdxToEditorOffset(editorEndRaw));
-    setPendingPlaybackRangeOrigin("svg");
+    setPendingPlaybackRangeOrigin("score-note");
     setEditorSelectionRange(editorStart, editorEnd);
-    const playbackRange = getPlaybackRange() || {};
     setPlaybackRange({
       startOffset: editorStart,
-      endOffset: editorEnd,
-      origin: "svg",
-      loop: Boolean(playbackRange.loop),
+      endOffset: null,
+      origin: "score-note",
+      loop: false,
     });
     return true;
   }

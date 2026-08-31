@@ -215,6 +215,7 @@ const $templatesManage = document.getElementById("templatesManage");
 const $templatesEdit = document.getElementById("templatesEdit");
 const $templatesReload = document.getElementById("templatesReload");
 const $templatesPreviewTitle = document.getElementById("templatesPreviewTitle");
+const $templatesPreviewScore = document.getElementById("templatesPreviewScore");
 const $templatesPreviewText = document.getElementById("templatesPreviewText");
 const $templatesInsert = document.getElementById("templatesInsert");
 const $templatesReplace = document.getElementById("templatesReplace");
@@ -240,6 +241,7 @@ const $btnLibraryRefresh = document.getElementById("btnLibraryRefresh");
 const $libraryRoot = document.getElementById("libraryRoot");
 const $btnLibraryClearFilter = document.getElementById("btnLibraryClearFilter");
 const $btnToggleLibrary = document.getElementById("btnToggleLibrary");
+const $btnToggleSetList = document.getElementById("btnToggleSetList");
 const $libraryToolbarMenu = document.getElementById("libraryToolbarMenu");
 const $btnLibraryCatalog = document.getElementById("btnLibraryCatalog");
 const $btnCopyActiveFileTuneList = document.getElementById("btnCopyActiveFileTuneList");
@@ -332,6 +334,7 @@ const $setListOpen = document.getElementById("setListOpen");
 const $setListSave = document.getElementById("setListSave");
 const $setListSaveAs = document.getElementById("setListSaveAs");
 const $setListAddCurrent = document.getElementById("setListAddCurrent");
+const $setListRefreshSources = document.getElementById("setListRefreshSources");
 const $setListEmpty = document.getElementById("setListEmpty");
 const $setListItems = document.getElementById("setListItems");
 const $setListHeader = document.getElementById("setListHeader");
@@ -928,6 +931,10 @@ function applySetListPanelVisibility(visible) {
   const nextVisible = Boolean(visible);
   if (setListPanelVisible === nextVisible) return;
   setListPanelVisible = nextVisible;
+  if ($btnToggleSetList) {
+    $btnToggleSetList.classList.toggle("toggle-active", setListPanelVisible);
+    $btnToggleSetList.setAttribute("aria-pressed", setListPanelVisible ? "true" : "false");
+  }
   document.body.classList.toggle("set-list-visible", setListPanelVisible);
   if (libraryRuntime.isVisible()) {
     const width = libraryUiStateController
@@ -956,6 +963,7 @@ const setListFeature = createSetListFeature({
     saveButton: $setListSave,
     saveAsButton: $setListSaveAs,
     addCurrentButton: $setListAddCurrent,
+    refreshSourcesButton: $setListRefreshSources,
     empty: $setListEmpty,
     itemsList: $setListItems,
     headerButton: $setListHeader,
@@ -1023,10 +1031,6 @@ const setListFeature = createSetListFeature({
     resetPlaybackState();
   },
   applyPerformanceView: applySetListPerformanceView,
-  savePerformanceToSource: saveSetListPerformanceToSource,
-  confirmPerformanceSave: (details) => window.api && typeof window.api.confirmSetListPerformanceSave === "function"
-    ? window.api.confirmSetListPerformanceSave(details)
-    : Promise.resolve("cancel"),
   onPerformanceViewStateChange: (context) => setSetListPerformanceReadOnly(Boolean(context)),
   onPanelVisibilityChange: applySetListPanelVisibility,
   getPrintPageMargins: () => String(settingsSnapshot.get()?.printPageMargins || "standard"),
@@ -1692,8 +1696,13 @@ saveFlowController = createSaveFlowController({
     pathsEqual,
     performAppendFlow,
     performRawSaveFlow,
-    reconcileActiveTuneAfterSave: (filePath, updatedFile) =>
-      libraryLifecycleController.reconcileActiveTuneAfterSave(filePath, updatedFile),
+    reconcileActiveTuneAfterSave: async (filePath, updatedFile) => {
+      const previousTuneId = activeContext.getActiveTuneId();
+      const reconciled = libraryLifecycleController.reconcileActiveTuneAfterSave(filePath, updatedFile);
+      if (!reconciled) return false;
+      await setListFeature.syncSourceTuneAfterSave(activeContext.getActiveTuneId(), { previousTuneId });
+      return true;
+    },
     recordRecentAction,
     refreshLibraryFile,
     readFile,
@@ -1730,6 +1739,7 @@ const templatesFeature = createTemplatesFeature({
     search: $templatesSearch,
     folderLabel: $templatesFolderLabel,
     previewTitle: $templatesPreviewTitle,
+    previewScore: $templatesPreviewScore,
     previewText: $templatesPreviewText,
     closeButton: $templatesClose,
     cancelButton: $templatesCancel,
@@ -1742,6 +1752,7 @@ const templatesFeature = createTemplatesFeature({
   },
   api: window.api,
   readFile,
+  renderAbcToSvgMarkup,
   safeBasename,
   enableDraggableModal,
   logError: (message) => logErr(message),
@@ -2123,6 +2134,7 @@ playbackDomain.initialize({
       resetLayoutButton: $btnResetLayout,
       focusModeButton: $btnFocusMode,
       toggleLibraryButton: $btnToggleLibrary,
+      toggleSetListButton: $btnToggleSetList,
       libraryRefreshButton: $btnLibraryRefresh,
       libraryClearFilterButton: $btnLibraryClearFilter,
       groupBySelect: $groupBy,
@@ -3347,17 +3359,6 @@ async function applySetListPerformanceView({ text } = {}) {
   return true;
 }
 
-async function saveSetListPerformanceToSource({ text } = {}) {
-  if (!getCurrentDocument()) return false;
-  resetTransposePreviewState();
-  editorRuntime.setTextClean(String(text || ""));
-  patchCurrentDocument({ content: String(text || ""), dirty: true }, { create: false });
-  setDirtyIndicator(true);
-  scheduleRenderNow({ clearOutput: true, source: "set-list-performance-source" });
-  const saved = await saveFlowController.performSaveFlow();
-  return Boolean(saved);
-}
-
 function alignBarsInEditor() {
   abcTransformFeature.alignBars();
 }
@@ -3643,6 +3644,15 @@ async function openAbout() {
 }
 
 async function applyAbc2abcTransform(options) {
+  if (setListFeature && setListFeature.isPerformanceViewActive()) {
+    const keys = Object.keys(options || {}).filter((key) => options[key] != null && options[key] !== false);
+    if (keys.length === 1 && keys[0] === "transposeSemitones") {
+      await setListFeature.adjustActivePerformanceTranspose(Number(options.transposeSemitones) || 0);
+      return;
+    }
+    showToast("Open the Library source for editing before applying this transform.", 3600);
+    return;
+  }
   await abcTransformFeature.apply(options || {});
 }
 
@@ -3832,6 +3842,7 @@ appCommandsDomain = createAppCommandsDomain({
   },
   elements: {
     toggleLibraryButton: $btnToggleLibrary,
+    toggleSetListButton: $btnToggleSetList,
     libraryToolbarMenu: $libraryToolbarMenu,
     libraryCatalogButton: $btnLibraryCatalog,
     openFolderAsLibraryButton: $btnOpenFolderAsLibrary,

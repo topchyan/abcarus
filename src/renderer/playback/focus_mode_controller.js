@@ -113,13 +113,13 @@ export function createFocusModeController({
   function applyRuntimeTempo(value) {
     const next = clampRuntimeTempoMultiplier(value, transport.practiceTempoMultiplier || 1);
     transport.practiceTempoMultiplier = next;
+    transport.desiredPlayerSpeed = next;
     syncPendingPlaybackPlan();
     if (
       isPlaybackBusy()
       && transport.player
       && typeof transport.player.set_speed === "function"
     ) {
-      transport.desiredPlayerSpeed = next;
       try { transport.player.set_speed(transport.desiredPlayerSpeed); } catch {}
     }
     updatePracticeUi();
@@ -538,7 +538,10 @@ export function createFocusModeController({
         applyRuntimeTempo(next);
       });
       const initial = Number(practiceTempo.value);
-      if (Number.isFinite(initial)) transport.practiceTempoMultiplier = clampRuntimeTempoMultiplier(initial);
+      if (Number.isFinite(initial)) {
+        transport.practiceTempoMultiplier = clampRuntimeTempoMultiplier(initial);
+        transport.desiredPlayerSpeed = transport.practiceTempoMultiplier;
+      }
     }
     if (practiceTempoDown) {
       practiceTempoDown.addEventListener("click", () => {

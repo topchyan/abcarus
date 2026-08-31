@@ -10,6 +10,7 @@ function createTemplatesController({
   list,
   folderLabel,
   previewTitle,
+  previewScore,
   previewText,
   closeButton,
   cancelButton,
@@ -21,6 +22,7 @@ function createTemplatesController({
   editButton,
   api,
   readFile,
+  renderAbcToSvgMarkup,
   safeBasename,
   enableDraggableModal,
   onInsert,
@@ -33,6 +35,7 @@ function createTemplatesController({
   let index = null;
   let items = [];
   let selectedKey = "";
+  let previewRenderSeq = 0;
 
   const view = createTemplatesView({
     list,
@@ -83,7 +86,41 @@ function createTemplatesController({
     modal.classList.remove("open");
     modal.setAttribute("aria-hidden", "true");
     selectedKey = "";
+    previewRenderSeq += 1;
     view.resetSelection();
+  }
+
+  async function renderNotationPreview(text, key) {
+    if (!previewScore) return;
+    const seq = (previewRenderSeq += 1);
+    const source = String(text || "").trim();
+    previewScore.textContent = "";
+    if (!source || typeof renderAbcToSvgMarkup !== "function") return;
+
+    previewScore.textContent = "Rendering notation preview...";
+    let previewAbc = source;
+    if (!/^[\t ]*X:/m.test(previewAbc)) {
+      previewAbc = /^[\t ]*K:/m.test(previewAbc)
+        ? `X:1\n${previewAbc}`
+        : `X:1\nM:4/4\nL:1/8\nK:C\n${previewAbc}`;
+    }
+    previewAbc = `%%pagewidth 18cm\n%%scale 1.6\n%%leftmargin 0.4cm\n%%rightmargin 0.4cm\n%%topspace 0\n${previewAbc}\n`;
+
+    try {
+      const result = await renderAbcToSvgMarkup(previewAbc, {
+        suppressGlobalErrors: true,
+        stopOnFirstError: true,
+      });
+      if (seq !== previewRenderSeq || key !== selectedKey) return;
+      if (!result || !result.ok || !result.svg) {
+        previewScore.textContent = "Notation preview unavailable.";
+        return;
+      }
+      previewScore.innerHTML = result.svg;
+    } catch {
+      if (seq !== previewRenderSeq || key !== selectedKey) return;
+      previewScore.textContent = "Notation preview unavailable.";
+    }
   }
 
   function renderList() {
@@ -116,11 +153,14 @@ function createTemplatesController({
     renderList();
     if (!item) {
       view.renderPreview(null, "");
+      previewRenderSeq += 1;
+      if (previewScore) previewScore.textContent = "";
       return;
     }
     const full = await getTemplateText(item.filePath);
     const slice = getTemplateSlice(full, item);
     view.renderPreview(item, slice);
+    renderNotationPreview(slice, item.key).catch(() => {});
   }
 
   async function load() {
