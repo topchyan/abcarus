@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [1.8.3] - 2026-08-31
 ### Added
 - The main toolbar now exposes the Set List panel directly, and an opened Set List can refresh its tune snapshots from Library sources with one command.
 - Templates now show a rendered notation preview together with their X, key, and meter metadata.
@@ -18,7 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Saving or refreshing a Library tune now synchronizes matching Set List snapshots and keys, including portable/mobile source locators, and saves the refreshed Set List automatically.
 - Runtime tempo changes now apply from the first playback start instead of taking effect only after playback has begun.
 - Clicking a score note now starts playback from that exact note instead of snapping to an earlier measure or reusing stale pause/restart state.
-
 
 ## [1.8.2] - 2026-08-28
 ### Changed
