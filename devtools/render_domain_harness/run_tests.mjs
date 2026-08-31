@@ -127,6 +127,7 @@ const { createHeaderLayersController } = await importBundledModule(
     pickClosestNoteElement: (elements) => elements[0] || null,
     setEditorSelectionRange: (start, end) => selections.push([start, end]),
     setPendingPlaybackRangeOrigin: (origin) => origins.push(origin),
+    getPlaybackRange: () => ({ loop: true }),
     setPlaybackRange: (range) => playbackRanges.push(range),
     setTimeoutRef: (callback) => callback(),
     clearTimeoutRef: () => {},

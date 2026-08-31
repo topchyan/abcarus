@@ -11,6 +11,7 @@ export function createScoreInteractionController({
   pickClosestNoteElement = () => null,
   setEditorSelectionRange = () => {},
   setPendingPlaybackRangeOrigin = () => {},
+  getPlaybackRange = () => ({ loop: false }),
   setPlaybackRange = () => {},
   isFocusModeEnabled = () => false,
   selectFocusMeasureAtRenderOffset = () => null,
