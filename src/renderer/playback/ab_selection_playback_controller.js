@@ -186,6 +186,7 @@ function createAbSelectionPlaybackController({
     const sel = editorView.state.selection.main;
     const text = typeof getEditorText === "function" ? getEditorText() : "";
     const pendingRange = typeof getPlaybackRange === "function" ? getPlaybackRange() : null;
+    if (pendingRange && pendingRange.origin === "score-note") return false;
     const isExplicitScoreSelection = Boolean(
       pendingRange
       && pendingRange.origin === "selection"

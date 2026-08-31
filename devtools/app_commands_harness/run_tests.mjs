@@ -28,6 +28,7 @@ function createButton() {
 
 const newTuneButton = createButton();
 const toggleLibraryButton = createButton();
+const toggleSetListButton = createButton();
 const libraryCatalogButton = createButton();
 const openFolderAsLibraryButton = createButton();
 const libraryToolbarMenu = {
@@ -59,6 +60,7 @@ const domain = createAppCommandsDomain({
   elements: {
     newTuneButton,
     toggleLibraryButton,
+    toggleSetListButton,
     libraryToolbarMenu,
     libraryCatalogButton,
     openFolderAsLibraryButton,
@@ -88,6 +90,8 @@ assert.equal(newTuneCalls, 1, "New Tune toolbar button must dispatch the canonic
 toggleLibraryButton.click({ shiftKey: true });
 assert.equal(toggleLibraryCalls, 1, "Library primary action must always toggle the Tree");
 assert.equal(libraryCatalogCalls, 0, "Library Catalog must not depend on hidden Shift-click behavior");
+toggleSetListButton.click();
+assert.equal(toggleSetListCalls, 1, "Set List toolbar button must toggle the docked panel");
 libraryCatalogButton.click();
 assert.equal(libraryToolbarMenu.open, false);
 assert.equal(libraryCatalogCalls, 1, "Library dropdown must expose Catalog");
@@ -106,7 +110,7 @@ await domain.dispatch("toggleSetList");
 await domain.dispatch("printSetList");
 await domain.dispatch("stopPlayback");
 await domain.dispatch({ type: "toggleSelectionLoop", value: true });
-assert.equal(toggleSetListCalls, 1, "View -> Show/Hide Set List Panel must toggle the docked panel");
+assert.equal(toggleSetListCalls, 2, "View -> Show/Hide Set List Panel must share the toolbar action");
 assert.equal(printSetListCalls, 1, "File -> Print Active Set List must print the active Set List");
 assert.equal(stopPlaybackCalls, 1, "Play -> Stop must stop playback");
 assert.deepEqual(settingsPatches.at(-1), { playbackSelectionLoopEnabled: true }, "Play -> Options -> Loop Selection must persist its setting");

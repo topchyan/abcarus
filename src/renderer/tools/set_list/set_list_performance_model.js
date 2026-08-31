@@ -9,6 +9,12 @@ function clampSetListTransposeSemitones(value) {
   return Math.max(-48, Math.min(48, Math.trunc(parsed)));
 }
 
+function extractSetListPerformanceKey(text, fallback = "") {
+  const match = String(text || "").match(/^[\t ]*K:[\t ]*([^\r\n]*)/m);
+  const key = match ? String(match[1] || "").trim() : "";
+  return key || String(fallback || "").trim();
+}
+
 function buildSetListPerformanceView({ sourceText = "", headerText = "", transposeSemitones = 0 } = {}) {
   const text = String(sourceText || "");
   const semitones = clampSetListTransposeSemitones(transposeSemitones);
@@ -38,14 +44,16 @@ function buildSetListPerformanceView({ sourceText = "", headerText = "", transpo
   }
 }
 
-function mergeSetListSnapshotAfterSourceSave(previous, replacement) {
+function mergeSetListSnapshotAfterSourceSave(previous, replacement, { preserveTranspose = false } = {}) {
   if (!previous || !replacement) return null;
   return {
     ...replacement,
     id: previous.id,
     performance: {
       ...replacement.performance,
-      transposeSemitones: 0,
+      transposeSemitones: preserveTranspose
+        ? clampSetListTransposeSemitones(previous.performance && previous.performance.transposeSemitones)
+        : 0,
       tempoScale: Number(previous.performance && previous.performance.tempoScale) || 1,
     },
     notes: String(previous.notes || ""),
@@ -57,5 +65,6 @@ function mergeSetListSnapshotAfterSourceSave(previous, replacement) {
 export {
   buildSetListPerformanceView,
   clampSetListTransposeSemitones,
+  extractSetListPerformanceKey,
   mergeSetListSnapshotAfterSourceSave,
 };

@@ -145,6 +145,18 @@ assert.equal(resolveFocusMeasureNumberAtRenderOffset(scoreMeasureIndex, 220), 3)
     "an accidental short editor selection must keep the existing intent gate",
   );
   assert.equal(playbackStarts.length, 0);
+
+  pendingRange = {
+    startOffset: 10,
+    endOffset: null,
+    origin: "score-note",
+    loop: false,
+  };
+  assert.equal(
+    await scoreSelectionController.playSelectionOnce(),
+    false,
+    "a clicked score note is a start anchor, not a bounded selection playback request",
+  );
 }
 
 const endState = createPlaybackTransportState();
@@ -161,6 +173,7 @@ endState.consumePlaybackEnd();
 assert.equal(endState.restartOnNextPlay, false);
 
 const startCalls = [];
+const rangeStartSpeeds = [];
 const controllerTransport = createPlaybackTransportState();
 controllerTransport.restartOnNextPlay = true;
 const controller = createPlaybackTransportController({
@@ -168,7 +181,7 @@ const controller = createPlaybackTransportController({
   getEditorView: () => ({ state: { doc: { length: 10 }, selection: { main: { anchor: 9, head: 9 } } } }),
   getFocusModeEnabled: () => false,
   startPlaybackAtIndex: async (index) => startCalls.push(index),
-  startPlaybackFromRange: async () => {},
+  startPlaybackFromRange: async () => rangeStartSpeeds.push(controllerTransport.desiredPlayerSpeed),
   pausePlayback: () => {},
   playSelectionOnce: async () => false,
   updatePlayButton: () => {},
@@ -185,7 +198,35 @@ assert.equal(
 );
 await controller.transportPlay();
 assert.deepEqual(startCalls, [0]);
+assert.equal(controllerTransport.desiredPlayerSpeed, 0.75);
 assert.equal(controllerTransport.restartOnNextPlay, false);
+
+controllerTransport.practiceTempoMultiplier = 0.6;
+await controller.transportPlay();
+assert.deepEqual(rangeStartSpeeds, [0.6]);
+assert.equal(
+  controllerTransport.desiredPlayerSpeed,
+  0.6,
+  "the runtime tempo selected before Play must reach the first playback start",
+);
+
+controllerTransport.isPaused = true;
+controllerTransport.restartOnNextPlay = true;
+controllerTransport.resumeStartIdx = 3;
+controller.setPlaybackRange({
+  startOffset: 9,
+  endOffset: null,
+  origin: "score-note",
+  loop: false,
+});
+assert.equal(controllerTransport.isPaused, false);
+assert.equal(controllerTransport.restartOnNextPlay, false);
+assert.equal(controllerTransport.resumeStartIdx, null);
+assert.equal(
+  controller.buildTransportPlaybackPlan().rangeStart,
+  9,
+  "a clicked score note must override measure snapping and stale resume/restart state",
+);
 
 const trace = [];
 const transport = {

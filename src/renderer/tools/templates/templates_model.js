@@ -19,6 +19,8 @@ function buildTemplatesFlatList(files, { safeBasename } = {}) {
           xNumber: tune.xNumber ? String(tune.xNumber) : "",
           title: tune.title ? String(tune.title) : "",
           composer: tune.composer ? String(tune.composer) : "",
+          keySignature: tune.key ? String(tune.key) : "",
+          meter: tune.meter ? String(tune.meter) : "",
           preview: tune.preview ? String(tune.preview) : "",
         });
       }
@@ -34,6 +36,8 @@ function buildTemplatesFlatList(files, { safeBasename } = {}) {
           xNumber: "",
           title: fileBasename || "Untitled",
           composer: "",
+          keySignature: "",
+          meter: "",
           preview: "Full file",
         });
       }
@@ -47,16 +51,18 @@ function filterTemplates(items, query) {
   const source = Array.isArray(items) ? items : [];
   if (!q) return source;
   return source.filter((item) => {
-    const hay = `${item.title} ${item.composer} ${item.xNumber} ${item.fileBasename}`.toLowerCase();
+    const hay = `${item.title} ${item.composer} ${item.xNumber} ${item.keySignature} ${item.meter} ${item.fileBasename}`.toLowerCase();
     return hay.includes(q);
   });
 }
 
 function getTemplateSubtitle(item) {
-  const x = item && item.xNumber ? `X:${item.xNumber}` : "X:";
-  const c = item && item.composer ? ` · ${item.composer}` : "";
-  const src = item && item.preview === "Full file" ? " · full file" : "";
-  return `${x}${c}${src}`;
+  const parts = [item && item.xNumber ? `X:${item.xNumber}` : "X:"];
+  if (item && item.keySignature) parts.push(`K:${item.keySignature}`);
+  if (item && item.meter) parts.push(`M:${item.meter}`);
+  if (item && item.composer) parts.push(item.composer);
+  if (item && item.preview === "Full file") parts.push("full file");
+  return parts.join(" · ");
 }
 
 function getTemplateDisplayTitle(item) {

@@ -13,6 +13,10 @@ function formatMidiButtonLabel(state) {
   return "MIDI: on";
 }
 
+function shouldShowMidiStatusButton(state) {
+  return Boolean(state && state.enabled);
+}
+
 function clamp01(value) {
   const raw = Number(value);
   if (!Number.isFinite(raw)) return 0;
@@ -86,8 +90,9 @@ export function createMidiInputPopoverController({
     if (!enabled) statusButton.classList.add("midi-off");
     else if (muted) statusButton.classList.add("midi-muted");
     else statusButton.classList.add("midi-on");
-    statusButton.classList.remove("hidden");
-    statusButton.style.display = "";
+    const showStatusButton = shouldShowMidiStatusButton(state);
+    statusButton.classList.toggle("hidden", !showStatusButton);
+    statusButton.style.display = showStatusButton ? "" : "none";
 
     if (enabledControl) enabledControl.checked = enabled;
     setCollapseState(enabledDependent, enabled);
@@ -236,3 +241,5 @@ export function createMidiInputPopoverController({
     isOpen: () => open,
   };
 }
+
+export { shouldShowMidiStatusButton };

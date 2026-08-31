@@ -124,11 +124,17 @@ function createPlaybackTransportController({
         focusPlan: focusResult.plan,
       };
     }
+    const playbackRange = transport.playbackRange || null;
+    const scoreNoteStart = playbackRange && playbackRange.origin === "score-note"
+      ? Number(playbackRange.startOffset)
+      : NaN;
     return {
       mode: "transport",
       invalid: false,
       invalidReason: "",
-      rangeStart: getEditorMeasureStartOffset(),
+      rangeStart: Number.isFinite(scoreNoteStart)
+        ? Math.max(0, scoreNoteStart)
+        : getEditorMeasureStartOffset(),
       rangeEnd: null,
       loopEnabled: false,
       tempoMultiplier,
@@ -184,6 +190,13 @@ function createPlaybackTransportController({
     }
 
     transport.setRange(nextRange);
+    if (nextRange.origin === "score-note") {
+      transport.isPaused = false;
+      transport.resumeStartIdx = null;
+      transport.pausedSelectionSignature = null;
+      transport.restartOnNextPlay = false;
+      transport.pendingPlaybackPlan = null;
+    }
   }
 
   function updatePlaybackRangeFromSelection(selection, origin, activeErrorHighlight = null) {
@@ -283,10 +296,12 @@ function createPlaybackTransportController({
 
     const completed = consumeCompletedPlaybackRestart();
     if (completed && !focusModeEnabled) {
+      applyPlaybackPlanSpeed(buildTransportPlaybackPlan());
       await startPlaybackAtIndex(0);
       return;
     }
 
+    applyPlaybackPlanSpeed(transport.pendingPlaybackPlan || buildTransportPlaybackPlan());
     if (await playSelectionOnce()) return;
 
     const plan = transport.pendingPlaybackPlan || buildTransportPlaybackPlan();
@@ -331,6 +346,7 @@ function createPlaybackTransportController({
     if (editorView) {
       editorView.dispatch({ selection: { anchor: 0, head: 0 }, scrollIntoView: true });
     }
+    applyPlaybackPlanSpeed(buildTransportPlaybackPlan());
     await startPlaybackAtIndex(0);
   }
 
@@ -346,6 +362,7 @@ function createPlaybackTransportController({
         showToast(plan.invalidReason || "Cannot start Focus playback.", 3200);
         return;
       }
+      applyPlaybackPlanSpeed(plan);
       await startPlaybackFromRange({
         startOffset: getResumeStartOffset(plan),
         endOffset: plan.rangeEnd,
@@ -355,11 +372,18 @@ function createPlaybackTransportController({
       return;
     }
     if (consumeCompletedPlaybackRestart() && !focusModeEnabled) {
+      applyPlaybackPlanSpeed(buildTransportPlaybackPlan());
       await startPlaybackAtIndex(0);
       return;
     }
-    const startOffset = getEditorMeasureStartOffset();
-    await startPlaybackFromRange({ startOffset, endOffset: null, origin: "transport", loop: false });
+    const plan = buildTransportPlaybackPlan();
+    applyPlaybackPlanSpeed(plan);
+    await startPlaybackFromRange({
+      startOffset: plan.rangeStart,
+      endOffset: plan.rangeEnd,
+      origin: "transport",
+      loop: plan.loopEnabled,
+    });
   }
 
   async function transportPlay() {
@@ -372,6 +396,7 @@ function createPlaybackTransportController({
         showToast(plan.invalidReason || "Cannot start Focus playback.", 3200);
         return;
       }
+      applyPlaybackPlanSpeed(plan);
       await startPlaybackFromRange({
         startOffset: getResumeStartOffset(plan),
         endOffset: plan.rangeEnd,
@@ -382,6 +407,7 @@ function createPlaybackTransportController({
     }
     const completed = consumeCompletedPlaybackRestart();
     if (completed && !focusModeEnabled) {
+      applyPlaybackPlanSpeed(buildTransportPlaybackPlan());
       await startPlaybackAtIndex(0);
       return;
     }
@@ -400,9 +426,15 @@ function createPlaybackTransportController({
       });
       return;
     }
+    applyPlaybackPlanSpeed(buildTransportPlaybackPlan());
     if (await playSelectionOnce()) return;
-    const startOffset = getEditorMeasureStartOffset();
-    await startPlaybackFromRange({ startOffset, endOffset: null, origin: "transport", loop: false });
+    const plan = buildTransportPlaybackPlan();
+    await startPlaybackFromRange({
+      startOffset: plan.rangeStart,
+      endOffset: plan.rangeEnd,
+      origin: "transport",
+      loop: plan.loopEnabled,
+    });
   }
 
   async function transportPause() {
@@ -418,6 +450,7 @@ function createPlaybackTransportController({
         showToast(plan.invalidReason || "Cannot start Focus playback.", 3200);
         return;
       }
+      applyPlaybackPlanSpeed(plan);
       await startPlaybackFromRange({
         startOffset: getResumeStartOffset(plan),
         endOffset: plan.rangeEnd,

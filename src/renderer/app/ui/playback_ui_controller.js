@@ -12,6 +12,7 @@ function createPlaybackUiController({
     resetLayoutButton = null,
     focusModeButton = null,
     toggleLibraryButton = null,
+    toggleSetListButton = null,
     libraryRefreshButton = null,
     libraryClearFilterButton = null,
     groupBySelect = null,
@@ -129,6 +130,7 @@ function createPlaybackUiController({
     disable(focusModeButton, true);
 
     disable(toggleLibraryButton);
+    disable(toggleSetListButton);
     disable(libraryRefreshButton);
     disable(libraryClearFilterButton);
     disable(groupBySelect);
