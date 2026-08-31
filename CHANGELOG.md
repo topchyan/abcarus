@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Standard chord symbols now produce the default abc2svg accompaniment even when a tune does not contain an explicit `%%MIDI gchord` pattern, including selection playback.
 
 
 ## [1.8.3] - 2026-08-31

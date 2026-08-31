@@ -27,6 +27,9 @@ const { createPlaybackTransportState } = await importBundledModule(
 const { createPlaybackTransportController } = await importBundledModule(
   "src/renderer/playback/playback_transport_controller.js",
 );
+const { injectGchordOn } = await importBundledModule(
+  "src/renderer/playback/playback_payload_model.js",
+);
 const { createAbSelectionPlaybackController } = await importBundledModule(
   "src/renderer/playback/ab_selection_playback_controller.js",
 );
@@ -41,6 +44,26 @@ const {
 } = await importBundledModule(
   "src/renderer/playback/focus_score_selection_model.js",
 );
+
+{
+  const bobFixture = `X:110
+T:Lady Walpole's Reel
+M:C|
+L:1/8
+K:Bb
+"^A"[|] F2 |
+"Bb"B2d2 "F7"decd | "Eb"EDEG "Bb"D2B,2 ||
+`;
+  const enabled = injectGchordOn(bobFixture, bobFixture.indexOf("X:110"));
+  assert.equal(enabled.changed, true, "ordinary chord symbols must enable default abc2svg accompaniment");
+  assert.match(enabled.text, /^%%MIDI gchordon\nX:110/);
+
+  const annotationOnly = injectGchordOn('X:1\nK:C\n"^A" CDEF |\n', 0);
+  assert.equal(annotationOnly.changed, false, "quoted annotations must not enable accompaniment");
+
+  const explicitlyMuted = injectGchordOn('%%MIDI gchordoff\nX:1\nK:C\n"C" CDEF |\n', 0);
+  assert.equal(explicitlyMuted.changed, false, "an explicit gchord toggle must remain authoritative");
+}
 
 assert.deepEqual(
   advanceFocusScoreSelection({ fromMeasure: 0, toMeasure: 0, awaitingEnd: false }, 6),

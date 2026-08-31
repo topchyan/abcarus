@@ -210,6 +210,7 @@ function injectGchordOn(text, insertAt) {
   const lines = String(text || "").split(/\r\n|\n|\r/);
   let hasGchordPattern = false;
   let hasGchordToggle = false;
+  let hasChordSymbol = false;
   let inTextBlock = false;
 
   for (const rawLine of lines) {
@@ -231,10 +232,20 @@ function injectGchordOn(text, insertAt) {
     }
     if (/^%%MIDI\s+gchord\b/i.test(trimmed)) {
       hasGchordPattern = true;
+      continue;
+    }
+    if (/^%%/.test(trimmed) || /^\s*[A-Za-z]:/.test(rawLine)) continue;
+    const quoted = rawLine.matchAll(/"([^"]*)"/g);
+    for (const match of quoted) {
+      const value = String(match[1] || "").trim();
+      if (/^[A-Ga-g][#b♯♭]?(?:$|[0-9(+/\-]|[ø°o]|m(?![a-z])|maj|min|dim|aug|sus|add|no|omit)/i.test(value)) {
+        hasChordSymbol = true;
+        break;
+      }
     }
   }
 
-  if (!hasGchordPattern || hasGchordToggle) {
+  if ((!hasGchordPattern && !hasChordSymbol) || hasGchordToggle) {
     return { text, changed: false, offsetDelta: 0 };
   }
 

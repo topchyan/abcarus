@@ -114,11 +114,19 @@ function createPlaybackPayloadController({
 
     if (selectionRuntime.isSelectionMode()) {
       const prefixPayload = buildHeaderPrefix(isChordProActive() ? "" : getActiveEntryHeader(), false, tuneText);
-      const text = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
+      const baseText = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
+      const injected = skipGchords
+        ? { text: baseText, changed: false, offsetDelta: 0 }
+        : injectGchordOn(baseText, prefixPayload.offset || 0);
+      const text = injected.changed ? injected.text : baseText;
       const lineOffset = isChordProActive() ? countLinesForPrefix(prefixPayload.text) + (lineOffsetBase || 0) : null;
       transport.setPayloadMeta();
       transport.clearPreparedPlaybackKey();
-      return { text, offset: (prefixPayload.offset || 0), lineOffset };
+      return {
+        text,
+        offset: (prefixPayload.offset || 0) + (injected.offsetDelta || 0),
+        lineOffset,
+      };
     }
 
     const prefixPayload = buildHeaderPrefix(isChordProActive() ? "" : getActiveEntryHeader(), false, tuneText);
