@@ -33,11 +33,21 @@ function getSetListDragKind(event, internalIndex = null) {
   return Number.isInteger(internalIndex) ? "set-list-item" : "";
 }
 
+function formatSetListUpdatedAt(value) {
+  const date = new Date(String(value || ""));
+  if (!Number.isFinite(date.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
 function createSetListController({
   modal,
   closeButton,
   titleInput,
   dirtySummary,
+  lastUpdated,
   quickSaveButton,
   newButton,
   openButton,
@@ -54,6 +64,10 @@ function createSetListController({
   pageBreaksSelect,
   pageMarginsSelect,
   compactCheckbox,
+  titlePageCheckbox,
+  tuneIndexSelect,
+  numberTunesCheckbox,
+  indexQrCodesCheckbox,
   headerModal,
   headerCloseButton,
   headerText,
@@ -101,6 +115,10 @@ function createSetListController({
   onPageBreaksChange,
   onPageMarginsChange,
   onCompactChange,
+  onTitlePageChange,
+  onTuneIndexChange,
+  onNumberTunesChange,
+  onIndexQrCodesChange,
   onHeaderTextChange,
   onTitleChange,
   onNew,
@@ -139,9 +157,14 @@ function createSetListController({
       pageBreaks: state.pageBreaks || "perTune",
       pageMargins: state.pageMargins || "standard",
       compact: Boolean(state.compact),
+      titlePage: Boolean(state.titlePage),
+      tuneIndex: ["none", "compact", "incipits"].includes(state.tuneIndex) ? state.tuneIndex : "none",
+      numberTunes: Boolean(state.numberTunes),
+      indexQrCodes: Boolean(state.indexQrCodes),
       title: String(state.title || "Untitled Set List"),
       dirty: Boolean(state.dirty),
       dirtyReasons: Array.isArray(state.dirtyReasons) ? state.dirtyReasons : [],
+      persistedUpdatedAt: String(state.persistedUpdatedAt || ""),
       notice: String(state.notice || ""),
       canAddCurrentTune: Boolean(state.canAddCurrentTune),
       activeItemId: String(state.activeItemId || ""),
@@ -242,6 +265,13 @@ function createSetListController({
     if (pageBreaksSelect) pageBreaksSelect.value = state.pageBreaks;
     if (pageMarginsSelect) pageMarginsSelect.value = state.pageMargins;
     if (compactCheckbox) compactCheckbox.checked = state.compact;
+    if (titlePageCheckbox) titlePageCheckbox.checked = state.titlePage;
+    if (tuneIndexSelect) tuneIndexSelect.value = state.tuneIndex;
+    if (numberTunesCheckbox) numberTunesCheckbox.checked = state.numberTunes;
+    if (indexQrCodesCheckbox) {
+      indexQrCodesCheckbox.checked = state.indexQrCodes;
+      indexQrCodesCheckbox.disabled = state.tuneIndex === "none";
+    }
     const dirtyLabel = state.dirtyReasons.length
       ? `Unsaved: ${state.dirtyReasons.join(", ")}`
       : (state.dirty ? "Unsaved changes" : "");
@@ -249,6 +279,13 @@ function createSetListController({
       dirtySummary.hidden = !state.dirty;
       dirtySummary.textContent = dirtyLabel;
       dirtySummary.title = dirtyLabel;
+    }
+    if (lastUpdated) {
+      const formatted = formatSetListUpdatedAt(state.persistedUpdatedAt);
+      lastUpdated.textContent = `Last updated: ${formatted || "Not saved"}`;
+      lastUpdated.title = state.persistedUpdatedAt || "This Set List has not been saved yet.";
+      if (state.persistedUpdatedAt) lastUpdated.setAttribute("datetime", state.persistedUpdatedAt);
+      else lastUpdated.removeAttribute("datetime");
     }
     if (titleInput && document.activeElement !== titleInput) {
       titleInput.value = `${state.title}${state.dirty ? " *" : ""}`;
@@ -790,6 +827,34 @@ function createSetListController({
     });
   }
 
+  if (titlePageCheckbox) {
+    titlePageCheckbox.addEventListener("change", () => {
+      if (typeof onTitlePageChange === "function") onTitlePageChange(Boolean(titlePageCheckbox.checked));
+      render();
+    });
+  }
+
+  if (tuneIndexSelect) {
+    tuneIndexSelect.addEventListener("change", () => {
+      if (typeof onTuneIndexChange === "function") onTuneIndexChange(String(tuneIndexSelect.value || "none"));
+      render();
+    });
+  }
+
+  if (numberTunesCheckbox) {
+    numberTunesCheckbox.addEventListener("change", () => {
+      if (typeof onNumberTunesChange === "function") onNumberTunesChange(Boolean(numberTunesCheckbox.checked));
+      render();
+    });
+  }
+
+  if (indexQrCodesCheckbox) {
+    indexQrCodesCheckbox.addEventListener("change", () => {
+      if (typeof onIndexQrCodesChange === "function") onIndexQrCodesChange(Boolean(indexQrCodesCheckbox.checked));
+      render();
+    });
+  }
+
   if (saveAbcButton) {
     saveAbcButton.addEventListener("click", () => {
       const state = readState();
@@ -844,6 +909,7 @@ function createSetListController({
 
 export {
   createSetListController,
+  formatSetListUpdatedAt,
   getDropInsertionIndex,
   getMoveTargetIndex,
   getSetListDragKind,

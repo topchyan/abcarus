@@ -137,6 +137,12 @@ tunes. Save one program per `*.abcarus-setlist.json` file; use `Export ABC…`,
 Export/print:
 - `Export ABC…` saves a new `.abc` file.
 - `Export PDF…` / `Print…` render the assembled list as a printable document.
+- The Set List `Layout` menu can add a title page, a compact index, or an
+  index with notation incipits. It can also number printed tunes and include
+  QR links for tunes with a valid `F:` source URL.
+- Index incipits follow the Set List occurrence's performance key. Index rows
+  can also show the saved runtime tempo and practice note without changing the
+  source tune.
 
 Important notes:
 - Export normalizes `X:` as `1..N` in the exported/printed output (to encode order and avoid conflicts).

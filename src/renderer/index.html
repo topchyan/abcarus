@@ -387,6 +387,27 @@
 	              <input id="setListCompact" type="checkbox" />
 	              <span>Compact spacing</span>
 	            </label>
+	            <span class="set-list-menu-sep" aria-hidden="true"></span>
+	            <label class="set-list-menu-check">
+	              <input id="setListTitlePage" type="checkbox" />
+	              <span>Title page</span>
+	            </label>
+	            <label class="set-list-menu-field">
+	              <span>Tune index</span>
+	              <select id="setListTuneIndex">
+	                <option value="none">Off</option>
+	                <option value="compact">Compact</option>
+	                <option value="incipits">With incipits</option>
+	              </select>
+	            </label>
+	            <label class="set-list-menu-check">
+	              <input id="setListNumberTunes" type="checkbox" />
+	              <span>Number printed tunes</span>
+	            </label>
+	            <label class="set-list-menu-check">
+	              <input id="setListIndexQrCodes" type="checkbox" />
+	              <span>Index QR codes</span>
+	            </label>
 	          </div>
 	        </details>
 	        <details class="set-list-menu">
@@ -406,6 +427,9 @@
 	          Use Edit &gt; Add Active Tune, or Add to Set List from a tune in Library.
 	        </div>
 	        <div id="setListItems" class="set-list-items" hidden></div>
+	      </div>
+	      <div class="set-list-panel-footer">
+	        <time id="setListLastUpdated">Last updated: Not saved</time>
 	      </div>
 	    </aside>
 

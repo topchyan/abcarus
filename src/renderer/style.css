@@ -3138,6 +3138,19 @@ body.set-list-visible .set-list-divider {
   background: #fafafa;
 }
 
+.set-list-panel-footer {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border-top: 1px solid var(--border-color);
+  background: var(--panel-bg);
+  color: var(--muted-text);
+  font-size: 11px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .set-list-menubar {
   position: relative;
   z-index: 2;

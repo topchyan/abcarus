@@ -1475,6 +1475,25 @@ function buildPrintHtml(svgMarkup, fontBase64, suggestedName) {
             } catch (_e) {}
           }
         }
+        function cropSetListIncipitBounds() {
+          const svgs = Array.from(document.querySelectorAll(".set-list-index-incipit svg"));
+          for (const svg of svgs) {
+            try {
+              if (!svg || !svg.getBBox) continue;
+              const bbox = svg.getBBox();
+              if (!bbox || !Number.isFinite(bbox.width) || !Number.isFinite(bbox.height) || bbox.width <= 0 || bbox.height <= 0) continue;
+              const padX = 2;
+              const padY = 2;
+              const minX = Math.floor(bbox.x - padX);
+              const minY = Math.floor(bbox.y - padY);
+              const width = Math.max(1, Math.ceil(bbox.x + bbox.width + padX) - minX);
+              const height = Math.max(1, Math.ceil(bbox.y + bbox.height + padY) - minY);
+              svg.setAttribute("viewBox", minX + " " + minY + " " + width + " " + height);
+              svg.setAttribute("width", width + "px");
+              svg.setAttribute("height", height + "px");
+            } catch (_e) {}
+          }
+        }
         function alignSourceSections() {
           const sections = Array.from(document.querySelectorAll(".abcarus-print-source"));
           for (const section of sections) {
@@ -1542,6 +1561,7 @@ function buildPrintHtml(svgMarkup, fontBase64, suggestedName) {
           });
         }
         window._rasterReadyPromise = waitForFonts().then(function () {
+          cropSetListIncipitBounds();
           if (!skipNormalizeSvgBounds) normalizeSvgBounds();
           alignSourceSections();
           if (skipRaster) return null;

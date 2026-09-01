@@ -1,5 +1,6 @@
 import {
   DEFAULT_SET_LIST_HEADER_TEXT,
+  SET_LIST_SCHEMA_V2,
   convertLegacySetListState,
   hashSetListAbc,
   insertSetListDocumentItem,
@@ -12,13 +13,19 @@ import {
 } from "./set_list_session.js";
 import { createSetListController } from "./set_list_controller.js";
 import {
+  buildSetListCoverMarkup,
   buildSetListExportAbc,
+  buildSetListIncipitAbc,
+  buildSetListIndexMarkup,
   composeSetListRenderHeader,
   getPrintableSetListItems,
   getSetListFileHeaderText,
+  formatSetListIndexTempo,
   namespaceSetListSvgIds,
+  numberSetListTuneTitle,
   shouldInjectNewPageBeforeTune,
 } from "../../print/set_list_markup.js";
+import { collectPrintSources } from "../../print/source_link_markup.js";
 import {
   buildPrintErrorCard,
   buildPrintErrorSummary,
@@ -64,6 +71,7 @@ function createSetListFeature({
   setPrintPageMargins = async () => {},
   renderItemToSvg = async () => ({ ok: false, error: "Render unavailable." }),
   buildSourceLinkMarkup = async () => "",
+  createQrDataUrl = async () => "",
   outputPrint = async () => ({ ok: false, error: "Print unavailable." }),
   saveAbc = async () => false,
   getExportBaseName = () => "set-list",
@@ -116,6 +124,11 @@ function createSetListFeature({
       dirtyReasons: state.dirtyReasons,
       pageMargins: getPrintPageMargins(),
       filePath: state.filePath,
+      persistedUpdatedAt: state.persistedUpdatedAt,
+      titlePage: Boolean(state.document.print.titlePage),
+      tuneIndex: state.document.print.tuneIndex || "none",
+      numberTunes: Boolean(state.document.print.numberTunes),
+      indexQrCodes: Boolean(state.document.print.indexQrCodes),
       notice: legacyImported
         ? "Imported from the previous ABCarus Set List. Use Save As to keep it as a portable document."
         : "",
@@ -125,6 +138,12 @@ function createSetListFeature({
     };
   };
   const getHeaderText = () => getDocument().print.headerText;
+  const updatePresentation = (mutator) => {
+    session.mutate((document) => {
+      document.schema = SET_LIST_SCHEMA_V2;
+      mutator(document.print);
+    }, { reason: "layout" });
+  };
   const getSuggestedBaseName = () => (
     sanitizeFileBaseName(getDocument().title || "Untitled Set List") || "Untitled Set List"
   );
@@ -173,6 +192,7 @@ function createSetListFeature({
       originalKey: item.tune.key,
       performanceKey: getPerformanceKey(item),
       transposeSemitones: Number(item.performance && item.performance.transposeSemitones) || 0,
+      tempoScale: Number(item.performance && item.performance.tempoScale) || 1,
       notes: item.notes || "",
       headerText: item.embeddedHeaderAbc || "",
       text: item.embeddedAbc || "",
@@ -349,6 +369,7 @@ function createSetListFeature({
     closeButton: elements.closeButton,
     titleInput: elements.titleInput,
     dirtySummary: elements.dirtySummary,
+    lastUpdated: elements.lastUpdated,
     quickSaveButton: elements.quickSaveButton,
     newButton: elements.newButton,
     openButton: elements.openButton,
@@ -365,6 +386,10 @@ function createSetListFeature({
     pageBreaksSelect: elements.pageBreaksSelect,
     pageMarginsSelect: elements.pageMarginsSelect,
     compactCheckbox: elements.compactCheckbox,
+    titlePageCheckbox: elements.titlePageCheckbox,
+    tuneIndexSelect: elements.tuneIndexSelect,
+    numberTunesCheckbox: elements.numberTunesCheckbox,
+    indexQrCodesCheckbox: elements.indexQrCodesCheckbox,
     headerModal: elements.headerModal,
     headerCloseButton: elements.headerCloseButton,
     headerText: elements.headerText,
@@ -482,6 +507,12 @@ function createSetListFeature({
     onCompactChange: (value) => {
       session.mutate((document) => { document.print.compact = Boolean(value); }, { reason: "layout" });
     },
+    onTitlePageChange: (value) => updatePresentation((print) => { print.titlePage = Boolean(value); }),
+    onTuneIndexChange: (value) => updatePresentation((print) => {
+      print.tuneIndex = ["none", "compact", "incipits"].includes(value) ? value : "none";
+    }),
+    onNumberTunesChange: (value) => updatePresentation((print) => { print.numberTunes = Boolean(value); }),
+    onIndexQrCodesChange: (value) => updatePresentation((print) => { print.indexQrCodes = Boolean(value); }),
     onHeaderTextChange: (value) => {
       session.mutate((document) => { document.print.headerText = String(value || ""); }, { reason: "header" });
     },
@@ -731,9 +762,12 @@ function createSetListFeature({
     if (!hasItems(items)) return { ok: false, error: "No tunes in Set List." };
 
     const entry = { basename: "Set List" };
+    const document = getDocument();
+    const print = document.print;
     const blocks = [];
     let current = [];
     const summary = [];
+    const indexEntries = [];
 
     const flush = () => {
       if (!current.length) return;
@@ -756,7 +790,7 @@ function createSetListFeature({
         preview: item.title || `X:${printableIndex + 1}`,
       };
 
-      const pageBreaks = getDocument().print.pageBreaks;
+      const pageBreaks = print.pageBreaks;
       const breakBefore = shouldInjectNewPageBeforeTune(raw, {
         mode: pageBreaks,
         idx: printableIndex,
@@ -764,7 +798,10 @@ function createSetListFeature({
       });
       if (breakBefore) flush();
 
-      const renumbered = ensureXNumberInAbc(raw, printableIndex + 1);
+      const printText = print.numberTunes
+        ? numberSetListTuneTitle(raw, printableIndex + 1)
+        : raw;
+      const renumbered = ensureXNumberInAbc(printText, printableIndex + 1);
       const combinedHeader = composeSetListRenderHeader(item.headerText || "", getFileHeaderText());
       const renderRes = await renderItemToSvg({
         abcText: renumbered,
@@ -790,6 +827,47 @@ function createSetListFeature({
       const sourceMarkup = await buildSourceLinkMarkup(renderRes && renderRes.blockText ? renderRes.blockText : renumbered);
       if (sourceMarkup) current.push(sourceMarkup);
 
+      if (print.tuneIndex !== "none") {
+        const source = collectPrintSources(raw)[0] || null;
+        let incipitSvg = "";
+        if (print.tuneIndex === "incipits") {
+          const performanceView = buildSetListPerformanceView({
+            sourceText: raw,
+            headerText: item.headerText || "",
+            transposeSemitones: item.transposeSemitones,
+          });
+          const incipitSource = performanceView && performanceView.ok ? performanceView.text : raw;
+          const incipitAbc = buildSetListIncipitAbc(incipitSource);
+          if (incipitAbc) {
+            const incipitResult = await renderItemToSvg({
+              abcText: incipitAbc,
+              headerText: combinedHeader,
+              tune: { ...tune, title: "" },
+            });
+            if (incipitResult && incipitResult.svg) {
+              incipitSvg = namespaceSetListSvgIds(
+                incipitResult.svg.trim(),
+                `abcarus-set-list-index-${printableIndex + 1}`,
+              );
+            }
+          }
+        }
+        let qrDataUrl = "";
+        if (print.indexQrCodes && source && source.url) {
+          try { qrDataUrl = await createQrDataUrl(source.url, { size: 80 }); } catch {}
+        }
+        const meterMatch = raw.match(/^\s*M:\s*(.*?)\s*$/mi);
+        indexEntries.push({
+          title: item.title || `Tune ${printableIndex + 1}`,
+          meter: meterMatch ? String(meterMatch[1] || "").trim() : "",
+          tempo: formatSetListIndexTempo(raw, item.tempoScale),
+          practiceNote: item.notes || "",
+          incipitSvg,
+          sourceUrl: source ? source.url : "",
+          qrDataUrl,
+        });
+      }
+
       if (pageBreaks === "perTune") flush();
       printableIndex += 1;
     }
@@ -798,6 +876,20 @@ function createSetListFeature({
     if (!blocks.length) return { ok: false, error: "No SVG output produced." };
 
     const parts = [];
+    if (print.titlePage) {
+      parts.push(buildSetListCoverMarkup({
+        title: document.title,
+        itemCount: printableIndex,
+        updatedAt: document.updatedAt,
+      }));
+    }
+    if (print.tuneIndex !== "none") {
+      parts.push(buildSetListIndexMarkup({
+        title: document.title,
+        entries: indexEntries,
+        numberTunes: print.numberTunes,
+      }));
+    }
     if (includeIssueSummary && summary.length) {
       parts.push(buildPrintErrorSummary(entry, summary, total).trim());
     }
