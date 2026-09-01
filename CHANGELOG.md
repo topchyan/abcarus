@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [1.9.1] - 2026-09-01
 ### Added
 - The Editor status bar now shows contextual measure fill while entering notation, with understated incomplete and overfull feedback.
 
@@ -16,8 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Library rows no longer overflow and paint over the Library footer.
 - The document status remains anchored at the right edge when contextual measure information appears.
-
-
 
 ## [1.9.0] - 2026-09-01
 ### Added
