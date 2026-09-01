@@ -33,6 +33,7 @@ function createYouTubeMetadataAction({ api = null, state = {}, actions = {} } = 
         const sources = collectYouTubeSources(before);
         if (!sources.length) {
           await api.confirmYouTubeMetadataUpdate({ updateCount: 0, detail: "No YouTube F: links were found in the active file." });
+          setStatus("No YouTube links found.");
           return;
         }
         const unique = Array.from(new Map(sources.map((item) => [item.videoId, item])).values());
@@ -60,7 +61,16 @@ function createYouTubeMetadataAction({ api = null, state = {}, actions = {} } = 
           if (failures.length > 30) report.push(`…and ${failures.length - 30} more.`);
         }
         const confirmed = await api.confirmYouTubeMetadataUpdate({ updateCount: result.updated, detail: report.join("\n") });
-        if (!confirmed || !result.updated) return;
+        if (!confirmed) {
+          setStatus("YouTube metadata update canceled.");
+          return;
+        }
+        if (!result.updated) {
+          setStatus(failures.length
+            ? `YouTube metadata check finished · ${failures.length} unavailable.`
+            : "YouTube metadata is up to date.");
+          return;
+        }
         const writeRes = await writeFile(filePath, result.text, { expectedData: before });
         if (!writeRes || !writeRes.ok) {
           if (writeRes && writeRes.conflict) throw new Error("File changed on disk while YouTube metadata was being read. Nothing was written.");
@@ -73,7 +83,7 @@ function createYouTubeMetadataAction({ api = null, state = {}, actions = {} } = 
             || updatedFile.tunes.find((tune) => String(tune.xNumber || "") === String(previousTune.xNumber || ""));
           if (replacement && replacement.id) await selectTune(replacement.id, { skipConfirm: true, suppressRecent: true });
         }
-        setStatus(`Updated YouTube metadata for ${result.updated} link${result.updated === 1 ? "" : "s"}.`);
+        setStatus(`YouTube metadata updated · ${result.updated} link${result.updated === 1 ? "" : "s"}.`);
       });
     } catch (error) {
       setStatus("Error");

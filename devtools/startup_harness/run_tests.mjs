@@ -173,7 +173,7 @@ const { createStartupController } = await importRendererModule(
   assert.deepEqual(statuses, [
     ["Scanning… 12 files"],
     ["Indexing… 4/4"],
-    ["Ready", "Ready (12 files)"],
+    ["Indexed · 12 files"],
   ]);
   assert.equal(timers.length, 2);
   assert.equal(timers[0].delay, 600);

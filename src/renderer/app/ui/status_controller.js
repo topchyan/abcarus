@@ -124,10 +124,10 @@ function createStatusController({
     const isNeutral = !displayNorm || /^ready\b/i.test(displayNorm);
     const label = startupUiLoading && isNeutral
       ? "Loading..."
-      : (isNeutral ? "Ready" : display);
+      : (isNeutral ? fileState.label : display);
     const kind = startupUiLoading && isNeutral
       ? "loading"
-      : (isNeutral ? "ready" : (fileState.kind === "conflict" ? "conflict" : (fileState.kind === "dirty" ? "dirty" : "ready")));
+      : (isNeutral ? fileState.kind : (fileState.kind === "conflict" ? "conflict" : (fileState.kind === "dirty" ? "dirty" : "ready")));
 
     statusElement.textContent = label || "Ready";
 

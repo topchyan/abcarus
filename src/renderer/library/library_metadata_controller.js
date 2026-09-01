@@ -76,10 +76,11 @@ export function createLibraryMetadataController({
     const libraryIndex = getLibraryIndex();
     if (libraryIndex) {
       const count = (libraryIndex.files || []).length;
-      setScanStatus("Ready", `Ready (${count} files)`);
+      const fileLabel = count === 1 ? "file" : "files";
+      setScanStatus(`Indexed · ${count} ${fileLabel}`);
       return;
     }
-    setScanStatus("Idle");
+    setScanStatus("No library");
   }
 
   async function ensureFullLibraryIndex({ reason = "" } = {}) {

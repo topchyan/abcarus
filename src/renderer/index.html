@@ -258,16 +258,8 @@
 	    <aside class="sidebar">
 	      <div class="sidebar-header">
 	        <div class="sidebar-controls">
-	          <div class="library-root-row">
-	            <button id="btnLibraryRefresh" class="sidebar-action" type="button" title="Refresh library">
-                <svg class="btn-icon icon-reset" aria-hidden="true"><use href="#ui-reset"></use></svg>
-                <span class="btn-text">Refresh</span>
-              </button>
-	            <div class="library-root" id="libraryRoot" title="">Library: (none)</div>
-	          </div>
-	          <div class="scan-status" id="scanStatus">Idle</div>
 	          <div class="sidebar-control">
-	            <div class="sidebar-label">Group by:</div>
+	            <label class="sidebar-label" for="groupBy">Group by</label>
 	            <select id="groupBy">
               <option value="file">File</option>
               <option value="x">X (Reference)</option>
@@ -289,7 +281,7 @@
             </select>
           </div>
           <div class="sidebar-control">
-            <div class="sidebar-label">Sort groups:</div>
+            <label class="sidebar-label" for="sortBy">Sort groups</label>
             <select id="sortBy">
               <option value="name_asc">Name A→Z</option>
               <option value="name_desc">Name Z→A</option>
@@ -300,7 +292,7 @@
             </select>
           </div>
           <div class="sidebar-control">
-            <div class="sidebar-label">Sort tunes:</div>
+            <label class="sidebar-label" for="sortTunesBy">Sort tunes</label>
             <select id="sortTunesBy">
               <option value="x_asc" selected>X Asc</option>
               <option value="x_desc">X Desc</option>
@@ -317,8 +309,8 @@
             </select>
           </div>
 	          <div class="sidebar-control sidebar-search">
-	            <div class="sidebar-label">Filter:</div>
-	            <input id="librarySearch" type="text" placeholder="Title, composer, key…" />
+	            <label class="sidebar-label" for="librarySearch">Filter</label>
+	            <input id="librarySearch" type="text" placeholder="Title, composer, key…" aria-label="Filter library" />
 	            <button id="btnLibraryClearFilter" class="sidebar-action" type="button" title="Clear filter">
                 <svg class="btn-icon icon-clear" aria-hidden="true"><use href="#ui-clear"></use></svg>
                 <span class="btn-text">Clear</span>
@@ -329,7 +321,11 @@
 	      <div class="sidebar-body">
 	        <div class="tree" id="libraryTree"></div>
 	        <div class="sidebar-split" id="sidebarSplit" role="separator" aria-orientation="horizontal" tabindex="0"></div>
-      </div>
+	      </div>
+	      <div class="library-panel-footer">
+	        <div class="library-root" id="libraryRoot" title="">Library: (none)</div>
+	        <div class="scan-status" id="scanStatus">No library</div>
+	      </div>
     </aside>
 
 	    <div class="divider" id="paneDivider" role="separator" aria-orientation="vertical" tabindex="0"></div>
@@ -548,6 +544,16 @@
 	      <div id="out"></div>
 	    </div>
   </div>
+	  <footer class="workspace-statusbar">
+	    <div id="measureInputStatus" class="measure-input-status" aria-live="polite" hidden></div>
+	    <div class="workspace-statusbar-main">
+	      <div id="hoverStatus" class="hover-status" aria-live="polite"></div>
+	      <div id="toolStatus" class="tool-status" aria-live="polite"></div>
+	    </div>
+	    <div id="bufferStatus" class="buffer-status" aria-live="polite"></div>
+	    <div id="cursorStatus" class="cursor-status"></div>
+	    <div id="status" class="status-loading">Loading…</div>
+	  </footer>
 </section>
 </main>
 
@@ -637,16 +643,6 @@
 		    </div>
 		  </div>
 
-  <footer class="taskbar">
-		    <div class="taskbar-left">
-		      <div id="status" class="status-loading">Loading…</div>
-		      <div id="hoverStatus" class="hover-status" aria-live="polite"></div>
-		      <div id="toolStatus" class="tool-status" aria-live="polite"></div>
-		    </div>
-		    <div id="measureInputStatus" class="measure-input-status" aria-live="polite" hidden></div>
-		    <div id="cursorStatus" class="cursor-status"></div>
-		    <div id="bufferStatus" class="buffer-status" aria-live="polite"></div>
-		  </footer>
 		  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 			  <div id="errorsPopover" class="errors-popover hidden" role="dialog" aria-label="Errors list">

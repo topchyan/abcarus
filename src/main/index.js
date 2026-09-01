@@ -3583,6 +3583,87 @@ async function runUiSmoke(win) {
         && normalRightPaneWidthPx >= 300
         && normalRightPane.getClientRects().length > 0
       );
+      const workspaceStatusbar = document.querySelector(".workspace-statusbar");
+      const panelStatusLayoutOk = Boolean(
+        workspaceStatusbar
+        && workspaceStatusbar.parentElement === normalRightPane
+        && byId("measureInputStatus")?.parentElement === workspaceStatusbar
+        && byId("scanStatus")?.closest(".library-panel-footer")
+        && !document.querySelector("body > .taskbar")
+        && Math.abs(
+          workspaceStatusbar.getBoundingClientRect().left
+          - normalRightPane.getBoundingClientRect().left
+        ) <= 1
+      );
+      const libraryPanelOpaque = Boolean(
+        document.querySelector(".sidebar")
+        && getComputedStyle(document.querySelector(".sidebar")).backgroundColor !== "rgba(0, 0, 0, 0)"
+        && getComputedStyle(document.querySelector(".sidebar-body")).backgroundColor !== "rgba(0, 0, 0, 0)"
+      );
+      const libraryTree = byId("libraryTree");
+      const libraryBody = document.querySelector(".sidebar-body");
+      const libraryTreeContained = Boolean(
+        libraryTree
+        && libraryBody
+        && libraryTree.getBoundingClientRect().bottom <= libraryBody.getBoundingClientRect().bottom + 1
+      );
+      const panelFooterBackgrounds = [
+        document.querySelector(".library-panel-footer"),
+        document.querySelector(".set-list-panel-footer"),
+        document.querySelector(".workspace-statusbar"),
+      ].filter(Boolean).map((element) => getComputedStyle(element).backgroundColor);
+      const panelFootersVisible = panelFooterBackgrounds.length === 3
+        && new Set(panelFooterBackgrounds).size === 1
+        && panelFooterBackgrounds[0] !== getComputedStyle(document.querySelector(".sidebar-body")).backgroundColor;
+      const libraryHeader = document.querySelector(".sidebar-header");
+      const libraryControls = document.querySelector(".sidebar-controls");
+      const libraryRoot = byId("libraryRoot");
+      const sortGroupsSelect = byId("sortBy");
+      const sortTunesSelect = byId("sortTunesBy");
+      const librarySearch = byId("librarySearch");
+      const libraryClear = byId("btnLibraryClearFilter");
+      const libraryHeaderHeightPx = libraryHeader
+        ? Math.round(libraryHeader.getBoundingClientRect().height)
+        : 0;
+      const libraryControlsCompact = Boolean(
+        libraryHeader
+        && libraryControls
+        && libraryRoot?.closest(".library-panel-footer")
+        && sortGroupsSelect
+        && sortTunesSelect
+        && librarySearch
+        && libraryClear
+        && getComputedStyle(libraryControls).display === "grid"
+        && getComputedStyle(libraryControls).gridTemplateColumns.trim().split(/\\s+/).length === 3
+        && Math.abs(libraryHeaderHeightPx - 84) <= 1
+        && Math.abs(librarySearch.getBoundingClientRect().height - sortTunesSelect.getBoundingClientRect().height) <= 1
+        && Math.abs(librarySearch.getBoundingClientRect().height - libraryClear.getBoundingClientRect().height) <= 1
+        && !byId("btnLibraryRefresh")
+      );
+      const statusElement = byId("status");
+      const measureStatus = byId("measureInputStatus");
+      let workspaceStatusStable = false;
+      let measureStatusInline = false;
+      if (workspaceStatusbar && statusElement && measureStatus) {
+        const measureWasHidden = measureStatus.hidden;
+        const measureText = measureStatus.textContent;
+        measureStatus.hidden = true;
+        const statusRightWithoutMeasure = statusElement.getBoundingClientRect().right;
+        measureStatus.textContent = "Measure 8/8";
+        measureStatus.hidden = false;
+        const statusRightWithMeasure = statusElement.getBoundingClientRect().right;
+        const footerStyle = getComputedStyle(workspaceStatusbar);
+        const expectedStatusRight = workspaceStatusbar.getBoundingClientRect().right
+          - (Number.parseFloat(footerStyle.paddingRight || "0") || 0);
+        workspaceStatusStable = Math.abs(statusRightWithoutMeasure - statusRightWithMeasure) <= 1
+          && Math.abs(statusRightWithMeasure - expectedStatusRight) <= 1;
+        const measureStyle = getComputedStyle(measureStatus);
+        measureStatusInline = Number.parseFloat(measureStyle.borderTopWidth || "0") === 0
+          && Number.parseFloat(measureStyle.paddingLeft || "0") === 0
+          && measureStyle.backgroundColor === "rgba(0, 0, 0, 0)";
+        measureStatus.textContent = measureText;
+        measureStatus.hidden = measureWasHidden;
+      }
       const hook = window.__abcarusDevUiSmoke;
       if (hook && typeof hook.setText === "function") {
         hook.setText([
@@ -3738,6 +3819,9 @@ async function runUiSmoke(win) {
       let setListDocumentUiOk = false;
       let setListPracticeNoteUiOk = false;
       const setListPracticeNoteDiagnostics = {};
+      let panelBarsAligned = false;
+      let panelBarHeights = null;
+      let panelFooterStyles = null;
       let resetViewLayoutOk = false;
       let scoreCenteredAfterReset = false;
       let resetViewRatio = null;
@@ -3793,9 +3877,10 @@ async function runUiSmoke(win) {
           const button = byId(id);
           if (!button || button.hidden) return false;
           const style = getComputedStyle(button);
+          const expectedSize = id === "setListClose" ? 28 : 32;
           return String(button.textContent || "").trim() === "×"
-            && Math.round(Number.parseFloat(style.width || "0")) === 32
-            && Math.round(Number.parseFloat(style.height || "0")) === 32;
+            && Math.round(Number.parseFloat(style.width || "0")) === expectedSize
+            && Math.round(Number.parseFloat(style.height || "0")) === expectedSize;
         });
         const settingsModal = byId("settingsModal");
         if (settingsModal && settingsModal.classList.contains("open")) {
@@ -3906,6 +3991,40 @@ async function runUiSmoke(win) {
           && setListTarget
           && setListTarget.getAttribute("aria-hidden") === "true"
         );
+        const fileHeaderPanel = byId("fileHeaderPanel");
+        const setListHeader = setListPanel?.querySelector(".set-list-panel-header");
+        const setListMenubar = setListPanel?.querySelector(".set-list-menubar");
+        const setListFooter = setListPanel?.querySelector(".set-list-panel-footer");
+        const libraryFooter = document.querySelector(".library-panel-footer");
+        const workspaceFooter = document.querySelector(".workspace-statusbar");
+        const barElements = [
+          fileHeaderPanel,
+          setListHeader,
+          scoreToolbar,
+          setListMenubar,
+          libraryFooter,
+          setListFooter,
+          workspaceFooter,
+        ];
+        if (barElements.every(Boolean)) {
+          const fileHeaderWasCollapsed = fileHeaderPanel.classList.contains("collapsed");
+          fileHeaderPanel.classList.add("collapsed");
+          panelBarHeights = barElements.map((element, index) => Math.round(Number.parseFloat(
+            index < 4
+              ? getComputedStyle(element).minHeight
+              : String(element.getBoundingClientRect().height),
+          ) || 0));
+          if (!fileHeaderWasCollapsed) fileHeaderPanel.classList.remove("collapsed");
+          const [fileHeaderHeight, setListHeaderHeight, scoreToolbarHeight, setListMenuHeight, ...footerHeights] = panelBarHeights;
+          panelFooterStyles = [libraryFooter, setListFooter, workspaceFooter].map((element) => {
+            const style = getComputedStyle(element);
+            return [style.fontSize, style.fontWeight, style.lineHeight, style.backgroundColor, style.borderTopColor].join("|");
+          });
+          panelBarsAligned = Math.abs(fileHeaderHeight - setListHeaderHeight) <= 1
+            && Math.abs(scoreToolbarHeight - setListMenuHeight) <= 1
+            && Math.max(...footerHeights) - Math.min(...footerHeights) <= 1
+            && new Set(panelFooterStyles).size === 1;
+        }
         const setListAddCurrent = byId("setListAddCurrent");
         setListPracticeNoteDiagnostics.addCurrentPresent = Boolean(setListAddCurrent);
         setListPracticeNoteDiagnostics.addCurrentEnabled = Boolean(setListAddCurrent && !setListAddCurrent.disabled);
@@ -4025,6 +4144,14 @@ async function runUiSmoke(win) {
           && toolbarDomainsOk
           && settingsSaveUiOk
           && normalRightPaneVisible
+          && panelStatusLayoutOk
+          && libraryPanelOpaque
+          && libraryTreeContained
+          && panelFootersVisible
+          && libraryControlsCompact
+          && workspaceStatusStable
+          && measureStatusInline
+          && panelBarsAligned
           && resetViewLayoutOk
           && scoreCenteredAfterReset
           && setListDocumentUiOk
@@ -4063,6 +4190,18 @@ async function runUiSmoke(win) {
         settingsSaveUiDiagnostics,
         normalRightPaneVisible,
         normalRightPaneWidthPx,
+        panelStatusLayoutOk,
+        libraryPanelOpaque,
+        libraryTreeContained,
+        panelFootersVisible,
+        panelFooterBackgrounds,
+        libraryControlsCompact,
+        libraryHeaderHeightPx,
+        workspaceStatusStable,
+        measureStatusInline,
+        panelBarsAligned,
+        panelBarHeights,
+        panelFooterStyles,
         resetViewLayoutOk,
         resetViewRatio,
         scoreCenteredAfterReset,

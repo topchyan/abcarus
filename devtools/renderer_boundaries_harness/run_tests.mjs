@@ -158,6 +158,36 @@ assert.deepEqual(settingsSnapshot.get(), {
 await settingsSnapshot.persistPatch({ playbackLoopEnabled: true });
 assert.deepEqual(settingsUpdates, [{ playbackLoopEnabled: true }]);
 
+const { createStatusController } = await importBundledModule(
+  "src/renderer/app/ui/status_controller.js",
+);
+const statusClasses = new Set();
+const statusElement = {
+  textContent: "",
+  classList: {
+    toggle(name, enabled) {
+      if (enabled) statusClasses.add(name);
+      else statusClasses.delete(name);
+    },
+  },
+};
+let statusDocument = { path: "/music/tunes.abc", dirty: false };
+const statusController = createStatusController({
+  statusElement,
+  getCurrentDoc: () => statusDocument,
+  getActiveTuneMeta: () => ({ path: statusDocument?.path || "" }),
+});
+statusController.markStartupSettingsApplied();
+assert.equal(statusElement.textContent, "Saved");
+assert.equal(statusClasses.has("status-saved"), true);
+statusDocument.dirty = true;
+statusController.renderUnifiedStatus();
+assert.equal(statusElement.textContent, "Unsaved changes");
+assert.equal(statusClasses.has("status-dirty"), true);
+statusDocument = null;
+statusController.setStatus("Ready");
+assert.equal(statusElement.textContent, "Ready");
+
 const headerModel = await importBundledModule(
   "src/renderer/app/document/file_header_model.js",
 );

@@ -120,7 +120,8 @@ export function createStartupController({
     }
     if (payload.phase === "done") {
       const filesFound = payload.filesFound || 0;
-      setScanStatus("Ready", `Ready (${filesFound} files)`);
+      const fileLabel = filesFound === 1 ? "file" : "files";
+      setScanStatus(`Indexed · ${filesFound} ${fileLabel}`);
       if (scanStatusClearTimer) clearTimeoutRef(scanStatusClearTimer);
       scanStatusClearTimer = setTimeoutRef(() => {
         scanStatusClearTimer = null;
