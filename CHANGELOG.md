@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- The Editor status bar now shows contextual measure fill while entering notation, with understated incomplete and overfull feedback.
+
+### Changed
+- Library, Set List, and Editor/Score now use aligned panel-owned headers and status bars; Library controls use a compact two-row layout and document/library statuses are explicit.
+- YouTube metadata updates now report a clear final outcome for updated, current, unavailable, canceled, and missing-link cases.
+
+### Fixed
+- Library rows no longer overflow and paint over the Library footer.
+- The document status remains anchored at the right edge when contextual measure information appears.
+
 
 
 ## [1.9.0] - 2026-09-01
