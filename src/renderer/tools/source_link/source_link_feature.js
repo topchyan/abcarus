@@ -66,6 +66,7 @@ function createSourceLinkFeature({
 
   return {
     buildPrintMarkup,
+    createQrDataUrl,
     clear: () => controller.clear(),
     scheduleUpdate: (delayMs = 250) => controller.scheduleUpdate(delayMs),
     update: () => controller.update(),

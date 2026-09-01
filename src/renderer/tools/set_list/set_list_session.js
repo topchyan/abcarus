@@ -48,12 +48,20 @@ function createSetListSession({
   let document = createEmptySetListDocument({ id: makeId(), nowIso });
   let filePath = "";
   let diskText = null;
+  let persistedUpdatedAt = "";
   let dirty = false;
   let dirtyReasons = [];
   let recentPaths = normalizeRecentPaths(readStorage(recentsKey));
 
   function snapshot() {
-    return { document, filePath, dirty, dirtyReasons: dirtyReasons.slice(), recentPaths: recentPaths.slice() };
+    return {
+      document,
+      filePath,
+      persistedUpdatedAt,
+      dirty,
+      dirtyReasons: dirtyReasons.slice(),
+      recentPaths: recentPaths.slice(),
+    };
   }
 
   function emit() {
@@ -79,6 +87,8 @@ function createSetListSession({
     filePath = String(nextFilePath || "");
     diskText = typeof nextDiskText === "string" ? nextDiskText : null;
     dirty = Boolean(nextDirty);
+    if (!filePath) persistedUpdatedAt = "";
+    else if (!dirty && typeof nextDiskText === "string") persistedUpdatedAt = normalized.updatedAt;
     dirtyReasons = dirty
       ? Array.from(new Set((Array.isArray(nextDirtyReasons) ? nextDirtyReasons : []).map((value) => String(value || "").trim()).filter(Boolean)))
       : [];

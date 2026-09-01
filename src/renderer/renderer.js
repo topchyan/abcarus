@@ -328,6 +328,7 @@ const $setListDivider = document.getElementById("setListDivider");
 const $setListClose = document.getElementById("setListClose");
 const $setListTitle = document.getElementById("setListTitle");
 const $setListDirtySummary = document.getElementById("setListDirtySummary");
+const $setListLastUpdated = document.getElementById("setListLastUpdated");
 const $setListQuickSave = document.getElementById("setListQuickSave");
 const $setListNew = document.getElementById("setListNew");
 const $setListOpen = document.getElementById("setListOpen");
@@ -384,6 +385,10 @@ const $setListPrint = document.getElementById("setListPrint");
 const $setListPageBreaks = document.getElementById("setListPageBreaks");
 const $setListPageMargins = document.getElementById("setListPageMargins");
 const $setListCompact = document.getElementById("setListCompact");
+const $setListTitlePage = document.getElementById("setListTitlePage");
+const $setListTuneIndex = document.getElementById("setListTuneIndex");
+const $setListNumberTunes = document.getElementById("setListNumberTunes");
+const $setListIndexQrCodes = document.getElementById("setListIndexQrCodes");
 const $setListHeaderModal = document.getElementById("setListHeaderModal");
 const $setListHeaderClose = document.getElementById("setListHeaderClose");
 const $setListHeaderText = document.getElementById("setListHeaderText");
@@ -957,6 +962,7 @@ const setListFeature = createSetListFeature({
     closeButton: $setListClose,
     titleInput: $setListTitle,
     dirtySummary: $setListDirtySummary,
+    lastUpdated: $setListLastUpdated,
     quickSaveButton: $setListQuickSave,
     newButton: $setListNew,
     openButton: $setListOpen,
@@ -974,6 +980,10 @@ const setListFeature = createSetListFeature({
     pageBreaksSelect: $setListPageBreaks,
     pageMarginsSelect: $setListPageMargins,
     compactCheckbox: $setListCompact,
+    titlePageCheckbox: $setListTitlePage,
+    tuneIndexSelect: $setListTuneIndex,
+    numberTunesCheckbox: $setListNumberTunes,
+    indexQrCodesCheckbox: $setListIndexQrCodes,
     headerModal: $setListHeaderModal,
     headerCloseButton: $setListHeaderClose,
     headerText: $setListHeaderText,
@@ -1041,6 +1051,7 @@ const setListFeature = createSetListFeature({
   },
   renderItemToSvg: setListRendererAdapter.renderItemToSvg,
   buildSourceLinkMarkup: (abcText) => sourceLinkFeature.buildPrintMarkup(abcText),
+  createQrDataUrl: (value, options) => sourceLinkFeature.createQrDataUrl(value, options),
   outputPrint: setListRendererAdapter.outputPrint,
   saveAbc: setListRendererAdapter.saveAbc,
   getExportBaseName: getSuggestedBaseName,

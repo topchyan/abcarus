@@ -16,6 +16,7 @@ async function importBundledModule(filePath) {
 const {
   SET_LIST_RESOLUTION,
   SET_LIST_SCHEMA,
+  SET_LIST_SCHEMA_V2,
   convertLegacySetListState,
   hashSetListAbc,
   insertSetListDocumentItem,
@@ -37,16 +38,42 @@ const {
 } = await importBundledModule("src/renderer/tools/set_list/set_list_feature.js");
 
 const {
+  formatSetListUpdatedAt,
   getDropInsertionIndex,
   getMoveTargetIndex,
   getSetListDragKind,
 } = await importBundledModule("src/renderer/tools/set_list/set_list_controller.js");
 
+await test("Set List last-updated timestamp uses the persisted portable revision", async () => {
+  const timestamps = [
+    "2026-08-20T12:00:00.000Z",
+    "2026-08-20T12:05:00.000Z",
+    "2026-08-20T12:10:00.000Z",
+  ];
+  const session = createSetListSession({
+    makeId: () => "set-list-id",
+    nowIso: () => timestamps.shift() || "2026-08-20T12:10:00.000Z",
+    writeFile: async () => ({ ok: true }),
+  });
+  assert.equal(session.getState().persistedUpdatedAt, "");
+  assert.equal((await session.save("/sets/concert.abcarus-setlist.json")).ok, true);
+  assert.equal(session.getState().persistedUpdatedAt, "2026-08-20T12:05:00.000Z");
+  session.mutate((document) => { document.title = "Changed locally"; }, { reason: "title" });
+  assert.equal(session.getState().persistedUpdatedAt, "2026-08-20T12:05:00.000Z");
+  assert.ok(formatSetListUpdatedAt(session.getState().persistedUpdatedAt));
+  assert.equal(formatSetListUpdatedAt("not-a-date"), "");
+});
+
 const {
+  buildSetListCoverMarkup,
   buildSetListExportAbc,
+  buildSetListIncipitAbc,
+  buildSetListIndexMarkup,
+  formatSetListIndexTempo,
   composeSetListRenderHeader,
   getPrintableSetListItems,
   namespaceSetListSvgIds,
+  numberSetListTuneTitle,
   shouldInjectNewPageBeforeTune,
 } = await importBundledModule("src/renderer/print/set_list_markup.js");
 
@@ -95,7 +122,7 @@ await test("print marker skips only SVG bounds normalization", async () => {
     "",
     "Print",
   );
-  async function countSvgBoundsReads(html) {
+  async function countSvgBoundsReads(html, { hasIncipit = false } = {}) {
     const script = html.match(/<script>([\s\S]*?)<\/script>/);
     assert.ok(script, "print HTML must include its preparation script");
     let boundsReads = 0;
@@ -111,7 +138,10 @@ await test("print marker skips only SVG bounds normalization", async () => {
     const printContext = {
       document: {
         fonts: null,
-        querySelectorAll: (selector) => selector === "svg" ? [svg] : [],
+        querySelectorAll: (selector) => {
+          if (selector === ".set-list-index-incipit svg") return hasIncipit ? [svg] : [];
+          return selector === "svg" ? [svg] : [];
+        },
       },
       window: {},
     };
@@ -121,6 +151,7 @@ await test("print marker skips only SVG bounds normalization", async () => {
   }
   assert.equal(await countSvgBoundsReads(normalHtml), 1);
   assert.equal(await countSvgBoundsReads(diagnosticHtml), 0);
+  assert.equal(await countSvgBoundsReads(diagnosticHtml, { hasIncipit: true }), 1);
 
 });
 
@@ -179,6 +210,73 @@ test("canonical portable documents satisfy the shared JSON Schema", () => {
     const canonical = JSON.parse(serializeSetListDocument(readFixture(name)));
     assert.equal(validate(canonical), true, `${name}: ${ajv.errorsText(validate.errors)}`);
   }
+});
+
+test("v2 print presentation is strict while unchanged v1 output stays v1", () => {
+  const source = readFixture("self-contained.abcarus-setlist.json");
+  source.print.titlePage = true;
+  source.print.tuneIndex = "incipits";
+  source.print.numberTunes = true;
+  source.print.indexQrCodes = true;
+  const v1 = JSON.parse(serializeSetListDocument(source));
+  assert.equal(v1.schema, SET_LIST_SCHEMA);
+  assert.equal(v1.print.titlePage, undefined);
+
+  source.schema = SET_LIST_SCHEMA_V2;
+  const v2 = JSON.parse(serializeSetListDocument(source));
+  const schema = readFixture("../../../docs/schemas/abcarus.setlist.v2.schema.json");
+  const ajv = new Ajv2020({ allErrors: true, strict: true, validateFormats: false });
+  const validate = ajv.compile(schema);
+  assert.equal(validate(v2), true, ajv.errorsText(validate.errors));
+  assert.deepEqual(v2.print, {
+    headerText: source.print.headerText,
+    pageBreaks: source.print.pageBreaks,
+    compact: source.print.compact,
+    titlePage: true,
+    tuneIndex: "incipits",
+    numberTunes: true,
+    indexQrCodes: true,
+  });
+});
+
+test("print presentation helpers do not mutate source ABC", () => {
+  const source = "X:7\nT:Example\nM:4/4\nL:1/8\nQ:1/4=120\nP:AB\nK:C\nV:1 treble nm=\"Lead\"\n[P:A] z8|x2|[P:B] \"Am\"CDEF|GABc|cBAG|FEDC|\n";
+  const numbered = numberSetListTuneTitle(source, 3);
+  assert.match(numbered, /^T:3\. Example$/m);
+  assert.equal(source.includes("3. Example"), false);
+  const incipit = buildSetListIncipitAbc(source, 4);
+  assert.match(incipit, /^%%singleline 1$/m);
+  assert.match(incipit, /^%%trimsvg 1$/m);
+  assert.match(incipit, /^%%stretchlast 0$/m);
+  assert.match(incipit, /^%%topspace 0$/m);
+  assert.match(incipit, /^%%musicspace 0$/m);
+  assert.match(incipit, /^%%scale \.72$/m);
+  assert.match(incipit, /^%%leftmargin 0$/m);
+  assert.match(incipit, /^%%rightmargin 0$/m);
+  assert.match(incipit, /^%%writefields Q 0$/m);
+  assert.doesNotMatch(incipit, /^Q:/m);
+  assert.doesNotMatch(incipit, /Lead|"Am"|\[P:|^P:/m);
+  assert.match(incipit, /^M:4\/4$/m);
+  assert.match(incipit, /CDEF/);
+  assert.doesNotMatch(incipit, /z8|x2/);
+  assert.doesNotMatch(incipit, /GABc/);
+  assert.match(buildSetListCoverMarkup({ title: "Concert", itemCount: 2 }), /Concert/);
+  const index = buildSetListIndexMarkup({
+    title: "Concert",
+    numberTunes: true,
+    entries: [{ title: "Example", meter: "4/4", tempo: "Tempo 1/4 = 90", practiceNote: "Start softly", incipitSvg: "<svg></svg>", sourceUrl: "https://example.com", qrDataUrl: "data:image/png;base64,x" }],
+  });
+  assert.match(index, /1\./);
+  assert.doesNotMatch(index, /Play in/);
+  assert.match(index, /M: 4\/4 · Tempo 1\/4 = 90/);
+  assert.match(index, /Start softly/);
+  assert.match(index, /<svg><\/svg>/);
+  assert.match(index, /data:image\/png;base64,x/);
+  assert.match(index, /grid-template-columns:24px minmax\(145px,.8fr\) minmax\(280px,2fr\) 28px/);
+  assert.match(index, /grid-template-columns:1fr/);
+  const compactIndex = buildSetListIndexMarkup({ title: "Concert", entries: [{ title: "Example" }] });
+  assert.match(compactIndex, /grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.equal(formatSetListIndexTempo('X:1\nQ:"Slow" 1/4=120\nK:C\nC|', 0.75), "Tempo 1/4 = 90");
 });
 
 test("keeps duplicate tune occurrences as independent items", () => {
@@ -891,7 +989,7 @@ test("reports modified missing and ambiguous resolution fixtures", () => {
 });
 
 test("rejects unknown Set List schema versions", () => {
-  assert.equal(normalizeSetListDocument({ schema: "abcarus.setlist.v2", id: "future" }), null);
+  assert.equal(normalizeSetListDocument({ schema: "abcarus.setlist.v3", id: "future" }), null);
 });
 
 await test("hashes ABC portably across line endings", async () => {
@@ -999,11 +1097,22 @@ await test("Set List panel visibility is persisted and restored", () => {
 
 await test("restores the last Set List and uses its title for print and ABC export", async () => {
   const sourceDocument = readFixture("self-contained.abcarus-setlist.json");
+  sourceDocument.schema = SET_LIST_SCHEMA_V2;
   sourceDocument.print.headerText = "%%leftmargin 0\n";
+  sourceDocument.print.titlePage = true;
+  sourceDocument.print.tuneIndex = "incipits";
+  sourceDocument.print.numberTunes = true;
+  sourceDocument.print.indexQrCodes = true;
+  sourceDocument.items[0].embeddedAbc = sourceDocument.items[0].embeddedAbc.replace(
+    "C:Composer\n",
+    "C:Composer\nF:https://example.com/song\nM:4/4\nL:1/8\nQ:1/4=120\n",
+  );
   const source = serializeSetListDocument(sourceDocument);
   let abcSuggestedName = "";
   let printSuggestedName = "";
   let renderedHeaderText = "";
+  const renderedAbc = [];
+  let printMarkup = "";
   const feature = createSetListFeature({
     readStorage: (key) => key === "abcarus.setList.recentPaths.v1" ? ["/sets/saved.abcarus-setlist.json"] : null,
     writeStorage: () => true,
@@ -1014,12 +1123,15 @@ await test("restores the last Set List and uses its title for print and ABC expo
       abcSuggestedName = suggestedName;
       return true;
     },
-    renderItemToSvg: async ({ headerText }) => {
+    renderItemToSvg: async ({ abcText, headerText }) => {
       renderedHeaderText = headerText;
+      renderedAbc.push(abcText);
       return { ok: true, svg: "<svg></svg>", blockText: "X:1\nK:C\nC|\n" };
     },
-    outputPrint: async ({ suggestedName }) => {
+    createQrDataUrl: async () => "data:image/png;base64,qr",
+    outputPrint: async ({ suggestedName, svgMarkup }) => {
       printSuggestedName = suggestedName;
+      printMarkup = svgMarkup;
       return { ok: true };
     },
     sanitizeFileBaseName: (value) => String(value || "").trim(),
@@ -1033,4 +1145,12 @@ await test("restores the last Set List and uses its title for print and ABC expo
   assert.equal(await feature.runPrintAction("pdf"), true);
   assert.equal(printSuggestedName, "Saved Performance");
   assert.ok(renderedHeaderText.indexOf("%%stretchlast 1") < renderedHeaderText.indexOf("%%leftmargin 0"));
+  assert.match(renderedAbc[0], /^T:1\. Song A$/m);
+  assert.match(renderedAbc[1], /^K:E$/m);
+  assert.match(printMarkup, /class="print-tune set-list-cover"/);
+  assert.match(printMarkup, /class="print-tune set-list-index"/);
+  assert.doesNotMatch(printMarkup, /Play in E/);
+  assert.match(printMarkup, /M: 4\/4 · Tempo 1\/4 = 110\.4/);
+  assert.match(printMarkup, /Use saved arrangement\./);
+  assert.match(printMarkup, /data:image\/png;base64,qr/);
 });
