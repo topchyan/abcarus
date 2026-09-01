@@ -186,6 +186,7 @@ const $payloadModeCopy = document.getElementById("payloadModeCopy");
 const $payloadModeExit = document.getElementById("payloadModeExit");
 const $status = document.getElementById("status");
 const $cursorStatus = document.getElementById("cursorStatus");
+const $measureInputStatus = document.getElementById("measureInputStatus");
 const $bufferStatus = document.getElementById("bufferStatus");
 const $toolStatus = document.getElementById("toolStatus");
 const $hoverStatus = document.getElementById("hoverStatus");
@@ -3096,6 +3097,7 @@ function initEditor() {
   editorRuntime.init({
     host: $editorHost,
     cursorStatusElement: $cursorStatus,
+    measureStatusElement: $measureInputStatus,
     initialDoc: DEFAULT_ABC,
     extensionRuntime: editorExtensionRuntime,
     keymapOptions: {

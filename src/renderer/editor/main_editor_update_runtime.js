@@ -28,6 +28,7 @@ export function createMainEditorUpdateRuntime({
   updatePracticeUi = () => {},
   clearPracticeHighlight = () => {},
   setCursorStatus = () => {},
+  setMeasureInputStatus = () => {},
 } = {}) {
   let pendingRenderTimer = null;
   let pendingPlaybackRangeOrigin = null;
@@ -103,6 +104,11 @@ export function createMainEditorUpdateRuntime({
         update.state.doc.lines,
         update.state.doc.length
       );
+      if (isRawMode() || isPayloadMode() || isChordProFullView()) {
+        setMeasureInputStatus(null);
+      } else {
+        setMeasureInputStatus(update.state.doc.toString(), pos);
+      }
     }
   }
 

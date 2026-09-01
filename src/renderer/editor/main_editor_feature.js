@@ -9,6 +9,7 @@ import {
 import { foldBeginTextBlocks } from "./editor_commands.js";
 import { createMainEditorKeymap } from "./main_editor_keymap.js";
 import { createMainEditorUpdateRuntime } from "./main_editor_update_runtime.js";
+import { computeMeasureInputAssistance } from "../abc/measure_input_assistance.js";
 
 export function createRectSelectionExtension() {
   return rectangularSelection({
@@ -27,6 +28,7 @@ export function createRectSelectionExtension() {
 export function createMainEditorFeature({
   host,
   cursorStatusElement = null,
+  measureStatusElement = null,
   initialDoc = "",
   extensionRuntime,
   keymapOptions = {},
@@ -56,9 +58,27 @@ export function createMainEditorFeature({
     setCursorStatus(line, col, offset, totalLines, totalChars);
   }
 
+  function setMeasureInputStatus(text, offset) {
+    if (!measureStatusElement) return;
+    const result = typeof text === "string"
+      ? computeMeasureInputAssistance(text, offset)
+      : null;
+    measureStatusElement.textContent = result ? result.text : "";
+    measureStatusElement.hidden = !result;
+    measureStatusElement.dataset.state = result ? result.state : "";
+    measureStatusElement.title = result
+      ? `${result.text}: ${result.state}; M:${result.meter}, L:${result.defaultLength}`
+      : "";
+    measureStatusElement.setAttribute(
+      "aria-label",
+      result ? `${result.text}: ${result.state}` : "",
+    );
+  }
+
   const updateRuntime = createMainEditorUpdateRuntime({
     ...updateOptions,
     setCursorStatus,
+    setMeasureInputStatus,
   });
 
   function installDomHooks() {
@@ -118,6 +138,7 @@ export function createMainEditorFeature({
     keymapRuntime.installCompletionAcceptance();
     installDomHooks();
     setCursorStatus(1, 1, 1, state.doc.lines, state.doc.length);
+    setMeasureInputStatus(state.doc.toString(), 0);
     return view;
   }
 

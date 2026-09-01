@@ -2374,6 +2374,32 @@ svg {
   text-overflow: ellipsis;
 }
 
+.measure-input-status {
+  flex: 0 0 auto;
+  min-width: 112px;
+  padding: 1px 7px;
+  border-radius: 3px;
+  color: var(--muted-text);
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.measure-input-status[data-state="complete"] {
+  color: #176b3a;
+  border-color: rgba(23, 107, 58, 0.42);
+  background: rgba(46, 160, 86, 0.08);
+}
+
+.measure-input-status[data-state="overfull"] {
+  color: #9b2c2c;
+  border-color: rgba(155, 44, 44, 0.42);
+  background: rgba(190, 54, 54, 0.08);
+}
+
 .buffer-status:empty {
   display: none;
 }
