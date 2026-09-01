@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [1.9.0] - 2026-09-01
 ### Added
 - Set List printing can add an optional title page and tune index. The index can be compact or include notation incipits, optional QR source links, printed tune numbering, effective tempo, and practice notes.
 - Set List documents using the new print presentation options are written as `abcarus.setlist.v2`; unchanged v1 documents remain v1-compatible.
@@ -17,7 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Standard chord symbols now produce the default abc2svg accompaniment even when a tune does not contain an explicit `%%MIDI gchord` pattern, including selection playback.
 - Set List PDF export preserves complete staff rendering while applying tight SVG bounds only to index incipits.
-
 
 ## [1.8.3] - 2026-08-31
 ### Added
