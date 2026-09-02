@@ -1,6 +1,6 @@
 import {
   DEFAULT_SET_LIST_HEADER_TEXT,
-  SET_LIST_SCHEMA_V2,
+  SET_LIST_SCHEMA,
   convertLegacySetListState,
   hashSetListAbc,
   insertSetListDocumentItem,
@@ -141,7 +141,7 @@ function createSetListFeature({
   const getHeaderText = () => getDocument().print.headerText;
   const updatePresentation = (mutator) => {
     session.mutate((document) => {
-      document.schema = SET_LIST_SCHEMA_V2;
+      document.schema = SET_LIST_SCHEMA;
       mutator(document.print);
     }, { reason: "layout" });
   };

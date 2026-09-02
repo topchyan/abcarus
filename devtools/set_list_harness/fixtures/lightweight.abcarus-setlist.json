@@ -1,10 +1,18 @@
 {
-  "schema": "abcarus.setlist.v1",
+  "schema": "abcarus.setlist.v2",
   "id": "set-lightweight",
   "title": "Autumn Festival 2026",
   "createdAt": "2026-08-20T12:00:00.000Z",
   "updatedAt": "2026-08-20T12:00:00.000Z",
-  "print": { "headerText": "%%stretchlast 1\n", "pageBreaks": "perTune", "compact": false },
+  "print": {
+    "headerText": "%%stretchlast 1\n",
+    "pageBreaks": "perTune",
+    "compact": false,
+    "titlePage": false,
+    "tuneIndex": "none",
+    "numberTunes": false,
+    "indexQrCodes": false
+  },
   "items": [{
     "id": "item-1",
     "tune": {

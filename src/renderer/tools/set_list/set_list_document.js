@@ -1,5 +1,4 @@
-const SET_LIST_SCHEMA = "abcarus.setlist.v1";
-const SET_LIST_SCHEMA_V2 = "abcarus.setlist.v2";
+const SET_LIST_SCHEMA = "abcarus.setlist.v2";
 const DEFAULT_SET_LIST_HEADER_TEXT = "%%stretchlast 1\n";
 const SET_LIST_RESOLUTION = Object.freeze({
   FOUND_EXACT: "FOUND_EXACT",
@@ -181,7 +180,7 @@ function normalizeSetListDocumentItem(item, options = {}) {
 }
 
 function normalizeSetListDocument(value, options = {}) {
-  if (!value || typeof value !== "object" || ![SET_LIST_SCHEMA, SET_LIST_SCHEMA_V2].includes(value.schema)) return null;
+  if (!value || typeof value !== "object" || value.schema !== SET_LIST_SCHEMA) return null;
   const makeId = typeof options.makeId === "function" ? options.makeId : () => "";
   const nowIso = typeof options.nowIso === "function" ? options.nowIso : () => new Date().toISOString();
   const id = text(value.id) || text(makeId());
@@ -195,7 +194,7 @@ function normalizeSetListDocument(value, options = {}) {
   }
   const print = value.print && typeof value.print === "object" ? value.print : {};
   return {
-    schema: value.schema,
+    schema: SET_LIST_SCHEMA,
     id,
     title: text(value.title) || text(value.name) || "Untitled Set List",
     createdAt,
@@ -347,12 +346,6 @@ function serializeSetListDocument(value, options = {}) {
   const normalized = normalizeSetListDocument(value, options);
   if (!normalized) throw new Error("Invalid Set List document.");
   const output = structuredClone(normalized);
-  if (output.schema === SET_LIST_SCHEMA) {
-    delete output.print.titlePage;
-    delete output.print.tuneIndex;
-    delete output.print.numberTunes;
-    delete output.print.indexQrCodes;
-  }
   return JSON.stringify(output, null, 2) + "\n";
 }
 
@@ -460,7 +453,6 @@ export {
   DEFAULT_SET_LIST_HEADER_TEXT,
   SET_LIST_RESOLUTION,
   SET_LIST_SCHEMA,
-  SET_LIST_SCHEMA_V2,
   canonicalizeAbcForHash,
   convertLegacySetListState,
   hashSetListAbc,

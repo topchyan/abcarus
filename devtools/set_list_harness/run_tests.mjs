@@ -16,7 +16,6 @@ async function importBundledModule(filePath) {
 const {
   SET_LIST_RESOLUTION,
   SET_LIST_SCHEMA,
-  SET_LIST_SCHEMA_V2,
   convertLegacySetListState,
   hashSetListAbc,
   insertSetListDocumentItem,
@@ -203,8 +202,8 @@ test("accepts lightweight and self-contained portable documents", () => {
   assert.equal(contained.items[0].export.pageBreakBefore, true);
 });
 
-test("canonical portable documents satisfy the shared JSON Schema", () => {
-  const schema = readFixture("../../../docs/schemas/abcarus.setlist.v1.schema.json");
+test("canonical portable documents satisfy the v2 JSON Schema", () => {
+  const schema = readFixture("../../../docs/schemas/abcarus.setlist.v2.schema.json");
   const ajv = new Ajv2020({ allErrors: true, strict: true, validateFormats: false });
   const validate = ajv.compile(schema);
   for (const name of ["lightweight.abcarus-setlist.json", "self-contained.abcarus-setlist.json"]) {
@@ -213,22 +212,18 @@ test("canonical portable documents satisfy the shared JSON Schema", () => {
   }
 });
 
-test("v2 print presentation is strict while unchanged v1 output stays v1", () => {
+test("all Set List writes use the canonical v2 print presentation", () => {
   const source = readFixture("self-contained.abcarus-setlist.json");
   source.print.titlePage = true;
   source.print.tuneIndex = "incipits";
   source.print.numberTunes = true;
   source.print.indexQrCodes = true;
-  const v1 = JSON.parse(serializeSetListDocument(source));
-  assert.equal(v1.schema, SET_LIST_SCHEMA);
-  assert.equal(v1.print.titlePage, undefined);
-
-  source.schema = SET_LIST_SCHEMA_V2;
   const v2 = JSON.parse(serializeSetListDocument(source));
   const schema = readFixture("../../../docs/schemas/abcarus.setlist.v2.schema.json");
   const ajv = new Ajv2020({ allErrors: true, strict: true, validateFormats: false });
   const validate = ajv.compile(schema);
   assert.equal(validate(v2), true, ajv.errorsText(validate.errors));
+  assert.equal(v2.schema, SET_LIST_SCHEMA);
   assert.deepEqual(v2.print, {
     headerText: source.print.headerText,
     pageBreaks: source.print.pageBreaks,
@@ -1195,7 +1190,7 @@ await test("Set List panel visibility is persisted and restored", () => {
 
 await test("restores the last Set List and uses its title for print and ABC export", async () => {
   const sourceDocument = readFixture("self-contained.abcarus-setlist.json");
-  sourceDocument.schema = SET_LIST_SCHEMA_V2;
+  sourceDocument.schema = SET_LIST_SCHEMA;
   sourceDocument.print.headerText = "%%leftmargin 0\n";
   sourceDocument.print.titlePage = true;
   sourceDocument.print.tuneIndex = "incipits";

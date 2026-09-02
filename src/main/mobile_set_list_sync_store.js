@@ -1,6 +1,6 @@
 "use strict";
 
-const SET_LIST_SCHEMA = "abcarus.setlist.v1";
+const SET_LIST_SCHEMA = "abcarus.setlist.v2";
 const STORE_SCHEMA = "abcarus.setlist-sync.v1";
 
 function parseTime(value) {
@@ -18,6 +18,10 @@ function validDocument(value) {
     && Array.isArray(value.items)
     && parseTime(value.updatedAt) > 0
   );
+}
+
+function sameDocument(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function safeFileName(value) {
@@ -97,8 +101,9 @@ function createMobileSetListSyncStore({ fs, path, getStoreDir, getDefaultDir } =
     return { document: winner, filePath: target, remoteWon: !incomingWins };
   }
 
-  async function syncImpl(documents) {
+  async function syncDetailedImpl(documents) {
     const state = await load();
+    const changedIds = [];
     for (const document of Array.isArray(documents) ? documents : []) {
       if (!validDocument(document)) continue;
       const id = String(document.id);
@@ -107,13 +112,16 @@ function createMobileSetListSyncStore({ fs, path, getStoreDir, getDefaultDir } =
       const target = String(existing && existing.filePath || "").trim()
         || await chooseNewPath(document, state.entries);
       const copy = structuredClone(document);
+      if (existing && sameDocument(existing.document, copy)) continue;
       state.entries[id] = { filePath: target, document: copy };
       await writeText(target, serialize(copy));
+      changedIds.push(id);
     }
     await save(state);
-    return Object.values(state.entries)
+    const documentsForMobile = Object.values(state.entries)
       .filter((entry) => entry && validDocument(entry.document))
       .map((entry) => structuredClone(entry.document));
+    return { documents: documentsForMobile, changedIds };
   }
 
   return {
@@ -122,8 +130,13 @@ function createMobileSetListSyncStore({ fs, path, getStoreDir, getDefaultDir } =
       return Object.values(state.entries).filter((entry) => entry && validDocument(entry.document));
     }),
     publish: (document, filePath) => run(() => publishImpl(document, filePath)),
-    sync: (documents) => run(() => syncImpl(documents)),
+    sync: (documents) => run(async () => (await syncDetailedImpl(documents)).documents),
+    syncDetailed: (documents) => run(() => syncDetailedImpl(documents)),
   };
 }
 
-module.exports = { createMobileSetListSyncStore, parseTime, validDocument };
+module.exports = {
+  createMobileSetListSyncStore,
+  parseTime,
+  validDocument,
+};

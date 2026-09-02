@@ -55,7 +55,7 @@ try {
 
   const enrichedDocuments = await enrichMobileSetListDocuments({
     documents: [{
-      schema: "abcarus.setlist.v1",
+      schema: "abcarus.setlist.v2",
       id: "enrichment",
       title: "Enrichment",
       updatedAt: "2026-08-24T12:00:00.000Z",
@@ -119,7 +119,7 @@ try {
   assert.match(batch.files[0].content, /T:One/);
 
   const setList = {
-    schema: "abcarus.setlist.v1",
+    schema: "abcarus.setlist.v2",
     id: "gig-id",
     title: "Friday Gig",
     createdAt: "2026-08-20T12:00:00.000Z",
@@ -155,6 +155,45 @@ try {
   };
   await setListStore.sync([enrichedTablet]);
   assert.equal((await setListStore.list())[0].document.items[0].tune.composer, "Composer");
+
+  const desktopV2 = {
+    ...enrichedTablet,
+    updatedAt: "2026-08-23T13:00:00.000Z",
+    print: {
+      ...enrichedTablet.print,
+      titlePage: true,
+      tuneIndex: "incipits",
+      numberTunes: true,
+      indexQrCodes: true,
+    },
+  };
+  await setListStore.publish(desktopV2, entries[0].filePath);
+  const v2SyncResponse = await request(`${base}/v1/set-lists/sync`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ setLists: [] }),
+  });
+  assert.equal(v2SyncResponse.status, 200);
+  const mobileProjection = (await v2SyncResponse.json()).setLists;
+  assert.equal(mobileProjection[0].schema, "abcarus.setlist.v2");
+  assert.equal(mobileProjection[0].print.tuneIndex, "incipits");
+  assert.equal((await setListStore.list())[0].document.schema, "abcarus.setlist.v2");
+
+  const editedOnMobile = {
+    ...mobileProjection[0],
+    title: "Tablet renamed v2 list",
+    updatedAt: "2026-08-23T14:00:00.000Z",
+  };
+  const detailedSync = await setListStore.syncDetailed([editedOnMobile]);
+  assert.deepEqual(detailedSync.changedIds, [setList.id]);
+  assert.equal(detailedSync.documents[0].schema, "abcarus.setlist.v2");
+  const roundTrippedV2 = (await setListStore.list())[0].document;
+  assert.equal(roundTrippedV2.schema, "abcarus.setlist.v2");
+  assert.equal(roundTrippedV2.title, "Tablet renamed v2 list");
+  assert.equal(roundTrippedV2.print.tuneIndex, "incipits");
+
+  const unchangedSync = await setListStore.syncDetailed([editedOnMobile]);
+  assert.deepEqual(unchangedSync.changedIds, []);
 
   selectedSetListRoot = path.join(tempRoot, "custom-set-lists");
   const secondSetList = {

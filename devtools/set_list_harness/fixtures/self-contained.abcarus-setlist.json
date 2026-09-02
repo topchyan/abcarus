@@ -1,10 +1,18 @@
 {
-  "schema": "abcarus.setlist.v1",
+  "schema": "abcarus.setlist.v2",
   "id": "set-contained",
   "title": "Saved Performance",
   "createdAt": "2026-08-20T12:00:00.000Z",
   "updatedAt": "2026-08-20T12:00:00.000Z",
-  "print": { "headerText": "", "pageBreaks": "none", "compact": true },
+  "print": {
+    "headerText": "",
+    "pageBreaks": "none",
+    "compact": true,
+    "titlePage": false,
+    "tuneIndex": "none",
+    "numberTunes": false,
+    "indexQrCodes": false
+  },
   "items": [{
     "id": "item-saved",
     "tune": {

@@ -1,11 +1,10 @@
 # ABCarus Set List Format
 
-Status: Draft 0.4
+Status: Draft 0.5
 
-Schema identifiers: `abcarus.setlist.v1`, `abcarus.setlist.v2`
+Canonical schema identifier: `abcarus.setlist.v2`
 
-Normative schemas: `docs/schemas/abcarus.setlist.v1.schema.json`,
-`docs/schemas/abcarus.setlist.v2.schema.json`
+Normative schema: `docs/schemas/abcarus.setlist.v2.schema.json`.
 
 This document is the portable data contract shared by ABCarus desktop and
 mobile clients. ADR-0020 defines the document model. ADR-0021 defines the
@@ -15,27 +14,19 @@ desktop workflow and source-versus-snapshot authority.
 
 One Set List is one UTF-8 JSON file named `*.abcarus-setlist.json`.
 
-Readers of `abcarus.setlist.v1` are tolerant of omitted optional fields and
-unknown fields. Writers emit only fields defined by the v1 schema. Consequently,
-opening and saving a v1 document in an older writer may discard fields that the
-writer does not understand. This is an intentional tolerant-read/strict-write
-tradeoff: semantic format additions require a new schema revision rather than
-silently extending frozen v1. A reader must reject an unknown schema identifier
-instead of rewriting it.
+Desktop and Mobile read, write, and synchronize `abcarus.setlist.v2`. A reader
+must reject any other schema identifier instead of rewriting it.
 
-Fields added during the v1 draft period, including `snapshot`, remain optional
-when reading existing files. Newly captured embedded revisions should write
-them when the information is available.
+`snapshot` remains optional. Newly captured embedded revisions should write it
+when the information is available.
 
-Version 2 adds only optional print-presentation choices. ABCarus continues to
-write version 1 until one of those choices is changed, then writes version 2.
-This keeps unchanged documents compatible with existing v1 readers.
+Version 2 includes the print-presentation choices in the single shared contract.
 
 ## Document
 
 ```json
 {
-  "schema": "abcarus.setlist.v1",
+  "schema": "abcarus.setlist.v2",
   "id": "set-list-id",
   "title": "Autumn Concert",
   "createdAt": "2026-08-20T12:00:00.000Z",
@@ -43,20 +34,13 @@ This keeps unchanged documents compatible with existing v1 readers.
   "print": {
     "headerText": "%%stretchlast 1\n",
     "pageBreaks": "perTune",
-    "compact": false
+    "compact": false,
+    "titlePage": false,
+    "tuneIndex": "none",
+    "numberTunes": false,
+    "indexQrCodes": false
   },
   "items": []
-}
-```
-
-Version 2 extends `print` with the following required fields:
-
-```json
-{
-  "titlePage": false,
-  "tuneIndex": "none",
-  "numberTunes": false,
-  "indexQrCodes": false
 }
 ```
 
