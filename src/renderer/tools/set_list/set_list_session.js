@@ -1,6 +1,7 @@
 import {
   DEFAULT_SET_LIST_HEADER_TEXT,
   SET_LIST_SCHEMA,
+  mergeSetListDocuments,
   normalizeSetListDocument,
   serializeSetListDocument,
 } from "./set_list_document.js";
@@ -152,6 +153,35 @@ function createSetListSession({
     return { ok: true, path: target, state: snapshot() };
   }
 
+  async function mergeExternal() {
+    if (!filePath || typeof diskText !== "string") {
+      return { ok: false, error: "The Set List has no saved base revision." };
+    }
+    const result = await readFile(filePath);
+    if (!result || !result.ok) {
+      return { ok: false, error: result && result.error ? result.error : "Unable to read changed Set List." };
+    }
+    const remoteText = String(result.data || "");
+    try {
+      const merged = mergeSetListDocuments(
+        JSON.parse(diskText),
+        document,
+        JSON.parse(remoteText),
+        { makeId, nowIso },
+      );
+      if (!merged) return { ok: false, error: "The changed file is not the same Set List." };
+      replaceDocument(merged, {
+        nextFilePath: filePath,
+        nextDiskText: remoteText,
+        nextDirty: true,
+        nextDirtyReasons: [...dirtyReasons, "merged external changes"],
+      });
+      return { ok: true, state: snapshot() };
+    } catch (error) {
+      return { ok: false, error: `Unable to merge changed Set List: ${error.message}` };
+    }
+  }
+
   function forgetRecentPath(path) {
     const target = String(path || "");
     recentPaths = recentPaths.filter((entry) => entry !== target);
@@ -162,6 +192,7 @@ function createSetListSession({
   return {
     forgetRecentPath,
     getState: snapshot,
+    mergeExternal,
     mutate,
     newDocument,
     open,

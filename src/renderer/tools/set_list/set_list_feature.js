@@ -1056,7 +1056,14 @@ function createSetListFeature({
     if (!result.ok && result.conflict) {
       const choice = await resolveSaveConflict(path);
       if (choice === "save_as") return saveSetList(true);
-      if (choice === "overwrite") {
+      if (choice === "merge") {
+        const merged = await session.mergeExternal();
+        if (!merged.ok) {
+          logError(merged.error || "Unable to merge changed Set List.");
+          return false;
+        }
+        result = await session.save(path);
+      } else if (choice === "overwrite") {
         result = await session.save(path, { overwriteExternal: true });
       } else {
         return false;

@@ -20,6 +20,7 @@ const {
   convertLegacySetListState,
   hashSetListAbc,
   insertSetListDocumentItem,
+  mergeSetListDocuments,
   moveSetListDocumentItems,
   normalizeSetListDocument,
   resolveSetListItem,
@@ -290,6 +291,30 @@ test("keeps duplicate tune occurrences as independent items", () => {
   assert.equal(document.items[0].tune.contentHash, document.items[1].tune.contentHash);
   assert.notEqual(document.items[0].id, document.items[1].id);
   assert.equal(document.items[1].performance.transposeSemitones, 2);
+});
+
+test("three-way merge preserves independent item edits and combines conflicting notes", () => {
+  const base = normalizeSetListDocument(readFixture("lightweight.abcarus-setlist.json"));
+  const local = structuredClone(base);
+  const remote = structuredClone(base);
+  local.items[0].notes = "Desktop fingering";
+  local.items[0].performance.transposeSemitones = 2;
+  remote.items[0].notes = "Tablet cue";
+  remote.items.push({
+    ...structuredClone(remote.items[0]),
+    id: "mobile-added-item",
+    notes: "Added on tablet",
+  });
+
+  const merged = mergeSetListDocuments(base, local, remote, {
+    nowIso: () => "2030-01-01T00:00:00.000Z",
+  });
+
+  assert.equal(merged.items.length, 2);
+  assert.equal(merged.items[0].performance.transposeSemitones, 2);
+  assert.match(merged.items[0].notes, /Desktop fingering/);
+  assert.match(merged.items[0].notes, /Tablet cue/);
+  assert.equal(merged.items[1].id, "mobile-added-item");
 });
 
 test("portable document serialization drops unknown fields", () => {
@@ -587,7 +612,7 @@ await test("mobile sync reloads a matching clean Set List but preserves dirty wo
   assert.equal(feature.getState().items[0].notes, "Added on Mobile");
 });
 
-await test("Set List Save resolves an external conflict without trapping unsaved work", async () => {
+await test("Set List Save merges an external conflict without trapping unsaved work", async () => {
   const setListPath = "/sets/current.abcarus-setlist.json";
   const files = new Map([
     [setListPath, serializeSetListDocument(readFixture("lightweight.abcarus-setlist.json"))],
@@ -606,15 +631,21 @@ await test("Set List Save resolves an external conflict without trapping unsaved
       files.set(path, data);
       return { ok: true };
     },
-    resolveSaveConflict: async () => "overwrite",
+    resolveSaveConflict: async () => "merge",
   });
 
   assert.equal(await feature.restoreLastSetList(), true);
   assert.equal(feature.updatePracticeNote(0, "Keep this Desktop note"), true);
-  files.set(setListPath, `${files.get(setListPath)}\n`);
+  const mobileDocument = JSON.parse(files.get(setListPath));
+  mobileDocument.items[0].notes = "Keep this Mobile note";
+  mobileDocument.items[0].performance.transposeSemitones = 3;
+  mobileDocument.updatedAt = "2030-01-01T00:00:00.000Z";
+  files.set(setListPath, serializeSetListDocument(mobileDocument));
   assert.equal(await feature.saveSetList(), true);
   assert.equal(feature.getState().dirty, false);
   assert.match(files.get(setListPath), /Keep this Desktop note/);
+  assert.match(files.get(setListPath), /Keep this Mobile note/);
+  assert.equal(JSON.parse(files.get(setListPath)).items[0].performance.transposeSemitones, 3);
 });
 
 await test("Refresh promotes a trusted lightweight path and X match to a current snapshot", async () => {

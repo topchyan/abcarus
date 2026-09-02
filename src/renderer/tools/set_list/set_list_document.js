@@ -213,6 +213,136 @@ function normalizeSetListDocument(value, options = {}) {
   };
 }
 
+function sameJson(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function mergeConflictingNotes(local, remote) {
+  const localText = text(local).trim();
+  const remoteText = text(remote).trim();
+  if (!localText) return remoteText;
+  if (!remoteText || localText === remoteText || localText.includes(remoteText)) return localText;
+  if (remoteText.includes(localText)) return remoteText;
+  return `${localText}\n${remoteText}`;
+}
+
+function mergeArrayValues(local, remote) {
+  const values = [];
+  const seen = new Set();
+  for (const value of [...local, ...remote]) {
+    const key = JSON.stringify(value);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    values.push(structuredClone(value));
+  }
+  return values;
+}
+
+function mergeSetListValue(base, local, remote, key = "") {
+  if (sameJson(local, remote)) return structuredClone(local);
+  if (sameJson(local, base)) return structuredClone(remote);
+  if (sameJson(remote, base)) return structuredClone(local);
+  if (key === "notes" && typeof local === "string" && typeof remote === "string") {
+    return mergeConflictingNotes(local, remote);
+  }
+  if (Array.isArray(local) && Array.isArray(remote)) {
+    return mergeArrayValues(local, remote);
+  }
+  if (local && remote && typeof local === "object" && typeof remote === "object") {
+    const baseObject = base && typeof base === "object" && !Array.isArray(base) ? base : {};
+    const output = {};
+    const keys = new Set([...Object.keys(baseObject), ...Object.keys(local), ...Object.keys(remote)]);
+    for (const childKey of keys) {
+      const hasBase = Object.prototype.hasOwnProperty.call(baseObject, childKey);
+      const hasLocal = Object.prototype.hasOwnProperty.call(local, childKey);
+      const hasRemote = Object.prototype.hasOwnProperty.call(remote, childKey);
+      if (!hasLocal && !hasRemote) continue;
+      if (!hasLocal) {
+        if (!hasBase || !sameJson(remote[childKey], baseObject[childKey])) {
+          output[childKey] = structuredClone(remote[childKey]);
+        }
+        continue;
+      }
+      if (!hasRemote) {
+        if (!hasBase || !sameJson(local[childKey], baseObject[childKey])) {
+          output[childKey] = structuredClone(local[childKey]);
+        }
+        continue;
+      }
+      output[childKey] = mergeSetListValue(
+        hasBase ? baseObject[childKey] : undefined,
+        local[childKey],
+        remote[childKey],
+        childKey,
+      );
+    }
+    return output;
+  }
+  return structuredClone(local);
+}
+
+function mergeSetListItems(baseItems, localItems, remoteItems) {
+  const byId = (items) => new Map(items.map((item) => [String(item.id), item]));
+  const base = byId(baseItems);
+  const local = byId(localItems);
+  const remote = byId(remoteItems);
+  const merged = new Map();
+  const ids = new Set([...base.keys(), ...local.keys(), ...remote.keys()]);
+  for (const id of ids) {
+    const baseItem = base.get(id);
+    const localItem = local.get(id);
+    const remoteItem = remote.get(id);
+    if (!baseItem) {
+      if (localItem && remoteItem) merged.set(id, mergeSetListValue(undefined, localItem, remoteItem));
+      else if (localItem || remoteItem) merged.set(id, structuredClone(localItem || remoteItem));
+      continue;
+    }
+    if (!localItem && !remoteItem) continue;
+    if (!localItem) {
+      if (!sameJson(remoteItem, baseItem)) merged.set(id, structuredClone(remoteItem));
+      continue;
+    }
+    if (!remoteItem) {
+      if (!sameJson(localItem, baseItem)) merged.set(id, structuredClone(localItem));
+      continue;
+    }
+    merged.set(id, mergeSetListValue(baseItem, localItem, remoteItem));
+  }
+
+  const baseOrder = baseItems.map((item) => String(item.id));
+  const localOrder = localItems.map((item) => String(item.id));
+  const remoteOrder = remoteItems.map((item) => String(item.id));
+  const localOrderChanged = !sameJson(localOrder, baseOrder);
+  const remoteOrderChanged = !sameJson(remoteOrder, baseOrder);
+  const preferredOrder = !localOrderChanged && remoteOrderChanged ? remoteOrder : localOrder;
+  const orderedIds = [...preferredOrder, ...remoteOrder, ...localOrder];
+  const output = [];
+  const appended = new Set();
+  for (const id of orderedIds) {
+    if (appended.has(id) || !merged.has(id)) continue;
+    appended.add(id);
+    output.push(merged.get(id));
+  }
+  for (const [id, item] of merged) {
+    if (!appended.has(id)) output.push(item);
+  }
+  return output;
+}
+
+function mergeSetListDocuments(baseValue, localValue, remoteValue, options = {}) {
+  const base = normalizeSetListDocument(baseValue, options);
+  const local = normalizeSetListDocument(localValue, options);
+  const remote = normalizeSetListDocument(remoteValue, options);
+  if (!base || !local || !remote || base.id !== local.id || base.id !== remote.id) return null;
+  const merged = mergeSetListValue(base, local, remote);
+  merged.schema = local.schema;
+  merged.id = local.id;
+  merged.createdAt = local.createdAt;
+  merged.updatedAt = typeof options.nowIso === "function" ? options.nowIso() : new Date().toISOString();
+  merged.items = mergeSetListItems(base.items, local.items, remote.items);
+  return normalizeSetListDocument(merged, options);
+}
+
 function serializeSetListDocument(value, options = {}) {
   const normalized = normalizeSetListDocument(value, options);
   if (!normalized) throw new Error("Invalid Set List document.");
@@ -336,6 +466,7 @@ export {
   hashSetListAbc,
   insertSetListDocumentItem,
   moveSetListDocumentItems,
+  mergeSetListDocuments,
   normalizeSetListDocument,
   normalizeSetListDocumentItem,
   resolveSetListItem,

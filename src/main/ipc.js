@@ -729,15 +729,16 @@ function registerIpcHandlers(ctx) {
     const base = path.basename(String(filePath || "Set List"));
     const response = dialog.showMessageBoxSync(parent || undefined, {
       type: "warning",
-      buttons: ["Replace with my changes", "Save As…", "Cancel"],
+      buttons: ["Merge changes", "Replace with my changes", "Save As…", "Cancel"],
       defaultId: 0,
-      cancelId: 2,
+      cancelId: 3,
       message: "Set List changed on disk",
-      detail: `“${base}” was changed by synchronization or another window. Save your current unsaved version over it, or save it as another file.`,
+      detail: `“${base}” was changed by synchronization or another window. Merge independent changes, replace it with your current version, or save your version as another file.`,
       noLink: true,
     });
-    if (response === 0) return "overwrite";
-    if (response === 1) return "save_as";
+    if (response === 0) return "merge";
+    if (response === 1) return "overwrite";
+    if (response === 2) return "save_as";
     return "cancel";
   });
   ipcMain.handle("dialog:confirm-append", async (_e, payload) => {
