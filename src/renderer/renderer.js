@@ -1066,6 +1066,9 @@ const setListFeature = createSetListFeature({
   logError: logErr,
   confirm: (message) => window.confirm(message),
   confirmUnsavedChanges,
+  resolveSaveConflict: (filePath) => window.api && typeof window.api.confirmSetListSaveConflict === "function"
+    ? window.api.confirmSetListSaveConflict(filePath)
+    : Promise.resolve("cancel"),
   enableDraggable: enableDraggableModal,
 });
 

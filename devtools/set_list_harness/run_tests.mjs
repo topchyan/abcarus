@@ -587,6 +587,36 @@ await test("mobile sync reloads a matching clean Set List but preserves dirty wo
   assert.equal(feature.getState().items[0].notes, "Added on Mobile");
 });
 
+await test("Set List Save resolves an external conflict without trapping unsaved work", async () => {
+  const setListPath = "/sets/current.abcarus-setlist.json";
+  const files = new Map([
+    [setListPath, serializeSetListDocument(readFixture("lightweight.abcarus-setlist.json"))],
+  ]);
+  const feature = createSetListFeature({
+    readStorage: (key) => key === "abcarus.setList.recentPaths.v1" ? [setListPath] : null,
+    writeStorage: () => true,
+    readFile: async (path) => files.has(path)
+      ? { ok: true, data: files.get(path) }
+      : { ok: false, error: "missing" },
+    writeFile: async (path, data, options = {}) => {
+      if (Object.prototype.hasOwnProperty.call(options, "expectedData")
+        && files.get(path) !== options.expectedData) {
+        return { ok: false, conflict: true, error: "File changed on disk." };
+      }
+      files.set(path, data);
+      return { ok: true };
+    },
+    resolveSaveConflict: async () => "overwrite",
+  });
+
+  assert.equal(await feature.restoreLastSetList(), true);
+  assert.equal(feature.updatePracticeNote(0, "Keep this Desktop note"), true);
+  files.set(setListPath, `${files.get(setListPath)}\n`);
+  assert.equal(await feature.saveSetList(), true);
+  assert.equal(feature.getState().dirty, false);
+  assert.match(files.get(setListPath), /Keep this Desktop note/);
+});
+
 await test("Refresh promotes a trusted lightweight path and X match to a current snapshot", async () => {
   const feature = createSetListFeature({
     readStorage: (key) => key === "abcarus.setList.v1" ? {
@@ -1079,6 +1109,10 @@ await test("Set List session saves atomically and detects an external change", a
   assert.equal(conflict.ok, false);
   assert.equal(conflict.conflict, true);
   assert.equal(session.getState().dirty, true);
+  const overwritten = await session.save(undefined, { overwriteExternal: true });
+  assert.equal(overwritten.ok, true);
+  assert.equal(session.getState().dirty, false);
+  assert.match(files.get("/sets/concert.abcarus-setlist.json"), /"title": "Concert"/);
 });
 
 await test("Set List session opens a canonical portable document", async () => {

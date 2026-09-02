@@ -85,6 +85,7 @@ function createSetListFeature({
   logError = () => {},
   confirm = (message) => window.confirm(message),
   confirmUnsavedChanges = async () => "cancel",
+  resolveSaveConflict = async () => "cancel",
   enableDraggable = null,
   nowIso = () => new Date().toISOString(),
 } = {}) {
@@ -1051,11 +1052,18 @@ function createSetListFeature({
       path = await showSaveSetListDialog(getDocument().title, getDefaultSaveDir());
       if (!path) return false;
     }
-    const result = await session.save(path);
+    let result = await session.save(path);
+    if (!result.ok && result.conflict) {
+      const choice = await resolveSaveConflict(path);
+      if (choice === "save_as") return saveSetList(true);
+      if (choice === "overwrite") {
+        result = await session.save(path, { overwriteExternal: true });
+      } else {
+        return false;
+      }
+    }
     if (!result.ok) {
-      logError(result.conflict
-        ? "Set List changed on disk. Re-open it before saving again."
-        : (result.error || "Unable to save Set List."));
+      logError(result.error || "Unable to save Set List.");
       return false;
     }
     await publishCurrentSetList();

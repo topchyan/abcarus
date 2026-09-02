@@ -44,6 +44,8 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("dialog:confirm-unsaved", contextLabel),
   confirmOverwrite: async (filePath) =>
     ipcRenderer.invoke("dialog:confirm-overwrite", filePath),
+  confirmSetListSaveConflict: async (filePath) =>
+    ipcRenderer.invoke("dialog:set-list-save-conflict", filePath),
   confirmAppendToFile: async (filePath) =>
     ipcRenderer.invoke("dialog:confirm-append", filePath || ""),
   confirmAppendToFileDetailed: async (filePath, tuneLabel) =>

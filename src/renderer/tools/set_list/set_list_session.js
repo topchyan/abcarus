@@ -132,12 +132,14 @@ function createSetListSession({
     return { ok: true, state: snapshot() };
   }
 
-  async function save(path = filePath) {
+  async function save(path = filePath, { overwriteExternal = false } = {}) {
     const target = String(path || "").trim();
     if (!target) return { ok: false, needsPath: true };
     const nextDocument = { ...document, updatedAt: nowIso() };
     const serialized = serializeSetListDocument(nextDocument, { makeId, nowIso });
-    const options = target === filePath && typeof diskText === "string" ? { expectedData: diskText } : {};
+    const options = !overwriteExternal && target === filePath && typeof diskText === "string"
+      ? { expectedData: diskText }
+      : {};
     const result = await writeFile(target, serialized, options);
     if (!result || !result.ok) {
       return {

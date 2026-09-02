@@ -724,6 +724,22 @@ function registerIpcHandlers(ctx) {
   ipcMain.handle("dialog:confirm-overwrite", async (event, filePath) =>
     confirmOverwrite(filePath, event)
   );
+  ipcMain.handle("dialog:set-list-save-conflict", async (event, filePath) => {
+    const parent = getParentForDialog(event, "set-list-save-conflict");
+    const base = path.basename(String(filePath || "Set List"));
+    const response = dialog.showMessageBoxSync(parent || undefined, {
+      type: "warning",
+      buttons: ["Replace with my changes", "Save As…", "Cancel"],
+      defaultId: 0,
+      cancelId: 2,
+      message: "Set List changed on disk",
+      detail: `“${base}” was changed by synchronization or another window. Save your current unsaved version over it, or save it as another file.`,
+      noLink: true,
+    });
+    if (response === 0) return "overwrite";
+    if (response === 1) return "save_as";
+    return "cancel";
+  });
   ipcMain.handle("dialog:confirm-append", async (_e, payload) => {
     const raw = payload;
     const filePath = typeof raw === "string"
