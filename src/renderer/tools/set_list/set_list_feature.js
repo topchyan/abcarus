@@ -1014,6 +1014,31 @@ function createSetListFeature({
     return false;
   }
 
+  async function reloadSyncedSetList(payload = {}) {
+    const state = getDocumentState();
+    if (!state.filePath || state.dirty) return false;
+    const changedIds = Array.isArray(payload.ids)
+      ? payload.ids.map((value) => String(value || ""))
+      : [];
+    if (changedIds.length && !changedIds.includes(String(state.document.id || ""))) {
+      return false;
+    }
+    const previousActiveItemId = activeItemId;
+    const result = await session.open(state.filePath);
+    if (!result.ok) {
+      logError(result.error || "Unable to reload synchronized Set List.");
+      return false;
+    }
+    activeItemId = getItems().some((item) => String(item.id || "") === previousActiveItemId)
+      ? previousActiveItemId
+      : "";
+    activePerformanceContext = null;
+    itemResolutions.clear();
+    render();
+    showToast("Set List updated from Mobile.", 2400);
+    return true;
+  }
+
   function restorePanelVisibility() {
     if (readStorage(panelVisibilityStorageKey) !== true) return false;
     open();
@@ -1112,6 +1137,7 @@ function createSetListFeature({
     render,
     renderSvgMarkupForPrint,
     refreshFromLibrarySources,
+    reloadSyncedSetList,
     restoreLastSetList,
     restorePanelVisibility,
     runPrintAction,

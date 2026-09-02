@@ -1069,6 +1069,12 @@ const setListFeature = createSetListFeature({
   enableDraggable: enableDraggableModal,
 });
 
+if (window.api && typeof window.api.onMobileSetListsChanged === "function") {
+  window.api.onMobileSetListsChanged((payload) => {
+    setListFeature.reloadSyncedSetList(payload).catch(logErr);
+  });
+}
+
 const tuneListExportController = createTuneListExportController({
   modal: $tuneListExportModal,
   closeButton: $tuneListExportClose,

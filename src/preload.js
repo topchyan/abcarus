@@ -167,6 +167,9 @@ contextBridge.exposeInMainWorld("api", {
   onSettingsChanged: (handler) => {
     ipcRenderer.on("settings:changed", (_evt, settings) => handler(settings));
   },
+  onMobileSetListsChanged: (handler) => {
+    ipcRenderer.on("set-list-sync:changed", (_evt, payload) => handler(payload));
+  },
   getDevConfig: () => {
     const cfg = {};
     for (const [k, v] of Object.entries(process.env || {})) {

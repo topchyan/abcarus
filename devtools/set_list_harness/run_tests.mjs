@@ -554,6 +554,39 @@ await test("Refresh saves an opened Set List automatically", async () => {
   assert.equal(feature.getState().dirty, false);
 });
 
+await test("mobile sync reloads a matching clean Set List but preserves dirty work", async () => {
+  const setListPath = "/sets/current.abcarus-setlist.json";
+  const initial = normalizeSetListDocument(readFixture("lightweight.abcarus-setlist.json"));
+  let diskDocument = structuredClone(initial);
+  const feature = createSetListFeature({
+    readStorage: (key) => key === "abcarus.setList.recentPaths.v1" ? [setListPath] : null,
+    writeStorage: () => true,
+    readFile: async (path) => path === setListPath
+      ? { ok: true, data: serializeSetListDocument(diskDocument) }
+      : { ok: false, error: "missing" },
+    buildItemForTuneId: async () => ({
+      sourcePath: "/music/local.abc",
+      xNumber: "2",
+      title: "Unsaved Desktop Tune",
+      key: "C",
+      text: "X:2\nT:Unsaved Desktop Tune\nK:C\nC|\n",
+      headerText: "",
+    }),
+  });
+
+  assert.equal(await feature.restoreLastSetList(), true);
+  diskDocument.items[0].notes = "Added on Mobile";
+  diskDocument.updatedAt = "2030-01-01T00:00:00.000Z";
+  assert.equal(await feature.reloadSyncedSetList({ ids: [initial.id] }), true);
+  assert.equal(feature.getState().items[0].notes, "Added on Mobile");
+
+  assert.equal(await feature.addTuneById("/music/local.abc::2"), true);
+  diskDocument.items[0].notes = "Newer mobile note";
+  assert.equal(feature.getState().dirty, true);
+  assert.equal(await feature.reloadSyncedSetList({ ids: [initial.id] }), false);
+  assert.equal(feature.getState().items[0].notes, "Added on Mobile");
+});
+
 await test("Refresh promotes a trusted lightweight path and X match to a current snapshot", async () => {
   const feature = createSetListFeature({
     readStorage: (key) => key === "abcarus.setList.v1" ? {

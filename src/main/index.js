@@ -62,7 +62,13 @@ const mobileLibraryServer = createMobileLibraryServer({
         return parsed && parsed.files && parsed.files[0] ? parsed.files[0] : null;
       },
     });
-    return mobileSetListSyncStore.sync(enriched);
+    const synced = await mobileSetListSyncStore.sync(enriched);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("set-list-sync:changed", {
+        ids: synced.map((document) => String(document && document.id || "")).filter(Boolean),
+      });
+    }
+    return synced;
   },
 });
 let mobileLibrarySettingsRevision = 0;
