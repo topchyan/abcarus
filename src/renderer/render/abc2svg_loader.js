@@ -1,3 +1,5 @@
+import { neutralizeUnsafeAbcBlocks } from "../security/abc_security.js";
+
 function createAbc2svgLoader({
   windowRef = typeof window !== "undefined" ? window : null,
   documentRef = typeof document !== "undefined" ? document : null,
@@ -46,7 +48,11 @@ function createAbc2svgLoader({
     if (!w || !w.abc2svg || !w.abc2svg.modules || typeof w.abc2svg.modules.load !== "function") {
       return true;
     }
-    return w.abc2svg.modules.load(content, () => scheduleRender(), logError);
+    return w.abc2svg.modules.load(
+      neutralizeUnsafeAbcBlocks(content),
+      () => scheduleRender(),
+      logError,
+    );
   }
 
   function ensureAbc2svgModulesAsync(content) {
@@ -56,7 +62,7 @@ function createAbc2svgLoader({
     }
     return new Promise((resolve) => {
       const ok = w.abc2svg.modules.load(
-        content,
+        neutralizeUnsafeAbcBlocks(content),
         () => resolve(true),
         () => resolve(false)
       );

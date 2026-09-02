@@ -12,10 +12,11 @@ function neutralizeUnsafeAbcBlocks(text) {
   for (let index = 0; index < parts.length; index += 2) {
     const line = parts[index];
     const startsUnsafeBlock = line.match(/^\s*(?:%%|I:)begin(js|ml)(?:\s|$)/i);
+    const unsafeLoadJs = /^\s*(?:%%|I:)loadjs(?:\s|$)/i.test(line);
     if (!blockedType && startsUnsafeBlock) blockedType = startsUnsafeBlock[1].toLowerCase();
     const endsBlockedType = blockedType
       && new RegExp(`^\\s*(?:%%|I:)end${blockedType}(?:\\s|$)`, "i").test(line);
-    if (blockedType) parts[index] = neutralizeLinePreservingLength(line);
+    if (blockedType || unsafeLoadJs) parts[index] = neutralizeLinePreservingLength(line);
     if (endsBlockedType) blockedType = "";
   }
 

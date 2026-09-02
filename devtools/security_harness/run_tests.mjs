@@ -24,6 +24,7 @@ const {
   callAbc2svgSafely,
   neutralizeUnsafeAbcBlocks,
 } = await importBundledModule("src/renderer/security/abc_security.js");
+const { createAbc2svgLoader } = await importBundledModule("src/renderer/render/abc2svg_loader.js");
 
 const malicious = [
   "X:1",
@@ -57,6 +58,37 @@ const neutralizedInformationFieldBlock = neutralizeUnsafeAbcBlocks(informationFi
 assert.equal(neutralizedInformationFieldBlock.length, informationFieldBlock.length);
 assert.doesNotMatch(neutralizedInformationFieldBlock, /beginjs|writeFile|endjs/i);
 assert.match(neutralizedInformationFieldBlock, /^K:C$/m);
+
+const loadJsDirectives = [
+  "X:1",
+  "K:C",
+  "%%loadjs https://example.invalid/extension.js",
+  "I:loadjs ../../extension.js",
+  "C D E F|",
+].join("\n");
+const neutralizedLoadJs = neutralizeUnsafeAbcBlocks(loadJsDirectives);
+assert.equal(neutralizedLoadJs.length, loadJsDirectives.length);
+assert.equal(neutralizedLoadJs.split("\n").length, loadJsDirectives.split("\n").length);
+assert.doesNotMatch(neutralizedLoadJs, /loadjs|extension\.js/i);
+assert.match(neutralizedLoadJs, /^C D E F\|$/m);
+
+let moduleLoaderInput = "";
+const abc2svgLoader = createAbc2svgLoader({
+  windowRef: {
+    abc2svg: {
+      modules: {
+        load(content) {
+          moduleLoaderInput = content;
+          return true;
+        },
+      },
+    },
+  },
+});
+assert.equal(abc2svgLoader.ensureAbc2svgModules(loadJsDirectives), true);
+assert.doesNotMatch(moduleLoaderInput, /loadjs|extension\.js/i);
+assert.equal(await abc2svgLoader.ensureAbc2svgModulesAsync(loadJsDirectives), true);
+assert.doesNotMatch(moduleLoaderInput, /loadjs|extension\.js/i);
 
 const rawMarkup = [
   "X:1",
