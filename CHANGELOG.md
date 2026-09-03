@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Pressing Tab at the end of a complete single-voice measure inserts a barline; when a barline already follows, Tab advances past it. Incomplete, overfull, unsupported, and multi-voice contexts are left unchanged with status feedback.
+
+### Changed
+- Desktop and mobile Set List synchronization now use the canonical `abcarus.setlist.v2` document format exclusively.
+- Tune-scoped `%%titleformat` directives inherited from a file or Set List header are applied consistently to each tune in the Score, playback, print, PDF, and conversion paths.
+
+### Fixed
+- External and mobile Set List updates refresh clean open documents, while independently edited or concurrently saved Set Lists are merged without silently overwriting either side.
+- Unsafe abc2svg `%%beginjs` and `%%loadjs` directives are blocked before module loading and rendering.
+- Custom `%%setdiag` guitar diagrams preserve empty finger positions, preventing later finger labels from shifting left in Chromium. This backports upstream abc2svg check-in `cecc0ec042` until the next complete abc2svg upgrade.
 
 
 ## [1.9.1] - 2026-09-01
