@@ -13,6 +13,7 @@ import {
   normalizeReadableMidiDrumsForPlayback,
   sanitizeAbcForPlayback,
 } from "./playback_payload_model.js";
+import { composeHeaderPrefixPayload } from "../abc/header_prefix_model.js";
 
 function createPlaybackPayloadController({
   transport,
@@ -58,7 +59,7 @@ function createPlaybackPayloadController({
       return `payload|||${sanitized.text}|||${offset}|||${repeatsFlag}`;
     }
     const prefixPayload = buildHeaderPrefix(isChordProActive() ? "" : getActiveEntryHeader(), false, tuneText);
-    const baseText = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
+    const baseText = composeHeaderPrefixPayload(prefixPayload, tuneText);
     const injected = injectGchordOn(baseText, prefixPayload.offset || 0);
     const gchordText = injected && injected.changed ? injected.text : baseText;
     const preparedText = normalizeBlankLinesForPlayback(
@@ -114,7 +115,7 @@ function createPlaybackPayloadController({
 
     if (selectionRuntime.isSelectionMode()) {
       const prefixPayload = buildHeaderPrefix(isChordProActive() ? "" : getActiveEntryHeader(), false, tuneText);
-      const baseText = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
+      const baseText = composeHeaderPrefixPayload(prefixPayload, tuneText);
       const injected = skipGchords
         ? { text: baseText, changed: false, offsetDelta: 0 }
         : injectGchordOn(baseText, prefixPayload.offset || 0);
@@ -130,7 +131,7 @@ function createPlaybackPayloadController({
     }
 
     const prefixPayload = buildHeaderPrefix(isChordProActive() ? "" : getActiveEntryHeader(), false, tuneText);
-    const baseText = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
+    const baseText = composeHeaderPrefixPayload(prefixPayload, tuneText);
     const gchordPreview = skipGchords ? { changed: false, text: baseText } : injectGchordOn(baseText, prefixPayload.offset || 0);
     const gchordPreviewText = (gchordPreview && gchordPreview.changed) ? gchordPreview.text : baseText;
     const previewText = normalizeReadableMidiDrumsForPlayback(
@@ -149,9 +150,10 @@ function createPlaybackPayloadController({
       return { text: cached.text, offset: cached.offset, lineOffset };
     }
 
-    let payload = prefixPayload.text
-      ? { text: `${prefixPayload.text}${tuneText}`, offset: (prefixPayload.offset || 0) }
-      : { text: tuneText, offset: prefixPayload.offset || 0 };
+    let payload = {
+      text: composeHeaderPrefixPayload(prefixPayload, tuneText),
+      offset: prefixPayload.offset || 0,
+    };
     const gchordInjected = injectGchordOn(payload.text, prefixPayload.offset || 0);
     if (gchordInjected.changed) {
       payload = {

@@ -932,6 +932,7 @@ const setListRendererAdapter = createSetListRendererAdapter({
 });
 let setListPanelVisible = false;
 let setListPanelWidth = 300;
+let setListPerformanceHeaderText = "";
 
 function applySetListPanelVisibility(visible) {
   const nextVisible = Boolean(visible);
@@ -1042,7 +1043,10 @@ const setListFeature = createSetListFeature({
     resetPlaybackState();
   },
   applyPerformanceView: applySetListPerformanceView,
-  onPerformanceViewStateChange: (context) => setSetListPerformanceReadOnly(Boolean(context)),
+  onPerformanceViewStateChange: (context) => {
+    setListPerformanceHeaderText = context ? String(context.headerText || "") : "";
+    setSetListPerformanceReadOnly(Boolean(context));
+  },
   onPanelVisibilityChange: applySetListPanelVisibility,
   getPrintPageMargins: () => String(settingsSnapshot.get()?.printPageMargins || "standard"),
   setPrintPageMargins: async (value) => {
@@ -1576,7 +1580,7 @@ headerLayersController = createHeaderLayersController({
 renderRuntime.initializePayload({
   getEditorText: getEditorValue,
   getActiveFileEntry,
-  getHeaderText: getHeaderEditorValue,
+  getHeaderText: () => setListPerformanceHeaderText || getHeaderEditorValue(),
   isPayloadMode,
   isChordProEnabled: () => chordProFeature.isEnabled(),
   isChordProFullView: () => chordProFeature.isFullView(),
@@ -3370,8 +3374,9 @@ function applyTransformedText(text, options = {}) {
   scheduleRenderNow({ clearOutput: true });
 }
 
-async function applySetListPerformanceView({ text } = {}) {
+async function applySetListPerformanceView({ text, headerText } = {}) {
   if (!getCurrentDocument()) return false;
+  setListPerformanceHeaderText = String(headerText || "");
   resetTransposePreviewState();
   editorRuntime.setTextClean(String(text || ""));
   patchCurrentDocument({ content: String(text || ""), dirty: false }, { create: false });

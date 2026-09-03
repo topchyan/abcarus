@@ -1,4 +1,5 @@
 import { NEW_FILE_MINIMAL_ABC } from "../../abc/default_documents.js";
+import { composeHeaderPrefixPayload } from "../../abc/header_prefix_model.js";
 import { callAbc2svgSafely } from "../../security/abc_security.js";
 
 function formatConversionError(res) {
@@ -527,7 +528,7 @@ function createImportExportFeature({
         if (!tuneText.trim()) continue;
         const prefix = buildConversionHeaderPrefix(entry.headerText || "", tuneText);
         items.push({
-          abcText: `${prefix && prefix.text ? prefix.text : ""}${tuneText}`,
+          abcText: composeHeaderPrefixPayload(prefix, tuneText),
           xNumber: tune.xNumber || "",
           title: tune.title || "",
         });

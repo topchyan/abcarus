@@ -218,9 +218,10 @@ function createSetListFeature({
       : clampSetListTransposeSemitones(requestedSemitones);
     const source = await buildItemForTuneId(sourceTuneId || item?.tune?.source?.locatorHint || "");
     if (!source) return false;
+    const renderHeaderText = composeSetListRenderHeader(source.headerText, getFileHeaderText());
     const view = buildSetListPerformanceView({
       sourceText: source.text,
-      headerText: source.headerText,
+      headerText: renderHeaderText,
       transposeSemitones: semitones,
     });
     if (!view.ok) {
@@ -232,7 +233,7 @@ function createSetListFeature({
     const applied = await applyPerformanceView({
       text: view.text,
       sourceText: source.text,
-      headerText: source.headerText,
+      headerText: renderHeaderText,
       itemId: item.id,
       itemIndex: Number(index),
       sourceTuneId: sourceTuneId || item?.tune?.source?.locatorHint || "",
@@ -244,7 +245,8 @@ function createSetListFeature({
       itemIndex: Number(index),
       sourceTuneId: sourceTuneId || item?.tune?.source?.locatorHint || "",
       sourceText: source.text,
-      headerText: source.headerText,
+      sourceHeaderText: source.headerText,
+      headerText: renderHeaderText,
       text: view.text,
       transposeSemitones: view.transposeSemitones,
     };
@@ -516,6 +518,15 @@ function createSetListFeature({
     onIndexQrCodesChange: (value) => updatePresentation((print) => { print.indexQrCodes = Boolean(value); }),
     onHeaderTextChange: (value) => {
       session.mutate((document) => { document.print.headerText = String(value || ""); }, { reason: "header" });
+      if (activePerformanceContext) {
+        const headerText = composeSetListRenderHeader(
+          activePerformanceContext.sourceHeaderText || "",
+          getFileHeaderText(),
+        );
+        activePerformanceContext = { ...activePerformanceContext, headerText };
+        Promise.resolve(applyPerformanceView({ ...activePerformanceContext })).catch(logError);
+        onPerformanceViewStateChange({ ...activePerformanceContext });
+      }
     },
     onTitleChange: (value) => session.mutate((document) => { document.title = String(value || "Untitled Set List"); }, { reason: "title" }),
     onNew: () => { newSetList().catch(logError); },

@@ -1,3 +1,5 @@
+import { composeHeaderPrefixPayload } from "../abc/header_prefix_model.js";
+
 function createRenderPayloadController({
   getEditorText = () => "",
   getActiveFileEntry = () => null,
@@ -24,8 +26,8 @@ function createRenderPayloadController({
       if (isChordProFullView()) return { text: "", offset: 0, lineOffset: 0, empty: true };
       const tuneText = getEditorText();
       const prefixPayload = buildHeaderPrefix("", true, tuneText);
-      const text = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
-      const lineOffset = countLinesForPrefix(prefixPayload.text);
+      const text = composeHeaderPrefixPayload(prefixPayload, tuneText);
+      const lineOffset = countLinesForPrefix(prefixPayload.lineOffsetText || prefixPayload.text);
       const out = { text, offset: prefixPayload.offset || 0, lineOffset };
       assertCleanAbcText(out.text, "render payload");
       return out;
@@ -36,8 +38,9 @@ function createRenderPayloadController({
     const headerTextRaw = entry ? getHeaderText() : "";
     const headerText = sanitizeHeaderText(headerTextRaw);
     const prefixPayload = buildHeaderPrefix(headerText, true, tuneText);
-    if (!prefixPayload.text) return { text: tuneText, offset: 0 };
-    const out = { text: `${prefixPayload.text}${tuneText}`, offset: prefixPayload.offset };
+    const text = composeHeaderPrefixPayload(prefixPayload, tuneText);
+    if (!prefixPayload.text && text === tuneText) return { text: tuneText, offset: 0 };
+    const out = { text, offset: prefixPayload.offset };
     assertCleanAbcText(out.text, "render payload");
     return out;
   }

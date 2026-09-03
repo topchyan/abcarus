@@ -58,7 +58,39 @@ const SINGLETON_HEADER_DIRECTIVES = new Set([
   "systemsep",
   "stretchlast",
   "stretchstaff",
+  "titleformat",
 ]);
+
+function moveTuneScopedDirectivesIntoTune(headerText, tuneText) {
+  const sourceHeader = String(headerText || "");
+  const sourceTune = String(tuneText || "");
+  if (!sourceHeader || !/^[\t ]*X:/m.test(sourceTune)) {
+    return { headerText: sourceHeader, tuneText: sourceTune };
+  }
+
+  const tuneScoped = [];
+  const remaining = [];
+  for (const line of sourceHeader.split("\n")) {
+    if (/^[\t ]*%%\s*titleformat\b/i.test(line)) tuneScoped.push(line);
+    else remaining.push(line);
+  }
+  if (!tuneScoped.length) return { headerText: sourceHeader, tuneText: sourceTune };
+
+  const directiveText = `${tuneScoped.join("\n")}\n`;
+  return {
+    headerText: remaining.join("\n"),
+    tuneText: sourceTune.replace(
+      /^([\t ]*X:[^\r\n]*(?:\r\n|\n|\r))/m,
+      `$1${directiveText}`,
+    ),
+  };
+}
+
+function composeHeaderPrefixPayload(prefixPayload, tuneText) {
+  const payload = prefixPayload || {};
+  const body = typeof payload.tuneText === "string" ? payload.tuneText : String(tuneText || "");
+  return payload.text ? `${payload.text}${body}` : body;
+}
 
 function getHeaderLineKey(line) {
   const trimmed = String(line || "").trim();
@@ -152,8 +184,17 @@ function buildHeaderPrefixFromLayers({ layers = [], includeCheckbars = false, tu
   if (includeCheckbars && !/%%\s*checkbars\b/i.test(header)) {
     header = `%%checkbars 1\n${header}`;
   }
-  const prefix = /[\r\n]$/.test(header) ? header : `${header}\n`;
-  return { text: prefix, offset: prefix.length };
+  const fullPrefix = /[\r\n]$/.test(header) ? header : `${header}\n`;
+  const moved = moveTuneScopedDirectivesIntoTune(fullPrefix, tuneText);
+  const prefix = moved.headerText && !/[\r\n]$/.test(moved.headerText)
+    ? `${moved.headerText}\n`
+    : moved.headerText;
+  return {
+    text: prefix,
+    tuneText: moved.tuneText,
+    offset: prefix.length + moved.tuneText.length - String(tuneText || "").length,
+    lineOffsetText: fullPrefix,
+  };
 }
 
 function buildHeaderPrefixWithLayerSpansFromLayers({ layers = [], includeCheckbars = false, tuneText = "" } = {}) {
@@ -281,6 +322,7 @@ function sanitizeFileHeaderForPerTuneRender(text) {
 export {
   buildHeaderPrefixFromLayers,
   buildHeaderPrefixWithLayerSpansFromLayers,
+  composeHeaderPrefixPayload,
   collectHeaderKeys,
   normalizeHeaderLayer,
   sanitizeFileHeaderForInteractiveRender,

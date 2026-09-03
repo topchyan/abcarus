@@ -1,3 +1,5 @@
+import { composeHeaderPrefixPayload } from "../abc/header_prefix_model.js";
+
 function createPrintCurrentFeature({
   api,
   getEditorText = () => "",
@@ -18,7 +20,7 @@ function createPrintCurrentFeature({
     const entry = getActiveFileEntry();
     const headerText = entry ? getHeaderText() : "";
     const prefixPayload = buildHeaderPrefix(headerText, true, tuneText);
-    const text = prefixPayload.text ? `${prefixPayload.text}${tuneText}` : tuneText;
+    const text = composeHeaderPrefixPayload(prefixPayload, tuneText);
     const res = await renderAbcToSvgMarkup(text, { pageFormat: true });
     if (res && res.ok && res.svg) {
       const sourceMarkup = await buildSourceLinkMarkup(tuneText);

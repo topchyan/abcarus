@@ -1,4 +1,5 @@
 import { buildPrintTuneLabel } from "../../print/error_markup.js";
+import { composeHeaderPrefixPayload } from "../../abc/header_prefix_model.js";
 import { hashSetListAbc, resolveSetListItem, sourcePathsEquivalent } from "./set_list_document.js";
 
 function createSetListRendererAdapter({
@@ -155,9 +156,9 @@ function createSetListRendererAdapter({
     const body = String(abcText || "");
     const sanitizedHeader = sanitizeHeaderText(headerText);
     const prefix = buildHeaderPrefix(sanitizedHeader, false, body);
-    const block = prefix.text ? `${prefix.text}${body}` : body;
+    const block = composeHeaderPrefixPayload(prefix, body);
     const context = { tuneLabel: buildPrintTuneLabel(tune || {}) };
-    setErrorLineOffsetFromHeader(prefix.text);
+    setErrorLineOffsetFromHeader(prefix.lineOffsetText || prefix.text);
     const res = await renderAbcToSvgMarkup(block, { errorContext: context, pageFormat: true });
     return { ...res, blockText: block };
   }

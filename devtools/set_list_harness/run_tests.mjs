@@ -979,6 +979,7 @@ await test("opening a Set List occurrence applies one derived view to Editor Sco
     xNumberHint: "1",
   };
   document.items[0].performance.transposeSemitones = 2;
+  document.print.headerText = "%%titleformat P-1 T0 C1, Q-1 T0 O1, R-1 T0 H1\n";
   const feature = createSetListFeature({
     readStorage: (key) => key === "abcarus.setList.recentPaths.v1" ? ["/sets/performance.json"] : null,
     writeStorage: () => true,
@@ -996,7 +997,7 @@ await test("opening a Set List occurrence applies one derived view to Editor Sco
       xNumber: "1",
       title: "Tune",
       text: "X:1\nT:Tune\nK:C\nC D|\n",
-      headerText: "",
+      headerText: "%%stretchlast 0\n",
     }),
     applyPerformanceView: async (view) => { applied = view; return true; },
     onPerformanceViewStateChange: (context) => performanceViewStates.push(context),
@@ -1006,6 +1007,7 @@ await test("opening a Set List occurrence applies one derived view to Editor Sco
   assert.equal(applied.transposeSemitones, 2);
   assert.match(applied.text, /^K:D$/m);
   assert.match(applied.text, /D E\|/);
+  assert.ok(applied.headerText.indexOf("%%stretchlast 0") < applied.headerText.indexOf("%%titleformat P-1"));
   assert.equal(feature.getActivePerformanceOverride().text, applied.text);
   assert.equal(feature.isPerformanceViewActive(), true);
   assert.equal(performanceViewStates.length, 1);

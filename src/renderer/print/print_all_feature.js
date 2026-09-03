@@ -1,5 +1,6 @@
 import { createPrintAllOptionsController } from "./print_all_options_controller.js";
 import { buildPrintTuneLabel } from "./error_markup.js";
+import { composeHeaderPrefixPayload } from "../abc/header_prefix_model.js";
 
 function createPrintAllFeature({
   elements = {},
@@ -113,7 +114,7 @@ function createPrintAllFeature({
         : (entry.headerText || "");
       const headerText = sanitizeHeaderText(effectiveHeader);
       const prefix = buildHeaderPrefix(headerText, false, tuneText);
-      const block = prefix.text ? `${prefix.text}${tuneText}` : tuneText;
+      const block = composeHeaderPrefixPayload(prefix, tuneText);
       const meta = debugInfo ? {
         id: tune.id,
         xNumber: tune.xNumber,
@@ -133,7 +134,7 @@ function createPrintAllFeature({
         title: tune.title || "",
         skipMeasureRange: true,
       };
-      setErrorLineOffsetFromHeader(prefix.text);
+      setErrorLineOffsetFromHeader(prefix.lineOffsetText || prefix.text);
       const res = await renderAbcToSvgMarkup(block, { errorContext: context, pageFormat: true });
       const tuneErrors = res.errors ? res.errors.slice() : [];
       if (!res.ok && res.error) {

@@ -64,6 +64,24 @@ const { createHeaderLayersController } = await importBundledModule(
   const disabled = controller.buildHeaderPrefix("%%scale 0.8", false, "X:1\nK:C\n").text;
   assert.doesNotMatch(disabled, /%%titlefont|%%pagewidth|%%MIDI program 24/);
   assert.match(disabled, /%%scale 0\.8/);
+
+  const titleFormat = "%%titleformat P-1 T0 C1, Q-1 T0 O1, R-1 T0 H1";
+  const tuneScoped = controller.buildHeaderPrefix(
+    titleFormat,
+    false,
+    "X:7\nT:Tune\nC:Composer\nK:C\nC|\n",
+  );
+  assert.doesNotMatch(tuneScoped.text, /titleformat/);
+  assert.match(tuneScoped.tuneText, new RegExp(`^X:7\\n${titleFormat}\\nT:Tune`));
+  assert.equal(tuneScoped.offset, titleFormat.length + 1);
+
+  const tuneOverride = controller.buildHeaderPrefix(
+    titleFormat,
+    false,
+    "X:8\n%%titleformat T1 C0\nT:Override\nK:C\nC|\n",
+  );
+  assert.doesNotMatch(tuneOverride.text, /titleformat/);
+  assert.equal(tuneOverride.tuneText, undefined);
 }
 
 {
@@ -81,9 +99,16 @@ const { createHeaderLayersController } = await importBundledModule(
 
   runtime.initializePayload({
     getEditorText: () => "X:1\nK:C\n",
-    buildHeaderPrefix: () => ({ text: "", offset: 0 }),
+    buildHeaderPrefix: () => ({
+      text: "",
+      tuneText: "X:1\n%%titleformat T0\nK:C\n",
+      offset: 17,
+    }),
   });
-  assert.deepEqual(runtime.getRenderPayload(), { text: "X:1\nK:C\n", offset: 0 });
+  assert.deepEqual(runtime.getRenderPayload(), {
+    text: "X:1\n%%titleformat T0\nK:C\n",
+    offset: 17,
+  });
 
   const payload = {
     offset: 10,
