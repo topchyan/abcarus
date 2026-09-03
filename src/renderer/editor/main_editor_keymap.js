@@ -10,6 +10,36 @@ import {
   openFindPanel,
   openReplacePanel,
 } from "./editor_commands.js";
+import { planMeasureTabAction } from "../abc/measure_input_assistance.js";
+
+function runMeasureTab(view, showToast = () => {}) {
+  if (!view || !view.state || view.state.readOnly) return false;
+  const selection = view.state.selection;
+  const ranges = selection && Array.isArray(selection.ranges) ? selection.ranges : [];
+  const main = selection && selection.main;
+  if (ranges.length !== 1 || !main || main.from !== main.to) return indentSelectionMore(view);
+
+  const plan = planMeasureTabAction(view.state.doc.toString(), main.head);
+  if (!plan) return indentSelectionMore(view);
+  if (plan.action === "insert") {
+    view.dispatch({
+      changes: { from: plan.from, insert: plan.insert },
+      selection: { anchor: plan.from + plan.insert.length },
+      userEvent: "input",
+    });
+    return true;
+  }
+  if (plan.action === "advance") {
+    view.dispatch({ selection: { anchor: plan.to }, scrollIntoView: true });
+    return true;
+  }
+
+  const message = plan.action === "not_at_end"
+    ? "Move the cursor to the end of the measure before inserting a barline."
+    : `${plan.text || "Measure cannot be completed"}. Barline not inserted.`;
+  showToast(message, 2200);
+  return true;
+}
 
 export function createMainEditorKeymap({
   documentRef = document,
@@ -54,7 +84,7 @@ export function createMainEditorKeymap({
     { key: "Mod-F5", run: (view) => moveLineSelection(view, -1) },
     { key: "Ctrl-F2", run: openAbcHelper },
     { key: "Enter", run: (view) => (completionTooltipOpen(view) ? acceptCompletion(view) : false) },
-    { key: "Tab", run: (view) => (completionTooltipOpen(view) ? acceptCompletion(view) : indentSelectionMore(view)) },
+    { key: "Tab", run: (view) => (completionTooltipOpen(view) ? acceptCompletion(view) : runMeasureTab(view, showToast)) },
     { key: "Shift-Tab", run: (view) => (completionTooltipOpen(view) ? false : indentSelectionLess(view)) },
     { key: "Mod-/", run: toggleLineComments },
     {
@@ -99,3 +129,5 @@ export function createMainEditorKeymap({
     installCompletionAcceptance,
   };
 }
+
+export { runMeasureTab };

@@ -12,7 +12,20 @@ const bundled = await build({
   write: false,
 });
 const encoded = Buffer.from(bundled.outputFiles[0].text, "utf8").toString("base64");
-const { computeMeasureInputAssistance } = await import(`data:text/javascript;base64,${encoded}`);
+const {
+  computeMeasureInputAssistance,
+  planMeasureTabAction,
+} = await import(`data:text/javascript;base64,${encoded}`);
+const keymapBundle = await build({
+  entryPoints: [resolve("src/renderer/editor/main_editor_keymap.js")],
+  bundle: true,
+  format: "esm",
+  platform: "browser",
+  target: "es2022",
+  write: false,
+});
+const keymapEncoded = Buffer.from(keymapBundle.outputFiles[0].text, "utf8").toString("base64");
+const { runMeasureTab } = await import(`data:text/javascript;base64,${keymapEncoded}`);
 
 function at(text, needle, offset = 0) {
   const index = text.indexOf(needle);
@@ -86,5 +99,93 @@ C D E F |
 const common = computeMeasureInputAssistance(commonTime, at(commonTime, "C D E F", 3));
 assert.equal(common.state, "complete");
 assert.equal(common.text, "Measure 4/4");
+
+const tabInsert = `X:1
+M:4/4
+L:1/8
+K:C
+C2 D2 E2 F2`;
+assert.deepEqual(planMeasureTabAction(tabInsert, tabInsert.length), {
+  action: "insert",
+  from: tabInsert.length,
+  insert: " | ",
+  state: "complete",
+  text: "Measure 8/8",
+});
+const tabTransactions = [];
+const tabView = {
+  state: {
+    readOnly: false,
+    doc: { toString: () => tabInsert },
+    selection: {
+      ranges: [{ from: tabInsert.length, to: tabInsert.length }],
+      main: { from: tabInsert.length, to: tabInsert.length, head: tabInsert.length },
+    },
+  },
+  dispatch: (transaction) => tabTransactions.push(transaction),
+};
+assert.equal(runMeasureTab(tabView), true);
+assert.deepEqual(tabTransactions[0], {
+  changes: { from: tabInsert.length, insert: " | " },
+  selection: { anchor: tabInsert.length + 3 },
+  userEvent: "input",
+});
+
+const tabIncomplete = tabInsert.replace(" E2 F2", "");
+assert.equal(planMeasureTabAction(tabIncomplete, tabIncomplete.length).action, "incomplete");
+
+const tabOverfull = `${tabInsert} G2`;
+assert.equal(planMeasureTabAction(tabOverfull, tabOverfull.length).action, "overfull");
+
+const existingBar = `${tabInsert}   | G2`;
+const beforeExistingBar = at(existingBar, "F2   |", 2);
+const advance = planMeasureTabAction(existingBar, beforeExistingBar);
+assert.equal(advance.action, "advance");
+assert.equal(existingBar.slice(advance.to), "G2");
+
+const continued = `X:573
+T:Freedom Come All Ye
+M:3/4
+L:1/8
+K:D
+A>F|D2 D>E      FA|B2     A2\\
+Bd |A2 G>A      FD|`;
+const beforeContinuation = at(continued, "A2\\\nBd", 2);
+assert.equal(planMeasureTabAction(continued, beforeContinuation).action, "incomplete");
+const beforeContinuedBar = at(continued, "Bd |", 2);
+assert.equal(planMeasureTabAction(continued, beforeContinuedBar).action, "advance");
+
+const continuedWithoutBar = `X:1
+M:3/4
+L:1/8
+K:D
+B2 A2\\
+Bd`;
+assert.equal(planMeasureTabAction(continuedWithoutBar, continuedWithoutBar.length).action, "insert");
+
+const completeBeforeContinuation = `X:1
+M:3/4
+L:1/8
+K:D
+B2 A2 Bd\\`;
+const beforeContinuationPlan = planMeasureTabAction(
+  completeBeforeContinuation,
+  completeBeforeContinuation.length,
+);
+assert.equal(beforeContinuationPlan.action, "insert");
+assert.equal(beforeContinuationPlan.from, completeBeforeContinuation.length - 1);
+
+const multipleVoices = `X:1
+M:4/4
+L:1/8
+K:C
+V:1
+C2 D2 E2 F2
+V:2
+G2 A2 B2 c2`;
+assert.equal(planMeasureTabAction(multipleVoices, multipleVoices.length).action, "unsupported");
+
+assert.equal(planMeasureTabAction("X:1\nM:none\nK:C\nCDEF", 21).action, "unsupported");
+assert.equal(planMeasureTabAction(base, at(base, "T:Input", 2)), null);
 
 console.log("measure input assistance tests: OK");

@@ -95,14 +95,16 @@ function findMeasureBounds(text, bodyStart, offset) {
 
   let start = bodyStart;
   let end = src.length;
+  let nextSeparator = null;
   for (const separator of separators) {
     if (separator.end <= offset) start = separator.end;
     else if (separator.start >= offset) {
       end = separator.start;
+      nextSeparator = separator;
       break;
     }
   }
-  return { start, end };
+  return { start, end, nextSeparator };
 }
 
 function gcd(a, b) {
@@ -168,8 +170,76 @@ function computeMeasureInputAssistance(text, offset) {
   };
 }
 
+function measureState(actualUnits, expectedUnits) {
+  const tolerance = Math.max(0.001, expectedUnits * 0.001);
+  const delta = actualUnits - expectedUnits;
+  if (Math.abs(delta) <= tolerance) return "complete";
+  return delta < 0 ? "incomplete" : "overfull";
+}
+
+function hasMultipleVoices(text) {
+  const voices = new Set();
+  const pattern = /(?:^|\n)[\t ]*V:[\t ]*([^\s%]+)|\[[\t ]*V:[\t ]*([^\]\s]+)[^\]]*\]/gi;
+  let match;
+  while ((match = pattern.exec(String(text || ""))) !== null) {
+    voices.add(String(match[1] || match[2] || "").trim());
+    if (voices.size > 1) return true;
+  }
+  return false;
+}
+
+function planMeasureTabAction(text, offset) {
+  const src = String(text || "");
+  if (!src || !Number.isFinite(Number(offset))) return null;
+  const pos = Math.max(0, Math.min(Math.floor(Number(offset)), src.length));
+  const lineRange = lineRangeAt(src, pos);
+  if (!isMusicLine(src.slice(lineRange.start, lineRange.end))) return null;
+
+  const bodyStart = findBodyStart(src);
+  if (bodyStart == null || pos < bodyStart) return null;
+  if (hasMultipleVoices(src)) {
+    return { action: "unsupported", text: "Automatic barlines are unavailable for multiple voices" };
+  }
+  const meterRaw = findLastContextField(src, pos, "M");
+  const meter = meterRaw && !/^none$/i.test(meterRaw) ? parseMeter(meterRaw) : null;
+  const defaultLengthRaw = findLastContextField(src, pos, "L") || "1/8";
+  const defaultLength = parseFraction(defaultLengthRaw);
+  if (!meter || !defaultLength) {
+    return { action: "unsupported", text: "Measure length is unavailable" };
+  }
+
+  const bounds = findMeasureBounds(src, bodyStart, pos);
+  const measureText = stripNonMusicLines(src.slice(bounds.start, pos));
+  if (!measureText.trim()) return { action: "incomplete", text: "Measure 0" };
+  const actualWhole = getBarLength(measureText, defaultLength.value, meter.value);
+  if (!Number.isFinite(actualWhole)) {
+    return { action: "unsupported", text: "Measure length is unavailable" };
+  }
+
+  const actualUnits = actualWhole / defaultLength.value;
+  const expectedUnits = meter.value / defaultLength.value;
+  const state = measureState(actualUnits, expectedUnits);
+  const label = `Measure ${formatUnits(actualUnits)}/${formatUnits(expectedUnits)}`;
+  const gapText = stripNonMusicLines(src.slice(pos, bounds.end)).replace(/\\/g, "").trim();
+
+  if (!gapText && bounds.nextSeparator) {
+    let to = bounds.nextSeparator.end;
+    while (to < src.length && /[\t ]/.test(src[to])) to += 1;
+    return { action: "advance", from: pos, to, state, text: label };
+  }
+  if (state !== "complete") return { action: state, state, text: label };
+  if (gapText) return { action: "not_at_end", state, text: label };
+
+  const from = pos > 0 && src[pos - 1] === "\\" ? pos - 1 : pos;
+  const needsLeadingSpace = from > 0 && !/\s/.test(src[from - 1]);
+  const needsTrailingSpace = from >= src.length || !/[\s\\]/.test(src[from]);
+  const insert = `${needsLeadingSpace ? " " : ""}|${needsTrailingSpace ? " " : ""}`;
+  return { action: "insert", from, insert, state, text: label };
+}
+
 export {
   computeMeasureInputAssistance,
   formatUnits,
   isMusicLine,
+  planMeasureTabAction,
 };
