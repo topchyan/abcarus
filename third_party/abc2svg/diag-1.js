@@ -49,7 +49,7 @@ dc+='<text x="'+(x-10).toString()
 +'" class="frn">'+l[0]+'</text>\n'
 dc+='<text x="'+(n==6?'-12,-8,-4,0,4,8':'-8,-4,0,4')
 +'" y="-26" class="fng">'
-+d[2].replace(/[y0]/g,' ')
++d[2].replace(/[y0]/g,'\u00a0')
 +'</text>\n'
 for(i=0;i<n;i++){l=d[0][i]
 if(l&&l!='x'&&l!='0')
