@@ -3830,6 +3830,12 @@ async function runUiSmoke(win) {
       let panelFooterStyles = null;
       let resetViewLayoutOk = false;
       let scoreCenteredAfterReset = false;
+      let dividerResetRefitOk = false;
+      let dividerResetDiagnostics = null;
+      let splitOrientationRefitOk = false;
+      let splitOrientationFitRatios = null;
+      let focusTransitionRefitOk = false;
+      let focusTransitionFitRatios = null;
       let resetViewRatio = null;
       let scoreCenterGeometry = null;
       if (hook && typeof hook.dispatchAction === "function") {
@@ -4093,8 +4099,23 @@ async function runUiSmoke(win) {
           const rightSplit = document.querySelector(".right-split");
           const editorPane = document.querySelector(".editor-pane");
           const renderPane = document.querySelector(".render-pane");
-          const horizontal = document.body.classList.contains("right-split-horizontal");
           if (rightSplit && editorPane && renderPane) {
+            let horizontal = document.body.classList.contains("right-split-horizontal");
+            if (horizontal && splitButton) {
+              splitButton.click();
+              await wait(120);
+              horizontal = false;
+            }
+            const availableWidth = rightSplit.clientWidth || 0;
+            if (hook && typeof hook.setRightPaneSize === "function" && availableWidth > 0) {
+              hook.setRightPaneSize(Math.round(availableWidth * 0.72));
+              await wait(60);
+            }
+            const draggedEditorRatio = availableWidth > 0
+              ? editorPane.getBoundingClientRect().width / availableWidth
+              : null;
+            if (resetButton) resetButton.click();
+            await wait(650);
             const editorRect = editorPane.getBoundingClientRect();
             const renderRect = renderPane.getBoundingClientRect();
             const occupied = horizontal
@@ -4118,6 +4139,61 @@ async function runUiSmoke(win) {
               };
               scoreCenteredAfterReset = svgRect.width > outRect.width
                 || Math.abs((svgRect.left + svgRect.right) - (outRect.left + outRect.right)) <= 6;
+              const fittedRatio = renderPane.clientWidth > 0
+                ? svgRect.width / renderPane.clientWidth
+                : 0;
+              dividerResetDiagnostics = {
+                draggedEditorRatio,
+                resetEditorRatio: resetViewRatio,
+                fittedRatio,
+              };
+              dividerResetRefitOk = Number.isFinite(draggedEditorRatio)
+                && draggedEditorRatio >= 0.65
+                && resetViewLayoutOk
+                && fittedRatio >= 0.85
+                && fittedRatio <= 1.05;
+            }
+
+            const splitButton = byId("btnToggleSplit");
+            if (splitButton && scoreSvg) {
+              const initialOrientation = document.body.classList.contains("right-split-horizontal");
+              const fitRatio = () => {
+                const paneWidth = renderPane.clientWidth || 0;
+                const scoreWidth = scoreSvg.getBoundingClientRect().width;
+                return paneWidth > 0 ? scoreWidth / paneWidth : 0;
+              };
+              splitButton.click();
+              await wait(120);
+              const toggledOrientation = document.body.classList.contains("right-split-horizontal");
+              const toggledRatio = fitRatio();
+              focusBtn.click();
+              await wait(120);
+              const toggledFocusRatio = fitRatio();
+              focusBtn.click();
+              await wait(120);
+              const toggledExitRatio = fitRatio();
+              splitButton.click();
+              await wait(120);
+              const restoredOrientation = document.body.classList.contains("right-split-horizontal");
+              const restoredRatio = fitRatio();
+              focusBtn.click();
+              await wait(120);
+              const restoredFocusRatio = fitRatio();
+              focusBtn.click();
+              await wait(120);
+              const restoredExitRatio = fitRatio();
+              splitOrientationFitRatios = [toggledRatio, restoredRatio];
+              splitOrientationRefitOk = toggledOrientation !== initialOrientation
+                && restoredOrientation === initialOrientation
+                && splitOrientationFitRatios.every((ratio) => ratio >= 0.85 && ratio <= 1.05);
+              focusTransitionFitRatios = [
+                toggledFocusRatio,
+                toggledExitRatio,
+                restoredFocusRatio,
+                restoredExitRatio,
+              ];
+              focusTransitionRefitOk = focusTransitionFitRatios
+                .every((ratio) => ratio >= 0.85 && ratio <= 1.05);
             }
           }
         }
@@ -4160,6 +4236,9 @@ async function runUiSmoke(win) {
           && panelBarsAligned
           && resetViewLayoutOk
           && scoreCenteredAfterReset
+          && dividerResetRefitOk
+          && splitOrientationRefitOk
+          && focusTransitionRefitOk
           && setListDocumentUiOk
           && setListPracticeNoteUiOk,
         visualGapPx,
@@ -4212,6 +4291,12 @@ async function runUiSmoke(win) {
         resetViewRatio,
         scoreCenteredAfterReset,
         scoreCenterGeometry,
+        dividerResetRefitOk,
+        dividerResetDiagnostics,
+        splitOrientationRefitOk,
+        splitOrientationFitRatios,
+        focusTransitionRefitOk,
+        focusTransitionFitRatios,
         setListDocumentUiOk,
         setListPracticeNoteUiOk,
         setListPracticeNoteDiagnostics,

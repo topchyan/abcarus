@@ -36,18 +36,13 @@ export function createFocusModeController({
   clampInt = (value, _min, _max, fallback) => fallback,
   readRenderZoom = () => null,
   setRenderZoom = () => {},
-  computeFocusFitZoom = () => null,
+  fitScoreToCurrentPane = () => {},
   setLibraryVisible = () => {},
-  resetRightPaneSplit = () => {},
   syncPendingPlaybackPlan = () => {},
   clearNormalPlaybackPlan = () => {},
   stopPlaybackForRangeEdit = () => {},
   persistLoopSettingsPatch = async () => {},
   showToast = () => {},
-  requestFrame = (fn) => {
-    if (typeof requestAnimationFrame === "function") return requestAnimationFrame(fn);
-    return setTimeout(fn, 0);
-  },
 } = {}) {
   const {
     focusButton = null,
@@ -226,36 +221,16 @@ export function createFocusModeController({
       setRenderZoom(1);
       if (getLibraryVisible()) {
         setLibraryVisible(false, { persist: false });
-        requestFrame(() => {
-          try { resetRightPaneSplit(); } catch {}
-        });
       }
-      requestFrame(() => {
-        requestFrame(() => {
-          if (!enabled) return;
-          const fit = computeFocusFitZoom();
-          if (fit != null) setRenderZoom(fit);
-          if (typeof window !== "undefined" && window.__abcarusDebugFocus) {
-            try {
-              const cssZoom = getComputedStyle(document.documentElement).getPropertyValue("--render-zoom");
-              console.log("[abcarus][focus] apply " + JSON.stringify({
-                fit,
-                cssZoom: String(cssZoom || "").trim(),
-              }));
-            } catch {}
-          }
-        });
-      });
+      fitScoreToCurrentPane({ resetScroll: false, persist: false });
     } else if (prevRenderZoom != null) {
       setRenderZoom(prevRenderZoom);
       prevRenderZoom = null;
       if (prevLibraryVisible) {
         setLibraryVisible(true, { persist: false });
-        requestFrame(() => {
-          try { resetRightPaneSplit(); } catch {}
-        });
       }
       prevLibraryVisible = null;
+      fitScoreToCurrentPane({ resetScroll: false });
     }
 
     if (enabled) {

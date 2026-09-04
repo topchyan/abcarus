@@ -82,10 +82,13 @@ function findMeasureBounds(text, bodyStart, offset) {
         const found = line.indexOf(value, cursor);
         const relativeStart = found >= 0 ? found : cursor;
         cursor = relativeStart + value.length;
-        if (!BAR_SEP_NO_SPACE.test(value.trim())) continue;
+        const trimmed = value.trim();
+        if (!BAR_SEP_NO_SPACE.test(trimmed)) continue;
+        const leadingSpace = value.length - value.trimStart().length;
+        const separatorStart = lineStart + relativeStart + leadingSpace;
         separators.push({
-          start: lineStart + relativeStart,
-          end: lineStart + relativeStart + value.length,
+          start: separatorStart,
+          end: separatorStart + trimmed.length,
         });
       }
     }
@@ -102,6 +105,8 @@ function findMeasureBounds(text, bodyStart, offset) {
       end = separator.start;
       nextSeparator = separator;
       break;
+    } else {
+      start = separator.end;
     }
   }
   return { start, end, nextSeparator };

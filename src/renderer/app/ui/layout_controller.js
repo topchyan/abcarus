@@ -235,16 +235,7 @@ export function createLayoutController({
     applyRightSplitSizesFromRatio();
   };
 
-  const resetView = ({ fitScore = true, resetScroll = true } = {}) => {
-    if (rightSplitOrientation === "horizontal") {
-      rightSplitRatioHorizontal = defaultHorizontalScoreRatio;
-      scheduleSaveLayoutPrefs({ layoutSplitRatioHorizontal: rightSplitRatioHorizontal });
-    } else {
-      rightSplitRatioVertical = defaultVerticalEditorRatio;
-      scheduleSaveLayoutPrefs({ layoutSplitRatioVertical: rightSplitRatioVertical });
-    }
-    applyRightSplitSizesFromRatio({ rawMode: Boolean(isRawMode()) });
-
+  const fitScoreToCurrentPane = ({ fitScore = true, resetScroll = true, persist = true } = {}) => {
     requestFrame(() => requestFrame(() => {
       if (fitScore && !isRawMode()) {
         const fit = computeFocusFitZoom({ currentZoom: readRenderZoom() });
@@ -253,7 +244,7 @@ export function createLayoutController({
           const orientationZoomKey = rightSplitOrientation === "horizontal"
             ? "layoutRenderZoomHorizontal"
             : "layoutRenderZoomVertical";
-          scheduleSaveLayoutPrefs({ renderZoom: fit, [orientationZoomKey]: fit });
+          if (persist) scheduleSaveLayoutPrefs({ renderZoom: fit, [orientationZoomKey]: fit });
         }
       }
       if (resetScroll && renderPane) {
@@ -264,6 +255,18 @@ export function createLayoutController({
         }
       }
     }));
+  };
+
+  const resetView = ({ fitScore = true, resetScroll = true } = {}) => {
+    if (rightSplitOrientation === "horizontal") {
+      rightSplitRatioHorizontal = defaultHorizontalScoreRatio;
+      scheduleSaveLayoutPrefs({ layoutSplitRatioHorizontal: rightSplitRatioHorizontal });
+    } else {
+      rightSplitRatioVertical = defaultVerticalEditorRatio;
+      scheduleSaveLayoutPrefs({ layoutSplitRatioVertical: rightSplitRatioVertical });
+    }
+    applyRightSplitSizesFromRatio({ rawMode: Boolean(isRawMode()) });
+    fitScoreToCurrentPane({ fitScore, resetScroll });
   };
 
   const setSidebarSplitSizes = (topHeight) => {
@@ -412,6 +415,7 @@ export function createLayoutController({
     } catch {}
 
     if (persist) scheduleSaveLayoutPrefs({ layoutSplitOrientation: next });
+    if (userAction) fitScoreToCurrentPane({ resetScroll: false });
     showToast(next === "horizontal" ? "Split: Horizontal" : "Split: Vertical", 1500);
     return true;
   };
@@ -426,6 +430,7 @@ export function createLayoutController({
     applyRightSplitSizesFromRatio,
     getRightSplitOrientation: () => rightSplitOrientation,
     getSidebarWidth,
+    fitScoreToCurrentPane,
     initPaneResizer,
     initRightPaneResizer,
     initSidebarResizer,

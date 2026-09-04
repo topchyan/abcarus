@@ -15,6 +15,7 @@ function installDevUiSmokeHook({
   setPayloadTuneIdentity = () => {},
   dispatchAction = async () => {},
   setPayloadModeSettingEnabled = () => {},
+  setRightPaneSize = () => {},
 } = {}) {
   if (!windowRef || !devConfig || devConfig.ABCARUS_DEV_UI_SMOKE !== "1") return false;
   windowRef.__abcarusDevUiSmoke = {
@@ -40,6 +41,7 @@ function installDevUiSmokeHook({
     },
     dispatchAction,
     setPayloadModeSettingEnabled,
+    setRightPaneSize,
     snapshot: () => {
       const state = getState() || {};
       const playButton = elements.playButton || null;

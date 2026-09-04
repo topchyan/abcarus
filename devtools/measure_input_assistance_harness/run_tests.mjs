@@ -90,6 +90,20 @@ const afterDoubleRepeat = computeMeasureInputAssistance(
 assert.equal(afterDoubleRepeat.state, "complete");
 assert.equal(afterDoubleRepeat.text, "Measure 6/6");
 
+const continuedSection = `X:241
+M:C
+L:1/8
+K:Am
+[P:C] \\
+"BbM7" z2 {g}f e eddc | "Am" z2 {f}e d dccB | "G" z2 {e}d c cBAB | "C" c8 |  \\
+"F" z2 AB AB c2 | "C/E" z2 Bc Bc d2 |`;
+const continuedBarline = at(continuedSection, '"C" c8 |', 7);
+const continuedSpace = continuedBarline + 1;
+const continuedNextMeasure = at(continuedSection, '"F" z2 AB', 5);
+assert.equal(computeMeasureInputAssistance(continuedSection, continuedBarline).text, "Measure 8/8");
+assert.equal(computeMeasureInputAssistance(continuedSection, continuedSpace).text, "Measure 8/8");
+assert.equal(computeMeasureInputAssistance(continuedSection, continuedNextMeasure).text, "Measure 8/8");
+
 const commonTime = `X:1
 M:C
 L:1/4

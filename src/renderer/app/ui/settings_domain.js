@@ -261,10 +261,14 @@ function createSettingsDomain({
     if (!shouldIgnoreMenuZoomAction() && settingsController) settingsController.zoomOut();
   }
 
-  function resetLayout() {
-    if (settingsController) {
-      if (typeof settingsController.resetEditorZoom === "function") settingsController.resetEditorZoom();
-      else settingsController.zoomReset();
+  async function resetLayout() {
+    try {
+      if (settingsController) {
+        if (typeof settingsController.resetEditorZoom === "function") await settingsController.resetEditorZoom();
+        else await settingsController.zoomReset();
+      }
+    } catch {
+      // Layout reset should still complete if persisting editor zoom fails.
     }
     if (controllers.layout) controllers.layout.resetView();
   }

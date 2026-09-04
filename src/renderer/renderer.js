@@ -2257,9 +2257,8 @@ playbackDomain.initialize({
     velocityToDynamic,
     readRenderZoom: readRenderZoomCss,
     setRenderZoom: setRenderZoomCss,
-    computeFocusFitZoom,
+    fitScoreToCurrentPane: (options) => layoutController.fitScoreToCurrentPane(options),
     setLibraryVisible,
-    resetRightPaneSplit: () => layoutController.resetRightPaneSplit(),
     clearNormalPlaybackPlan: () => {
       editorRuntime.setPendingPlaybackRangeOrigin(null);
       clearPlaybackPlans();
@@ -2809,6 +2808,7 @@ diagnosticsDomain.installDevUiSmoke({
   setPayloadModeSettingEnabled: (enabled) => {
     settingsSnapshot.patch({ payloadModeEnabled: Boolean(enabled) });
   },
+  setRightPaneSize: (size) => layoutController.setRightPaneSizes(Number(size)),
   getState: () => ({
     ...playbackDomain.getUiState(),
     selection: editorRuntime.getView() ? {
@@ -3039,7 +3039,7 @@ function getEditorValue() {
 }
 
 function resetLayout() {
-  if (settingsDomain) settingsDomain.resetLayout();
+  return settingsDomain ? settingsDomain.resetLayout() : Promise.resolve();
 }
 
 function refreshErrorsNow() {
@@ -4078,13 +4078,6 @@ function setRenderZoomCss(zoom) {
 
 function readRenderZoomCss() {
   return layoutController.readRenderZoom({ fallback: getRenderZoomFactor() });
-}
-
-function computeFocusFitZoom() {
-  return layoutController.computeFocusFitZoom({
-    currentZoom: getRenderZoomFactor(),
-    clamp: clampNumber,
-  });
 }
 
 function isFocusModeEnabled() {
