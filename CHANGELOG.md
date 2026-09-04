@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The measure-fill indicator now advances correctly across barlines next to ABC line continuations instead of combining adjacent measures into an apparent overfull measure.
+- Score fitting now completes in one action after changing Split orientation, entering or leaving Focus, dragging the Editor/Score divider, or using Reset View.
 
 
 ## [1.9.2] - 2026-09-03
