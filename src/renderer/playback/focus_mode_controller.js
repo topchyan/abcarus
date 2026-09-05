@@ -407,6 +407,7 @@ export function createFocusModeController({
       focusScoreRenderSelection = null;
     }
     transport.playbackLoopEnabled = Boolean(settings.playbackLoopEnabled);
+    transport.playbackLoopGapMs = Math.max(0, Math.min(5000, Math.round(Number(settings.playbackLoopGapMs) || 0)));
     transport.playbackLoopFromMeasure = nextFrom;
     transport.playbackLoopToMeasure = nextTo;
     transport.playbackLoopTuneId = (typeof settings.playbackLoopTuneId === "string") ? settings.playbackLoopTuneId : null;
@@ -430,6 +431,7 @@ export function createFocusModeController({
   function wireControls() {
     if (practiceLoopEnabled) {
       practiceLoopEnabled.addEventListener("change", () => {
+        if (isPlaybackBusy()) stopPlaybackForRangeEdit();
         const next = Boolean(practiceLoopEnabled.checked);
         transport.playbackLoopEnabled = next;
         syncPendingPlaybackPlan();
@@ -441,6 +443,7 @@ export function createFocusModeController({
 
     if (practiceLoopFrom) {
       practiceLoopFrom.addEventListener("input", () => {
+        if (isPlaybackBusy()) stopPlaybackForRangeEdit();
         focusScoreSelectionAwaitingEnd = false;
         focusScoreRenderSelection = null;
         transport.playbackLoopFromMeasure = clampInt(practiceLoopFrom.value, 0, 100000, 0);
@@ -459,6 +462,7 @@ export function createFocusModeController({
 
     if (practiceLoopTo) {
       practiceLoopTo.addEventListener("input", () => {
+        if (isPlaybackBusy()) stopPlaybackForRangeEdit();
         focusScoreSelectionAwaitingEnd = false;
         focusScoreRenderSelection = null;
         transport.playbackLoopToMeasure = clampInt(practiceLoopTo.value, 0, 100000, 0);

@@ -106,6 +106,17 @@ function getSettingsSchema() {
       ui: { input: "checkbox" },
     },
     {
+      key: "playbackLoopGapMs",
+      type: "number",
+      default: 0,
+      section: "Playback",
+      group: "Loop",
+      groupOrder: 30,
+      label: "Minimum pause between loops (ms)",
+      help: "Use 0 for seamless Focus, selection, and A-B loops. Higher values pause before restarting; audio setup may add a short delay.",
+      ui: { input: "number", min: 0, max: 5000, step: 100 },
+    },
+    {
       key: "playbackSelectionSuppressRepeats",
       type: "boolean",
       default: true,

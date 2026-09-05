@@ -116,6 +116,76 @@ function collectPlaybackNoteOffsets(sandbox, parsed, startOffset) {
   return offsets;
 }
 
+function countBoundedPlaybackNotes(sandbox, start, end) {
+  let count = 0;
+  const playback = {
+    conf: { speed: 1 },
+    tgen: 3600,
+    get_time() { return -0.3; },
+    midi_ctrl() {},
+    midi_prog() {},
+    note_run() { count += 1; },
+    v_c: [],
+    c_i: [],
+    stop: false,
+    s_end: end,
+    s_cur: start,
+    repn: false,
+    repv: 0,
+  };
+  const originalSetTimeout = sandbox.setTimeout;
+  sandbox.setTimeout = () => 0;
+  try {
+    sandbox.abc2svg.play_next(playback);
+  } finally {
+    sandbox.setTimeout = originalSetTimeout;
+  }
+  return count;
+}
+
+function countNativeLoopNotes(sandbox, start, end, stopAfter) {
+  let count = 0;
+  const loopStart = {
+    type: -1,
+    dur: 0,
+    ptim: Number(start.ptim) || 0,
+    time: Number(start.time) || 0,
+    v: start.v,
+    p_v: start.p_v,
+    seqst: true,
+    ts_prev: start.ts_prev || null,
+    ts_next: start,
+  };
+  const playback = {
+    conf: { speed: 1 },
+    tgen: 3600,
+    get_time() { return -0.3; },
+    midi_ctrl() {},
+    midi_prog() {},
+    note_run(state) {
+      count += 1;
+      if (count >= stopAfter) state.stop = true;
+    },
+    onend() {},
+    v_c: [],
+    c_i: [],
+    stop: false,
+    s_end: end,
+    s_cur: loopStart,
+    s_loop: loopStart,
+    repn: false,
+    repv: 0,
+  };
+  const originalSetTimeout = sandbox.setTimeout;
+  sandbox.setTimeout = () => 0;
+  try {
+    sandbox.abc2svg.play_next(playback);
+  } finally {
+    sandbox.setTimeout = originalSetTimeout;
+  }
+  return count;
+}
+
 const DRUM_TUNE = `X:1
 T:Drum Hook Regression
 M:4/4
@@ -149,6 +219,18 @@ P:A
 c|c|1d|e:|2e|f||
 P:B
 a|g|1a|c:|2a|g||
+`;
+
+const FOUR_BAR_DRUM_TUNE = `X:114
+T:Zeybekiko
+M:9/8
+L:1/8
+Q:1/8=160
+K:none
+%%MIDI drumbars 1
+%%MIDI drum ddddddddd 36 42 38 42 36 42 38 42 36
+%%MIDI drumon
+z9 | z9 | z9 | z9 |]
 `;
 
 function main() {
@@ -191,6 +273,29 @@ function main() {
   assert(
     fromInside.slice(0, 4).join(",") === insidePrefix.join(","),
     `playback from inside P:A restarted A instead of continuing to B: ${fromInside.slice(0, 8).join(",")}`
+  );
+  const fourBars = parseOnce(sandbox, FOUR_BAR_DRUM_TUNE);
+  const fourBarTune = fourBars.abc.tunes[0];
+  sandbox.ToAudio().add(fourBarTune[0], fourBarTune[1], fourBarTune[3]);
+  const sourceRests = [];
+  for (let s = fourBarTune[0], guard = 0; s && guard < 1000; s = s.ts_next, guard += 1) {
+    if (Number.isFinite(s.istart) && s.dur > 0 && s.p_v && s.p_v.id === "1") sourceRests.push(s);
+  }
+  assert(sourceRests.length === 4, `expected four source rests, got ${sourceRests.length}`);
+  let normalizedEnd = sourceRests[3].ts_next;
+  assert(
+    normalizedEnd && !Number.isFinite(normalizedEnd.istart) && normalizedEnd.p_v.id === "_drum",
+    "fixture no longer exposes generated drums immediately after the final source rest"
+  );
+  while (normalizedEnd && !Number.isFinite(normalizedEnd.istart)) normalizedEnd = normalizedEnd.ts_next;
+  assert(normalizedEnd && normalizedEnd.bar_type === "|]", "normalized range end must reach the final barline");
+  assert(
+    countBoundedPlaybackNotes(sandbox, sourceRests[0], normalizedEnd) === 36,
+    "bounded playback must retain all nine drum hits in each of four selected measures"
+  );
+  assert(
+    countNativeLoopNotes(sandbox, sourceRests[0], normalizedEnd, 72) === 72,
+    "native zero-gap looping must play two complete four-measure drum cycles"
   );
   console.log("% PASS abc2svg playback harness: native drums and repeated P: cursor starts are available");
 }

@@ -171,7 +171,34 @@ function createPlaybackStartController({
       if (hasPartsOrder) engineStart = transport.playbackState.rootSymbol;
     }
 
-    transport.player.play(engineStart, endSym, 0);
+    const rangeGap = rangeForStart && Number(rangeForStart.loopGapMs);
+    const loopGapMs = Math.max(0, Math.min(5000, Math.round(
+      Number.isFinite(rangeGap) ? rangeGap : (Number(transport.playbackLoopGapMs) || 0)
+    )));
+    const useNativeLoop = Boolean(
+      rangeForStart
+      && rangeForStart.loop
+      && loopGapMs === 0
+      && (rangeForStart.origin === "focus" || rangeForStart.origin === "selection" || rangeForStart.origin === "ab")
+    );
+    let playerStart = engineStart;
+    if (useNativeLoop) {
+      // abc2svg restarts native loops at loopStart.ts_next. A silent proxy lets
+      // both the first pass and every subsequent pass begin at the same symbol.
+      playerStart = {
+        type: -1,
+        dur: 0,
+        ptim: Number(engineStart.ptim) || 0,
+        time: Number(engineStart.time) || 0,
+        v: engineStart.v,
+        p_v: engineStart.p_v,
+        seqst: true,
+        ts_prev: engineStart.ts_prev || null,
+        ts_next: engineStart,
+      };
+    }
+
+    transport.player.play(playerStart, endSym, 0, useNativeLoop);
     transport.markPlayingStarted();
     if (!transport.waitingForFirstNote) setStatus("Playing…");
     updatePlayButton();
@@ -190,7 +217,14 @@ function createPlaybackStartController({
     const lastInRange = findSymbolAtOrBefore(endAbcOffset - 1);
     if (!lastInRange || !Number.isFinite(lastInRange.istart)) return null;
     if (lastInRange.istart <= startSymbol.istart) return null;
-    return lastInRange.ts_next || null;
+    let endSymbol = lastInRange.ts_next || null;
+    // Audio expansion inserts drums and accompaniment into the timeline without
+    // source offsets. They belong to the selected source symbol, so stopping at
+    // the first one would exclude that symbol's generated playback entirely.
+    while (endSymbol && !Number.isFinite(endSymbol.istart)) {
+      endSymbol = endSymbol.ts_next || null;
+    }
+    return endSymbol;
   }
 
   async function startPlaybackFromRange(rangeOverride) {

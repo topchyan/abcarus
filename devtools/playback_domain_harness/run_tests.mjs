@@ -27,6 +27,9 @@ const { createPlaybackTransportState } = await importBundledModule(
 const { createPlaybackTransportController } = await importBundledModule(
   "src/renderer/playback/playback_transport_controller.js",
 );
+const { createPlaybackStartController } = await importBundledModule(
+  "src/renderer/playback/playback_start_controller.js",
+);
 const { injectGchordOn } = await importBundledModule(
   "src/renderer/playback/playback_payload_model.js",
 );
@@ -152,6 +155,7 @@ assert.equal(resolveFocusMeasureNumberAtRenderOffset(scoreMeasureIndex, 220), 3)
     endOffset: 14,
     origin: "selection",
     loop: true,
+    loopGapMs: 0,
   });
 
   playbackStarts.length = 0;
@@ -250,6 +254,89 @@ assert.equal(
   9,
   "a clicked score note must override measure snapping and stale resume/restart state",
 );
+
+{
+  const finalBar = { istart: 146, bar_type: "|]", ts_next: null };
+  const finalDrum = { istart: undefined, dur: 192, ts_next: finalBar };
+  const firstDrum = { istart: undefined, dur: 192, ts_next: finalDrum };
+  const finalRest = { istart: 143, dur: 1728, ts_next: firstDrum };
+  const startRest = { istart: 128, dur: 1728 };
+  const rangeController = createPlaybackStartController({
+    transport: { playbackIndexOffset: 0 },
+    findSymbolAtOrBefore: () => finalRest,
+  });
+  assert.equal(
+    rangeController.resolvePlaybackEndSymbol(
+      { startOffset: 128, endOffset: 145, origin: "selection", loop: true },
+      startRest,
+    ),
+    finalBar,
+    "selection playback must include generated drum events attached to its final source measure",
+  );
+}
+
+{
+  const calls = [];
+  const startSymbol = {
+    istart: 128,
+    dur: 1728,
+    ptim: 0,
+    time: 0,
+    v: 0,
+    p_v: { id: "1" },
+    ts_prev: null,
+  };
+  const endSymbol = { istart: 146, bar_type: "|]" };
+  const nativeTransport = {
+    playbackStartArmed: true,
+    playbackState: { symbols: [{ symbol: startSymbol }], startSymbol, rootSymbol: startSymbol },
+    activePlaybackRange: {
+      startOffset: 128,
+      endOffset: 145,
+      origin: "selection",
+      loop: true,
+      loopGapMs: 0,
+    },
+    activePlaybackEndSymbol: endSymbol,
+    waitingForFirstNote: false,
+    player: { play: (...args) => calls.push(args) },
+    markPreparedStart: () => {},
+    markPlayingStarted: () => {},
+    allowPlaybackEnd: () => {},
+  };
+  const nativeController = createPlaybackStartController({
+    transport: nativeTransport,
+    findSymbolAtOrAfter: () => startSymbol,
+    getPlaybackRange: () => nativeTransport.activePlaybackRange,
+    getDebugParts: () => false,
+    setStatus: () => {},
+    updatePlayButton: () => {},
+  });
+  nativeController.startPlaybackFromPrepared(128);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][1], endSymbol);
+  assert.equal(calls[0][3], true, "zero-gap selection loops must use abc2svg native looping");
+  assert.equal(calls[0][0].ts_next, startSymbol, "native loop proxy must restart at the selected first symbol");
+  assert.equal(calls[0][0].dur, 0, "native loop proxy must not add an audible event before the selection");
+
+  calls.length = 0;
+  nativeTransport.playbackStartArmed = true;
+  nativeTransport.playbackLoopGapMs = 0;
+  nativeTransport.activePlaybackRange = {
+    startOffset: 128,
+    endOffset: 145,
+    origin: "focus",
+    loop: true,
+  };
+  nativeController.startPlaybackFromPrepared(128);
+  assert.equal(calls[0][3], true, "zero-gap Focus loops must use abc2svg native looping");
+
+  calls.length = 0;
+  nativeTransport.playbackStartArmed = true;
+  nativeTransport.playbackLoopGapMs = 500;
+  nativeController.startPlaybackFromPrepared(128);
+  assert.equal(calls[0][3], false, "a configured Focus loop pause must use controlled restarts");
+}
 
 const trace = [];
 const transport = {

@@ -84,6 +84,7 @@ function createAbSelectionPlaybackController({
       : null;
     return {
       loop: (loopFromUi != null) ? loopFromUi : Boolean(settings.playbackSelectionLoopEnabled),
+      loopGapMs: Math.max(0, Math.min(5000, Math.round(Number(settings.playbackLoopGapMs) || 0))),
       suppressRepeats: (suppressFromUi != null) ? suppressFromUi : (settings.playbackSelectionSuppressRepeats !== false),
       muteGchords: (gchordsFromUi != null) ? !gchordsFromUi : Boolean(settings.playbackSelectionMuteGchords),
       allowMidiDrums: (drumsFromUi != null) ? drumsFromUi : Boolean(settings.playbackSelectionAllowMidiDrums),
@@ -157,6 +158,7 @@ function createAbSelectionPlaybackController({
       if (typeof showToast === "function") showToast("Range crosses repeat; suppress repeats or adjust B.", 3600);
       return;
     }
+    const selectionSettings = getSelectionSettings();
 
     const prevStripChord = globalObject.__abcarusPlaybackStripChordSymbols;
     if (plan.muteGchords) globalObject.__abcarusPlaybackStripChordSymbols = true;
@@ -166,8 +168,15 @@ function createAbSelectionPlaybackController({
         endOffset: plan.endOffset,
         origin: "ab",
         loop: true,
+        loopGapMs: selectionSettings.loopGapMs,
       });
-      await startPlaybackFromRange({ startOffset: plan.startOffset, endOffset: plan.endOffset, origin: "ab", loop: true });
+      await startPlaybackFromRange({
+        startOffset: plan.startOffset,
+        endOffset: plan.endOffset,
+        origin: "ab",
+        loop: true,
+        loopGapMs: selectionSettings.loopGapMs,
+      });
     } finally {
       globalObject.__abcarusPlaybackStripChordSymbols = prevStripChord;
       selectionPlaybackRuntime.clearAbMutedVoices();
@@ -213,8 +222,20 @@ function createAbSelectionPlaybackController({
       if (typeof showToast === "function" && typeof buildSelectionPlaybackToast === "function") {
         showToast(buildSelectionPlaybackToast(selectionSettings), 2600);
       }
-      setPlaybackRange({ startOffset: start, endOffset: end, origin: "selection", loop: selectionSettings.loop });
-      await startPlaybackFromRange({ startOffset: start, endOffset: end, origin: "selection", loop: selectionSettings.loop });
+      setPlaybackRange({
+        startOffset: start,
+        endOffset: end,
+        origin: "selection",
+        loop: selectionSettings.loop,
+        loopGapMs: selectionSettings.loopGapMs,
+      });
+      await startPlaybackFromRange({
+        startOffset: start,
+        endOffset: end,
+        origin: "selection",
+        loop: selectionSettings.loop,
+        loopGapMs: selectionSettings.loopGapMs,
+      });
     } finally {
       globalObject.__abcarusPlaybackStripChordSymbols = prevStripChord;
       selectionPlaybackRuntime.clearAbMutedVoices();

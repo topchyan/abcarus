@@ -8,13 +8,17 @@ function clonePlaybackRange(r) {
   if (!r || typeof r !== "object") {
     return { startOffset: 0, endOffset: null, origin: "cursor", loop: false, suppressRepeats: null };
   }
-  return {
+  const range = {
     startOffset: Number(r.startOffset) || 0,
     endOffset: (r.endOffset == null) ? null : Number(r.endOffset),
     origin: r.origin || "cursor",
     loop: Boolean(r.loop),
     suppressRepeats: (typeof r.suppressRepeats === "boolean") ? Boolean(r.suppressRepeats) : null,
   };
+  if (Number.isFinite(Number(r.loopGapMs))) {
+    range.loopGapMs = Math.max(0, Math.min(5000, Math.round(Number(r.loopGapMs))));
+  }
+  return range;
 }
 
 function createPlaybackTransportState() {
@@ -38,6 +42,7 @@ function createPlaybackTransportState() {
 
     practiceTempoMultiplier: 1,
     playbackLoopEnabled: false,
+    playbackLoopGapMs: 0,
     playbackLoopFromMeasure: 0,
     playbackLoopToMeasure: 0,
     playbackLoopTuneId: null,
@@ -239,6 +244,9 @@ function createPlaybackTransportState() {
         endOffset: (range.endOffset == null) ? null : Number(range.endOffset),
         origin: String(range.origin || "focus"),
         loop: true,
+        ...(Number.isFinite(Number(range.loopGapMs))
+          ? { loopGapMs: Math.max(0, Math.min(5000, Math.round(Number(range.loopGapMs)))) }
+          : {}),
       };
     } else {
       state.activeLoopRange = null;

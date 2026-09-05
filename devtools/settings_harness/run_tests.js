@@ -50,6 +50,7 @@ function main() {
   // Guard new selection-playback controls to prevent silent schema drift.
   const requiredDefaults = {
     playbackSelectionLoopEnabled: false,
+    playbackLoopGapMs: 0,
     playbackSelectionSuppressRepeats: true,
     playbackSelectionMuteGchords: false,
     playbackSelectionAllowMidiDrums: false,

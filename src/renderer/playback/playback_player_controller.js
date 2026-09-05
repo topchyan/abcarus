@@ -55,7 +55,11 @@ function createPlaybackPlayerController({
           }
         }
         if (endState.shouldLoop) {
-          queueMicrotask(() => {
+          const rangeGap = endState.loopRange && Number(endState.loopRange.loopGapMs);
+          const gapMs = Math.max(0, Math.min(5000, Math.round(
+            Number.isFinite(rangeGap) ? rangeGap : (Number(transport.playbackLoopGapMs) || 0)
+          )));
+          setTimeout(() => {
             if (!endState.loopRange || !transport.activePlaybackRange || !transport.activePlaybackRange.loop) return;
             if (transport.pendingPlaybackPlan) {
               const plan = transport.pendingPlaybackPlan;
@@ -72,7 +76,7 @@ function createPlaybackPlayerController({
               return;
             }
             startPlaybackFromRange(endState.loopRange).catch(() => {});
-          });
+          }, gapMs);
         }
         if (!endState.shouldLoop && endState.wasSelectionOrigin) {
           selectionRuntime.restoreSelection(editorView);
