@@ -6,13 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [1.9.4] - 2026-09-05
 ### Added
 - Library context menus now provide Expand All and Collapse All for file and metadata grouping modes.
 
 ### Fixed
 - Selection playback includes generated drum and accompaniment events belonging to the final selected measure instead of stopping before that measure sounds.
 - Focus, selection, and A-B loops can run seamlessly without reparsing or an audio-start gap; an optional shared loop pause remains available in Playback settings.
-
 
 ## [1.9.3] - 2026-09-04
 ### Fixed
