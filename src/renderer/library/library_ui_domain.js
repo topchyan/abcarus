@@ -417,6 +417,8 @@ function createLibraryUiDomain({
     renderLibraryTree,
     updateLibraryStatus: actions.updateLibraryStatus,
     refreshLibraryIndex: actions.refreshLibraryIndex,
+    expandAllLibrary: () => uiStateController.expandAll(),
+    collapseAllLibrary: () => uiStateController.collapseAll(),
     beginRenameFile: (filePath) => renameFileController.beginRenameFile(filePath),
     renameCatalogCategory: (target) => categoryMergeController.open(target),
     openXIssues: (filePath) => xIssuesModalController.open(filePath),
@@ -432,6 +434,13 @@ function createLibraryUiDomain({
   });
 
   function wireControls() {
+    if (libraryTree) {
+      libraryTree.addEventListener("contextmenu", (event) => {
+        if (event.defaultPrevented) return;
+        event.preventDefault();
+        contextMenu.show(event.clientX, event.clientY, { type: "library" });
+      });
+    }
     if (groupBy) {
       groupBy.addEventListener("change", () => {
         uiStateController.handleGroupModeChange(groupBy.value || "file");

@@ -31,6 +31,8 @@ function createLibraryContextMenu({
   renderLibraryTree = () => {},
   updateLibraryStatus = () => {},
   refreshLibraryIndex = async () => {},
+  expandAllLibrary = () => {},
+  collapseAllLibrary = () => {},
   beginRenameFile = () => {},
   renameCatalogCategory = () => false,
   openXIssues = async () => {},
@@ -168,6 +170,16 @@ function createLibraryContextMenu({
       hide();
       return;
     }
+    if (action === "expandAllLibrary") {
+      expandAllLibrary();
+      hide();
+      return;
+    }
+    if (action === "collapseAllLibrary") {
+      collapseAllLibrary();
+      hide();
+      return;
+    }
     if (action === "renameFile" && menuTarget && menuTarget.type === "file") {
       beginRenameFile(menuTarget.filePath);
       hide();
@@ -244,6 +256,15 @@ function createLibraryContextMenu({
     }
   }
 
+  function addLibraryTreeItems(items) {
+    if (items.length && !items[items.length - 1].separator) items.push({ separator: true });
+    items.push(
+      { label: "Expand All", action: "expandAllLibrary" },
+      { label: "Collapse All", action: "collapseAllLibrary" },
+    );
+    return items;
+  }
+
   function show(x, y, target) {
     if (!contextMenu) init();
     if (!contextMenu || !windowRef) return;
@@ -282,7 +303,7 @@ function createLibraryContextMenu({
           { label: "Delete Tune…", action: "deleteTune", danger: true },
         );
       }
-      buildItems(items);
+      buildItems(addLibraryTreeItems(items));
     } else if (target.type === "file") {
       const libraryIndex = getLibraryIndex();
       const fileEntry = libraryIndex && Array.isArray(libraryIndex.files) && target.filePath
@@ -312,16 +333,16 @@ function createLibraryContextMenu({
           { label: "Renumber X…", action: "renumberXInFile", disabled: !target.filePath },
         );
       }
-      buildItems(items);
+      buildItems(addLibraryTreeItems(items));
     } else if (target.type === "category") {
-      buildItems([
+      buildItems(addLibraryTreeItems([
         { label: "Rename / Merge Category...", action: "renameCatalogCategory" },
-      ]);
+      ]));
     } else if (target.type === "library") {
-      buildItems([
+      buildItems(addLibraryTreeItems([
         { label: "Refresh Library", action: "refreshLibrary" },
         { label: "Clear Search", action: "clearSearch", disabled: !getLibraryTextFilter() },
-      ]);
+      ]));
     } else if (target.type === "editor") {
       const canAdd = Boolean(getActiveTuneId()) && !getRawMode();
       buildItems([

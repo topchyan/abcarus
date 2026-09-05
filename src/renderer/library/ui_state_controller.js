@@ -512,6 +512,32 @@ function createLibraryUiStateController({
     }
   }
 
+  function expandAll() {
+    collapsedFiles.clear();
+    collapsedGroups.clear();
+    renderLibraryTree();
+    scheduleSaveLibraryUiState();
+  }
+
+  function collapseAll() {
+    const libraryIndex = getIndex();
+    const files = libraryIndex && Array.isArray(libraryIndex.files) ? libraryIndex.files : [];
+    collapsedFiles.clear();
+    collapsedGroups.clear();
+    if (groupMode === "file") {
+      for (const file of files) {
+        if (file && file.path) collapsedFiles.add(file.path);
+      }
+    } else {
+      const groups = buildGroupEntries(files, groupMode);
+      for (const group of groups) {
+        if (group && group.id) collapsedGroups.add(group.id);
+      }
+    }
+    renderLibraryTree();
+    scheduleSaveLibraryUiState();
+  }
+
   function handleGroupModeChange(nextGroup) {
     groupMode = nextGroup || "file";
     collapsedGroups.clear();
@@ -579,6 +605,8 @@ function createLibraryUiStateController({
     collapsedFiles,
     collapsedGroups,
     computeLibraryUiStateSnapshot,
+    collapseAll,
+    expandAll,
     expandInitialCollapsedState,
     flushLibraryPrefsSave,
     getCollapsedFiles: () => collapsedFiles,
