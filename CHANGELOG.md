@@ -6,12 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [1.10.0] - 2026-09-06
 ### Changed
 - Normal and Focus playback now share a compact centered transport and tempo toolbar.
 - Moved the shared playback scope, Loop toggle, and playback options into the workspace status bar. Loop now repeats either the selected scope or the entire tune from its beginning.
 - Selecting a playback scope in either the editor or score now highlights the corresponding measures in both views.
 - Moved workspace-level `Split`, `Follow`, and `Globals` controls to the top toolbar. The editor and score now each keep their own compact toolbar.
-
 
 ## [1.9.4] - 2026-09-05
 ### Added
