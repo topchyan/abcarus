@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Editor and Score toolbar actions remain accessible in narrow Split panes; `Stop` and `Start over` now collapse to centered icon buttons consistently with the editor actions.
 
 
 ## [1.10.0] - 2026-09-06

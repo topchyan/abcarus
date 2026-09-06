@@ -1590,6 +1590,7 @@ body.right-split-horizontal .editor-pane {
   flex: 1;
   overflow: scroll;
   position: relative;
+  container-type: inline-size;
 }
 
 .score-toolbar {
@@ -1664,6 +1665,19 @@ body.right-split-horizontal .editor-pane {
   display: none;
 }
 
+@container (max-width: 760px) {
+  .score-toolbar > .segmented .score-transport-action {
+    width: 30px;
+    min-width: 30px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .score-toolbar > .segmented .score-transport-action .btn-text {
+    display: none;
+  }
+}
+
 .score-toolbar .practice-controls {
   flex: 0 0 auto;
   flex-wrap: nowrap;
@@ -1734,6 +1748,26 @@ body.resizing-cols * {
   flex-direction: column;
   overflow: hidden;
   container-type: inline-size;
+}
+
+@container (max-width: 980px) {
+  .file-header-bar {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    row-gap: 4px;
+  }
+
+  .file-header-primary,
+  .file-header-context {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .file-header-context {
+    margin-left: 0;
+    padding-top: 4px;
+    border-top: 1px solid var(--border-color);
+  }
 }
 
 @container (max-width: 760px) {
