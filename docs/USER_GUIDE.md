@@ -160,7 +160,8 @@ Important notes:
 
 ## 8) Playback (audio)
 
-- The score toolbar above the rendered notation contains Play/Pause, Stop, Start Over, and runtime tempo controls.
+- The score toolbar above the rendered notation contains Play/Pause, Stop, Start Over, runtime tempo, and Focus. These controls remain in the same place in normal and Focus modes; Follow is available from the workspace toolbar in normal mode.
+- The common status bar below the editor and score shows the current playback scope, `Loop`, and Playback options. It remains available in Split and Focus modes.
 - Menu: `Play → Play / Pause` (`F5`)
 - Menu: `Play → Stop` (`Esc`)
 - Menu: `Play → Start Over` (`F4`)
@@ -180,8 +181,10 @@ The tempo slider and `−`/`+` buttons adjust playback without changing `Q:` or 
 ### Selection playback
 - Playback is selection-first.
 - If text is selected in the editor, Play runs that selected range.
-- The `Loop selection` control above the score appears only while text is selected.
-- The same setting remains available at `Play → Options → Loop Selection` even when no selection is active.
+- `Loop` repeats the selected scope. With no scope selected, it repeats the entire tune from its beginning until stopped.
+- Double-clicking measures on the score or selecting ABC text defines the playback scope; the status bar displays its bar range and provides Clear.
+- The selected scope is highlighted in both the editor and the score.
+- Playback options (`No repeats`, `Chords`, `Drums`, and muted `Voices`) are available from the status bar in both normal and Focus modes.
 - If nothing is selected, Play runs from normal transport context.
 - Loop/repeat/mute behavior for selection playback is configured in Settings:
   - `Playback -> Selection -> Loop selection`

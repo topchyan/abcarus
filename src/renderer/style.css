@@ -151,6 +151,7 @@ body.focus-mode #btnFileSave,
 body.focus-mode #btnFileClose,
 body.focus-mode #btnToggleRaw,
 body.focus-mode #midiInputStatus,
+body.focus-mode #btnToggleFollow,
 body.focus-mode #btnToggleSplit {
   display: none;
 }
@@ -215,6 +216,10 @@ header {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+.practice-group[hidden] {
+  display: none;
 }
 
 .practice-group:not([hidden]) + .practice-group:not([hidden]) {
@@ -1175,11 +1180,33 @@ body.chordpro-mode #btnToggleGlobals {
   gap: 8px;
   min-width: 0;
   overflow-x: auto;
-  scrollbar-width: thin;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.file-header-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.file-header-primary,
+.file-header-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.file-header-primary {
+  flex: 1 1 auto;
+}
+
+.file-header-context {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .file-header-toggles {
-  margin-left: auto;
   flex-wrap: nowrap;
 }
 
@@ -1260,9 +1287,9 @@ body.chordpro-mode #btnToggleGlobals {
 }
 
 #fileTuneSelect {
-  min-width: 180px;
-  max-width: 45%;
-  flex: 0 1 280px;
+  min-width: 100px;
+  max-width: none;
+  flex: 1 1 280px;
 }
 
 #fileTuneSelect.error-filter-active{
@@ -1586,13 +1613,14 @@ body.right-split-horizontal .editor-pane {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-width: 0;
+  flex: 0 0 auto;
+  min-width: max-content;
   color: var(--muted-text);
   font-size: var(--font-size-sm);
 }
 
 .runtime-tempo-control input[type="range"] {
-  width: clamp(96px, 13vw, 170px);
+  width: clamp(88px, 9vw, 130px);
 }
 
 .runtime-tempo-control output {
@@ -1614,21 +1642,31 @@ body.right-split-horizontal .editor-pane {
   padding-left: 10px;
 }
 
-body.focus-mode .score-toolbar {
+.score-toolbar {
   flex-wrap: nowrap;
+  justify-content: safe center;
   overflow-x: auto;
-  scrollbar-width: thin;
+  scrollbar-width: none;
 }
 
-body.focus-mode .score-toolbar .practice-controls {
-  flex-wrap: nowrap;
+.score-toolbar::-webkit-scrollbar {
+  display: none;
 }
 
-body.focus-mode .score-toolbar .right-controls {
+.score-toolbar > .segmented .icon-only {
+  width: 30px;
+  min-width: 30px;
+  padding: 0;
+  justify-content: center;
+}
+
+.score-toolbar > .segmented .icon-only .btn-text {
+  display: none;
+}
+
+.score-toolbar .practice-controls {
   flex: 0 0 auto;
   flex-wrap: nowrap;
-  min-width: max-content;
-  margin-left: auto;
 }
 
 body.focus-mode .score-toolbar .runtime-tempo-control input[type="range"] {
@@ -1695,6 +1733,29 @@ body.resizing-cols * {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  container-type: inline-size;
+}
+
+@container (max-width: 760px) {
+  .file-header-primary {
+    flex: 0 0 auto;
+  }
+
+  .file-header-context {
+    margin-left: 0;
+  }
+
+  #btnNewTune.file-tune-action,
+  #btnTemplates.file-tune-action,
+  #btnToggleRaw.file-tune-action {
+    width: 30px;
+    min-width: 30px;
+    padding: 0;
+  }
+
+  .file-header-primary .file-tune-action .btn-text {
+    display: none;
+  }
 }
 
 .editor-pane.unsaved {
@@ -2008,6 +2069,7 @@ svg {
   display: flex;
   align-items: center;
   gap: 10px;
+  position: relative;
 }
 
 .workspace-statusbar-main {
@@ -2016,6 +2078,130 @@ svg {
   gap: 10px;
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.playback-scope-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.playback-scope-label {
+  color: var(--muted-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playback-scope-heading {
+  color: var(--button-text);
+  font-weight: 600;
+}
+
+.playback-scope-hint {
+  color: var(--muted-text);
+}
+
+.playback-scope-loop,
+.playback-scope-options > summary,
+.playback-scope-options-menu > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.playback-scope-loop {
+  cursor: pointer;
+  color: var(--button-text);
+}
+
+.playback-scope-loop input {
+  margin: 0;
+}
+
+.playback-scope-options {
+  position: relative;
+}
+
+.playback-scope-options > summary {
+  list-style: none;
+  cursor: pointer;
+  color: var(--button-text);
+}
+
+.playback-scope-options > summary::-webkit-details-marker {
+  display: none;
+}
+
+.playback-scope-options > summary .btn-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.playback-scope-options-menu {
+  position: absolute;
+  z-index: 15;
+  left: 0;
+  bottom: calc(100% + 6px);
+  display: none;
+  min-width: 190px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-1);
+  background: var(--panel-bg, #fff);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.16);
+}
+
+.playback-scope-options[open] .playback-scope-options-menu {
+  display: grid;
+  gap: 7px;
+}
+
+.playback-scope-options-menu > label {
+  min-height: 22px;
+  color: var(--button-text);
+}
+
+.playback-scope-options-menu input[type="checkbox"] {
+  margin: 0;
+}
+
+.playback-scope-options-menu .practice-muted-voices {
+  width: 76px;
+  min-width: 0;
+  height: 24px;
+  box-sizing: border-box;
+}
+
+.playback-scope-clear {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+}
+
+@media (max-width: 760px) {
+  .playback-scope-controls {
+    position: static;
+    transform: none;
+    flex: 0 1 auto;
+  }
+
+  .playback-scope-options > summary span {
+    display: none;
+  }
+
+  .playback-scope-label {
+    max-width: 100px;
+  }
+
+  .playback-scope-hint {
+    display: none;
+  }
 }
 
 body.focus-mode .workspace-statusbar .measure-input-status,
@@ -4303,7 +4489,7 @@ button.primary:not(:disabled):hover {
   }
 }
 
-@media (max-width: 1400px) {
+@media (max-width: 1100px) {
   .header-row-top {
     flex-wrap: wrap;
     align-items: flex-start;
@@ -4311,42 +4497,17 @@ button.primary:not(:disabled):hover {
   }
 
   .left-controls,
-  .center-controls,
   .right-controls {
     flex: 1 1 100%;
     justify-content: flex-start;
   }
 
   .left-controls .segmented,
-  .center-controls .controls,
   .right-controls {
     flex-wrap: wrap;
     max-width: 100%;
   }
 
-  .file-header-toggles {
-    margin-left: 0;
-    order: 10;
-  }
-}
-
-@media (max-width: 1200px) {
-  #fileTuneSelect {
-    flex: 1 1 260px;
-    max-width: 100%;
-  }
-
-  .file-header-meta {
-    order: 11;
-    margin-left: 0;
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .file-header-toggles {
-    width: 100%;
-    justify-content: flex-start;
-  }
 }
 
 body.print-mode header,

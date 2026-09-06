@@ -164,12 +164,41 @@ export function createScoreInteractionController({
   }
 
   function handleScoreRendered() {
-    if (!isFocusModeEnabled()) normalScoreSelection = null;
     measureSelection.handleScoreRendered();
   }
 
   function handleFocusSelectionChanged() {
     if (isFocusModeEnabled()) normalScoreSelection = null;
+    measureSelection.renderHighlight();
+  }
+
+  function clearPlaybackScope() {
+    if (!isFocusModeEnabled()) normalScoreSelection = null;
+    measureSelection.clearHighlight();
+  }
+
+  function setPlaybackScopeHighlightVisible(event) {
+    if (event && event.detail && event.detail.visible === false) {
+      measureSelection.clearHighlight();
+      return;
+    }
+    measureSelection.renderHighlight();
+  }
+
+  function handleEditorPlaybackScope(event) {
+    if (isFocusModeEnabled()) return;
+    const detail = event && event.detail ? event.detail : null;
+    const start = Number(detail && detail.startOffset);
+    const end = Number(detail && detail.endOffset);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+      normalScoreSelection = null;
+      measureSelection.clearHighlight();
+      return;
+    }
+    const playStart = Number(mapEditorOffsetToRenderIdx(start));
+    const playEnd = Number(mapEditorOffsetToRenderIdx(end));
+    if (!Number.isFinite(playStart) || !Number.isFinite(playEnd) || playEnd < playStart) return;
+    normalScoreSelection = { playStart, playEnd };
     measureSelection.renderHighlight();
   }
 
@@ -182,6 +211,9 @@ export function createScoreInteractionController({
     outputElement.addEventListener("dblclick", handleOutputDoubleClick);
     outputElement.addEventListener("abcarus:score-rendered", handleScoreRendered);
     outputElement.addEventListener("abcarus:focus-selection-changed", handleFocusSelectionChanged);
+    outputElement.addEventListener("abcarus:clear-playback-scope", clearPlaybackScope);
+    outputElement.addEventListener("abcarus:editor-playback-scope", handleEditorPlaybackScope);
+    outputElement.addEventListener("abcarus:playback-scope-visibility", setPlaybackScopeHighlightVisible);
     measureSelection.handleScoreRendered();
     return true;
   }

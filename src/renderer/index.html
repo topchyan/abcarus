@@ -61,67 +61,38 @@
             </button>
 	        </div>
         </div>
-        <div class="center-controls controls">
-	        <div class="practice-controls" aria-label="Playback controls">
-	          <div id="practiceFocusRangeGroup" class="practice-group" hidden>
-            <label id="practiceLoopWrap" class="practice-loop" hidden>
-              <input id="practiceLoopEnabled" type="checkbox" />
-              <span>Loop</span>
-              <input id="practiceLoopFrom" class="practice-loop-num" type="number" inputmode="numeric" min="0" step="1" placeholder="from" title="Loop from measure (0 = first bar)" />
-              <span class="practice-loop-arrow">→</span>
-              <input id="practiceLoopTo" class="practice-loop-num" type="number" inputmode="numeric" min="0" step="1" placeholder="to" title="Loop to measure (0 = end)" />
-            </label>
-          </div>
-          <div id="practiceFocusOptionsGroup" class="practice-group" hidden>
-            <label id="selectionSuppressWrap" class="practice-selection-suppress" title="Suppress repeats during scoped playback">
-              <input id="selectionSuppressEnabled" type="checkbox" />
-              <span>No repeats</span>
-            </label>
-            <label id="selectionGchordsWrap" class="practice-selection-gchords" title="Enable chord symbols during scoped playback">
-              <input id="selectionGchordsEnabled" type="checkbox" />
-              <span>Chords</span>
-            </label>
-            <label id="selectionDrumsWrap" class="practice-selection-drums" title="Enable MIDI drums during scoped playback (best-effort)">
-              <input id="selectionDrumsEnabled" type="checkbox" />
-              <span>Drums</span>
-            </label>
-          </div>
-          <div id="practiceFocusVoicesGroup" class="practice-group" hidden>
-            <label id="selectionMutedWrap" class="practice-selection-muted" title="Mute voices for scoped playback (comma-separated voice IDs)">
-              <span>Voices</span>
-              <input id="selectionMutedVoices" class="practice-muted-voices" type="text" placeholder="e.g. 2,3" />
-            </label>
-          </div>
+	      <div class="right-controls">
+	        <div class="segmented" aria-label="Workspace view">
+	          <button id="btnToggleSplit" type="button" title="Toggle split orientation (Ctrl+Alt+\)" aria-label="Toggle split orientation" aria-pressed="false">
+	            <svg class="btn-icon icon-split" aria-hidden="true"><use href="#ui-split"></use></svg>
+	            <span class="btn-text">Split</span>
+	          </button>
+	          <button id="btnToggleFollow" type="button" title="Toggle playback follow" aria-label="Toggle playback follow" aria-pressed="false">
+	            <svg class="btn-icon icon-follow" aria-hidden="true"><use href="#ui-follow"></use></svg>
+	            <span class="btn-text">Follow</span>
+	          </button>
+            <button id="midiInputStatus" class="midi-status hidden" type="button" aria-label="MIDI input status">
+              <svg class="btn-icon icon-midi" aria-hidden="true"><use href="#ui-midi"></use></svg>
+              <span class="btn-text">MIDI: off</span>
+            </button>
+	          <button id="btnToggleGlobals" type="button" title="Toggle global ABC header">
+	            <svg class="btn-icon icon-globe" aria-hidden="true"><use href="#ui-globe"></use></svg>
+	            <span class="btn-text">Globals</span>
+	          </button>
 	        </div>
-      </div>
-		      <div class="right-controls">
-		        <div class="segmented" aria-label="Preferences">
-		          <button id="btnSettings" type="button" title="Settings (Ctrl+,)">
-	              <svg class="btn-icon icon-settings" aria-hidden="true"><use href="#ui-settings"></use></svg>
-	              <span class="btn-text">Settings</span>
-	            </button>
-		        </div>
-		        <div class="segmented" aria-label="Playback and input modes">
-              <button id="midiInputStatus" class="midi-status hidden" type="button" aria-label="MIDI input status">
-                <svg class="btn-icon icon-midi" aria-hidden="true"><use href="#ui-midi"></use></svg>
-                <span class="btn-text">MIDI: off</span>
-              </button>
-		          <button id="btnFocusMode" title="Playback focus mode (F7)" aria-label="Playback focus mode" aria-pressed="false">
-		              <svg class="btn-icon icon-focus" aria-hidden="true"><use href="#ui-focus"></use></svg>
-		              <span class="btn-text">Focus</span>
-		            </button>
-		          <button id="btnToggleFollow" type="button" title="Toggle playback follow" aria-pressed="false">
-		            <svg class="btn-icon icon-follow" aria-hidden="true"><use href="#ui-follow"></use></svg>
-		            <span class="btn-text">Follow</span>
-		          </button>
-		        </div>
-		        <div class="segmented" aria-label="View">
-		          <button id="btnResetLayout" title="Reset view (layout + zoom) (F8)" aria-label="Reset view (layout and zoom)">
-		              <svg class="btn-icon icon-reset" aria-hidden="true"><use href="#ui-reset"></use></svg>
-		              <span class="btn-text">Reset view</span>
-		            </button>
-			        </div>
-		      </div>
+	        <div class="segmented" aria-label="Preferences">
+	          <button id="btnSettings" type="button" title="Settings (Ctrl+,)">
+	            <svg class="btn-icon icon-settings" aria-hidden="true"><use href="#ui-settings"></use></svg>
+	            <span class="btn-text">Settings</span>
+	          </button>
+	        </div>
+	        <div class="segmented" aria-label="View">
+	          <button id="btnResetLayout" title="Reset view (layout + zoom) (F8)" aria-label="Reset view (layout and zoom)">
+	            <svg class="btn-icon icon-reset" aria-hidden="true"><use href="#ui-reset"></use></svg>
+	            <span class="btn-text">Reset view</span>
+	          </button>
+	        </div>
+	      </div>
 		    </div>
 		  </header>
 
@@ -432,60 +403,56 @@
 	    <div class="set-list-divider" id="setListDivider" aria-hidden="true"></div>
 
 	    <section class="pane right">
-	      <div class="file-header-panel" id="fileHeaderPanel">
-	        <div class="file-header-bar">
-          <button id="fileHeaderToggle" class="file-header-title header-state" type="button" title="No file header in this file.">
-            <span class="header-state-label">Header</span>
-            <span id="headerStateMarker" class="header-state-marker" aria-hidden="true">—</span>
-          </button>
-          <select id="fileTuneSelect"></select>
-          <button id="btnToggleRaw" class="file-tune-action" type="button" title="Toggle raw file mode" aria-label="Toggle raw file mode" aria-pressed="false">
-            <svg class="btn-icon icon-file-code" aria-hidden="true"><use href="#ui-file-code"></use></svg>
-            <span class="btn-text">Raw</span>
-          </button>
-          <button id="btnChordproPdf" class="file-tune-action" type="button" title="Preview PDF via ChordPro" aria-label="Preview ChordPro PDF">
-            <svg class="btn-icon icon-file" aria-hidden="true"><use href="#ui-file-code"></use></svg>
-          </button>
-          <button id="btnNewTune" class="file-tune-action" type="button" title="New Tune (Add to Active File) (Cmd/Ctrl+Alt+N)" aria-label="New Tune">
-            <svg class="btn-icon icon-plus" aria-hidden="true"><use href="#ui-plus"></use></svg>
-            <span class="btn-text">New Tune</span>
-          </button>
-          <button id="btnTemplates" class="file-tune-action" type="button" title="Templates…" aria-label="Templates">
-            <svg class="btn-icon icon-library" aria-hidden="true"><use href="#ui-library"></use></svg>
-            <span class="btn-text">Templates</span>
-          </button>
-          <button id="scanErrorTunes" class="scan-error-button" type="button" title="Scan file for errors" hidden>Scan</button>
-          <button id="errorsIndicator" class="errors-indicator" type="button" aria-label="Errors" hidden disabled>
-            Errors: 0
-          </button>
-          <span id="errorsFocusMessage" class="errors-focus-message" hidden></span>
-          <div class="file-header-toggles controls segmented" aria-label="Mode toggles">
-            <button id="btnToggleErrors" type="button" title="Toggle errors features">
-              <svg class="btn-icon icon-alert" aria-hidden="true"><use href="#ui-alert"></use></svg>
-              <span class="btn-text">Errors</span>
-            </button>
-            <button id="btnToggleSplit" type="button" title="Toggle split orientation (Ctrl+Alt+\)" aria-label="Toggle split orientation" aria-pressed="false">
-              <svg class="btn-icon icon-split" aria-hidden="true"><use href="#ui-split"></use></svg>
-              <span class="btn-text">Split</span>
-            </button>
-            <button id="btnToggleGlobals" type="button" title="Toggle global header">
-              <svg class="btn-icon icon-globe" aria-hidden="true"><use href="#ui-globe"></use></svg>
-              <span class="btn-text">Globals</span>
-            </button>
-          </div>
-	          <div class="file-header-meta">
-	            <div id="sourceLinkPanel" class="source-link-panel" hidden></div>
-	            <div class="dirty-indicator" id="dirtyIndicator" aria-live="polite"></div>
-	          </div>
-	        </div>
-	        <div id="fileHeaderEditor" class="file-header-editor" aria-label="File header"></div>
-        <div class="file-header-actions">
-          <button id="fileHeaderSave" type="button">Save Header</button>
-          <button id="fileHeaderReload" type="button">Reload</button>
-        </div>
-      </div>
       <div class="right-split">
         <div class="editor-pane">
+	        <div class="file-header-panel" id="fileHeaderPanel">
+	          <div class="file-header-bar controls" role="toolbar" aria-label="ABC editor">
+            <div class="file-header-primary controls">
+              <button id="fileHeaderToggle" class="file-header-title header-state" type="button" title="No file header in this file.">
+                <span class="header-state-label">Header</span>
+                <span id="headerStateMarker" class="header-state-marker" aria-hidden="true">—</span>
+              </button>
+              <select id="fileTuneSelect"></select>
+              <button id="btnToggleRaw" class="file-tune-action" type="button" title="Toggle raw file mode" aria-label="Toggle raw file mode" aria-pressed="false">
+                <svg class="btn-icon icon-file-code" aria-hidden="true"><use href="#ui-file-code"></use></svg>
+                <span class="btn-text">Raw</span>
+              </button>
+              <button id="btnChordproPdf" class="file-tune-action" type="button" title="Preview PDF via ChordPro" aria-label="Preview ChordPro PDF">
+                <svg class="btn-icon icon-file" aria-hidden="true"><use href="#ui-file-code"></use></svg>
+              </button>
+              <button id="btnNewTune" class="file-tune-action" type="button" title="New Tune (Add to Active File) (Cmd/Ctrl+Alt+N)" aria-label="New Tune">
+                <svg class="btn-icon icon-plus" aria-hidden="true"><use href="#ui-plus"></use></svg>
+                <span class="btn-text">New Tune</span>
+              </button>
+              <button id="btnTemplates" class="file-tune-action" type="button" title="Templates…" aria-label="Templates">
+                <svg class="btn-icon icon-library" aria-hidden="true"><use href="#ui-library"></use></svg>
+                <span class="btn-text">Templates</span>
+              </button>
+            </div>
+            <div class="file-header-context controls">
+              <button id="scanErrorTunes" class="scan-error-button" type="button" title="Scan file for errors" hidden>Scan</button>
+              <button id="errorsIndicator" class="errors-indicator" type="button" aria-label="Errors" hidden disabled>
+                Errors: 0
+              </button>
+              <span id="errorsFocusMessage" class="errors-focus-message" hidden></span>
+              <div class="file-header-toggles controls segmented" aria-label="Diagnostics">
+                <button id="btnToggleErrors" type="button" title="Toggle errors features">
+                  <svg class="btn-icon icon-alert" aria-hidden="true"><use href="#ui-alert"></use></svg>
+                  <span class="btn-text">Errors</span>
+                </button>
+              </div>
+	            <div class="file-header-meta">
+	              <div id="sourceLinkPanel" class="source-link-panel" hidden></div>
+	              <div class="dirty-indicator" id="dirtyIndicator" aria-live="polite"></div>
+	            </div>
+            </div>
+	          </div>
+	          <div id="fileHeaderEditor" class="file-header-editor" aria-label="File header"></div>
+            <div class="file-header-actions">
+              <button id="fileHeaderSave" type="button">Save Header</button>
+              <button id="fileHeaderReload" type="button">Reload</button>
+            </div>
+          </div>
           <div id="payloadModeBar" class="payload-mode-bar hidden" role="region" aria-label="Payload mode">
             <div class="payload-mode-left">
               <span class="payload-mode-title">Payload mode</span>
@@ -514,31 +481,31 @@
 	            <svg class="btn-icon icon-pause" aria-hidden="true"><use href="#ui-pause"></use></svg>
 	            <span class="btn-text">Play</span>
 	          </button>
-	          <button id="btnStop" type="button" title="Stop (Esc)">
+	          <button id="btnStop" class="icon-only" type="button" title="Stop (Esc)" aria-label="Stop">
 	            <svg class="btn-icon icon-stop" aria-hidden="true"><use href="#ui-stop"></use></svg>
 	            <span class="btn-text">Stop</span>
 	          </button>
-	          <button id="btnRestart" type="button" title="Start over (F4)">
+	          <button id="btnRestart" class="icon-only" type="button" title="Start over (F4)" aria-label="Start over">
 	            <svg class="btn-icon icon-start-over" aria-hidden="true"><use href="#ui-start-over"></use></svg>
 	            <span class="btn-text">Start over</span>
 	          </button>
 	        </div>
 	        <div id="practiceTempoWrap" class="runtime-tempo-control" aria-label="Runtime tempo">
 	          <label for="practiceTempo">Tempo</label>
-	          <input id="practiceTempo" type="range" min="0.5" max="1.5" step="0.01" value="1" aria-label="Playback tempo" />
-	          <output id="practiceTempoValue" for="practiceTempo">100%</output>
 	          <button id="practiceTempoDown" class="icon-only" type="button" aria-label="Decrease tempo" title="Decrease tempo">
 	            <svg class="btn-icon" aria-hidden="true"><use href="#ui-minus"></use></svg>
 	          </button>
+	          <input id="practiceTempo" type="range" min="0.5" max="1.5" step="0.01" value="1" aria-label="Playback tempo" />
 	          <button id="practiceTempoUp" class="icon-only" type="button" aria-label="Increase tempo" title="Increase tempo">
 	            <svg class="btn-icon" aria-hidden="true"><use href="#ui-plus"></use></svg>
 	          </button>
+	          <output id="practiceTempoValue" for="practiceTempo">100%</output>
 	        </div>
-	        <div id="practiceSelectionGroup" class="practice-group" hidden>
-	          <label id="selectionLoopWrap" class="practice-selection-loop" title="Loop current text selection in the ABC editor (not score selection). Options also available in Settings → Playback">
-	            <input id="selectionLoopEnabled" type="checkbox" />
-	            <span>Loop selection</span>
-	          </label>
+	        <div class="segmented playback-mode-controls" aria-label="Playback modes">
+	          <button id="btnFocusMode" title="Playback focus mode (F7)" aria-label="Playback focus mode" aria-pressed="false">
+	            <svg class="btn-icon icon-focus" aria-hidden="true"><use href="#ui-focus"></use></svg>
+	            <span class="btn-text">Focus</span>
+	          </button>
 	        </div>
 	      </div>
 	      <div id="out"></div>
@@ -546,6 +513,42 @@
   </div>
 	  <footer class="workspace-statusbar">
 	    <div id="measureInputStatus" class="measure-input-status" aria-live="polite" hidden></div>
+	    <div id="playbackScopeControls" class="playback-scope-controls" aria-label="Playback scope">
+	      <span class="playback-scope-heading">Playback:</span>
+	      <span id="playbackScopeLabel" class="playback-scope-label">Whole tune</span>
+	      <span id="playbackScopeHint" class="playback-scope-hint">Select text or double-click bars</span>
+	      <label class="playback-scope-loop" title="Repeat the current playback scope">
+	        <input id="practiceLoopEnabled" type="checkbox" />
+	        <span>Loop</span>
+	      </label>
+	      <details id="playbackScopeOptions" class="playback-scope-options">
+	        <summary title="Playback options" aria-label="Playback options">
+	          <svg class="btn-icon icon-settings" aria-hidden="true"><use href="#ui-settings"></use></svg>
+	          <span>Options</span>
+	        </summary>
+	        <div class="playback-scope-options-menu">
+	          <label id="selectionSuppressWrap" title="Suppress repeats during scoped playback">
+	            <input id="selectionSuppressEnabled" type="checkbox" />
+	            <span>No repeats</span>
+	          </label>
+	          <label id="selectionGchordsWrap" title="Enable chord symbols during scoped playback">
+	            <input id="selectionGchordsEnabled" type="checkbox" />
+	            <span>Chords</span>
+	          </label>
+	          <label id="selectionDrumsWrap" title="Enable MIDI drums during scoped playback (best-effort)">
+	            <input id="selectionDrumsEnabled" type="checkbox" />
+	            <span>Drums</span>
+	          </label>
+	          <label id="selectionMutedWrap" title="Mute voices for scoped playback (comma-separated voice IDs)">
+	            <span>Voices</span>
+	            <input id="selectionMutedVoices" class="practice-muted-voices" type="text" placeholder="e.g. 2,3" />
+	          </label>
+	        </div>
+	      </details>
+	      <button id="playbackScopeClear" class="icon-only playback-scope-clear" type="button" title="Clear playback scope" aria-label="Clear playback scope" hidden>
+	        <svg class="btn-icon" aria-hidden="true"><use href="#ui-clear"></use></svg>
+	      </button>
+	    </div>
 	    <div class="workspace-statusbar-main">
 	      <div id="hoverStatus" class="hover-status" aria-live="polite"></div>
 	      <div id="toolStatus" class="tool-status" aria-live="polite"></div>

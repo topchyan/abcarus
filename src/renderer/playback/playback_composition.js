@@ -278,6 +278,7 @@ export function createPlaybackComposition({
     getLibraryVisible: host.getLibraryVisible,
     isRawModeActive: host.isRawMode,
     isPlaybackBusy: domain.isBusy,
+    isPlaybackPlaying: domain.isPlaying,
     isFocusBoundedPlaybackScope: domain.isFocusBoundedScope,
     getEditorView: host.getEditorView,
     getEditorText: host.getEditorText,
@@ -297,6 +298,7 @@ export function createPlaybackComposition({
     clearNormalPlaybackPlan: host.clearNormalPlaybackPlan,
     stopPlaybackForRangeEdit: domain.stopTransport,
     persistLoopSettingsPatch: host.persistLoopSettingsPatch,
+    onScopeChanged: host.onPlaybackScopeChanged,
     showToast: host.showToast,
   });
 

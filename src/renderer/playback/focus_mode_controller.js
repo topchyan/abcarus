@@ -23,6 +23,7 @@ export function createFocusModeController({
   getLibraryVisible = () => false,
   isRawModeActive = () => false,
   isPlaybackBusy = () => false,
+  isPlaybackPlaying = () => false,
   isFocusBoundedPlaybackScope = () => false,
   getEditorView = () => null,
   getEditorText = () => "",
@@ -42,6 +43,7 @@ export function createFocusModeController({
   clearNormalPlaybackPlan = () => {},
   stopPlaybackForRangeEdit = () => {},
   persistLoopSettingsPatch = async () => {},
+  onScopeChanged = () => {},
   showToast = () => {},
 } = {}) {
   const {
@@ -69,9 +71,6 @@ export function createFocusModeController({
     selectionMutedVoices = null,
     selectionLoopWrap = null,
     selectionLoopEnabled = null,
-    scoreToolbar = null,
-    practiceControls = null,
-    rightControls = null,
   } = elements;
 
   let enabled = false;
@@ -79,14 +78,6 @@ export function createFocusModeController({
   let prevLibraryVisible = null;
   let focusScoreSelectionAwaitingEnd = false;
   let focusScoreRenderSelection = null;
-  const normalToolbarPositions = [practiceControls, rightControls]
-    .filter(Boolean)
-    .map((element) => ({
-      element,
-      parent: element.parentNode,
-      nextSibling: element.nextSibling,
-    }));
-
   function isEnabled() {
     return enabled;
   }
@@ -97,12 +88,19 @@ export function createFocusModeController({
     try { outputElement.dispatchEvent(new Event("abcarus:focus-selection-changed")); } catch {}
   }
 
-  function hasEditorTextSelection() {
+  function getEditorTextSelectionRange() {
     const editorView = getEditorView();
     const ranges = editorView && editorView.state && editorView.state.selection
       ? editorView.state.selection.ranges
       : null;
-    return Boolean(Array.isArray(ranges) && ranges.some((range) => range && range.from !== range.to));
+    const range = Array.isArray(ranges)
+      ? ranges.find((candidate) => candidate && candidate.from !== candidate.to)
+      : null;
+    if (!range) return null;
+    return {
+      startOffset: Math.min(Number(range.from) || 0, Number(range.to) || 0),
+      endOffset: Math.max(Number(range.from) || 0, Number(range.to) || 0),
+    };
   }
 
   function applyRuntimeTempo(value) {
@@ -123,11 +121,12 @@ export function createFocusModeController({
   function updatePracticeUi() {
     const settings = getSettings() || null;
     if (practiceTempoWrap) practiceTempoWrap.hidden = false;
-    if (practiceFocusRangeGroup) practiceFocusRangeGroup.hidden = !enabled;
-    if (practiceFocusOptionsGroup) practiceFocusOptionsGroup.hidden = !enabled;
-    if (practiceFocusVoicesGroup) practiceFocusVoicesGroup.hidden = !enabled;
-    const hasSelection = hasEditorTextSelection();
-    if (practiceSelectionGroup) practiceSelectionGroup.hidden = Boolean(enabled || !hasSelection);
+    if (practiceFocusRangeGroup) practiceFocusRangeGroup.hidden = true;
+    const editorSelectionRange = getEditorTextSelectionRange();
+    const hasSelection = Boolean(editorSelectionRange);
+    if (practiceFocusOptionsGroup) practiceFocusOptionsGroup.hidden = true;
+    if (practiceFocusVoicesGroup) practiceFocusVoicesGroup.hidden = true;
+    if (practiceSelectionGroup) practiceSelectionGroup.hidden = true;
     if (practiceTempo && document.activeElement !== practiceTempo) {
       const value = String(transport.practiceTempoMultiplier);
       if (practiceTempo.value !== value) practiceTempo.value = value;
@@ -140,7 +139,7 @@ export function createFocusModeController({
         : "Runtime playback speed; source tempo is not a simple Q: fraction=value form";
     }
 
-    if (practiceLoopWrap) practiceLoopWrap.hidden = !enabled;
+    if (practiceLoopWrap) practiceLoopWrap.hidden = false;
     if (practiceLoopEnabled && document.activeElement !== practiceLoopEnabled) {
       practiceLoopEnabled.checked = Boolean(transport.playbackLoopEnabled);
     }
@@ -151,22 +150,22 @@ export function createFocusModeController({
       practiceLoopTo.value = String(clampInt(transport.playbackLoopToMeasure, 0, 100000, 0) || 0);
     }
 
-    if (selectionSuppressWrap) selectionSuppressWrap.hidden = !enabled;
+    if (selectionSuppressWrap) selectionSuppressWrap.hidden = false;
     if (selectionSuppressEnabled && document.activeElement !== selectionSuppressEnabled) {
       const checked = isFocusBoundedPlaybackScope()
         || Boolean(!settings || settings.playbackSelectionSuppressRepeats !== false);
       selectionSuppressEnabled.checked = checked;
     }
-    if (selectionGchordsWrap) selectionGchordsWrap.hidden = !enabled;
+    if (selectionGchordsWrap) selectionGchordsWrap.hidden = false;
     if (selectionGchordsEnabled && document.activeElement !== selectionGchordsEnabled) {
       const checked = Boolean(!settings || settings.playbackSelectionMuteGchords !== true);
       selectionGchordsEnabled.checked = checked;
     }
-    if (selectionDrumsWrap) selectionDrumsWrap.hidden = !enabled;
+    if (selectionDrumsWrap) selectionDrumsWrap.hidden = false;
     if (selectionDrumsEnabled && document.activeElement !== selectionDrumsEnabled) {
       selectionDrumsEnabled.checked = Boolean(settings && settings.playbackSelectionAllowMidiDrums);
     }
-    if (selectionMutedWrap) selectionMutedWrap.hidden = !enabled;
+    if (selectionMutedWrap) selectionMutedWrap.hidden = false;
     if (selectionMutedVoices && document.activeElement !== selectionMutedVoices) {
       const raw = settings && settings.playbackSelectionMutedVoices != null
         ? String(settings.playbackSelectionMutedVoices)
@@ -174,24 +173,19 @@ export function createFocusModeController({
       if (selectionMutedVoices.value !== raw) selectionMutedVoices.value = raw;
     }
 
-    if (selectionLoopWrap) selectionLoopWrap.hidden = Boolean(enabled || !hasSelection);
-    if (selectionLoopEnabled && document.activeElement !== selectionLoopEnabled) {
-      selectionLoopEnabled.checked = Boolean(settings && settings.playbackSelectionLoopEnabled);
-    }
+    if (selectionLoopWrap) selectionLoopWrap.hidden = true;
+
+    onScopeChanged({
+      enabled,
+      hasSelection,
+      editorSelectionRange,
+      isPlaying: Boolean(isPlaybackPlaying()),
+    });
 
     if (enabled && !isPlaybackBusy()) syncPendingPlaybackPlan();
   }
 
   function updateUi() {
-    if (enabled && scoreToolbar) {
-      if (practiceControls) scoreToolbar.append(practiceControls);
-      if (rightControls) scoreToolbar.append(rightControls);
-    } else {
-      normalToolbarPositions.forEach(({ element, parent, nextSibling }) => {
-        if (!parent) return;
-        parent.insertBefore(element, nextSibling && nextSibling.parentNode === parent ? nextSibling : null);
-      });
-    }
     document.body.classList.toggle("focus-mode", enabled);
     if (focusButton) {
       focusButton.classList.toggle("toggle-active", enabled);
@@ -492,7 +486,6 @@ export function createFocusModeController({
         persistLoopSettingsPatch({ [key]: value }).catch(() => {});
       });
     };
-    persistBooleanSetting(selectionLoopEnabled, "playbackSelectionLoopEnabled");
     persistBooleanSetting(selectionSuppressEnabled, "playbackSelectionSuppressRepeats");
     persistBooleanSetting(selectionGchordsEnabled, "playbackSelectionMuteGchords", true);
     persistBooleanSetting(selectionDrumsEnabled, "playbackSelectionAllowMidiDrums");

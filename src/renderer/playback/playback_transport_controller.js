@@ -128,15 +128,18 @@ function createPlaybackTransportController({
     const scoreNoteStart = playbackRange && playbackRange.origin === "score-note"
       ? Number(playbackRange.startOffset)
       : NaN;
+    const loopEnabled = Boolean(transport.playbackLoopEnabled);
     return {
       mode: "transport",
       invalid: false,
       invalidReason: "",
-      rangeStart: Number.isFinite(scoreNoteStart)
+      rangeStart: loopEnabled
+        ? 0
+        : Number.isFinite(scoreNoteStart)
         ? Math.max(0, scoreNoteStart)
         : getEditorMeasureStartOffset(),
       rangeEnd: null,
-      loopEnabled: false,
+      loopEnabled,
       tempoMultiplier,
     };
   }

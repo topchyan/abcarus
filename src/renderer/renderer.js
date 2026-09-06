@@ -256,8 +256,8 @@ const $btnPlay = document.getElementById("btnPlay");
 const $btnPause = document.getElementById("btnPause");
 const $btnStop = document.getElementById("btnStop");
 const $btnPlayPause = document.getElementById("btnPlayPause");
-const $selectionLoopWrap = document.getElementById("selectionLoopWrap");
-const $selectionLoopEnabled = document.getElementById("selectionLoopEnabled");
+const $selectionLoopWrap = null;
+const $selectionLoopEnabled = document.getElementById("practiceLoopEnabled");
 const $selectionSuppressWrap = document.getElementById("selectionSuppressWrap");
 const $selectionSuppressEnabled = document.getElementById("selectionSuppressEnabled");
 const $selectionGchordsWrap = document.getElementById("selectionGchordsWrap");
@@ -271,14 +271,17 @@ const $practiceTempo = document.getElementById("practiceTempo");
 const $practiceTempoValue = document.getElementById("practiceTempoValue");
 const $practiceTempoDown = document.getElementById("practiceTempoDown");
 const $practiceTempoUp = document.getElementById("practiceTempoUp");
-const $practiceFocusRangeGroup = document.getElementById("practiceFocusRangeGroup");
-const $practiceFocusOptionsGroup = document.getElementById("practiceFocusOptionsGroup");
-const $practiceFocusVoicesGroup = document.getElementById("practiceFocusVoicesGroup");
-const $practiceSelectionGroup = document.getElementById("practiceSelectionGroup");
-const $practiceLoopWrap = document.getElementById("practiceLoopWrap");
+const $practiceFocusRangeGroup = null;
+const $practiceFocusOptionsGroup = null;
+const $practiceFocusVoicesGroup = null;
+const $practiceSelectionGroup = null;
+const $practiceLoopWrap = null;
 const $practiceLoopEnabled = document.getElementById("practiceLoopEnabled");
-const $practiceLoopFrom = document.getElementById("practiceLoopFrom");
-const $practiceLoopTo = document.getElementById("practiceLoopTo");
+const $practiceLoopFrom = null;
+const $practiceLoopTo = null;
+const $playbackScopeLabel = document.getElementById("playbackScopeLabel");
+const $playbackScopeHint = document.getElementById("playbackScopeHint");
+const $playbackScopeClear = document.getElementById("playbackScopeClear");
 const $btnRestart = document.getElementById("btnRestart");
 	const $btnPrevMeasure = document.getElementById("btnPrevMeasure");
 	const $btnNextMeasure = document.getElementById("btnNextMeasure");
@@ -289,9 +292,6 @@ const $btnToggleSplit = document.getElementById("btnToggleSplit");
 const $btnToggleFollow = document.getElementById("btnToggleFollow");
 const $btnToggleGlobals = document.getElementById("btnToggleGlobals");
 const $btnToggleErrors = document.getElementById("btnToggleErrors");
-const $scoreToolbar = document.querySelector(".score-toolbar");
-const $practiceControls = document.querySelector(".practice-controls");
-const $rightControls = document.querySelector(".right-controls");
 const $soundfontLabel = document.getElementById("soundfontLabel");
 const $rightSplit = document.querySelector(".right-split");
 const $splitDivider = document.getElementById("splitDivider");
@@ -2146,9 +2146,6 @@ playbackDomain.initialize({
       selectionMutedVoices: $selectionMutedVoices,
       selectionLoopWrap: $selectionLoopWrap,
       selectionLoopEnabled: $selectionLoopEnabled,
-      scoreToolbar: $scoreToolbar,
-      practiceControls: $practiceControls,
-      rightControls: $rightControls,
     },
     ui: {
       renderPane: $renderPane,
@@ -2264,6 +2261,20 @@ playbackDomain.initialize({
       clearPlaybackPlans();
     },
     persistLoopSettingsPatch: settingsSnapshot.persistPatch,
+    onPlaybackScopeChanged: (scope = {}) => {
+      const isPlaying = Boolean(scope.isPlaying);
+      if (!isPlaying) updatePlaybackScopeStatus();
+      if ($out) {
+        $out.dispatchEvent(new CustomEvent("abcarus:playback-scope-visibility", {
+          detail: { visible: !isPlaying },
+        }));
+      }
+      if (!isPlaying && !scope.enabled && $out) {
+        $out.dispatchEvent(new CustomEvent("abcarus:editor-playback-scope", {
+          detail: scope.editorSelectionRange || null,
+        }));
+      }
+    },
     setBufferStatus,
     setStatus,
     showToast,
@@ -2276,6 +2287,49 @@ playbackDomain.initialize({
     setButtonText,
   },
 });
+
+function getPlaybackScopeLabel() {
+  if (playbackDomain.isFocusEnabled()) {
+    const bounds = playbackDomain.getFocusScoreSelectionBounds();
+    if (bounds) return `Bars ${bounds.fromMeasure}\u2013${bounds.toMeasure}`;
+  }
+  const view = editorRuntime.getView();
+  const selection = view && view.state && view.state.selection && view.state.selection.main;
+  if (!selection || selection.from === selection.to) return "Whole tune";
+  const start = Math.min(selection.from, selection.to);
+  const end = Math.max(selection.from, selection.to) - 1;
+  const from = playbackDomain.resolveFocusScoreMeasureNumber(mapEditorOffsetToRenderIdx(start));
+  const to = playbackDomain.resolveFocusScoreMeasureNumber(mapEditorOffsetToRenderIdx(end));
+  if (Number.isInteger(from) && Number.isInteger(to)) {
+    return `Bars ${Math.min(from, to)}\u2013${Math.max(from, to)}`;
+  }
+  return "Selection";
+}
+
+function updatePlaybackScopeStatus() {
+  const label = getPlaybackScopeLabel();
+  if ($playbackScopeLabel) {
+    $playbackScopeLabel.textContent = label;
+    $playbackScopeLabel.title = label;
+  }
+  if ($playbackScopeHint) $playbackScopeHint.hidden = label !== "Whole tune";
+  if ($playbackScopeClear) $playbackScopeClear.hidden = label === "Whole tune";
+}
+
+if ($playbackScopeClear) {
+  $playbackScopeClear.addEventListener("click", () => {
+    if (playbackDomain.isFocusEnabled()) {
+      playbackDomain.clearFocusScoreSelection();
+    } else {
+      const view = editorRuntime.getView();
+      const selection = view && view.state && view.state.selection && view.state.selection.main;
+      if (selection) setEditorSelectionAt(selection.head);
+    }
+    if ($out) $out.dispatchEvent(new Event("abcarus:clear-playback-scope"));
+    updatePlaybackScopeStatus();
+  });
+}
+updatePlaybackScopeStatus();
 
 documentLifecycleController = createDocumentLifecycleController({
   elements: {

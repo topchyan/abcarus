@@ -30,6 +30,9 @@ const { createPlaybackTransportController } = await importBundledModule(
 const { createPlaybackStartController } = await importBundledModule(
   "src/renderer/playback/playback_start_controller.js",
 );
+const { createFocusModeController } = await importBundledModule(
+  "src/renderer/playback/focus_mode_controller.js",
+);
 const { injectGchordOn } = await importBundledModule(
   "src/renderer/playback/playback_payload_model.js",
 );
@@ -47,6 +50,48 @@ const {
 } = await importBundledModule(
   "src/renderer/playback/focus_score_selection_model.js",
 );
+
+{
+  const previousDocument = globalThis.document;
+  globalThis.document = {
+    activeElement: null,
+    body: { classList: { toggle() {} } },
+  };
+  const makeElement = () => ({ hidden: true, checked: false, value: "" });
+  const optionsGroup = makeElement();
+  const voicesGroup = makeElement();
+  const selectionGroup = makeElement();
+  let selected = false;
+  const focusUi = createFocusModeController({
+    elements: {
+      practiceFocusOptionsGroup: optionsGroup,
+      practiceFocusVoicesGroup: voicesGroup,
+      practiceSelectionGroup: selectionGroup,
+      selectionSuppressWrap: makeElement(),
+      selectionGchordsWrap: makeElement(),
+      selectionDrumsWrap: makeElement(),
+      selectionMutedWrap: makeElement(),
+    },
+    transport: { practiceTempoMultiplier: 1 },
+    getEditorView: () => ({
+      state: { selection: { ranges: selected ? [{ from: 4, to: 12 }] : [{ from: 4, to: 4 }] } },
+    }),
+  });
+
+  focusUi.updatePracticeUi();
+  assert.equal(optionsGroup.hidden, true, "legacy score-toolbar options stay hidden");
+  selected = true;
+  focusUi.updatePracticeUi();
+  assert.equal(optionsGroup.hidden, true, "normal selection keeps Focus playback options hidden");
+  assert.equal(voicesGroup.hidden, true, "normal selection keeps Focus voice controls hidden");
+  assert.equal(selectionGroup.hidden, true, "legacy score-toolbar loop control stays hidden");
+  focusUi.setEnabled(true);
+  selected = false;
+  focusUi.updatePracticeUi();
+  assert.equal(optionsGroup.hidden, true, "legacy score-toolbar options remain hidden in Focus");
+  assert.equal(selectionGroup.hidden, true, "legacy score-toolbar loop control remains hidden in Focus");
+  globalThis.document = previousDocument;
+}
 
 {
   const bobFixture = `X:110
@@ -223,6 +268,16 @@ assert.equal(
   0.75,
   "runtime tempo multiplier must apply outside Focus mode",
 );
+controllerTransport.playbackLoopEnabled = true;
+assert.deepEqual(
+  {
+    rangeStart: controller.buildTransportPlaybackPlan().rangeStart,
+    loopEnabled: controller.buildTransportPlaybackPlan().loopEnabled,
+  },
+  { rangeStart: 0, loopEnabled: true },
+  "a global Loop repeats the whole tune from its beginning when no scope is selected",
+);
+controllerTransport.playbackLoopEnabled = false;
 await controller.transportPlay();
 assert.deepEqual(startCalls, [0]);
 assert.equal(controllerTransport.desiredPlayerSpeed, 0.75);

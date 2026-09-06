@@ -3534,7 +3534,10 @@ async function runUiSmoke(win) {
       const focusBtn = byId("btnFocusMode");
       const followBtn = byId("btnToggleFollow");
       const errorsBtn = byId("btnToggleErrors");
-      const selectionLoopWrap = byId("selectionLoopWrap");
+      const loopControl = byId("practiceLoopEnabled");
+      const playbackScopeLabel = byId("playbackScopeLabel");
+      const playbackScopeHint = byId("playbackScopeHint");
+      const playbackScopeClear = byId("playbackScopeClear");
       const libOpenBtn = byId("libOpen");
       const groupBySelect = byId("groupBy");
       const tuneSelect = byId("fileTuneSelect");
@@ -3547,7 +3550,10 @@ async function runUiSmoke(win) {
       if (!focusBtn) missing.push("btnFocusMode");
       if (!followBtn) missing.push("btnToggleFollow");
       if (!errorsBtn) missing.push("btnToggleErrors");
-      if (!selectionLoopWrap) missing.push("selectionLoopWrap");
+      if (!loopControl) missing.push("practiceLoopEnabled");
+      if (!playbackScopeLabel) missing.push("playbackScopeLabel");
+      if (!playbackScopeHint) missing.push("playbackScopeHint");
+      if (!playbackScopeClear) missing.push("playbackScopeClear");
       if (!libOpenBtn) missing.push("libOpen");
       if (!groupBySelect) missing.push("groupBy");
       if (!tuneSelect) missing.push("fileTuneSelect");
@@ -3688,22 +3694,23 @@ async function runUiSmoke(win) {
         }
       }
 
-      const isHidden = () => Boolean(selectionLoopWrap.hidden || selectionLoopWrap.hasAttribute("hidden"));
       const body = document.body;
       const initialFocus = body.classList.contains("focus-mode");
       if (!initialFocus) {
         focusBtn.click();
         await wait(120);
       }
-      const hiddenInFocus = isHidden();
+      const scopeVisibleInFocus = Boolean(
+        playbackScopeLabel.getClientRects().length
+        && loopControl.getClientRects().length
+      );
       const libraryHiddenInFocus = Boolean(
         librarySplitControl
         && librarySplitControl.getClientRects().length === 0
       );
       const focusToolbarUnified = Boolean(
         focusBtn.closest(".score-toolbar") === scoreToolbar
-        && byId("btnSettings").closest(".score-toolbar") === scoreToolbar
-        && byId("practiceFocusRangeGroup").closest(".score-toolbar") === scoreToolbar
+        && loopControl.closest(".workspace-statusbar")
         && getComputedStyle(document.querySelector("header")).display === "none"
       );
       const focusControlsAligned = Math.abs(
@@ -3727,36 +3734,31 @@ async function runUiSmoke(win) {
         };
         dispatchScoreMouse(scoreNotes[0], "dblclick");
         await wait(80);
-        const firstFrom = Number(byId("practiceLoopFrom").value);
-        const firstTo = Number(byId("practiceLoopTo").value);
-        const firstSelected = firstFrom >= 1 && firstTo === firstFrom;
+        const firstScope = playbackScopeLabel.textContent;
+        const firstSelected = firstScope !== "Whole tune";
         dispatchScoreMouse(scoreNotes[scoreNotes.length - 1], "dblclick");
         await wait(80);
-        const rangeFrom = Number(byId("practiceLoopFrom").value);
-        const rangeTo = Number(byId("practiceLoopTo").value);
+        const rangeScope = playbackScopeLabel.textContent;
         const overlayCount = document.querySelectorAll("#out .svg-focus-selection").length;
         focusDoubleClickSelectionOk = Boolean(
           firstSelected
-          && rangeFrom === firstFrom
-          && rangeTo > rangeFrom
+          && rangeScope !== "Whole tune"
+          && rangeScope !== firstScope
           && overlayCount > 0
         );
         dispatchScoreMouse(scoreNotes[0], "click");
         await wait(420);
-        focusSingleClickClearOk = Number(byId("practiceLoopFrom").value) === 0
-          && Number(byId("practiceLoopTo").value) === 0
+        focusSingleClickClearOk = playbackScopeLabel.textContent === "Whole tune"
+          && playbackScopeClear.hidden
           && !document.querySelector("#out .svg-focus-selection");
         focusScoreSelectionDiagnostics = {
           noteCount: scoreNotes.length,
           firstNoteStart: scoreNotes[0] ? scoreNotes[0].getAttribute("data-start") : null,
           lastNoteStart: scoreNotes.length ? scoreNotes[scoreNotes.length - 1].getAttribute("data-start") : null,
-          firstFrom,
-          firstTo,
-          rangeFrom,
-          rangeTo,
+          firstScope,
+          rangeScope,
           overlayCount,
-          clearedFrom: Number(byId("practiceLoopFrom").value),
-          clearedTo: Number(byId("practiceLoopTo").value),
+          clearedScope: playbackScopeLabel.textContent,
           clearedOverlayCount: document.querySelectorAll("#out .svg-focus-selection").length,
         };
       }
@@ -3795,7 +3797,7 @@ async function runUiSmoke(win) {
           && !document.querySelector("#out .svg-focus-selection")
         );
       }
-      const hiddenWithoutSelection = isHidden();
+      const scopeShowsWholeTune = playbackScopeLabel.textContent === "Whole tune";
       const editorContent = document.querySelector("#abc-editor .cm-content");
       let shownWithSelection = false;
       if (editorContent) {
@@ -3809,7 +3811,8 @@ async function runUiSmoke(win) {
           bubbles: true,
         }));
         await wait(80);
-        shownWithSelection = !isHidden();
+        shownWithSelection = playbackScopeLabel.textContent !== "Whole tune"
+          && Boolean(document.querySelector("#out .svg-focus-selection"));
       }
       let fontChoicesOk = false;
       let interfaceFontPresetsOk = false;
@@ -3932,21 +3935,29 @@ async function runUiSmoke(win) {
         const rawButton = byId("btnToggleRaw");
         const settingsButton = byId("btnSettings");
         const splitButton = byId("btnToggleSplit");
+        const globalsButton = byId("btnToggleGlobals");
         const resetButton = byId("btnResetLayout");
         const focusGroup = focusBtn ? focusBtn.closest(".segmented") : null;
+        const workspaceGroup = followBtn ? followBtn.closest(".segmented") : null;
         toolbarDomainsOk = Boolean(
           rawButton
           && rawButton.closest(".file-header-bar")
-          && Number.parseFloat(getComputedStyle(rawButton).minWidth || "0") >= 60
+          && Number.parseFloat(getComputedStyle(rawButton).minWidth || "0") >= 28
           && settingsButton
           && !byId("btnFonts")
           && focusGroup
-          && focusGroup.getAttribute("aria-label") === "Playback and input modes"
-          && followBtn.closest(".segmented") === focusGroup
+          && focusGroup.getAttribute("aria-label") === "Playback modes"
+          && workspaceGroup
+          && workspaceGroup.getAttribute("aria-label") === "Workspace view"
           && splitButton
-          && splitButton.closest(".file-header-toggles")
+          && splitButton.closest(".segmented") === workspaceGroup
+          && globalsButton
+          && globalsButton.closest(".segmented") === workspaceGroup
           && resetButton
-          && followBtn.getBoundingClientRect().left < resetButton.getBoundingClientRect().left
+          && splitButton.getBoundingClientRect().left < followBtn.getBoundingClientRect().left
+          && followBtn.getBoundingClientRect().left < globalsButton.getBoundingClientRect().left
+          && globalsButton.getBoundingClientRect().left < settingsButton.getBoundingClientRect().left
+          && settingsButton.getBoundingClientRect().left < resetButton.getBoundingClientRect().left
         );
 
         hook.dispatchAction({ type: "playGotoMeasure" });
@@ -4206,7 +4217,7 @@ async function runUiSmoke(win) {
           && selGroupRadiusPx >= 7
           && selTuneRadiusPx >= 7
           && selTempoHeightPx >= 27
-          && hiddenInFocus
+          && scopeVisibleInFocus
           && libraryHiddenInFocus
           && focusToolbarUnified
           && focusControlsAligned
@@ -4214,7 +4225,7 @@ async function runUiSmoke(win) {
           && focusSingleClickClearOk
           && normalDoubleClickSelectionOk
           && normalSingleClickClearOk
-          && hiddenWithoutSelection
+          && scopeShowsWholeTune
           && shownWithSelection
           && transportInScore
           && libraryDropdownOk
@@ -4249,7 +4260,7 @@ async function runUiSmoke(win) {
         selTempoHeightPx,
         errorsDisplay,
         followDisplay,
-        hiddenInFocus,
+        scopeVisibleInFocus,
         libraryHiddenInFocus,
         focusToolbarUnified,
         focusControlsAligned,
@@ -4258,7 +4269,7 @@ async function runUiSmoke(win) {
         normalDoubleClickSelectionOk,
         normalSingleClickClearOk,
         focusScoreSelectionDiagnostics,
-        hiddenWithoutSelection,
+        scopeShowsWholeTune,
         shownWithSelection,
         transportInScore,
         libraryDropdownOk,
