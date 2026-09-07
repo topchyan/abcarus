@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Pressing `Tab` after a correctly filled measure now inserts the barline and applies the existing bar/lyric column alignment to the affected notation grid.
+- Split now supports four layouts: editor left/right of the score or above/below it. The Split button cycles through them, while its arrow menu selects a layout directly.
+
 
 
 ## [1.10.1] - 2026-09-06

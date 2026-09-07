@@ -19,7 +19,9 @@ export function createRenumberXAction({
     patchCurrentDocument = () => {},
     readFile = async () => ({ ok: false }),
     refreshLibraryFile = async () => null,
+    loadLibraryFileIntoEditor = async () => ({ ok: false }),
     renumberXLinesConsecutive = () => ({ ok: false }),
+    pathsEqual = (left, right) => String(left || "") === String(right || ""),
     setDirtyIndicator = () => {},
     setStatus = () => {},
     showSaveError = async () => {},
@@ -59,6 +61,9 @@ export function createRenumberXAction({
         }
       });
       await refreshLibraryFile(filePath, { force: true });
+      if (getCurrentDocumentPath() && pathsEqual(getCurrentDocumentPath(), filePath)) {
+        await loadLibraryFileIntoEditor(filePath, { skipConfirm: true, suppressRecent: true });
+      }
       setStatus("Renumbered X.");
     } catch (e) {
       await showSaveError(e && e.message ? e.message : String(e));

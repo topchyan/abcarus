@@ -48,7 +48,14 @@ assert(labels(viewMenu).includes("Show/Hide Library Panel"));
 assert(labels(viewMenu).includes("Library Catalog…"));
 assert(labels(viewMenu).includes("Show/Hide Set List Panel"));
 assert(labels(viewMenu).includes("Show/Hide File Header"));
-assert.equal(labels(viewMenu).filter((label) => label.includes("Split Orientation")).length, 1);
+assert.equal(labels(viewMenu).filter((label) => label.includes("Cycle Split Layout")).length, 1);
+const splitLayoutMenu = menu("View").submenu.find((item) => item.label === "Split Layout");
+assert.deepEqual(labels(splitLayoutMenu), [
+  "Editor left / Score right",
+  "Score left / Editor right",
+  "Editor top / Score bottom",
+  "Score top / Editor bottom",
+]);
 assert(labels(fileMenu).includes("Print Active Set List…"));
 assert(!labels(toolsMenu).includes("Set List"));
 assert(labels(toolsMenu).includes("ABC Helpers…"));

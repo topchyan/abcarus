@@ -642,6 +642,11 @@ async function loadState() {
     appState.globalHeaderMigrationVersion = Number(state.globalHeaderMigrationVersion) || 0;
     if (persistedSettings && typeof persistedSettings === "object") {
       const merged = { ...getDefaultSettings(), ...persistedSettings };
+      if (!Object.prototype.hasOwnProperty.call(persistedSettings, "layoutSplitMode")) {
+        merged.layoutSplitMode = persistedSettings.layoutSplitOrientation === "horizontal"
+          ? "horizontal-score-top"
+          : "vertical-editor-left";
+      }
       if (persistedSettings.zoomFactor && !persistedSettings.renderZoom && !persistedSettings.editorZoom) {
         merged.renderZoom = persistedSettings.zoomFactor;
         merged.editorZoom = persistedSettings.zoomFactor;
@@ -1867,6 +1872,18 @@ function applySettingsPatch(patch) {
   }
   next.renderZoom = clampZoom(Number(next.renderZoom));
   next.editorZoom = clampZoom(Number(next.editorZoom));
+  const splitModes = new Set([
+    "vertical-editor-left",
+    "vertical-score-left",
+    "horizontal-editor-top",
+    "horizontal-score-top",
+  ]);
+  if (!splitModes.has(String(next.layoutSplitMode || ""))) {
+    next.layoutSplitMode = next.layoutSplitOrientation === "horizontal"
+      ? "horizontal-score-top"
+      : "vertical-editor-left";
+  }
+  next.layoutSplitOrientation = next.layoutSplitMode.startsWith("horizontal-") ? "horizontal" : "vertical";
   next.layoutRenderZoomVertical = clampZoom(Number(next.layoutRenderZoomVertical));
   next.layoutRenderZoomHorizontal = clampZoom(Number(next.layoutRenderZoomHorizontal));
   // Keep per-split render zoom in sync with the active orientation whenever `renderZoom` changes.
@@ -4167,7 +4184,9 @@ async function runUiSmoke(win) {
 
             const splitButton = byId("btnToggleSplit");
             if (splitButton && scoreSvg) {
-              const initialOrientation = document.body.classList.contains("right-split-horizontal");
+              const getSplitMode = () => Array.from(document.body.classList)
+                .find((name) => name.startsWith("right-split-mode-")) || "";
+              const initialMode = getSplitMode();
               const fitRatio = () => {
                 const paneWidth = renderPane.clientWidth || 0;
                 const scoreWidth = scoreSvg.getBoundingClientRect().width;
@@ -4175,7 +4194,7 @@ async function runUiSmoke(win) {
               };
               splitButton.click();
               await wait(120);
-              const toggledOrientation = document.body.classList.contains("right-split-horizontal");
+              const toggledMode = getSplitMode();
               const toggledRatio = fitRatio();
               focusBtn.click();
               await wait(120);
@@ -4183,9 +4202,11 @@ async function runUiSmoke(win) {
               focusBtn.click();
               await wait(120);
               const toggledExitRatio = fitRatio();
-              splitButton.click();
-              await wait(120);
-              const restoredOrientation = document.body.classList.contains("right-split-horizontal");
+              for (let i = 0; i < 3; i += 1) {
+                splitButton.click();
+                await wait(120);
+              }
+              const restoredMode = getSplitMode();
               const restoredRatio = fitRatio();
               focusBtn.click();
               await wait(120);
@@ -4194,8 +4215,8 @@ async function runUiSmoke(win) {
               await wait(120);
               const restoredExitRatio = fitRatio();
               splitOrientationFitRatios = [toggledRatio, restoredRatio];
-              splitOrientationRefitOk = toggledOrientation !== initialOrientation
-                && restoredOrientation === initialOrientation
+              splitOrientationRefitOk = toggledMode !== initialMode
+                && restoredMode === initialMode
                 && splitOrientationFitRatios.every((ratio) => ratio >= 0.85 && ratio <= 1.05);
               focusTransitionFitRatios = [
                 toggledFocusRatio,

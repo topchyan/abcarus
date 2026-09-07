@@ -288,6 +288,9 @@ const $btnRestart = document.getElementById("btnRestart");
 const $btnResetLayout = document.getElementById("btnResetLayout");
 const $btnSettings = document.getElementById("btnSettings");
 const $btnToggleSplit = document.getElementById("btnToggleSplit");
+
+const $splitToolbarMenu = document.getElementById("splitToolbarMenu");
+const $splitModeButtons = Array.from(document.querySelectorAll("[data-split-mode]"));
 	const $btnFocusMode = document.getElementById("btnFocusMode");
 const $btnToggleFollow = document.getElementById("btnToggleFollow");
 const $btnToggleGlobals = document.getElementById("btnToggleGlobals");
@@ -1508,6 +1511,7 @@ const layoutController = createLayoutController({
   errorPane: $errorPane,
   libraryTree: $libraryTree,
   toggleSplitButton: $btnToggleSplit,
+  splitModeButtons: $splitModeButtons,
   minPaneWidth: MIN_PANE_WIDTH,
   minRightPaneWidth: MIN_RIGHT_PANE_WIDTH,
   minRightPaneHeight: MIN_RIGHT_PANE_HEIGHT,
@@ -3947,6 +3951,8 @@ appCommandsDomain = createAppCommandsDomain({
     settingsButton: $btnSettings,
     resetLayoutButton: $btnResetLayout,
     toggleSplitButton: $btnToggleSplit,
+    splitToolbarMenu: $splitToolbarMenu,
+    splitModeButtons: $splitModeButtons,
     toggleFollowButton: $btnToggleFollow,
     toggleErrorsButton: $btnToggleErrors,
     toggleGlobalsButton: $btnToggleGlobals,
@@ -4023,6 +4029,7 @@ appCommandsDomain = createAppCommandsDomain({
     setFollowPlayback: playbackDomain.setFollowEnabled,
     setNoteTypingPreview: (enabled) => midiInputFeature.applySettingsPatch({ noteTypingPreviewEnabled: Boolean(enabled) }),
     setSplitOrientation,
+    setSplitMode,
     setStatus,
     showSaveError,
     showToast,
@@ -4168,10 +4175,19 @@ function setSplitOrientation(nextOrientation, { persist = true, userAction = fal
   return ok;
 }
 
+function setSplitMode(nextMode, { persist = true, userAction = false } = {}) {
+  const before = layoutController.getRightSplitMode();
+  const ok = layoutController.setSplitMode(nextMode, { persist, userAction });
+  if (ok && before !== layoutController.getRightSplitMode()) {
+    suppressFollowScroll();
+  }
+  return ok;
+}
+
 function toggleSplitOrientation({ userAction = false } = {}) {
-  const before = layoutController.getRightSplitOrientation();
+  const before = layoutController.getRightSplitMode();
   const ok = layoutController.toggleSplitOrientation({ userAction });
-  if (ok && before !== layoutController.getRightSplitOrientation()) {
+  if (ok && before !== layoutController.getRightSplitMode()) {
     suppressFollowScroll();
   }
   return ok;

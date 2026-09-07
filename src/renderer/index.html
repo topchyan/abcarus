@@ -62,12 +62,21 @@
 	        </div>
         </div>
 	      <div class="right-controls">
-	        <div class="segmented" aria-label="Workspace view">
-	          <button id="btnToggleSplit" type="button" title="Toggle split orientation (Ctrl+Alt+\)" aria-label="Toggle split orientation" aria-pressed="false">
+	        <div class="segmented split-toolbar-control" aria-label="Workspace view">
+	          <button id="btnToggleSplit" type="button" title="Cycle split layout (Ctrl+Alt+\)" aria-label="Cycle split layout" aria-pressed="false">
 	            <svg class="btn-icon icon-split" aria-hidden="true"><use href="#ui-split"></use></svg>
 	            <span class="btn-text">Split</span>
 	          </button>
-	          <button id="btnToggleFollow" type="button" title="Toggle playback follow" aria-label="Toggle playback follow" aria-pressed="false">
+	          <details id="splitToolbarMenu" class="toolbar-dropdown">
+	            <summary aria-label="Split layout options" title="Split layout options"><span aria-hidden="true">▾</span></summary>
+	            <div class="toolbar-dropdown-menu split-toolbar-menu" role="menu" aria-label="Split layout options">
+              <button id="splitModeVerticalEditorLeft" type="button" role="menuitem" data-split-mode="vertical-editor-left">Editor left / Score right <kbd class="split-mode-shortcut">Ctrl+Alt+[</kbd></button>
+              <button id="splitModeVerticalScoreLeft" type="button" role="menuitem" data-split-mode="vertical-score-left">Score left / Editor right <kbd class="split-mode-shortcut">Ctrl+Alt+]</kbd></button>
+              <button id="splitModeHorizontalEditorTop" type="button" role="menuitem" data-split-mode="horizontal-editor-top">Editor top / Score bottom <kbd class="split-mode-shortcut">Ctrl+Alt+,</kbd></button>
+              <button id="splitModeHorizontalScoreTop" type="button" role="menuitem" data-split-mode="horizontal-score-top">Score top / Editor bottom <kbd class="split-mode-shortcut">Ctrl+Alt+.</kbd></button>
+	            </div>
+          </details>
+          <button id="btnToggleFollow" type="button" title="Toggle playback follow" aria-label="Toggle playback follow" aria-pressed="false">
 	            <svg class="btn-icon icon-follow" aria-hidden="true"><use href="#ui-follow"></use></svg>
 	            <span class="btn-text">Follow</span>
 	          </button>

@@ -4,6 +4,32 @@ function clampRatio(value, fallback = 0.5) {
   return Math.max(0.1, Math.min(0.9, v));
 }
 
+const SPLIT_MODES = [
+  "vertical-editor-left",
+  "vertical-score-left",
+  "horizontal-editor-top",
+  "horizontal-score-top",
+];
+
+const SPLIT_MODE_LABELS = {
+  "vertical-editor-left": "Editor left - Score right",
+  "vertical-score-left": "Score left - Editor right",
+  "horizontal-editor-top": "Editor top - Score bottom",
+  "horizontal-score-top": "Score top - Editor bottom",
+};
+
+function normalizeSplitMode(value) {
+  return SPLIT_MODES.includes(value) ? value : null;
+}
+
+function splitOrientationForMode(mode) {
+  return String(mode || "").startsWith("horizontal-") ? "horizontal" : "vertical";
+}
+
+function defaultSplitModeForOrientation(orientation) {
+  return orientation === "horizontal" ? "horizontal-score-top" : "vertical-editor-left";
+}
+
 export function createLayoutController({
   main,
   divider,
@@ -18,6 +44,7 @@ export function createLayoutController({
   errorPane,
   libraryTree,
   toggleSplitButton,
+  splitModeButtons = [],
   minPaneWidth = 220,
   minRightPaneWidth = 220,
   minRightPaneHeight = 180,
@@ -36,6 +63,7 @@ export function createLayoutController({
   saveLayoutPrefs = async () => {},
   showToast = () => {},
 } = {}) {
+  let rightSplitMode = "vertical-editor-left";
   let rightSplitOrientation = "vertical";
   let rightSplitRatioVertical = 0.5;
   let rightSplitRatioHorizontal = 0.5;
@@ -109,20 +137,32 @@ export function createLayoutController({
     });
   };
 
-  const applyRightSplitOrientation = (next) => {
-    const normalized = (next === "horizontal") ? "horizontal" : "vertical";
-    rightSplitOrientation = normalized;
-    document.body.classList.toggle("right-split-horizontal", normalized === "horizontal");
+  const applyRightSplitMode = (nextMode) => {
+    const normalized = normalizeSplitMode(nextMode) || "vertical-editor-left";
+    rightSplitMode = normalized;
+    rightSplitOrientation = splitOrientationForMode(normalized);
+    document.body.classList.toggle("right-split-horizontal", rightSplitOrientation === "horizontal");
+    for (const mode of SPLIT_MODES) {
+      document.body.classList.toggle(`right-split-mode-${mode}`, mode === normalized);
+    }
     if (splitDivider) {
-      splitDivider.setAttribute("aria-orientation", normalized === "horizontal" ? "horizontal" : "vertical");
+      splitDivider.setAttribute("aria-orientation", rightSplitOrientation === "horizontal" ? "horizontal" : "vertical");
     }
     if (toggleSplitButton) {
-      toggleSplitButton.classList.toggle("toggle-active", normalized === "horizontal");
-      toggleSplitButton.setAttribute("aria-pressed", normalized === "horizontal" ? "true" : "false");
-      toggleSplitButton.title = normalized === "horizontal"
-        ? "Toggle split orientation (Ctrl+Alt+\\) - Horizontal"
-        : "Toggle split orientation (Ctrl+Alt+\\) - Vertical";
+      toggleSplitButton.classList.toggle("toggle-active", normalized !== "vertical-editor-left");
+      toggleSplitButton.setAttribute("aria-pressed", normalized === "vertical-editor-left" ? "false" : "true");
+      toggleSplitButton.title = `Cycle split layout (Ctrl+Alt+\\) - ${SPLIT_MODE_LABELS[normalized]}`;
     }
+    for (const button of splitModeButtons) {
+      if (!button) continue;
+      const active = button.dataset && button.dataset.splitMode === normalized;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-checked", active ? "true" : "false");
+    }
+  };
+
+  const applyRightSplitOrientation = (next) => {
+    applyRightSplitMode(defaultSplitModeForOrientation(next === "horizontal" ? "horizontal" : "vertical"));
   };
 
   const applyRightSplitSizesFromRatio = ({ rawMode = false } = {}) => {
@@ -311,7 +351,9 @@ export function createLayoutController({
     if (!settings || typeof settings !== "object") return;
     rightSplitRatioVertical = clampRatio(settings.layoutSplitRatioVertical, rightSplitRatioVertical);
     rightSplitRatioHorizontal = clampRatio(settings.layoutSplitRatioHorizontal, rightSplitRatioHorizontal);
-    applyRightSplitOrientation(settings.layoutSplitOrientation === "horizontal" ? "horizontal" : "vertical");
+    const savedMode = normalizeSplitMode(settings.layoutSplitMode)
+      || defaultSplitModeForOrientation(settings.layoutSplitOrientation === "horizontal" ? "horizontal" : "vertical");
+    applyRightSplitMode(savedMode);
     applyRightSplitSizesFromRatio();
   };
 
@@ -378,13 +420,20 @@ export function createLayoutController({
   };
 
   const setSplitOrientation = (nextOrientation, { persist = true, userAction = false } = {}) => {
-    const next = (nextOrientation === "horizontal") ? "horizontal" : "vertical";
+    const next = defaultSplitModeForOrientation(nextOrientation === "horizontal" ? "horizontal" : "vertical");
+    return setSplitMode(next, { persist, userAction });
+  };
+
+  const setSplitMode = (nextMode, { persist = true, userAction = false } = {}) => {
+    const next = normalizeSplitMode(nextMode) || "vertical-editor-left";
     if (userAction && !isNormalModeForSplitToggle()) {
-      showToast("Exit Focus/Raw mode to change split orientation.", 2400);
+      showToast("Exit Focus/Raw mode to change split layout.", 2400);
       return false;
     }
+    const currentMode = rightSplitMode;
+    if (currentMode === next) return true;
     const currentOrientation = rightSplitOrientation;
-    if (currentOrientation === next) return true;
+    const nextOrientation = splitOrientationForMode(next);
 
     try {
       const currentZoom = readRenderZoom();
@@ -398,7 +447,7 @@ export function createLayoutController({
       }
     } catch {}
 
-    applyRightSplitOrientation(next);
+    applyRightSplitMode(next);
     applyRightSplitSizesFromRatio({ rawMode: Boolean(isRawMode()) });
 
     try {
@@ -414,21 +463,24 @@ export function createLayoutController({
       }
     } catch {}
 
-    if (persist) scheduleSaveLayoutPrefs({ layoutSplitOrientation: next });
+    if (persist) scheduleSaveLayoutPrefs({ layoutSplitMode: next, layoutSplitOrientation: nextOrientation });
     if (userAction) fitScoreToCurrentPane({ resetScroll: false });
-    showToast(next === "horizontal" ? "Split: Horizontal" : "Split: Vertical", 1500);
+    showToast(`Split: ${SPLIT_MODE_LABELS[next]}`, 1500);
     return true;
   };
 
   const toggleSplitOrientation = ({ userAction = false } = {}) => {
-    const next = rightSplitOrientation === "horizontal" ? "vertical" : "horizontal";
-    return setSplitOrientation(next, { persist: true, userAction });
+    const currentIndex = SPLIT_MODES.indexOf(rightSplitMode);
+    const next = SPLIT_MODES[(currentIndex + 1) % SPLIT_MODES.length];
+    return setSplitMode(next, { persist: true, userAction });
   };
 
   return {
     applyRightSplitOrientation,
+    applyRightSplitMode,
     applyRightSplitSizesFromRatio,
     getRightSplitOrientation: () => rightSplitOrientation,
+    getRightSplitMode: () => rightSplitMode,
     getSidebarWidth,
     fitScoreToCurrentPane,
     initPaneResizer,
@@ -446,6 +498,7 @@ export function createLayoutController({
     setRightPaneSizes,
     setSidebarSplitSizes,
     setSplitOrientation,
+    setSplitMode,
     toggleSplitOrientation,
   };
 }

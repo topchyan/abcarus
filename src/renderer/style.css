@@ -549,6 +549,19 @@ main > .pane.right { grid-column: 5; }
   border-radius: var(--button-radius) 0 0 var(--button-radius);
 }
 
+.split-toolbar-control {
+  position: relative;
+}
+
+.split-toolbar-control > #btnToggleSplit {
+  border-radius: var(--button-radius) 0 0 var(--button-radius);
+  margin-right: -6px;
+}
+
+.split-toolbar-control > .toolbar-dropdown > summary {
+  border-radius: 0 var(--button-radius) var(--button-radius) 0;
+}
+
 .toolbar-dropdown {
   position: relative;
 }
@@ -600,6 +613,28 @@ main > .pane.right { grid-column: 5; }
   border: 0;
   background: transparent;
   text-align: left;
+}
+
+.toolbar-dropdown-menu button.is-active {
+  background: var(--accent-soft);
+  font-weight: 700;
+}
+
+.split-toolbar-menu {
+  min-width: 190px;
+}
+
+.split-toolbar-menu button {
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.split-mode-shortcut {
+  margin-left: auto;
+  color: var(--muted-text);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: 400;
 }
 
 .segmented button:disabled {
@@ -1584,6 +1619,42 @@ body.right-split-horizontal .split-divider {
 body.right-split-horizontal .editor-pane {
   grid-column: 1;
   grid-row: 3;
+}
+
+body.right-split-mode-vertical-score-left .render-pane {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+body.right-split-mode-vertical-score-left .split-divider {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+body.right-split-mode-vertical-score-left .editor-pane {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+body.right-split-mode-horizontal-editor-top .editor-pane {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+body.right-split-mode-horizontal-editor-top .split-divider {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+body.right-split-mode-horizontal-editor-top .render-pane {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+/* Raw mode keeps only the editor, regardless of the last split arrangement. */
+body.raw-mode .right-split .editor-pane {
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .render-pane {

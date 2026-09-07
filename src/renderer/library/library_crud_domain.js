@@ -208,6 +208,7 @@ function createLibraryCrudDomain({
     },
     actions: {
       hasUnsavedChangesForFile: actions.hasUnsavedChangesForFile,
+      loadLibraryFileIntoEditor: actions.loadLibraryFileIntoEditor,
       markCurrentDocumentClean: actions.markCurrentDocumentClean,
       markDiskConflictPath: actions.markDiskConflictPath,
       pathsEqual: actions.pathsEqual,

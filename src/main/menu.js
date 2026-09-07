@@ -241,7 +241,16 @@ function buildMenuTemplate(appState, sendMenuAction) {
       { label: "Show/Hide Set List Panel", accelerator: "F6", click: () => sendMenuAction("toggleSetList") },
       { label: "Show/Hide File Header", accelerator: "CmdOrCtrl+Alt+H", click: () => sendMenuAction("toggleFileHeader") },
       { type: "separator" },
-      { label: "Switch Split Orientation", accelerator: "CmdOrCtrl+Alt+\\", click: () => sendMenuAction("toggleSplitOrientation") },
+      { label: "Cycle Split Layout", accelerator: "CmdOrCtrl+Alt+\\", click: () => sendMenuAction("toggleSplitOrientation") },
+      {
+        label: "Split Layout",
+        submenu: [
+          { label: "Editor left / Score right", accelerator: "CmdOrCtrl+Alt+[", click: () => sendMenuAction({ type: "setSplitMode", value: "vertical-editor-left" }) },
+          { label: "Score left / Editor right", accelerator: "CmdOrCtrl+Alt+]", click: () => sendMenuAction({ type: "setSplitMode", value: "vertical-score-left" }) },
+          { label: "Editor top / Score bottom", accelerator: "CmdOrCtrl+Alt+,", click: () => sendMenuAction({ type: "setSplitMode", value: "horizontal-editor-top" }) },
+          { label: "Score top / Editor bottom", accelerator: "CmdOrCtrl+Alt+.", click: () => sendMenuAction({ type: "setSplitMode", value: "horizontal-score-top" }) },
+        ],
+      },
       { type: "separator" },
       { label: "Zoom In", accelerator: "CmdOrCtrl+=", click: () => sendMenuAction("zoomIn") },
       { label: "Zoom Out", accelerator: "CmdOrCtrl+-", click: () => sendMenuAction("zoomOut") },

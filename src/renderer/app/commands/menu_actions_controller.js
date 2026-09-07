@@ -7,6 +7,7 @@ const BUSY_ALLOWED_ACTIONS = new Set([
   "playGotoMeasure",
   "toggleFocusMode",
   "setSplitOrientation",
+  "setSplitMode",
   "toggleSplitOrientation",
   "toggleDebugMessages",
   "toggleAutoDump",
@@ -29,6 +30,7 @@ const PAYLOAD_ALLOWED_ACTIONS = new Set([
   "zoomReset",
   "resetLayout",
   "setSplitOrientation",
+  "setSplitMode",
   "toggleSplitOrientation",
   "toggleDebugMessages",
   "toggleAutoDump",
@@ -235,6 +237,10 @@ function createMenuActionsController({
     else if (actionType === "setSplitOrientation") {
       const value = action && action.value ? String(action.value) : "";
       actions.setSplitOrientation(value, { persist: true, userAction: true });
+    }
+    else if (actionType === "setSplitMode") {
+      const value = action && action.value ? String(action.value) : "";
+      actions.setSplitMode(value, { persist: true, userAction: true });
     }
     else if (actionType === "renumberXInFile") await actions.renumberXInActiveFile();
     else if (actionType === "updateYouTubeMetadata") {

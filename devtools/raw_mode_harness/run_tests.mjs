@@ -12,6 +12,13 @@ async function importRendererModule(filePath) {
 
 const { createRawModeFeature } = await importRendererModule(resolve("src/renderer/tools/raw_mode/raw_mode_feature.js"));
 
+const layoutCss = await readFile(resolve("src/renderer/style.css"), "utf8");
+assert.match(
+  layoutCss,
+  /body\.raw-mode \.right-split \.editor-pane\s*\{[\s\S]*grid-column:\s*1;[\s\S]*grid-row:\s*1;/,
+  "Raw mode must place the editor in the only visible split grid cell",
+);
+
 function createHarness({ readDelay = 0, confirmChoice = "cancel" } = {}) {
   const filePath = "/tmp/raw-mode.abc";
   const fullText = "%%abc-charset utf-8\nX:1\nT:One\nK:C\nC|\nX:2\nT:Two\nK:D\nD|\n";

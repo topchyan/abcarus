@@ -145,6 +145,45 @@ assert.deepEqual(tabTransactions[0], {
   userEvent: "input",
 });
 
+const tabAlignSource = `X:1
+M:4/4
+L:1/4
+K:C
+"Am" C D E F | G A B c |
+C D E F`;
+const tabAlignTransactions = [];
+const tabAlignView = {
+  state: {
+    readOnly: false,
+    doc: { toString: () => tabAlignSource },
+    selection: {
+      ranges: [{ from: tabAlignSource.length, to: tabAlignSource.length }],
+      main: { from: tabAlignSource.length, to: tabAlignSource.length, head: tabAlignSource.length },
+    },
+  },
+  dispatch: (transaction) => tabAlignTransactions.push(transaction),
+};
+assert.equal(runMeasureTab(tabAlignView), true);
+assert.deepEqual(tabAlignTransactions[0], {
+  changes: {
+    from: 0,
+    to: tabAlignSource.length,
+    insert: `X:1
+M:4/4
+L:1/4
+K:C
+"Am" C D E F | G A B c |
+C    D E F   |`,
+  },
+  selection: { anchor: `X:1
+M:4/4
+L:1/4
+K:C
+"Am" C D E F | G A B c |
+C    D E F   |`.length },
+  userEvent: "input",
+});
+
 const tabIncomplete = tabInsert.replace(" E2 F2", "");
 assert.equal(planMeasureTabAction(tabIncomplete, tabIncomplete.length).action, "incomplete");
 

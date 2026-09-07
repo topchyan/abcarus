@@ -182,6 +182,7 @@ function createAppCommandsDomain({
       setNoteTypingPreview: setNoteTypingPreviewCommand,
       setSelectionLoop: setSelectionLoopCommand,
       setSplitOrientation: actions.setSplitOrientation,
+      setSplitMode: actions.setSplitMode,
       setStatus: actions.setStatus,
       showSaveError: actions.showSaveError,
       showToast: actions.showToast,
@@ -377,6 +378,8 @@ function createAppCommandsDomain({
       settingsButton,
       resetLayoutButton,
       toggleSplitButton,
+      splitToolbarMenu,
+      splitModeButtons,
       toggleFollowButton,
       toggleErrorsButton,
       toggleGlobalsButton,
@@ -398,6 +401,27 @@ function createAppCommandsDomain({
     if (toggleSplitButton) {
       toggleSplitButton.addEventListener("click", () => {
         call(actions.toggleSplitOrientation, { userAction: true });
+      });
+    }
+
+    if (splitModeButtons && splitModeButtons.length) {
+      for (const button of splitModeButtons) {
+        button.addEventListener("click", () => {
+          if (splitToolbarMenu) splitToolbarMenu.open = false;
+          call(actions.setSplitMode, button.dataset.splitMode, { persist: true, userAction: true });
+        });
+      }
+    }
+
+    if (splitToolbarMenu) {
+      document.addEventListener("pointerdown", (event) => {
+        if (!splitToolbarMenu.open || splitToolbarMenu.contains(event.target)) return;
+        splitToolbarMenu.open = false;
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && splitToolbarMenu.open) {
+          splitToolbarMenu.open = false;
+        }
       });
     }
 
