@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [1.10.3] - 2026-09-11
 ### Added
 - Library tunes can be reordered within their source file from the context menu or by dragging before/after another tune.
 - The editor can generate an empty bar skeleton in another voice from the form of `V:1`, preserving measure, repeat, volta, part, and line-break structure without copying its melody.
@@ -23,7 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MusicXML formatting keeps xml2abc volta and line-break sequences such as `|1$` together so the volta label remains visible on the Score.
 - Set List source resolution no longer substitutes or overwrites an unrelated tune when file offsets or reused X numbers become stale.
 - PDF output preserves abc2svg system bounds so chords and volta marks do not create excessive vertical spacing between printed staves.
-
 
 ## [1.10.2] - 2026-09-07
 ### Changed
