@@ -4,6 +4,14 @@
     "candidates": [{ "sourcePath": "/library/a.abc", "xNumber": "235", "title": "Gece Yorgundu", "composer": "Ara Dinkjian", "contentHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }],
     "expected": "FOUND_MODIFIED"
   },
+  "reorderedWithReusedX": {
+    "item": { "id": "reordered", "tune": { "title": "Intended Tune", "composer": "Composer", "source": { "pathHint": "/library/a.abc", "xNumberHint": "12" }, "contentHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" } },
+    "candidates": [
+      { "sourcePath": "/library/a.abc", "xNumber": "12", "title": "Different Tune", "composer": "Other", "contentHash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" },
+      { "sourcePath": "/library/a.abc", "xNumber": "19", "title": "Intended Tune", "composer": "Composer", "contentHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" }
+    ],
+    "expected": "FOUND_EXACT"
+  },
   "missingEmbedded": {
     "item": { "id": "missing-saved", "tune": { "title": "Lost Song", "composer": "", "source": { "pathHint": "/gone/file.abc", "xNumberHint": "4" }, "contentHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" }, "embeddedAbc": "X:4\nT:Lost Song\nK:C\nC|\n" },
     "candidates": [],

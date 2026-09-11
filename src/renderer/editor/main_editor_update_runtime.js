@@ -21,6 +21,7 @@ export function createMainEditorUpdateRuntime({
   isPlaying = () => false,
   getFollowPlayback = () => false,
   scheduleCursorNoteHighlight = () => {},
+  scheduleCursorScoreReveal = () => {},
   clearNoteSelection = () => {},
   updatePlaybackRangeFromSelection = () => {},
   getActiveErrorHighlight = () => null,
@@ -79,6 +80,7 @@ export function createMainEditorUpdateRuntime({
       } else {
         clearNoteSelection();
       }
+      scheduleCursorScoreReveal(idx);
       if (!suppressPlaybackRangeSelectionSync) {
         const origin = pendingPlaybackRangeOrigin || "cursor";
         pendingPlaybackRangeOrigin = null;
@@ -91,6 +93,10 @@ export function createMainEditorUpdateRuntime({
         pendingPlaybackRangeOrigin = null;
       }
       handlePlaybackSelectionTransportState(clearPracticeHighlight);
+    }
+
+    if (!isRawMode() && update.docChanged && !isPlaying()) {
+      scheduleCursorScoreReveal(update.state.selection.main.anchor);
     }
 
     if (update.selectionSet || update.docChanged) {

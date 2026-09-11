@@ -33,7 +33,10 @@ export function createTuneClipboardController({
     const libraryIndex = getLibraryIndex();
     if (!libraryIndex || !tuneId) return null;
     for (const file of libraryIndex.files || []) {
-      const tune = (file.tunes || []).find((t) => t.id === tuneId);
+      const tune = (file.tunes || []).find((t) => (
+        t
+        && (t.id === tuneId || (t.tuneUid && t.tuneUid === tuneId))
+      ));
       if (tune) return { tune, file };
     }
     return null;

@@ -28,6 +28,7 @@ function createLibraryTreeView({
   commitRenameFile = async () => {},
   requestLoadLibraryFile = async () => {},
   moveTuneToFile = async () => {},
+  reorderTune = async () => ({ ok: false }),
   mergeCatalogCategory = () => false,
   showContextMenuAt = () => {},
   scheduleSaveLibraryUiState = () => {},
@@ -266,7 +267,7 @@ function createLibraryTreeView({
         const button = documentRef.createElement("button");
         button.type = "button";
         button.className = "tree-label tune-label";
-        button.draggable = true;
+        button.draggable = !isRawMode() && !isPayloadMode();
         button.disabled = isPayloadMode();
         const labelNumber = tune.xNumber || String(tune.indexInFile);
         const title = tune.title || tune.preview || "";
@@ -294,6 +295,35 @@ function createLibraryTreeView({
         });
         button.addEventListener("dragend", () => {
           dragTuneId = "";
+          button.classList.remove("drop-target", "drop-before", "drop-after");
+        });
+        button.addEventListener("dragover", (ev) => {
+          if (!isTuneDrag(ev)) return;
+          const sourceTuneId = getDragTuneId(ev);
+          if (!sourceTuneId || sourceTuneId === tune.id) return;
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+          const rect = typeof button.getBoundingClientRect === "function" ? button.getBoundingClientRect() : null;
+          const placement = rect && Number.isFinite(Number(ev.clientY)) && ev.clientY >= rect.top + (rect.height / 2)
+            ? "after"
+            : "before";
+          button.classList.add("drop-target");
+          button.classList.toggle("drop-before", placement === "before");
+          button.classList.toggle("drop-after", placement === "after");
+        });
+        button.addEventListener("dragleave", () => {
+          button.classList.remove("drop-target", "drop-before", "drop-after");
+        });
+        button.addEventListener("drop", async (ev) => {
+          const sourceTuneId = getDragTuneId(ev);
+          if (!sourceTuneId || sourceTuneId === tune.id) return;
+          ev.preventDefault();
+          ev.stopPropagation();
+          const placement = button.classList.contains("drop-after") ? "after" : "before";
+          button.classList.remove("drop-target", "drop-before", "drop-after");
+          dragTuneId = "";
+          await reorderTune(sourceTuneId, { targetTuneId: tune.id, placement });
         });
         button.addEventListener("contextmenu", (ev) => {
           ev.preventDefault();

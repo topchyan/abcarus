@@ -4,6 +4,7 @@ import { createErrorsBarMismatchController } from "./errors_bar_mismatch_control
 import {
   analyzeBarMismatchesForGutter,
 } from "./errors_bar_mismatch_model.js";
+import { analyzeVoiceMeasureCorrespondence } from "../abc/voice_measure_correspondence_model.js";
 import { createErrorsCollection } from "./errors_collection.js";
 import { createErrorsFocusMessageController } from "./errors_focus_message_controller.js";
 import { createErrorsHighlightState } from "./errors_highlight_state.js";
@@ -198,6 +199,10 @@ function createErrorsFeature({
     }
     try {
       let markers = analyzeBarMismatchesForGutter(tuneText);
+      const voiceForm = analyzeVoiceMeasureCorrespondence(tuneText);
+      if (Array.isArray(voiceForm.mismatches) && voiceForm.mismatches.length) {
+        markers = [...markers, ...voiceForm.mismatches];
+      }
       const lineDelta = Number(lineOffset) || 0;
       const offsetDelta = Number(startOffset) || 0;
       if ((lineDelta || offsetDelta) && Array.isArray(markers)) {
@@ -242,7 +247,9 @@ function createErrorsFeature({
       const deltaLabel = marker.deltaText ? ` ${marker.deltaText}` : "";
       const voicePrefix = marker.voiceId ? `V:${marker.voiceId} · ` : "";
       const detail = marker.detail ? String(marker.detail) : `${voicePrefix}${barLabel}${deltaLabel} mismatch.`;
-      const message = `Bar mismatch: ${detail}`;
+      const message = (marker.kind === "measure-count" || marker.kind === "structure")
+        ? `Voice form mismatch: ${detail}`
+        : `Bar mismatch: ${detail}`;
       const loc = Number.isFinite(marker.line)
         ? { line: Number(marker.line), col: Number.isFinite(marker.col) ? Number(marker.col) : 1 }
         : null;

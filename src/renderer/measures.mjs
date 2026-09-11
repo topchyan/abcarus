@@ -48,6 +48,7 @@ function consumeBarlineToken(src, start) {
   if (s[i] === ":" && (s[i + 1] === ":" || s[i + 1] === "|")) {
     let j = i;
     while (j < s.length && (s[j] === ":" || s[j] === "|")) j += 1;
+    if (/[0-9]/.test(s[j] || "") && s[j + 1] === "$") j += 2;
     if (s[j] === "]" && !/[0-9]/.test(s[j + 1] || "")) j += 1;
     if (s[j] === "[" && /[0-9|:\]]/.test(s[j + 1] || "")) {
       j += 1;
@@ -75,6 +76,10 @@ function consumeBarlineToken(src, start) {
       }
       break;
     }
+    // xml2abc emits a volta and forced system break as one unit: `|1$`.
+    // Keep this exact sequence together while reflowing; otherwise `1$` can
+    // become the next line's text and abc2svg loses the volta label.
+    if (/[0-9]/.test(s[j] || "") && s[j + 1] === "$") j += 2;
     return { text: s.slice(i, j), end: j };
   }
   return null;

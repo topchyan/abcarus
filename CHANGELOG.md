@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Library tunes can be reordered within their source file from the context menu or by dragging before/after another tune.
+- The editor can generate an empty bar skeleton in another voice from the form of `V:1`, preserving measure, repeat, volta, part, and line-break structure without copying its melody.
+- Corresponding measures are highlighted across compatible voices, while incompatible measure counts, repeats, and voltas are reported as voice-form errors.
+- The Globals toolbar button now provides direct access to the Global Header page in Settings.
+
+### Changed
+- Moving the editor cursor reveals and comfortably scrolls the corresponding measure into view on the Score, including when editing a secondary voice.
+- The Measure indicator reports musical duration independently of `L:`, keeps a stable unavailable state, and distinguishes incomplete and overfull measures more clearly.
+
+### Fixed
+- Normal playback started from the editor now uses the current cursor measure on the first launch, including after a completed playback or a stale Focus/navigation plan.
+- The latest selected tune is restored consistently across application restarts and regular file opening, without trusting stale file offsets or silently substituting the first tune.
+- Renumber X keeps the currently open tune selected when changed X-line lengths shift its file offset.
+- MusicXML formatting keeps xml2abc volta and line-break sequences such as `|1$` together so the volta label remains visible on the Score.
+- Set List source resolution no longer substitutes or overwrites an unrelated tune when file offsets or reused X numbers become stale.
+- PDF output preserves abc2svg system bounds so chords and volta marks do not create excessive vertical spacing between printed staves.
 
 
 ## [1.10.2] - 2026-09-07

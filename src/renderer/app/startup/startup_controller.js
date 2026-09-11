@@ -155,7 +155,7 @@ export function createStartupController({
       if (!candidate || !candidate.entry) continue;
       if (candidate.type === "tune") {
         reportStartupStatus("Opening recent tune…");
-        const opened = await openRecentTune(candidate.entry);
+        const opened = await openRecentTune(candidate.entry, { suppressRecent: true });
         if (opened && opened.ok) {
           markRecentOpenStarted();
           return true;

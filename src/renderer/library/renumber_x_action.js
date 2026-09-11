@@ -20,6 +20,7 @@ export function createRenumberXAction({
     readFile = async () => ({ ok: false }),
     refreshLibraryFile = async () => null,
     loadLibraryFileIntoEditor = async () => ({ ok: false }),
+    selectTune = async () => false,
     renumberXLinesConsecutive = () => ({ ok: false }),
     pathsEqual = (left, right) => String(left || "") === String(right || ""),
     setDirtyIndicator = () => {},
@@ -32,6 +33,12 @@ export function createRenumberXAction({
 
   async function renumberXInActiveFile(explicitFilePath) {
     const activeTuneMeta = getActiveTuneMeta();
+    const activeTuneStartOffset = activeTuneMeta && Number.isFinite(Number(activeTuneMeta.startOffset))
+      ? Number(activeTuneMeta.startOffset)
+      : null;
+    const activeTuneIndex = activeTuneMeta && Number.isInteger(Number(activeTuneMeta.tuneIndex))
+      ? Number(activeTuneMeta.tuneIndex)
+      : null;
     const filePath = explicitFilePath
       || ((activeTuneMeta && activeTuneMeta.path) ? activeTuneMeta.path : null)
       || (getActiveFilePath() || getCurrentDocumentPath() || null);
@@ -60,9 +67,21 @@ export function createRenumberXAction({
           throw new Error((writeRes && writeRes.error) ? writeRes.error : "Unable to write file.");
         }
       });
-      await refreshLibraryFile(filePath, { force: true });
+      const updatedFile = await refreshLibraryFile(filePath, { force: true });
       if (getCurrentDocumentPath() && pathsEqual(getCurrentDocumentPath(), filePath)) {
-        await loadLibraryFileIntoEditor(filePath, { skipConfirm: true, suppressRecent: true });
+        const updatedTunes = updatedFile && Array.isArray(updatedFile.tunes) ? updatedFile.tunes : [];
+        let matchingTune = activeTuneIndex != null ? updatedTunes[activeTuneIndex] || null : null;
+        if (!matchingTune && activeTuneStartOffset != null) {
+          matchingTune = updatedTunes.find((tune) => Number(tune && tune.startOffset) === activeTuneStartOffset) || null;
+        }
+        if (matchingTune) {
+          await selectTune(matchingTune.tuneUid || matchingTune.id, {
+            skipConfirm: true,
+            suppressRecent: true,
+          });
+        } else {
+          await loadLibraryFileIntoEditor(filePath, { skipConfirm: true, suppressRecent: true });
+        }
       }
       setStatus("Renumbered X.");
     } catch (e) {

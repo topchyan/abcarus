@@ -1464,6 +1464,11 @@ function buildPrintHtml(svgMarkup, fontBase64, suggestedName) {
           for (const svg of svgs) {
             try {
               if (!svg || !svg.getBBox) continue;
+              const className = String(svg.getAttribute("class") || "");
+              // abc2svg deliberately lets chords, volta marks, and other notation
+              // extend outside each system's layout box. Expanding that box here
+              // turns the intended overflow into large gaps between printed staves.
+              if (/(^|\\s)tune\\d+(\\s|$)/.test(className)) continue;
               const bbox = svg.getBBox();
               if (!bbox || !Number.isFinite(bbox.width) || !Number.isFinite(bbox.height) || bbox.width <= 0 || bbox.height <= 0) continue;
               const vb = svg.viewBox && svg.viewBox.baseVal;

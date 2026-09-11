@@ -13,6 +13,8 @@ function createScoreHighlightController({
   getFollowEnabled = () => false,
   isRawMode = () => false,
   isPlaying = () => false,
+  shouldRevealCursorInScore = () => false,
+  resolveEditorMeasureRangeForScore = () => null,
   scrollToNote = () => {},
 } = {}) {
   let lastSvgFollowBarEls = [];
@@ -23,6 +25,8 @@ function createScoreHighlightController({
   let noteHighlightIndexCache = null;
   let pendingCursorNoteHighlightRaf = null;
   let pendingCursorNoteHighlightIdx = null;
+  let pendingCursorScoreRevealRaf = null;
+  let pendingCursorScoreRevealIdx = null;
 
   function clearSvgFollowBarHighlight() {
     for (const el of lastSvgFollowBarEls) {
@@ -413,6 +417,22 @@ function createScoreHighlightController({
     return Array.isArray(hit) ? hit : [];
   }
 
+  function findNoteHighlightElementsInRenderRange(renderStart, renderEnd) {
+    const start = Number(renderStart);
+    const end = Number(renderEnd);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return [];
+    const cache = buildNoteHighlightIndexCache();
+    if (!cache || !cache.map || !Array.isArray(cache.idxs)) return [];
+    const matches = [];
+    for (const idx of cache.idxs) {
+      if (idx < start) continue;
+      if (idx > end) break;
+      const elements = cache.map.get(idx);
+      if (Array.isArray(elements)) matches.push(...elements);
+    }
+    return matches;
+  }
+
   function highlightRenderNoteAtIndex(renderIdx, { scrollToNote: scroll = scrollToNote } = {}) {
     const out = getOutElement();
     if (!out) return;
@@ -445,12 +465,55 @@ function createScoreHighlightController({
     });
   }
 
+  function revealEditorCursorInScore(editorIdx) {
+    if (isRawMode() || isPlaying() || !shouldRevealCursorInScore()) return false;
+    const editorView = getEditorView();
+    const editorText = editorView && editorView.state && editorView.state.doc
+      ? editorView.state.doc.toString()
+      : "";
+    const measure = resolveEditorMeasureRangeForScore(editorText, editorIdx);
+    const targetEditorIdx = measure && Number.isFinite(measure.from) ? measure.from : editorIdx;
+    const renderIdx = Number.isFinite(targetEditorIdx)
+      ? mapEditorOffsetToRenderIdx(targetEditorIdx)
+      : targetEditorIdx;
+    if (!Number.isFinite(renderIdx)) return false;
+    const renderEnd = measure && Number.isFinite(measure.to)
+      ? mapEditorOffsetToRenderIdx(measure.to)
+      : renderIdx;
+    const inMeasure = findNoteHighlightElementsInRenderRange(renderIdx, renderEnd);
+    const exact = queryNoteHighlightElementsByRenderIdx(renderIdx);
+    const candidates = inMeasure.length
+      ? inMeasure
+      : exact.length ? exact : findNearestNoteHighlightElements(renderIdx);
+    const chosen = candidates.length ? pickClosestNoteElement(candidates) : null;
+    if (!chosen) {
+      clearSvgFollowMeasureHighlight();
+      return false;
+    }
+    highlightSvgFollowMeasureForNote(chosen, findNearestBarElForNote(chosen));
+    const scrollTarget = lastSvgFollowMeasureEls[0] || chosen;
+    scrollToNote(scrollTarget, { placement: "comfortable-center" });
+    return true;
+  }
+
+  function scheduleCursorScoreReveal(editorIdx) {
+    pendingCursorScoreRevealIdx = editorIdx;
+    if (pendingCursorScoreRevealRaf != null) return;
+    pendingCursorScoreRevealRaf = requestAnimationFrameRef(() => {
+      pendingCursorScoreRevealRaf = null;
+      const next = pendingCursorScoreRevealIdx;
+      pendingCursorScoreRevealIdx = null;
+      revealEditorCursorInScore(next);
+    });
+  }
+
   return {
     clearNoteSelection,
     clearSvgFollowBarHighlight,
     clearSvgFollowMeasureHighlight,
     clearSvgPlayhead,
     extractRenderIdxFromElementClass,
+    findNoteHighlightElementsInRenderRange,
     findNearestBarElForNote,
     findNearestNoteHighlightElements,
     getSvgPlayheadElement,
@@ -461,7 +524,9 @@ function createScoreHighlightController({
     invalidateNoteHighlightIndexCache,
     pickClosestNoteElement,
     queryNoteHighlightElementsByRenderIdx,
+    revealEditorCursorInScore,
     scheduleCursorNoteHighlight,
+    scheduleCursorScoreReveal,
     setSvgPlayheadFromElements,
   };
 }

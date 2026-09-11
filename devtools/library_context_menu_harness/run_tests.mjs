@@ -57,11 +57,24 @@ const windowRef = {
 };
 let expandCalls = 0;
 let collapseCalls = 0;
+const reorderCalls = [];
+let generateSkeletonCalls = 0;
+const contextTunes = [
+  { id: "/music/a.abc::0" },
+  { id: "/music/a.abc::1" },
+  { id: "/music/a.abc::2" },
+];
 const contextMenu = createLibraryContextMenu({
   documentRef,
   windowRef,
   expandAllLibrary: () => { expandCalls += 1; },
   collapseAllLibrary: () => { collapseCalls += 1; },
+  findTuneById: (tuneId) => ({
+    file: { path: "/music/a.abc", tunes: contextTunes },
+    tune: contextTunes.find((tune) => tune.id === tuneId),
+  }),
+  reorderTune: async (tuneId, options) => { reorderCalls.push([tuneId, options]); },
+  generateBlankVoiceSkeleton: () => { generateSkeletonCalls += 1; },
 });
 contextMenu.init();
 const menuElement = body.children[0];
@@ -80,6 +93,7 @@ for (const target of [
 
 contextMenu.show(10, 10, { type: "editor" });
 assert.ok(!menuElement.children.some((item) => item.textContent === "Expand All"));
+assert.ok(menuElement.children.some((item) => item.dataset.action === "editorGenerateBlankVoiceSkeleton"));
 contextMenu.show(10, 10, { type: "library" });
 
 async function clickAction(action) {
@@ -92,6 +106,19 @@ await clickAction("expandAllLibrary");
 await clickAction("collapseAllLibrary");
 assert.equal(expandCalls, 1);
 assert.equal(collapseCalls, 1);
+
+contextMenu.show(10, 10, { type: "editor" });
+await clickAction("editorGenerateBlankVoiceSkeleton");
+assert.equal(generateSkeletonCalls, 1, "editor context menu must expose voice skeleton generation");
+
+contextMenu.show(10, 10, { type: "tune", tuneId: "/music/a.abc::1" });
+await clickAction("moveTuneUp");
+contextMenu.show(10, 10, { type: "tune", tuneId: "/music/a.abc::1" });
+await clickAction("moveTuneDown");
+assert.deepEqual(reorderCalls, [
+  ["/music/a.abc::1", { direction: -1 }],
+  ["/music/a.abc::1", { direction: 1 }],
+]);
 
 const { createLibraryUiStateController } = await loadModule("src/renderer/library/ui_state_controller.js");
 const files = [
@@ -122,5 +149,40 @@ controller.expandAll();
 controller.collapseAll();
 assert.deepEqual([...controller.getCollapsedGroups()], ["group:a", "group:b"]);
 assert.equal(renders, 5);
+
+{
+  const selected = [];
+  const shiftedTunes = [{
+    id: "/music/a.abc::20",
+    path: "/music/a.abc",
+    xNumber: "1",
+    title: "First",
+    startOffset: 20,
+  }, {
+    id: "/music/a.abc::40",
+    path: "/music/a.abc",
+    xNumber: "2",
+    title: "Second",
+    startOffset: 40,
+  }];
+  const restoreController = createLibraryUiStateController({
+    getLibraryIndex: () => ({
+      root: "/music",
+      files: [{ path: "/music/a.abc", tunes: shiftedTunes }],
+    }),
+    pathsEqual: (left, right) => left === right,
+    selectTune: async (id) => { selected.push(id); return { ok: true }; },
+    renderLibraryTree: () => {},
+  });
+
+  assert.equal(await restoreController.restoreLibraryTuneSelection({
+    tuneId: "/music/a.abc::20",
+    filePath: "/music/a.abc",
+    xNumber: "2",
+    title: "Second",
+    startOffset: 20,
+  }), true);
+  assert.deepEqual(selected, ["/music/a.abc::40"], "stale offsets must not restore a different tune");
+}
 
 console.log("library context menu harness: all tests passed");

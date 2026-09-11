@@ -54,6 +54,7 @@ function createDocumentSessionController({
     discardChordProChangesForActiveFile = async () => false,
     discardRawChangesForActiveFile = async () => false,
     flushLibraryPrefsSave = async () => {},
+    loadLibraryFileIntoEditor = null,
     loadSingleLibraryFile = async () => null,
     markHeaderClean = () => {},
     openChordProFile = async () => {},
@@ -324,6 +325,12 @@ function createDocumentSessionController({
     }
 
     setChordProMode(false);
+    if (typeof loadLibraryFileIntoEditor === "function") {
+      const loaded = await loadLibraryFileIntoEditor(filePath, { skipConfirm: true });
+      if (loaded && loaded.ok) return;
+      setActiveTuneText("", null);
+      return;
+    }
     const fileEntry = await loadSingleLibraryFile(filePath, {
       content: readRes && readRes.ok ? readRes.data : null,
     });

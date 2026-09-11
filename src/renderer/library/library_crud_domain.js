@@ -4,6 +4,7 @@ import { createDuplicateTuneAction } from "./duplicate_tune_action.js";
 import { createNewFileAction } from "./new_file_action.js";
 import { createPasteMoveTuneAction } from "./paste_move_tune_action.js";
 import { createRenumberXAction } from "./renumber_x_action.js";
+import { createReorderTuneAction } from "./reorder_tune_action.js";
 import { createTuneClipboardController } from "./tune_clipboard_controller.js";
 
 function createLibraryCrudDomain({
@@ -47,6 +48,7 @@ function createLibraryCrudDomain({
       getActiveFilePath: state.getActiveFilePath,
       getActiveTuneMeta: state.getActiveTuneMeta,
       getActiveTuneUid: state.getActiveTuneUid,
+      getRawMode: state.getRawMode,
       getCurrentDocumentPath: state.getCurrentDocumentPath,
       getCurrentNavFilePath: state.getCurrentNavFilePath,
       getEditorText: state.getEditorText,
@@ -216,7 +218,32 @@ function createLibraryCrudDomain({
       readFile: actions.readFile,
       refreshLibraryFile: actions.refreshLibraryFile,
       renumberXLinesConsecutive: actions.renumberXLinesConsecutive,
+      selectTune: actions.selectTune,
       setDirtyIndicator: actions.setDirtyIndicator,
+      setStatus: actions.setStatus,
+      showSaveError: actions.showSaveError,
+      showToast: actions.showToast,
+      withFileLock: actions.withFileLock,
+      writeFile: actions.writeFile,
+    },
+  });
+
+  const reorderTuneAction = createReorderTuneAction({
+    state: {
+      getActiveTuneId: state.getActiveTuneId,
+      getActiveTuneIndex: state.getActiveTuneIndex,
+      getActiveTuneMeta: state.getActiveTuneMeta,
+      getActiveTuneUid: state.getActiveTuneUid,
+      getRawMode: state.getRawMode,
+    },
+    actions: {
+      findTuneById,
+      markDiskConflictPath: actions.markDiskConflictPath,
+      pathsEqual: actions.pathsEqual,
+      readFile: actions.readFile,
+      refreshLibraryFile: actions.refreshLibraryFile,
+      requireCleanForFileOp: actions.requireCleanForFileOp,
+      selectTune: actions.selectTune,
       setStatus: actions.setStatus,
       showSaveError: actions.showSaveError,
       showToast: actions.showToast,
@@ -236,6 +263,7 @@ function createLibraryCrudDomain({
     getTuneText,
     newFileAction,
     pasteMoveTuneAction,
+    reorderTuneAction,
     renumberXAction,
     setClipboardTune,
     tuneClipboardController,

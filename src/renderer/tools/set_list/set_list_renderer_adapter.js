@@ -47,8 +47,21 @@ function createSetListRendererAdapter({
 
     const locator = String(source.locatorHint || "");
     const direct = locator ? findTuneById(locator) : null;
-    let candidates = direct
-      ? [{
+    const title = String(snapshot.title || "").trim().toLocaleLowerCase("en");
+    const composer = String(snapshot.composer || "").trim().toLocaleLowerCase("en");
+    const sourceCandidates = all.filter((candidate) => source.pathHint && source.xNumberHint
+      && (pathsEqual(candidate.sourcePath, source.pathHint)
+        || sourcePathsEquivalent(candidate.sourcePath, source.pathHint))
+      && candidate.xNumber === String(source.xNumberHint));
+    const metadataCandidates = all.filter((candidate) => {
+      if (!title || candidate.title.trim().toLocaleLowerCase("en") !== title) return false;
+      return !composer || candidate.composer.trim().toLocaleLowerCase("en") === composer;
+    });
+    let candidates = [...sourceCandidates, ...metadataCandidates].filter((candidate, index, values) => (
+      values.findIndex((entry) => entry.tune === candidate.tune && entry.file === candidate.file) === index
+    ));
+    if (direct) {
+      const directCandidate = {
           tuneId: String(direct.tune.id || locator),
           sourcePath: String(direct.file.path || ""),
           xNumber: String(direct.tune.xNumber || ""),
@@ -56,19 +69,15 @@ function createSetListRendererAdapter({
           composer: String(direct.tune.composer || ""),
           tune: direct.tune,
           file: direct.file,
-        }]
-      : all.filter((candidate) => source.pathHint && source.xNumberHint
-        && (pathsEqual(candidate.sourcePath, source.pathHint)
-          || sourcePathsEquivalent(candidate.sourcePath, source.pathHint))
-        && candidate.xNumber === String(source.xNumberHint));
+        };
+      if (!candidates.some((candidate) => candidate.tune === directCandidate.tune
+        && candidate.file === directCandidate.file)) {
+        candidates.unshift(directCandidate);
+      }
+    }
 
     if (!candidates.length) {
-      const title = String(snapshot.title || "").trim().toLocaleLowerCase("en");
-      const composer = String(snapshot.composer || "").trim().toLocaleLowerCase("en");
-      candidates = all.filter((candidate) => {
-        if (!title || candidate.title.trim().toLocaleLowerCase("en") !== title) return false;
-        return !composer || candidate.composer.trim().toLocaleLowerCase("en") === composer;
-      });
+      candidates = metadataCandidates;
     }
 
     for (const candidate of candidates) {

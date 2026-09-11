@@ -129,6 +129,40 @@ function formatUnits(value) {
   return `${numerator / divisor}/${scale / divisor}`;
 }
 
+function lcm(a, b) {
+  const left = Math.abs(Math.round(a));
+  const right = Math.abs(Math.round(b));
+  if (!left || !right) return 0;
+  return Math.round((left / gcd(left, right)) * right);
+}
+
+function findDurationDenominator(value, maxDenominator = 15360) {
+  const duration = Math.abs(Number(value));
+  if (!Number.isFinite(duration)) return null;
+  for (let denominator = 1; denominator <= maxDenominator; denominator += 1) {
+    const numerator = Math.round(duration * denominator);
+    if (Math.abs(duration - (numerator / denominator)) <= 1e-9) return denominator;
+  }
+  return null;
+}
+
+function formatMeasureDuration(actualWhole, meter) {
+  if (!meter || !Number.isFinite(actualWhole)) return null;
+  const actualDenominator = findDurationDenominator(actualWhole);
+  const denominator = actualDenominator ? lcm(meter.den, actualDenominator) : meter.den;
+  if (!Number.isFinite(denominator) || denominator <= 0 || denominator > 15360) return null;
+  const actualNumerator = Math.round(actualWhole * denominator);
+  const expectedNumerator = Math.round(meter.value * denominator);
+  if (
+    Math.abs(actualWhole - (actualNumerator / denominator)) > 1e-8
+    || Math.abs(meter.value - (expectedNumerator / denominator)) > 1e-8
+  ) return null;
+  return {
+    actual: `${actualNumerator}/${denominator}`,
+    expected: `${expectedNumerator}/${denominator}`,
+  };
+}
+
 function computeMeasureInputAssistance(text, offset) {
   const src = String(text || "");
   if (!src || !Number.isFinite(Number(offset))) return null;
@@ -163,6 +197,7 @@ function computeMeasureInputAssistance(text, offset) {
   const state = Math.abs(delta) <= tolerance
     ? "complete"
     : (delta < 0 ? "incomplete" : "overfull");
+  const duration = formatMeasureDuration(actualWhole, meter);
 
   return {
     state,
@@ -171,7 +206,8 @@ function computeMeasureInputAssistance(text, offset) {
     meter: `${meter.num}/${meter.den}`,
     defaultLength: `${defaultLength.num}/${defaultLength.den}`,
     range: { start, end },
-    text: `Measure ${formatUnits(actualUnits)}/${formatUnits(expectedUnits)}`,
+    duration,
+    text: duration ? `Measure ${duration.actual}` : `Measure ${formatUnits(actualUnits)}/${formatUnits(expectedUnits)}`,
   };
 }
 
@@ -224,7 +260,8 @@ function planMeasureTabAction(text, offset) {
   const actualUnits = actualWhole / defaultLength.value;
   const expectedUnits = meter.value / defaultLength.value;
   const state = measureState(actualUnits, expectedUnits);
-  const label = `Measure ${formatUnits(actualUnits)}/${formatUnits(expectedUnits)}`;
+  const duration = formatMeasureDuration(actualWhole, meter);
+  const label = duration ? `Measure ${duration.actual}` : `Measure ${formatUnits(actualUnits)}/${formatUnits(expectedUnits)}`;
   const gapText = stripNonMusicLines(src.slice(pos, bounds.end)).replace(/\\/g, "").trim();
 
   if (!gapText && bounds.nextSeparator) {

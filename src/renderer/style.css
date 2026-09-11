@@ -562,6 +562,17 @@ main > .pane.right { grid-column: 5; }
   border-radius: 0 var(--button-radius) var(--button-radius) 0;
 }
 
+.split-toolbar-control > #btnToggleGlobals {
+  border-radius: var(--button-radius) 0 0 var(--button-radius);
+  margin-right: -6px;
+}
+
+.globals-toolbar-menu > .toolbar-dropdown-menu {
+  right: 0;
+  left: auto;
+  min-width: 180px;
+}
+
 .toolbar-dropdown {
   position: relative;
 }
@@ -1082,6 +1093,14 @@ body.resizing * {
   color: #246b3a;
 }
 
+.tree-label.tune-label.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.tree-label.tune-label.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
 .tree-label-text {
   flex: 1;
   text-align: left;
@@ -1199,7 +1218,8 @@ body.chordpro-mode #fileHeaderToggle,
 body.chordpro-mode #btnNewTune,
 body.chordpro-mode #btnTemplates,
 body.chordpro-mode #btnToggleErrors,
-body.chordpro-mode #btnToggleGlobals {
+body.chordpro-mode #btnToggleGlobals,
+body.chordpro-mode #globalsToolbarMenu {
   display: none;
 }
 
@@ -2170,6 +2190,11 @@ svg {
   border-bottom: 1px solid rgba(47, 133, 90, 0.35);
 }
 
+.cm-voice-measure-peer {
+  background: rgba(59, 130, 246, 0.11);
+  border-bottom: 1px solid rgba(37, 99, 235, 0.38);
+}
+
 .workspace-statusbar {
   display: flex;
   align-items: center;
@@ -2742,7 +2767,8 @@ body.focus-mode .workspace-statusbar .cursor-status {
 }
 
 .measure-input-status {
-  flex: 0 0 auto;
+  flex: 0 0 112px;
+  min-width: 112px;
   color: var(--muted-text);
   font-size: var(--font-size-xs);
   font-variant-numeric: tabular-nums;
@@ -2753,12 +2779,18 @@ body.focus-mode .workspace-statusbar .cursor-status {
   color: var(--muted-text);
 }
 
+.measure-input-status[data-state="unavailable"] {
+  color: var(--muted-text);
+}
+
 .measure-input-status[data-state="incomplete"] {
   color: #8a5a00;
+  font-weight: 600;
 }
 
 .measure-input-status[data-state="overfull"] {
   color: #9b2c2c;
+  font-weight: 600;
 }
 
 .buffer-status:empty {
@@ -4166,6 +4198,13 @@ body.set-list-visible .set-list-divider {
   line-height: var(--line-height-ui);
   white-space: nowrap;
   min-height: 24px;
+  gap: 24px;
+  justify-content: space-between;
+}
+
+.context-menu-shortcut {
+  color: var(--muted-text);
+  font-size: var(--font-size-xs);
 }
 
 .context-menu-item:hover {

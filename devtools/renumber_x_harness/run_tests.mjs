@@ -34,7 +34,7 @@ const errors = [];
 
 const action = createRenumberXAction({
   state: {
-    getActiveTuneMeta: () => ({ path: filePath }),
+    getActiveTuneMeta: () => ({ path: filePath, startOffset: 42, tuneIndex: 1 }),
     getCurrentDocumentPath: () => filePath,
     getRawMode: () => false,
   },
@@ -51,10 +51,22 @@ const action = createRenumberXAction({
     refreshLibraryFile: async (path, options) => {
       assert.equal(path, filePath);
       assert.deepEqual(options, { force: true });
-      return { ok: true };
+      return {
+        ok: true,
+        tunes: [
+          { startOffset: 0, tuneUid: `${filePath}::0` },
+          { startOffset: 44, tuneUid: `${filePath}::44` },
+        ],
+      };
     },
     loadLibraryFileIntoEditor: async (path, options) => {
       assert.equal(path, filePath);
+      assert.deepEqual(options, { skipConfirm: true, suppressRecent: true });
+      loaded += 1;
+      return { ok: true };
+    },
+    selectTune: async (tuneId, options) => {
+      assert.equal(tuneId, `${filePath}::44`);
       assert.deepEqual(options, { skipConfirm: true, suppressRecent: true });
       loaded += 1;
       return { ok: true };

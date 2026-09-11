@@ -31,8 +31,8 @@ const { createStartupController } = await importRendererModule(
       events.push(["load-folder", path, options]);
       root = path;
     },
-    openRecentTune: async () => {
-      events.push(["open-tune"]);
+    openRecentTune: async (_entry, options) => {
+      events.push(["open-tune", options]);
       return { ok: false };
     },
     openRecentFile: async () => {
@@ -47,7 +47,7 @@ const { createStartupController } = await importRendererModule(
   assert.deepEqual(events, [
     ["load-folder", "/music", { selectInitialTune: false }],
     ["recent-started"],
-    ["open-tune"],
+    ["open-tune", { suppressRecent: true }],
     ["open-file"],
     ["recent-started"],
     ["render-status"],

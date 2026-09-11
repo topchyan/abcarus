@@ -10,6 +10,7 @@ export function createEditorExtensionRuntime({
   getEditorView = () => null,
   getDiagnosticExtensions = () => [],
   getInitialDiagnosticExtensions = getDiagnosticExtensions,
+  getPersistentExtensions = () => [],
 } = {}) {
   const highlightCompartment = new Compartment();
   const diagnosticsCompartment = new Compartment();
@@ -35,6 +36,7 @@ export function createEditorExtensionRuntime({
       tuningModeCompartment.of([]),
       payloadReadOnlyCompartment.of([]),
       setListReadOnlyCompartment.of([]),
+      ...getPersistentExtensions(),
     ];
   }
 

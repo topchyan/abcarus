@@ -181,6 +181,28 @@ async function testDontSaveRequiresSuccessfulTuneReload() {
   assert.equal(headerReloadCalls, 1, "header-only discard must reload the file context");
 }
 
+async function testFileOpenUsesLibraryRestorationPath() {
+  const filePath = "/tmp/tunes.abc";
+  const calls = [];
+  const controller = createDocumentSessionController({
+    actions: {
+      showOpenDialog: async () => filePath,
+      readFile: async () => ({ ok: true, data: "X:1\nT:First\nK:C\nC |\n" }),
+      loadLibraryFileIntoEditor: async (path, options) => {
+        calls.push([path, options]);
+        return { ok: true };
+      },
+      loadSingleLibraryFile: async () => {
+        throw new Error("fileOpen must not bypass last-tune restoration");
+      },
+      safeDirname: () => "/tmp",
+    },
+  });
+
+  await controller.fileOpen();
+  assert.deepEqual(calls, [[filePath, { skipConfirm: true }]]);
+}
+
 function testBeginFullFileModeContextClearsTuneBeforeSaveSession() {
   const calls = [];
   const controller = createDocumentLifecycleController({
@@ -514,6 +536,7 @@ async function testSimpleTuneSaveIsOwnedBySaveController() {
 testBeginCleanFileDocumentClearsStaleSaveContext();
 testCurrentDocumentControllerKeepsSessionAndUiTogether();
 await testDontSaveRequiresSuccessfulTuneReload();
+await testFileOpenUsesLibraryRestorationPath();
 testBeginFullFileModeContextClearsTuneBeforeSaveSession();
 testBeginRawFullFileContextPreservesTuneState();
 testSetRawActiveTuneContextClearsStaleUidAndIndex();

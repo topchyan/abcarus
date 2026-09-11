@@ -10,6 +10,7 @@ import { foldBeginTextBlocks } from "./editor_commands.js";
 import { createMainEditorKeymap } from "./main_editor_keymap.js";
 import { createMainEditorUpdateRuntime } from "./main_editor_update_runtime.js";
 import { computeMeasureInputAssistance } from "../abc/measure_input_assistance.js";
+import { getMeasureInputStatusDisplay } from "./measure_input_status_model.js";
 
 export function createRectSelectionExtension() {
   return rectangularSelection({
@@ -63,16 +64,12 @@ export function createMainEditorFeature({
     const result = typeof text === "string"
       ? computeMeasureInputAssistance(text, offset)
       : null;
-    measureStatusElement.textContent = result ? result.text : "";
-    measureStatusElement.hidden = !result;
-    measureStatusElement.dataset.state = result ? result.state : "";
-    measureStatusElement.title = result
-      ? `${result.text}: ${result.state}; M:${result.meter}, L:${result.defaultLength}`
-      : "";
-    measureStatusElement.setAttribute(
-      "aria-label",
-      result ? `${result.text}: ${result.state}` : "",
-    );
+    const display = getMeasureInputStatusDisplay(result);
+    measureStatusElement.textContent = display.text;
+    measureStatusElement.hidden = false;
+    measureStatusElement.dataset.state = display.state;
+    measureStatusElement.title = display.title;
+    measureStatusElement.setAttribute("aria-label", display.ariaLabel);
   }
 
   const updateRuntime = createMainEditorUpdateRuntime({

@@ -620,7 +620,10 @@ function createSetListFeature({
         && String(source.pathHint || "") === String(replacementSource.pathHint)
         && String(source.xNumberHint || "") === String(replacementSource.xNumberHint)
       );
-      if (locatorMatches || sourceMatches) matchingIndexes.push(index);
+      const previousTitle = String(item && item.tune && item.tune.title || "").trim().toLocaleLowerCase("en");
+      const replacementTitle = String(replacement && replacement.tune && replacement.tune.title || "").trim().toLocaleLowerCase("en");
+      const identityMatches = Boolean(previousTitle && replacementTitle && previousTitle === replacementTitle);
+      if ((locatorMatches || sourceMatches) && identityMatches) matchingIndexes.push(index);
     });
     if (!matchingIndexes.length) return false;
 

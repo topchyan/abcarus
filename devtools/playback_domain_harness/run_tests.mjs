@@ -30,6 +30,9 @@ const { createPlaybackTransportController } = await importBundledModule(
 const { createPlaybackStartController } = await importBundledModule(
   "src/renderer/playback/playback_start_controller.js",
 );
+const { createPlaybackFollowController } = await importBundledModule(
+  "src/renderer/playback/playback_follow_controller.js",
+);
 const { createFocusModeController } = await importBundledModule(
   "src/renderer/playback/focus_mode_controller.js",
 );
@@ -50,6 +53,32 @@ const {
 } = await importBundledModule(
   "src/renderer/playback/focus_score_selection_model.js",
 );
+
+{
+  const renderPane = {
+    scrollTop: 400,
+    scrollLeft: 100,
+    scrollHeight: 1200,
+    scrollWidth: 1200,
+    clientHeight: 200,
+    clientWidth: 400,
+    getBoundingClientRect: () => ({ top: 0, left: 0 }),
+  };
+  const follow = createPlaybackFollowController({
+    transport: { isPlaying: false, isPaused: false, waitingForFirstNote: false },
+    getRenderPane: () => renderPane,
+  });
+  follow.maybeScrollRenderToNote({
+    getBoundingClientRect: () => ({ top: 260, bottom: 280, left: 100, right: 200, width: 100, height: 20 }),
+  }, { placement: "comfortable-center" });
+  assert.equal(renderPane.scrollTop, 570, "editor-selected score row should be vertically centered");
+  assert.equal(renderPane.scrollLeft, 100, "a horizontally comfortable measure should not move");
+
+  follow.maybeScrollRenderToNote({
+    getBoundingClientRect: () => ({ top: 80, bottom: 120, left: 500, right: 1100, width: 600, height: 40 }),
+  }, { placement: "comfortable-center" });
+  assert.equal(renderPane.scrollLeft, 700, "a wide off-screen measure should be centered within scroll bounds");
+}
 
 {
   const previousDocument = globalThis.document;
@@ -282,6 +311,42 @@ await controller.transportPlay();
 assert.deepEqual(startCalls, [0]);
 assert.equal(controllerTransport.desiredPlayerSpeed, 0.75);
 assert.equal(controllerTransport.restartOnNextPlay, false);
+
+// Regression: a pending Focus/navigation plan must not override the current
+// editor cursor when normal-mode playback is started with F5.
+const cursorStartCalls = [];
+const cursorStartTransport = createPlaybackTransportState();
+cursorStartTransport.restartOnNextPlay = true;
+cursorStartTransport.pendingPlaybackPlan = {
+  rangeStart: 0,
+  rangeEnd: null,
+  loopEnabled: false,
+  tempoMultiplier: 1,
+};
+const cursorStartController = createPlaybackTransportController({
+  transport: cursorStartTransport,
+  getEditorView: () => ({
+    state: {
+      doc: { length: 15 },
+      selection: { main: { anchor: 12, head: 12 } },
+    },
+  }),
+  getEditorText: () => "X:1\nK:C\nC|D|E|F|",
+  findMeasureStartOffsetByNumber: () => null,
+  getFocusModeEnabled: () => false,
+  startPlaybackFromRange: async (range) => cursorStartCalls.push(range),
+  playSelectionOnce: async () => false,
+  updatePlayButton: () => {},
+  clearNoteSelection: () => {},
+  resetPlaybackUiState: () => {},
+  setSoundfontCaption: () => {},
+  showToast: () => {},
+});
+cursorStartController.setPlaybackRange({ startOffset: 12, endOffset: null, origin: "cursor", loop: false });
+assert.equal(cursorStartTransport.restartOnNextPlay, false, "moving the cursor after playback ends must cancel restart-from-zero");
+await cursorStartController.togglePlayPauseEffective();
+assert.equal(cursorStartCalls.length, 1);
+assert.ok(cursorStartCalls[0].startOffset > 0, "normal playback must use the current editor measure, not a stale pending plan");
 
 controllerTransport.practiceTempoMultiplier = 0.6;
 await controller.transportPlay();

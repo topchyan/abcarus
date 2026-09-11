@@ -14,6 +14,7 @@ function createLibraryContextMenu({
   getRawMode = () => false,
   getClipboardTune = () => null,
   getEditorView = () => null,
+  generateBlankVoiceSkeleton = () => false,
   getWindowApi = () => null,
   pathsEqual = (a, b) => String(a || "") === String(b || ""),
   safeBasename = (path) => String(path || "").split("/").pop() || "",
@@ -38,6 +39,7 @@ function createLibraryContextMenu({
   openXIssues = async () => {},
   renumberXInActiveFile = async () => {},
   openMoveTuneModal = () => {},
+  reorderTune = async () => ({ ok: false }),
   addTuneToSetList = async () => {},
   copyFileTuneList = async () => {},
   appendTuneToActiveFile = async () => {},
@@ -208,6 +210,11 @@ function createLibraryContextMenu({
       hide();
       return;
     }
+    if ((action === "moveTuneUp" || action === "moveTuneDown") && menuTarget && menuTarget.type === "tune") {
+      hide();
+      await reorderTune(menuTarget.tuneId, { direction: action === "moveTuneUp" ? -1 : 1 });
+      return;
+    }
     if (action === "editorCut" && menuTarget && menuTarget.type === "editor") {
       const editorView = getEditorView();
       if (editorView) editorView.focus();
@@ -229,6 +236,11 @@ function createLibraryContextMenu({
       hide();
       return;
     }
+    if (action === "editorGenerateBlankVoiceSkeleton" && menuTarget && menuTarget.type === "editor") {
+      hide();
+      generateBlankVoiceSkeleton();
+      return;
+    }
     if (await handleTemplatesContextMenuAction(action, menuTarget)) {
       hide();
     }
@@ -247,7 +259,17 @@ function createLibraryContextMenu({
       }
       const row = documentRef.createElement("div");
       row.className = "context-menu-item";
-      row.textContent = item.label;
+      if (item.shortcut) {
+        const label = documentRef.createElement("span");
+        label.textContent = item.label;
+        row.appendChild(label);
+        const shortcut = documentRef.createElement("span");
+        shortcut.className = "context-menu-shortcut";
+        shortcut.textContent = item.shortcut;
+        row.appendChild(shortcut);
+      } else {
+        row.textContent = item.label;
+      }
       row.dataset.action = item.action;
       if (item.danger) row.classList.add("danger");
       if (item.disabled) row.classList.add("disabled");
@@ -276,6 +298,11 @@ function createLibraryContextMenu({
       const sourcePath = sourceRes && sourceRes.file && sourceRes.file.path ? String(sourceRes.file.path) : "";
       const globalDirty = Boolean(getCurrentDocDirty()) || Boolean(getHeaderDirty()) || Boolean(getIsNewTuneDraft());
       const sourceDirty = Boolean(sourcePath) && (globalDirty || hasUnsavedChangesForFile(sourcePath));
+      const sourceTunes = sourceRes && sourceRes.file && Array.isArray(sourceRes.file.tunes) ? sourceRes.file.tunes : [];
+      const sourceIndex = sourceTunes.findIndex((tune) => tune && (
+        String(tune.id || "") === String(target.tuneId || "")
+        || (tune.tuneUid && String(tune.tuneUid) === String(target.tuneId || ""))
+      ));
       const canAppend = Boolean(
         targetPath
         && sourcePath
@@ -287,8 +314,11 @@ function createLibraryContextMenu({
       );
       const items = [{ label: "Add to Set List", action: "addToSetList" }];
       if (canAppend) items.push({ separator: true }, { label: "Append to Active File…", action: "appendTuneToActiveFile" });
-      if (sourceDirty) {
-        items.push({ separator: true }, { label: "Save/Discard changes to enable file actions", action: "noop", disabled: true });
+      if (sourceDirty || getRawMode()) {
+        const blockedLabel = getRawMode()
+          ? "Exit Raw mode to change tune order"
+          : "Save/Discard changes to enable file actions";
+        items.push({ separator: true }, { label: blockedLabel, action: "noop", disabled: true });
       } else {
         items.push(
           { separator: true },
@@ -296,6 +326,8 @@ function createLibraryContextMenu({
           { label: "Cut Tune", action: "cutTune" },
           { label: "Duplicate Tune", action: "duplicateTune" },
           { separator: true },
+          { label: "Move Up", action: "moveTuneUp", disabled: sourceIndex <= 0 },
+          { label: "Move Down", action: "moveTuneDown", disabled: sourceIndex < 0 || sourceIndex >= sourceTunes.length - 1 },
           { label: "Move to…", action: "moveTune" },
           { separator: true },
           { label: "Renumber X (File)…", action: "renumberXInFile" },
@@ -350,6 +382,12 @@ function createLibraryContextMenu({
         { label: "Cut", action: "editorCut" },
         { label: "Copy", action: "editorCopy" },
         { label: "Paste", action: "editorPaste" },
+        { separator: true },
+        {
+          label: "Generate Empty Bar Skeleton from V:1",
+          action: "editorGenerateBlankVoiceSkeleton",
+          disabled: getRawMode(),
+        },
       ]);
     } else if (target.type === "templatesPreview") {
       buildItems(buildTemplatesPreviewContextMenuItems(target));

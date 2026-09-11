@@ -21,6 +21,23 @@ function buildPracticeBarDecorations(state, range) {
   return buildSingleRangeMarkDecorations(state, range, "cm-practice-bar");
 }
 
+function buildVoiceMeasurePeerDecorations(state, ranges) {
+  if (!state || !state.doc || !Array.isArray(ranges) || !ranges.length) return Decoration.none;
+  const builder = new RangeSetBuilder();
+  const max = state.doc.length;
+  for (const range of ranges) {
+    if (!range) continue;
+    const from = Math.max(0, Math.min(Number(range.from) || 0, max));
+    const to = Math.max(from, Math.min(Number(range.to) || 0, max));
+    if (to <= from) continue;
+    builder.add(from, to, Decoration.mark({
+      class: "cm-voice-measure-peer",
+      attributes: { title: `Corresponding bar ${range.barNumber} in V:${range.voiceId}` },
+    }));
+  }
+  return builder.finish();
+}
+
 function createTextWidget(className, text) {
   return {
     eq(other) {
@@ -225,4 +242,5 @@ export {
   buildMeasureErrorDecorations,
   buildPayloadLayerDecorations,
   buildPracticeBarDecorations,
+  buildVoiceMeasurePeerDecorations,
 };

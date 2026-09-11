@@ -55,6 +55,7 @@ const RAW_BLOCKED_ACTIONS = new Set([
   "transformTurkishToBolahenk",
   "transformMeasures",
   "alignBars",
+  "generateBlankVoiceSkeleton",
   "checkLyricFit",
   "printPreview",
   "print",
@@ -67,6 +68,8 @@ const RAW_BLOCKED_ACTIONS = new Set([
   "exportMp3",
   "importMusicXml",
   "importMidi",
+  "moveActiveTuneUp",
+  "moveActiveTuneDown",
   "templatesModal",
   "abcHelpers",
   "libraryMetadata",
@@ -251,6 +254,8 @@ function createMenuActionsController({
     }
     else if (actionType === "navTunePrev") await actions.navigateTuneByDelta(-1);
     else if (actionType === "navTuneNext") await actions.navigateTuneByDelta(1);
+    else if (actionType === "moveActiveTuneUp") await actions.reorderActiveTune(-1);
+    else if (actionType === "moveActiveTuneDown") await actions.reorderActiveTune(1);
     else if (actionType === "openRecentTune" && action && action.entry) await actions.openRecentTune(action.entry);
     else if (actionType === "openRecentFile" && action && action.entry) await actions.openRecentFile(action.entry);
     else if (actionType === "openRecentFolder" && action && action.entry) await actions.openRecentFolder(action.entry);
@@ -294,6 +299,7 @@ function createMenuActionsController({
     }
     else if (actionType === "transformLinebreakMarkers") await actions.applyAbc2abcTransform({ linebreakMarker: true });
     else if (actionType === "alignBars") actions.alignBarsInEditor();
+    else if (actionType === "generateBlankVoiceSkeleton") actions.generateBlankVoiceSkeleton();
     else if (actionType === "checkLyricFit") await actions.checkLyricFitInEditor();
     else if (actionType === "openIntonationExplorer") actions.openIntonationExplorer();
     else if (actionType === "dumpDebug") actions.dumpDebug();

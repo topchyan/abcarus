@@ -403,25 +403,18 @@ function sameSource(snapshot, candidate) {
     && text(candidate.xNumber) === source.xNumberHint);
 }
 
+function sameTuneMetadata(snapshot, candidate) {
+  const title = normalizedIdentityText(snapshot && snapshot.title);
+  if (!title || normalizedIdentityText(candidate && candidate.title) !== title) return false;
+  const composer = normalizedIdentityText(snapshot && snapshot.composer);
+  return !composer || normalizedIdentityText(candidate && candidate.composer) === composer;
+}
+
 function resolveSetListItem(item, candidates) {
   const snapshot = normalizeTuneSnapshot(item && item.tune);
   const pool = Array.isArray(candidates) ? candidates.filter((candidate) => candidate && typeof candidate === "object") : [];
   const hash = snapshot.contentHash;
   const sourceMatches = pool.filter((candidate) => sameSource(snapshot, candidate));
-
-  if (sourceMatches.length === 1) {
-    const candidateHash = text(sourceMatches[0].contentHash);
-    if (hash && candidateHash === hash) {
-      return { status: SET_LIST_RESOLUTION.FOUND_EXACT, candidate: sourceMatches[0], candidates: sourceMatches, matchedBy: "source" };
-    }
-    if (hash && candidateHash && candidateHash !== hash) {
-      return { status: SET_LIST_RESOLUTION.FOUND_MODIFIED, candidate: sourceMatches[0], candidates: sourceMatches, matchedBy: "source" };
-    }
-    return { status: SET_LIST_RESOLUTION.FOUND_STRONG, candidate: sourceMatches[0], candidates: sourceMatches, matchedBy: "source" };
-  }
-  if (sourceMatches.length > 1) {
-    return { status: SET_LIST_RESOLUTION.AMBIGUOUS, candidate: null, candidates: sourceMatches };
-  }
 
   if (hash) {
     const hashMatches = pool.filter((candidate) => text(candidate.contentHash) === hash);
@@ -429,17 +422,29 @@ function resolveSetListItem(item, candidates) {
       return { status: SET_LIST_RESOLUTION.FOUND_EXACT, candidate: hashMatches[0], candidates: hashMatches, matchedBy: "hash" };
     }
     if (hashMatches.length > 1) {
+      const exactSourceMatches = hashMatches.filter((candidate) => sameSource(snapshot, candidate));
+      if (exactSourceMatches.length === 1) {
+        return { status: SET_LIST_RESOLUTION.FOUND_EXACT, candidate: exactSourceMatches[0], candidates: exactSourceMatches, matchedBy: "hash" };
+      }
       return { status: SET_LIST_RESOLUTION.AMBIGUOUS, candidate: null, candidates: hashMatches };
     }
   }
 
+  const identifiedSourceMatches = sourceMatches.filter((candidate) => sameTuneMetadata(snapshot, candidate));
+  if (identifiedSourceMatches.length === 1) {
+    const candidateHash = text(identifiedSourceMatches[0].contentHash);
+    if (hash && candidateHash && candidateHash !== hash) {
+      return { status: SET_LIST_RESOLUTION.FOUND_MODIFIED, candidate: identifiedSourceMatches[0], candidates: identifiedSourceMatches, matchedBy: "source" };
+    }
+    return { status: SET_LIST_RESOLUTION.FOUND_STRONG, candidate: identifiedSourceMatches[0], candidates: identifiedSourceMatches, matchedBy: "source" };
+  }
+  if (identifiedSourceMatches.length > 1) {
+    return { status: SET_LIST_RESOLUTION.AMBIGUOUS, candidate: null, candidates: identifiedSourceMatches };
+  }
+
   const title = normalizedIdentityText(snapshot.title);
   const composer = normalizedIdentityText(snapshot.composer);
-  const metadataMatches = pool.filter((candidate) => {
-    if (!title || normalizedIdentityText(candidate.title) !== title) return false;
-    if (!composer) return true;
-    return normalizedIdentityText(candidate.composer) === composer;
-  });
+  const metadataMatches = pool.filter((candidate) => sameTuneMetadata(snapshot, candidate));
   if (metadataMatches.length === 1) {
     return { status: SET_LIST_RESOLUTION.FOUND_STRONG, candidate: metadataMatches[0], candidates: metadataMatches, matchedBy: "metadata" };
   }

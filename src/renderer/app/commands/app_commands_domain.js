@@ -99,6 +99,7 @@ function createAppCommandsDomain({
     actions: {
       alignBarsInEditor: actions.alignBarsInEditor,
       checkLyricFitInEditor: actions.checkLyricFitInEditor,
+      generateBlankVoiceSkeleton: actions.generateBlankVoiceSkeleton,
       applyAbc2abcTransform: actions.applyAbc2abcTransform,
       clearLibraryFilter: actions.clearLibraryFilter,
       confirmReloadFromDisk: actions.confirmReloadFromDisk,
@@ -171,6 +172,7 @@ function createAppCommandsDomain({
       },
       openTemplatesModal: actions.openTemplatesModal,
       renumberXInActiveFile: actions.renumberXInActiveFile,
+      reorderActiveTune: actions.reorderActiveTune,
       updateYouTubeMetadata: actions.updateYouTubeMetadata,
       requestCloseDocument: actions.requestCloseDocument,
       requestQuitApplication: actions.requestQuitApplication,
@@ -383,6 +385,8 @@ function createAppCommandsDomain({
       toggleFollowButton,
       toggleErrorsButton,
       toggleGlobalsButton,
+      globalsToolbarMenu,
+      editGlobalHeaderButton,
     } = elements;
 
     const guardRawPlayback = () => {
@@ -498,6 +502,31 @@ function createAppCommandsDomain({
         if (!api || typeof api.updateSettings !== "function") return;
         await api.updateSettings({ globalHeaderEnabled: !call(state.isGlobalHeaderEnabled) });
       }));
+    }
+
+    const closeGlobalsToolbarMenu = () => {
+      if (globalsToolbarMenu) globalsToolbarMenu.open = false;
+    };
+    if (editGlobalHeaderButton) {
+      editGlobalHeaderButton.addEventListener("click", () => guardedRun(async () => {
+        closeGlobalsToolbarMenu();
+        const settings = getSettingsDomain();
+        if (settings && typeof settings.openHeaderSettings === "function") {
+          await settings.openHeaderSettings();
+        } else if (settings && typeof settings.openSettings === "function") {
+          await settings.openSettings();
+        }
+      }));
+    }
+    if (globalsToolbarMenu && documentRef) {
+      documentRef.addEventListener("pointerdown", (event) => {
+        if (!globalsToolbarMenu.open || globalsToolbarMenu.contains(event.target)) return;
+        closeGlobalsToolbarMenu();
+      });
+      documentRef.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape" || !globalsToolbarMenu.open) return;
+        closeGlobalsToolbarMenu();
+      });
     }
   }
 

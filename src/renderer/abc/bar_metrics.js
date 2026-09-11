@@ -36,9 +36,23 @@ function escapeRegExp(s) {
 const BAR_SEP = new RegExp(
   `(${BAR_SEP_SYMBOLS.map((s) => `\\s*${escapeRegExp(s)}\\s*`).join("|")})`
 );
-const BAR_SEP_NO_SPACE = new RegExp(
-  `(${BAR_SEP_SYMBOLS.map((s) => escapeRegExp(s)).join("|")})`
-);
+const BAR_SEP_NO_SPACE_SOURCE = `(${BAR_SEP_SYMBOLS.map((s) => escapeRegExp(s)).join("|")})`;
+const BAR_SEP_NO_SPACE = new RegExp(BAR_SEP_NO_SPACE_SOURCE);
+
+function findBarSeparators(line) {
+  const text = String(line || "");
+  const re = new RegExp(BAR_SEP_NO_SPACE_SOURCE, "g");
+  const matches = [];
+  let match;
+  while ((match = re.exec(text)) !== null) {
+    matches.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      token: match[0],
+    });
+  }
+  return matches;
+}
 
 function splitLineIntoParts(line) {
   return String(line || "").split(BAR_SEP).filter((p) => p);
@@ -191,6 +205,7 @@ function gcdInt(a, b) {
 
 export {
   BAR_SEP_NO_SPACE,
+  findBarSeparators,
   gcdInt,
   getBarLength,
   getDefaultLen,

@@ -32,6 +32,7 @@ function createRenderPipelineController({
   detectRepeatMarkerAfterShortBar = () => null,
   applyMeasureHighlights = () => {},
   highlightNoteAtIndex = () => {},
+  revealEditorCursorInScore = () => {},
   getActiveErrorHighlightRange = () => null,
   highlightSvgAtEditorOffset = () => {},
   isPlaybackBusy = () => false,
@@ -361,6 +362,7 @@ function createRenderPipelineController({
           if (editorView) {
             const anchor = editorView.state.selection.main.anchor;
             highlightNoteAtIndex(anchor);
+            revealEditorCursorInScore(anchor);
             const activeErrorRange = getActiveErrorHighlightRange();
             if (activeErrorRange && Number.isFinite(activeErrorRange.from)) {
               highlightSvgAtEditorOffset(activeErrorRange.from);

@@ -222,6 +222,29 @@ function buildMenuTemplate(appState, sendMenuAction) {
       { role: "paste" },
       ...(isMac ? [{ role: "pasteAndMatchStyle" }] : []),
       { role: "selectAll" },
+      { type: "separator" },
+      {
+        label: "Tune Order",
+        submenu: [
+          {
+            label: "Move Tune Up",
+            click: () => sendMenuAction("moveActiveTuneUp"),
+          },
+          {
+            label: "Move Tune Down",
+            click: () => sendMenuAction("moveActiveTuneDown"),
+          },
+        ],
+      },
+      {
+        label: "Voices",
+        submenu: [
+          {
+            label: "Generate Empty Bar Skeleton from V:1",
+            click: () => sendMenuAction("generateBlankVoiceSkeleton"),
+          },
+        ],
+      },
       ...(isMac
         ? []
         : [

@@ -193,11 +193,13 @@ function createPlaybackTransportController({
     }
 
     transport.setRange(nextRange);
+    // Moving the cursor or changing the selection after natural playback end
+    // is a new start request, not a request to replay the completed tune.
+    transport.restartOnNextPlay = false;
     if (nextRange.origin === "score-note") {
       transport.isPaused = false;
       transport.resumeStartIdx = null;
       transport.pausedSelectionSignature = null;
-      transport.restartOnNextPlay = false;
       transport.pendingPlaybackPlan = null;
     }
   }
@@ -304,10 +306,14 @@ function createPlaybackTransportController({
       return;
     }
 
-    applyPlaybackPlanSpeed(transport.pendingPlaybackPlan || buildTransportPlaybackPlan());
+    // A cursor move while typing must be reflected on the first F5 press.
+    // Pending plans are produced by Focus/navigation flows and can be stale
+    // for a normal editor playback start.
+    const freshPlan = buildTransportPlaybackPlan();
+    applyPlaybackPlanSpeed(freshPlan);
     if (await playSelectionOnce()) return;
 
-    const plan = transport.pendingPlaybackPlan || buildTransportPlaybackPlan();
+    const plan = freshPlan;
     if (plan && plan.invalid) {
       transport.pendingPlaybackPlan = null;
       showToast(plan.invalidReason || "Cannot start Focus playback.", 3200);

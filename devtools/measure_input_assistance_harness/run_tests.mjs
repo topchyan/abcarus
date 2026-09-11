@@ -26,6 +26,16 @@ const keymapBundle = await build({
 });
 const keymapEncoded = Buffer.from(keymapBundle.outputFiles[0].text, "utf8").toString("base64");
 const { runMeasureTab } = await import(`data:text/javascript;base64,${keymapEncoded}`);
+const statusBundle = await build({
+  entryPoints: [resolve("src/renderer/editor/measure_input_status_model.js")],
+  bundle: true,
+  format: "esm",
+  platform: "browser",
+  target: "es2022",
+  write: false,
+});
+const statusEncoded = Buffer.from(statusBundle.outputFiles[0].text, "utf8").toString("base64");
+const { getMeasureInputStatusDisplay } = await import(`data:text/javascript;base64,${statusEncoded}`);
 
 function at(text, needle, offset = 0) {
   const index = text.indexOf(needle);
@@ -43,15 +53,18 @@ C2 D2 | E2 F2 G2 A2 | B2 c2 d2 e2 f2 |
 
 const incomplete = computeMeasureInputAssistance(base, at(base, "C2 D2", 2));
 assert.equal(incomplete.state, "incomplete");
-assert.equal(incomplete.text, "Measure 4/8");
+assert.equal(incomplete.text, "Measure 2/4");
+assert.deepEqual(incomplete.duration, { actual: "2/4", expected: "4/4" });
 
 const complete = computeMeasureInputAssistance(base, at(base, "E2 F2 G2 A2", 4));
 assert.equal(complete.state, "complete");
-assert.equal(complete.text, "Measure 8/8");
+assert.equal(complete.text, "Measure 4/4");
+assert.deepEqual(complete.duration, { actual: "4/4", expected: "4/4" });
 
 const overfull = computeMeasureInputAssistance(base, at(base, "B2 c2 d2 e2 f2", 6));
 assert.equal(overfull.state, "overfull");
-assert.equal(overfull.text, "Measure 10/8");
+assert.equal(overfull.text, "Measure 5/4");
+assert.deepEqual(overfull.duration, { actual: "5/4", expected: "4/4" });
 
 const contextual = `X:1
 M:4/4
@@ -64,7 +77,7 @@ G2 A2 B2 |
 `;
 const local = computeMeasureInputAssistance(contextual, at(contextual, "G2 A2 B2", 3));
 assert.equal(local.state, "complete");
-assert.equal(local.text, "Measure 6/6");
+assert.equal(local.text, "Measure 3/8");
 assert.equal(local.meter, "3/8");
 assert.equal(local.defaultLength, "1/16");
 
@@ -88,7 +101,7 @@ const afterDoubleRepeat = computeMeasureInputAssistance(
   at(doubleRepeat, "G2 A2 B2", 4),
 );
 assert.equal(afterDoubleRepeat.state, "complete");
-assert.equal(afterDoubleRepeat.text, "Measure 6/6");
+assert.equal(afterDoubleRepeat.text, "Measure 3/4");
 
 const continuedSection = `X:241
 M:C
@@ -100,9 +113,9 @@ K:Am
 const continuedBarline = at(continuedSection, '"C" c8 |', 7);
 const continuedSpace = continuedBarline + 1;
 const continuedNextMeasure = at(continuedSection, '"F" z2 AB', 5);
-assert.equal(computeMeasureInputAssistance(continuedSection, continuedBarline).text, "Measure 8/8");
-assert.equal(computeMeasureInputAssistance(continuedSection, continuedSpace).text, "Measure 8/8");
-assert.equal(computeMeasureInputAssistance(continuedSection, continuedNextMeasure).text, "Measure 8/8");
+assert.equal(computeMeasureInputAssistance(continuedSection, continuedBarline).text, "Measure 4/4");
+assert.equal(computeMeasureInputAssistance(continuedSection, continuedSpace).text, "Measure 4/4");
+assert.equal(computeMeasureInputAssistance(continuedSection, continuedNextMeasure).text, "Measure 4/4");
 
 const commonTime = `X:1
 M:C
@@ -114,6 +127,28 @@ const common = computeMeasureInputAssistance(commonTime, at(commonTime, "C D E F
 assert.equal(common.state, "complete");
 assert.equal(common.text, "Measure 4/4");
 
+const normalizedSixEight = `X:1
+M:6/8
+L:1/8
+K:C
+G4 F2 A G F4 |`;
+const sixEight = computeMeasureInputAssistance(normalizedSixEight, at(normalizedSixEight, "G4 F2", 1));
+assert.equal(sixEight.text, "Measure 12/8");
+assert.deepEqual(sixEight.duration, { actual: "12/8", expected: "6/8" });
+
+assert.deepEqual(getMeasureInputStatusDisplay(null), {
+  ariaLabel: "Measure fill is unavailable here",
+  state: "unavailable",
+  text: "Measure -",
+  title: "Move the cursor to music with a defined M: and L: to check the measure fill.",
+});
+assert.deepEqual(getMeasureInputStatusDisplay(complete), {
+  ariaLabel: "Measure 4/4: complete",
+  state: "complete",
+  text: "Measure 4/4",
+  title: "Measure 4/4: complete; expected 4/4 (M:4/4)",
+});
+
 const tabInsert = `X:1
 M:4/4
 L:1/8
@@ -124,7 +159,7 @@ assert.deepEqual(planMeasureTabAction(tabInsert, tabInsert.length), {
   from: tabInsert.length,
   insert: " | ",
   state: "complete",
-  text: "Measure 8/8",
+  text: "Measure 4/4",
 });
 const tabTransactions = [];
 const tabView = {

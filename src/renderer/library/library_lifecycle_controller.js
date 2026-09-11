@@ -164,18 +164,69 @@ export function createLibraryLifecycleController({
     return true;
   }
 
-  function findRecentTuneInFileEntry(fileEntry, entry) {
+  function findRecentTuneInFileEntry(fileEntry, entry, { fallbackToFirst = false } = {}) {
     if (!fileEntry || !Array.isArray(fileEntry.tunes) || !entry) return null;
+    const tunes = fileEntry.tunes;
+    const wantedX = String(entry.xNumber || "").trim();
+    const wantedTitle = String(entry.title || "").trim().toLowerCase();
     const startOffset = Number(entry.startOffset) || 0;
-    const id = `${entry.path}::${startOffset}`;
-    let tune = fileEntry.tunes.find((t) => t && t.id === id) || null;
-    if (!tune && entry.xNumber) tune = fileEntry.tunes.find((t) => String(t && (t.xNumber || "")) === String(entry.xNumber)) || null;
-    if (!tune && entry.title) {
-      const title = String(entry.title || "").trim().toLowerCase();
-      tune = fileEntry.tunes.find((t) => String(t && (t.title || "")).trim().toLowerCase() === title) || null;
+    const titleOf = (tune) => String(tune && (tune.title || "")).trim().toLowerCase();
+    const xOf = (tune) => String(tune && (tune.xNumber || "")).trim();
+
+    let tune = null;
+    if (wantedX && wantedTitle) {
+      const matches = tunes.filter((candidate) => xOf(candidate) === wantedX && titleOf(candidate) === wantedTitle);
+      if (matches.length === 1) tune = matches[0];
     }
-    if (!tune && fileEntry.tunes.length) tune = fileEntry.tunes[0];
+    if (!tune && wantedTitle) {
+      const matches = tunes.filter((candidate) => titleOf(candidate) === wantedTitle);
+      if (matches.length === 1) tune = matches[0];
+    }
+    if (!tune && wantedX) {
+      const matches = tunes.filter((candidate) => xOf(candidate) === wantedX);
+      if (matches.length === 1) tune = matches[0];
+    }
+    if (!tune && Number.isFinite(Number(entry.startOffset))) {
+      const id = `${entry.path}::${startOffset}`;
+      const offsetMatch = tunes.find((candidate) => candidate && (
+        candidate.id === id || Number(candidate.startOffset) === startOffset
+      )) || null;
+      const metadataMatches = offsetMatch
+        && (!wantedX || xOf(offsetMatch) === wantedX)
+        && (!wantedTitle || titleOf(offsetMatch) === wantedTitle);
+      if (metadataMatches) tune = offsetMatch;
+    }
+    if (!tune && fallbackToFirst && tunes.length) tune = tunes[0];
     return tune || null;
+  }
+
+  async function findLastRecentTuneForFile(filePath) {
+    if (!api || typeof api.getRecentCandidates !== "function") return null;
+    try {
+      const candidates = await api.getRecentCandidates();
+      if (!Array.isArray(candidates)) return null;
+      const recent = candidates.find((candidate) => (
+        candidate
+        && candidate.type === "tune"
+        && candidate.entry
+        && pathsEqual(candidate.entry.path, filePath)
+      ));
+      return recent ? recent.entry : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function selectInitialTuneForFile(fileEntry, filePath, options = {}) {
+    if (!fileEntry || !Array.isArray(fileEntry.tunes) || !fileEntry.tunes.length) return false;
+    const recentEntry = await findLastRecentTuneForFile(filePath);
+    const tune = recentEntry
+      ? findRecentTuneInFileEntry(fileEntry, recentEntry, { fallbackToFirst: true })
+      : fileEntry.tunes[0];
+    const key = tune ? (tune.tuneUid || tune.id) : "";
+    if (!key) return false;
+    const result = await selectTune(key, options);
+    return Boolean(result && result.ok);
   }
 
   function setActiveTuneText(text, metadata, options = {}) {
@@ -519,18 +570,19 @@ export function createLibraryLifecycleController({
     return { ok: false, error: (res && res.error) ? res.error : "Unable to open tune." };
   }
 
-  async function openRecentTune(entry) {
+  async function openRecentTune(entry, options = {}) {
     if (!entry || !entry.path) return { ok: false, error: "Missing path." };
     const ok = await ensureSafeToAbandonCurrentDoc("opening a recent tune");
     if (!ok) return { ok: false, cancelled: true };
+    const suppressRecent = Boolean(options.suppressRecent);
 
     setChordProMode(false);
     let fileEntry = findLoadedFileEntry(entry.path);
+    const hadIndexedTunes = Boolean(fileEntry && Array.isArray(fileEntry.tunes) && fileEntry.tunes.length);
     if (fileEntry && Array.isArray(fileEntry.tunes)) {
       const tune = findRecentTuneInFileEntry(fileEntry, entry);
       if (tune && tune.id) {
-        await selectTune(tune.tuneUid || tune.id, { skipConfirm: true, suppressRecent: true });
-        return { ok: true };
+        return selectTune(tune.tuneUid || tune.id, { skipConfirm: true, suppressRecent });
       }
     }
 
@@ -538,10 +590,11 @@ export function createLibraryLifecycleController({
     if (fileEntry && Array.isArray(fileEntry.tunes)) {
       const tune = findRecentTuneInFileEntry(fileEntry, entry);
       if (tune && tune.id) {
-        await selectTune(tune.tuneUid || tune.id, { skipConfirm: true, suppressRecent: true });
-        return { ok: true };
+        return selectTune(tune.tuneUid || tune.id, { skipConfirm: true, suppressRecent });
       }
+      if (fileEntry.tunes.length) return { ok: false, error: "Recent tune no longer found in file." };
     }
+    if (hadIndexedTunes) return { ok: false, error: "Recent tune no longer found in file." };
     const res = await readFile(entry.path);
     if (!res.ok) {
       logErr(res.error || "Unable to read file.");
@@ -560,7 +613,7 @@ export function createLibraryLifecycleController({
       endLine: entry.endLine || countLines(tuneText),
       startOffset,
       endOffset,
-    });
+    }, { suppressRecent });
     setDirtyIndicator(false);
     return { ok: true };
   }
@@ -594,9 +647,11 @@ export function createLibraryLifecycleController({
       content: readRes && readRes.ok ? readRes.data : null,
     });
     if (fileEntry && Array.isArray(fileEntry.tunes) && fileEntry.tunes.length) {
-      const first = fileEntry.tunes[0];
-      await selectTune(first.tuneUid || first.id, { skipConfirm: true, suppressRecent: true });
-      return { ok: true };
+      const selected = await selectInitialTuneForFile(fileEntry, entry.path, {
+        skipConfirm: true,
+        suppressRecent: true,
+      });
+      return selected ? { ok: true } : { ok: false, error: "No tunes found in file." };
     }
     return { ok: false, error: "No tunes found in file." };
   }
@@ -759,20 +814,16 @@ export function createLibraryLifecycleController({
       const fileEntry = libraryIndex.files.find((f) => pathsEqual(f.path, filePath)) || null;
       if (!fileEntry) return { ok: false };
       if (fileEntry.tunes && fileEntry.tunes.length) {
-        const first = fileEntry.tunes[0];
-        const key = first ? (first.tuneUid || first.id) : "";
-        if (key) await selectTune(key, tuneSelectOptions);
-        return { ok: true };
+        const selected = await selectInitialTuneForFile(fileEntry, filePath, tuneSelectOptions);
+        return selected ? { ok: true } : { ok: false };
       }
       const tuneCount = Number.isFinite(fileEntry.tuneCount) ? fileEntry.tuneCount : null;
       const shouldTryParse = tuneCount == null || tuneCount > 0;
       if (shouldTryParse) {
         const updated = await refreshLibraryFile(filePath);
         if (updated && updated.tunes && updated.tunes.length) {
-          const first = updated.tunes[0];
-          const key = first ? (first.tuneUid || first.id) : "";
-          if (key) await selectTune(key, tuneSelectOptions);
-          return { ok: true };
+          const selected = await selectInitialTuneForFile(updated, filePath, tuneSelectOptions);
+          return selected ? { ok: true } : { ok: false };
         }
       }
       return { ok: false, error: `No tunes found in file: ${safeBasename(filePath)}` };

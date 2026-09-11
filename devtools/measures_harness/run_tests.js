@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 const fs = require("fs");
 const path = require("path");
+const assert = require("node:assert/strict");
 
 const ROOT = path.resolve(__dirname);
 const FIXTURES = path.join(ROOT, "fixtures");
@@ -201,6 +202,26 @@ async function main() {
     for (const line of msg.split(/\r\n|\n|\r/)) {
       console.log(`% ${line}`);
     }
+    process.exitCode = 1;
+  }
+
+  try {
+    const { transformMeasuresPerLine, normalizeMeasuresLineBreaks } = await import("../../src/renderer/measures.mjs");
+    const xml2abcVolta = [
+      "X:1",
+      "M:2/4",
+      "L:1/8",
+      "I:linebreak $",
+      "K:C",
+      "C2 D2 | E2 F2 | G2 A2 | B2 c2 |1$ d2 e2 :|2 f2 g2 |]",
+    ].join("\n");
+    const reflowed = normalizeMeasuresLineBreaks(transformMeasuresPerLine(xml2abcVolta, 4));
+    assert.match(reflowed, /B2 c2 \|1\$\nd2 e2 :\|2 f2 g2 \|\]/);
+    assert.doesNotMatch(reflowed, /B2 c2 \|\n1\$/);
+    console.log("% PASS TEST 13: xml2abc volta token and linebreak stay attached");
+  } catch (e) {
+    console.log("% FAIL TEST 13: xml2abc volta token and linebreak stay attached");
+    console.log(`% ${String(e && e.message ? e.message : e)}`);
     process.exitCode = 1;
   }
 }

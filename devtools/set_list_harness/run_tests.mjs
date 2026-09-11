@@ -100,7 +100,7 @@ function test(name, fn) {
   return result;
 }
 
-await test("print marker skips only SVG bounds normalization", async () => {
+await test("print bounds preserve abc2svg systems and honor the skip marker", async () => {
   const mainSource = fs.readFileSync("src/main/index.js", "utf8");
   const buildPrintHtmlSource = mainSource.match(
     /function buildPrintHtml\(svgMarkup, fontBase64, suggestedName\) \{[\s\S]*?\n\}(?=\n\nasync function withPrintWindow)/,
@@ -122,18 +122,23 @@ await test("print marker skips only SVG bounds normalization", async () => {
     "",
     "Print",
   );
-  async function countSvgBoundsReads(html, { hasIncipit = false } = {}) {
+  async function runSvgBoundsNormalization(html, { className = "", hasIncipit = false } = {}) {
     const script = html.match(/<script>([\s\S]*?)<\/script>/);
     assert.ok(script, "print HTML must include its preparation script");
     let boundsReads = 0;
+    const attributes = new Map([
+      ["class", className],
+      ["width", "10"],
+      ["height", "10"],
+    ]);
     const svg = {
       getBBox: () => {
         boundsReads += 1;
-        return { x: 0, y: 0, width: 10, height: 10 };
+        return { x: -4, y: -20, width: 20, height: 50 };
       },
       viewBox: { baseVal: { x: 0, y: 0, width: 10, height: 10 } },
-      getAttribute: () => "10",
-      setAttribute: () => {},
+      getAttribute: (name) => attributes.get(name) || "",
+      setAttribute: (name, value) => attributes.set(name, value),
     };
     const printContext = {
       document: {
@@ -147,11 +152,20 @@ await test("print marker skips only SVG bounds normalization", async () => {
     };
     vm.runInNewContext(script[1], printContext);
     await printContext.window._rasterReadyPromise;
-    return boundsReads;
+    return { attributes, boundsReads };
   }
-  assert.equal(await countSvgBoundsReads(normalHtml), 1);
-  assert.equal(await countSvgBoundsReads(diagnosticHtml), 0);
-  assert.equal(await countSvgBoundsReads(diagnosticHtml, { hasIncipit: true }), 1);
+  const generic = await runSvgBoundsNormalization(normalHtml);
+  assert.equal(generic.boundsReads, 1);
+  assert.equal(generic.attributes.get("height"), "56px");
+
+  const scoreSystem = await runSvgBoundsNormalization(normalHtml, { className: "f4 tune0" });
+  assert.equal(scoreSystem.boundsReads, 0);
+  assert.equal(scoreSystem.attributes.get("height"), "10");
+
+  const skipped = await runSvgBoundsNormalization(diagnosticHtml);
+  assert.equal(skipped.boundsReads, 0);
+  const skippedIncipit = await runSvgBoundsNormalization(diagnosticHtml, { hasIncipit: true });
+  assert.equal(skippedIncipit.boundsReads, 1);
 
 });
 
@@ -462,6 +476,31 @@ await test("docked Set List activation uses the canonical Library tune pipeline"
   const result = await adapter.activateItemSource(item);
   assert.equal(result.status, SET_LIST_RESOLUTION.FOUND_EXACT);
   assert.deepEqual(selected, [tune.id]);
+});
+
+await test("stale offset locator resolves the moved tune instead of the tune now occupying its X", async () => {
+  const intendedAbc = "X:19\nT:Intended Tune\nC:Composer\nK:C\nC|\n";
+  const wrongAbc = "X:12\nT:Different Tune\nC:Other\nK:D\nD|\n";
+  const contentHash = await hashSetListAbc(intendedAbc, webcrypto);
+  const wrong = { id: "/music/source.abc::100", xNumber: "12", title: "Different Tune", composer: "Other" };
+  const intended = { id: "/music/source.abc::200", xNumber: "19", title: "Intended Tune", composer: "Composer" };
+  const file = { path: "/music/source.abc", tunes: [wrong, intended] };
+  const adapter = createSetListRendererAdapter({
+    findTuneById: (id) => id === wrong.id ? { tune: wrong, file } : null,
+    getLibraryIndex: () => ({ files: [file] }),
+    getTuneText: async (tune) => tune === intended ? intendedAbc : wrongAbc,
+  });
+  const result = await adapter.resolveItemSource({
+    tune: {
+      title: "Intended Tune",
+      composer: "Composer",
+      source: { locatorHint: wrong.id, pathHint: file.path, xNumberHint: "12" },
+      contentHash,
+    },
+    embeddedAbc: intendedAbc,
+  });
+  assert.equal(result.status, SET_LIST_RESOLUTION.FOUND_EXACT);
+  assert.equal(result.candidate.tuneId, intended.id);
 });
 
 await test("opening a modified Library source refreshes the Set List key", async () => {
@@ -965,6 +1004,38 @@ await test("saving a Library source refreshes matching Set List items and preser
   assert.equal(state.items[1].originalKey, "D");
   assert.equal(state.dirty, true);
   assert.deepEqual(state.dirtyReasons, ["source updates"]);
+});
+
+await test("saving a different tune that inherited an X number does not replace a Set List item", async () => {
+  const portable = normalizeSetListDocument(readFixture("self-contained.abcarus-setlist.json"));
+  portable.items = [portable.items[0]];
+  portable.items[0].tune.title = "Intended Tune";
+  portable.items[0].tune.source = {
+    locatorHint: "/music/a.abc::old-offset",
+    pathHint: "/music/a.abc",
+    xNumberHint: "12",
+  };
+  const feature = createSetListFeature({
+    readStorage: (key) => key === "abcarus.setList.recentPaths.v1" ? ["/sets/current.json"] : null,
+    writeStorage: () => true,
+    readFile: async (path) => path === "/sets/current.json"
+      ? { ok: true, data: serializeSetListDocument(portable) }
+      : { ok: false, error: "missing" },
+    buildItemForTuneId: async () => ({
+      sourcePath: "/music/a.abc",
+      xNumber: "12",
+      title: "Different Tune",
+      key: "D",
+      text: "X:12\nT:Different Tune\nK:D\nD|\n",
+      headerText: "",
+    }),
+  });
+
+  assert.equal(await feature.restoreLastSetList(), true);
+  assert.equal(await feature.syncSourceTuneAfterSave("/music/a.abc::new-offset", {
+    previousTuneId: "/music/a.abc::old-offset",
+  }), false);
+  assert.equal(feature.getState().items[0].title, "Intended Tune");
 });
 
 await test("opening a Set List occurrence applies one derived view to Editor Score and playback source", async () => {

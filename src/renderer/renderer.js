@@ -20,6 +20,7 @@ import {
   createRectSelectionExtension,
 } from "./editor/main_editor_feature.js";
 import { createEditorRuntime } from "./editor/editor_runtime.js";
+import { createVoiceMeasureCorrespondenceController } from "./editor/voice_measure_correspondence_controller.js";
 import { createAbcHelpersFeature } from "./editor/abc_helpers_feature.js";
 import { createErrorsFeature } from "./editor/errors_feature.js";
 import {
@@ -70,6 +71,7 @@ import {
   gcdInt,
   getDefaultLen,
 } from "./abc/bar_metrics.js";
+import { planBlankVoiceSkeleton } from "./abc/blank_voice_skeleton.js";
 import {
   computeMeasureStatsAt as computeMeasureStatsAtCore,
   parseMeterParts,
@@ -294,6 +296,8 @@ const $splitModeButtons = Array.from(document.querySelectorAll("[data-split-mode
 	const $btnFocusMode = document.getElementById("btnFocusMode");
 const $btnToggleFollow = document.getElementById("btnToggleFollow");
 const $btnToggleGlobals = document.getElementById("btnToggleGlobals");
+const $globalsToolbarMenu = document.getElementById("globalsToolbarMenu");
+const $btnEditGlobalHeader = document.getElementById("btnEditGlobalHeader");
 const $btnToggleErrors = document.getElementById("btnToggleErrors");
 const $soundfontLabel = document.getElementById("soundfontLabel");
 const $rightSplit = document.querySelector(".right-split");
@@ -350,8 +354,10 @@ const $setListExportPdf = document.getElementById("setListExportPdf");
 const editorRuntime = createEditorRuntime({
   logError: (...args) => console.error(...args),
 });
+const voiceMeasureCorrespondenceController = createVoiceMeasureCorrespondenceController();
 const editorExtensionRuntime = createEditorExtensionRuntime({
   getEditorView: editorRuntime.getView,
+  getPersistentExtensions: () => [voiceMeasureCorrespondenceController.plugin],
   getDiagnosticExtensions: () => [
     measureErrorPlugin,
     barMismatchPlugin,
@@ -458,6 +464,7 @@ let tuneClipboardController = null;
 let deleteTuneAction = null;
 let duplicateTuneAction = null;
 let pasteMoveTuneAction = null;
+let reorderTuneAction = null;
 let renumberXAction = null;
 let appendCurrentTuneAction = null;
 let newFileAction = null;
@@ -1209,7 +1216,11 @@ const scoreHighlightController = createScoreHighlightController({
   getFollowEnabled: playbackDomain.isFollowEnabled,
   isRawMode: () => isRawModeActive(),
   isPlaying,
-  scrollToNote: (element) => maybeScrollRenderToNote(element),
+  shouldRevealCursorInScore: () => !isFocusModeEnabled(),
+  resolveEditorMeasureRangeForScore: (text, offset) => (
+    voiceMeasureCorrespondenceController.resolveReferenceMeasureRange(text, offset)
+  ),
+  scrollToNote: (element, options) => maybeScrollRenderToNote(element, options),
 });
 const practiceBarHighlightController = createPracticeBarHighlightController({
   getOutElement: () => $out,
@@ -1232,6 +1243,7 @@ const {
   highlightSvgFollowMeasureForNote,
   invalidateNoteHighlightIndexCache,
   pickClosestNoteElement,
+  scheduleCursorScoreReveal,
   scheduleCursorNoteHighlight,
   setSvgPlayheadFromElements,
 } = scoreHighlightController;
@@ -1863,6 +1875,7 @@ const libraryUiDomain = createLibraryUiDomain({
     getActiveEditFilePath,
     getClipboardTune,
     getEditorView: editorRuntime.getView,
+    generateBlankVoiceSkeleton,
     getNextXNumber,
     getTuneText,
     hasDiskConflictPath,
@@ -1872,6 +1885,7 @@ const libraryUiDomain = createLibraryUiDomain({
     handleTemplatesContextMenuAction: (action, target) => templatesFeature.handleContextMenuAction(action, target),
     loadLibraryFromFolder,
     moveTuneToFile: (tuneId, targetPath) => pasteMoveTuneAction.moveTuneToFile(tuneId, targetPath),
+    reorderTune: (tuneId, options) => reorderTuneAction.reorderTune(tuneId, options),
     openTuneFromLibrarySelection,
     pasteClipboardToFile,
     pinHoverStatus,
@@ -2514,6 +2528,7 @@ newFileAction = libraryCrudDomain.newFileAction;
 deleteTuneAction = libraryCrudDomain.deleteTuneAction;
 duplicateTuneAction = libraryCrudDomain.duplicateTuneAction;
 pasteMoveTuneAction = libraryCrudDomain.pasteMoveTuneAction;
+reorderTuneAction = libraryCrudDomain.reorderTuneAction;
 renumberXAction = libraryCrudDomain.renumberXAction;
 
 libraryLifecycleController = createLibraryLifecycleController({
@@ -2641,6 +2656,7 @@ documentSessionController = createDocumentSessionController({
     discardFileChangesForActiveFile,
     discardRawChangesForActiveFile: () => rawModeFeature.discardUnsavedRawState(),
     flushLibraryPrefsSave,
+    loadLibraryFileIntoEditor,
     loadSingleLibraryFile,
     markHeaderClean,
     discardChordProChangesForActiveFile: () => chordProFeature.discardChanges(),
@@ -3209,6 +3225,7 @@ function initEditor() {
       isPlaying,
       getFollowPlayback: playbackDomain.isFollowEnabled,
       scheduleCursorNoteHighlight,
+      scheduleCursorScoreReveal,
       clearNoteSelection,
       updatePlaybackRangeFromSelection,
       getActiveErrorHighlight: () => errorsFeature.getActiveHighlight(),
@@ -3277,8 +3294,8 @@ async function openTuneFromLibrarySelection(selection) {
 
 window.openTuneFromLibrarySelection = openTuneFromLibrarySelection;
 
-async function openRecentTune(entry) {
-  const result = await libraryLifecycleController.openRecentTune(entry);
+async function openRecentTune(entry, options = {}) {
+  const result = await libraryLifecycleController.openRecentTune(entry, options);
   if (result !== false && (!result || result.ok !== false)) setListFeature.clearActiveItem();
   return result;
 }
@@ -3291,6 +3308,19 @@ async function openRecentFile(entry) {
 
 async function openRecentFolder(entry) {
   return libraryShellController.openRecentFolder(entry);
+}
+
+async function reorderActiveTune(direction) {
+  if (setListFeature && setListFeature.isPerformanceViewActive()) {
+    showToast("Open the source tune from Library before changing its order.", 2600);
+    return { ok: false };
+  }
+  const tuneId = activeContext.getActiveTuneUid() || activeContext.getActiveTuneId();
+  if (!tuneId || !reorderTuneAction) {
+    showToast("Open a Library tune first.", 2200);
+    return { ok: false };
+  }
+  return reorderTuneAction.reorderTune(tuneId, { direction });
 }
 
 async function scanAndLoadLibrary() {
@@ -3446,6 +3476,34 @@ async function applySetListPerformanceView({ text, headerText } = {}) {
 
 function alignBarsInEditor() {
   abcTransformFeature.alignBars();
+}
+
+function generateBlankVoiceSkeleton() {
+  if (isRawModeActive()) {
+    showToast("Raw mode: switch to tune mode to generate a voice skeleton.", 2400);
+    return false;
+  }
+  const view = editorRuntime.getView();
+  if (!view) return false;
+  const plan = planBlankVoiceSkeleton(view.state.doc.toString(), {
+    sourceVoiceId: "1",
+    targetOffset: view.state.selection.main.head,
+  });
+  if (!plan.ok) {
+    showToast(plan.error || "Unable to generate an empty voice skeleton.", 2800);
+    return false;
+  }
+  if (plan.targetHasPitchedMusic && !window.confirm(
+    `V:${plan.targetVoiceId} contains notes. Replace it with an empty bar skeleton from V:${plan.sourceVoiceId}?`,
+  )) return false;
+  view.dispatch({
+    changes: plan.change,
+    selection: { anchor: plan.change.from },
+    scrollIntoView: true,
+  });
+  view.focus();
+  showToast(`Created empty V:${plan.targetVoiceId} skeleton from V:${plan.sourceVoiceId}.`, 2400);
+  return true;
 }
 
 async function checkLyricFitInEditor() {
@@ -3613,6 +3671,7 @@ renderRuntime.initializePipeline({
   detectRepeatMarkerAfterShortBar,
   applyMeasureHighlights,
   highlightNoteAtIndex,
+  revealEditorCursorInScore: scoreHighlightController.revealEditorCursorInScore,
   getActiveErrorHighlightRange: () => errorsFeature.getActiveHighlightRange(),
   highlightSvgAtEditorOffset,
   isPlaybackBusy,
@@ -3956,6 +4015,8 @@ appCommandsDomain = createAppCommandsDomain({
     toggleFollowButton: $btnToggleFollow,
     toggleErrorsButton: $btnToggleErrors,
     toggleGlobalsButton: $btnToggleGlobals,
+    globalsToolbarMenu: $globalsToolbarMenu,
+    editGlobalHeaderButton: $btnEditGlobalHeader,
   },
   state: {
     getEditorView: editorRuntime.getView,
@@ -3974,6 +4035,7 @@ appCommandsDomain = createAppCommandsDomain({
   actions: {
     alignBarsInEditor,
     checkLyricFitInEditor,
+    generateBlankVoiceSkeleton,
     applyAbc2abcTransform,
     clearLibraryFilter,
     confirmReloadFromDisk,
@@ -4017,6 +4079,7 @@ appCommandsDomain = createAppCommandsDomain({
     printSetList: () => setListFeature.runPrintAction("print"),
     openTemplatesModal,
     renumberXInActiveFile,
+    reorderActiveTune,
     requestCloseDocument,
     requestQuitApplication,
     resetLayout,

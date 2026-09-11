@@ -31,7 +31,13 @@ const toggleLibraryButton = createButton();
 const toggleSetListButton = createButton();
 const libraryCatalogButton = createButton();
 const openFolderAsLibraryButton = createButton();
+const toggleGlobalsButton = createButton();
+const editGlobalHeaderButton = createButton();
 const libraryToolbarMenu = {
+  open: true,
+  contains: () => false,
+};
+const globalsToolbarMenu = {
   open: true,
   contains: () => false,
 };
@@ -50,6 +56,8 @@ let libraryMetadataCalls = 0;
 let toggleSetListCalls = 0;
 let printSetListCalls = 0;
 let stopPlaybackCalls = 0;
+let generateSkeletonCalls = 0;
+let openHeaderSettingsCalls = 0;
 
 const domain = createAppCommandsDomain({
   api: {
@@ -57,6 +65,11 @@ const domain = createAppCommandsDomain({
     updateSettings: async (patch) => { settingsPatches.push(patch); },
   },
   documentRef,
+  controllers: {
+    getSettingsDomain: () => ({
+      openHeaderSettings: async () => { openHeaderSettingsCalls += 1; },
+    }),
+  },
   elements: {
     newTuneButton,
     toggleLibraryButton,
@@ -64,8 +77,12 @@ const domain = createAppCommandsDomain({
     libraryToolbarMenu,
     libraryCatalogButton,
     openFolderAsLibraryButton,
+    toggleGlobalsButton,
+    globalsToolbarMenu,
+    editGlobalHeaderButton,
   },
   state: {
+    isGlobalHeaderEnabled: () => true,
     isPayloadMode: () => false,
     isRawModeActive: () => false,
   },
@@ -80,6 +97,7 @@ const domain = createAppCommandsDomain({
     toggleSetList: () => { toggleSetListCalls += 1; },
     printSetList: async () => { printSetListCalls += 1; },
     stopPlaybackTransport: () => { stopPlaybackCalls += 1; },
+    generateBlankVoiceSkeleton: () => { generateSkeletonCalls += 1; },
   },
 });
 
@@ -100,6 +118,13 @@ openFolderAsLibraryButton.click();
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(libraryToolbarMenu.open, false);
 assert.equal(openFolderCalls, 1, "Library dropdown must expose Open Folder as Library");
+toggleGlobalsButton.click();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.deepEqual(settingsPatches.at(-1), { globalHeaderEnabled: false }, "Globals primary action must toggle the global header");
+editGlobalHeaderButton.click();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(globalsToolbarMenu.open, false);
+assert.equal(openHeaderSettingsCalls, 1, "Globals dropdown must open Settings on the Header page");
 await domain.dispatch("newFromTemplate");
 await domain.dispatch("templatesModal");
 assert.equal(newFromTemplateCalls, 1, "New Tune From Template must retain its new-file contract");
@@ -109,10 +134,12 @@ assert.equal(libraryMetadataCalls, 1, "Tools -> Library Metadata must dispatch i
 await domain.dispatch("toggleSetList");
 await domain.dispatch("printSetList");
 await domain.dispatch("stopPlayback");
+await domain.dispatch("generateBlankVoiceSkeleton");
 await domain.dispatch({ type: "toggleSelectionLoop", value: true });
 assert.equal(toggleSetListCalls, 2, "View -> Show/Hide Set List Panel must share the toolbar action");
 assert.equal(printSetListCalls, 1, "File -> Print Active Set List must print the active Set List");
 assert.equal(stopPlaybackCalls, 1, "Play -> Stop must stop playback");
+assert.equal(generateSkeletonCalls, 1, "Edit -> Voices must generate the voice skeleton");
 assert.deepEqual(settingsPatches.at(-1), { playbackSelectionLoopEnabled: true }, "Play -> Options -> Loop Selection must persist its setting");
 
 console.log("app commands harness: all tests passed");

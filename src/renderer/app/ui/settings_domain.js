@@ -174,10 +174,18 @@ function createSettingsDomain({
     if (settingsController) settingsController.openSettings();
   }
 
-  function openFontsSettings() {
+  function openSettingsTab(tabKey) {
     if (!settingsController) return;
-    if (typeof settingsController.openTab === "function") settingsController.openTab("fonts");
-    else settingsController.openSettings();
+    if (typeof settingsController.openTab === "function") return settingsController.openTab(tabKey);
+    return settingsController.openSettings();
+  }
+
+  function openFontsSettings() {
+    return openSettingsTab("fonts");
+  }
+
+  function openHeaderSettings() {
+    return openSettingsTab("header");
   }
 
   async function exportSettings() {
@@ -338,6 +346,7 @@ function createSettingsDomain({
     hasController,
     importSettings,
     openFontsSettings,
+    openHeaderSettings,
     openSettings,
     openSettingsFolder,
     refreshHeaderLayers,

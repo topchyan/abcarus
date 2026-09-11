@@ -250,6 +250,11 @@ function createLibraryUiDomain({
     return Promise.resolve();
   }
 
+  function reorderTune(tuneId, options) {
+    if (typeof actions.reorderTune === "function") return actions.reorderTune(tuneId, options);
+    return Promise.resolve({ ok: false });
+  }
+
   const moveTuneModalController = createMoveTuneModalController({
     modal: moveTuneModal,
     closeButton: moveTuneClose,
@@ -367,6 +372,7 @@ function createLibraryUiDomain({
     commitRenameFile: (oldPath, inputName) => renameFileController.commitRenameFile(oldPath, inputName),
     requestLoadLibraryFile: actions.requestLoadLibraryFile,
     moveTuneToFile,
+    reorderTune,
     mergeCatalogCategory: (source, target) => categoryMergeController.open(source, target),
     showContextMenuAt: actions.showContextMenuAt,
     scheduleSaveLibraryUiState: () => uiStateController.scheduleSaveLibraryUiState(),
@@ -394,6 +400,7 @@ function createLibraryUiDomain({
     getRawMode: state.isRawMode,
     getClipboardTune: actions.getClipboardTune,
     getEditorView: actions.getEditorView,
+    generateBlankVoiceSkeleton: actions.generateBlankVoiceSkeleton,
     getWindowApi: () => api,
     pathsEqual,
     safeBasename,
@@ -424,6 +431,7 @@ function createLibraryUiDomain({
     openXIssues: (filePath) => xIssuesModalController.open(filePath),
     renumberXInActiveFile: actions.renumberXInActiveFile,
     openMoveTuneModal,
+    reorderTune,
     addTuneToSetList: actions.addTuneToSetList,
     copyFileTuneList: actions.copyFileTuneList,
     appendTuneToActiveFile: (tuneId) => appendTuneToActiveFileAction.run(tuneId),

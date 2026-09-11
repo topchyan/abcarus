@@ -84,11 +84,17 @@
               <svg class="btn-icon icon-midi" aria-hidden="true"><use href="#ui-midi"></use></svg>
               <span class="btn-text">MIDI: off</span>
             </button>
-	          <button id="btnToggleGlobals" type="button" title="Toggle global ABC header">
-	            <svg class="btn-icon icon-globe" aria-hidden="true"><use href="#ui-globe"></use></svg>
-	            <span class="btn-text">Globals</span>
-	          </button>
-	        </div>
+		          <button id="btnToggleGlobals" type="button" title="Toggle global ABC header">
+		            <svg class="btn-icon icon-globe" aria-hidden="true"><use href="#ui-globe"></use></svg>
+		            <span class="btn-text">Globals</span>
+		          </button>
+		          <details id="globalsToolbarMenu" class="toolbar-dropdown globals-toolbar-menu">
+		            <summary aria-label="Global header actions" title="Global header actions"><span aria-hidden="true">▾</span></summary>
+		            <div class="toolbar-dropdown-menu" role="menu" aria-label="Global header actions">
+		              <button id="btnEditGlobalHeader" type="button" role="menuitem">Edit Global Header…</button>
+		            </div>
+		          </details>
+		        </div>
 	        <div class="segmented" aria-label="Preferences">
 	          <button id="btnSettings" type="button" title="Settings (Ctrl+,)">
 	            <svg class="btn-icon icon-settings" aria-hidden="true"><use href="#ui-settings"></use></svg>

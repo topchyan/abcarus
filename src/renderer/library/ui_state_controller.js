@@ -346,11 +346,6 @@ function createLibraryUiStateController({
       return false;
     };
 
-    if (tuneId) {
-      const ok = await trySelect(tuneId);
-      if (ok) return true;
-    }
-
     let fileEntry = null;
     if (filePath && libraryIndex && Array.isArray(libraryIndex.files)) {
       fileEntry = libraryIndex.files.find((f) => pathsEqual(f.path, filePath)) || null;
@@ -366,19 +361,34 @@ function createLibraryUiStateController({
     const tunes = fileEntry && Array.isArray(fileEntry.tunes) ? fileEntry.tunes : [];
     if (!tunes.length) return false;
 
+    const normalizedTitle = title.trim().toLowerCase();
+    const titleOf = (tune) => String(tune && (tune.title || "")).trim().toLowerCase();
+    const xOf = (tune) => String(tune && (tune.xNumber || ""));
+    const metadataMatches = (tune) => Boolean(
+      tune
+      && (!xNumber || xOf(tune) === xNumber)
+      && (!normalizedTitle || titleOf(tune) === normalizedTitle)
+    );
     let candidate = null;
-    if (Number.isFinite(startOffset)) {
-      candidate = tunes.find((t) => Number(t.startOffset) === Number(startOffset)) || null;
+    if (tuneId) {
+      const byId = tunes.find((tune) => String(tune && (tune.id || "")) === tuneId) || null;
+      if (metadataMatches(byId)) candidate = byId;
+    }
+    if (!candidate && xNumber && normalizedTitle) {
+      const matches = tunes.filter((tune) => xOf(tune) === xNumber && titleOf(tune) === normalizedTitle);
+      if (matches.length === 1) candidate = matches[0];
+    }
+    if (!candidate && normalizedTitle) {
+      const matches = tunes.filter((tune) => titleOf(tune) === normalizedTitle);
+      if (matches.length === 1) candidate = matches[0];
     }
     if (!candidate && xNumber) {
-      const matches = tunes.filter((t) => String(t.xNumber || "") === xNumber);
+      const matches = tunes.filter((tune) => xOf(tune) === xNumber);
       if (matches.length === 1) candidate = matches[0];
-      else if (matches.length > 1 && title) {
-        const want = title.trim().toLowerCase();
-        candidate = matches.find((t) => String(t.title || "").trim().toLowerCase() === want) || matches[0];
-      } else if (matches.length) {
-        candidate = matches[0];
-      }
+    }
+    if (!candidate && Number.isFinite(startOffset)) {
+      const byOffset = tunes.find((tune) => Number(tune.startOffset) === Number(startOffset)) || null;
+      if (metadataMatches(byOffset)) candidate = byOffset;
     }
 
     if (!candidate) return false;

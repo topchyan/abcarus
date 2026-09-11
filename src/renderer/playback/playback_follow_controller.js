@@ -120,7 +120,7 @@ function createPlaybackFollowController({
     }
   }
 
-  function maybeScrollRenderToNote(el) {
+  function maybeScrollRenderToNote(el, { placement = "nearest" } = {}) {
     const renderPane = getRenderPane();
     if (!renderPane || !el) return;
     if (transport.isPlaying || transport.isPaused || transport.waitingForFirstNote) {
@@ -135,22 +135,33 @@ function createPlaybackFollowController({
     const relBottom = relTop + targetRect.height;
     const relLeft = targetRect.left - containerRect.left;
     const relRight = relLeft + targetRect.width;
-    const linePad = Math.max(80, targetRect.height * 8);
-    const colPad = Math.max(80, targetRect.width * 8);
+    const paneHeight = Math.max(1, renderPane.clientHeight);
+    const paneWidth = Math.max(1, renderPane.clientWidth);
+    const linePad = Math.min(Math.max(24, targetRect.height * 4), paneHeight * 0.4);
+    const colPad = Math.min(Math.max(32, targetRect.width * 0.25), paneWidth * 0.35);
     let nextTop = viewTop;
     let nextLeft = viewLeft;
-    if (relTop < linePad) {
-      nextTop = viewTop + (relTop - linePad);
-    } else if (relBottom > renderPane.clientHeight - linePad) {
-      nextTop = viewTop + (relBottom - (renderPane.clientHeight - linePad));
+    if (placement === "comfortable-center") {
+      const targetCenterY = (relTop + relBottom) / 2;
+      const targetCenterX = (relLeft + relRight) / 2;
+      const outsideVerticalComfort = relTop < linePad || relBottom > paneHeight - linePad;
+      const outsideHorizontalComfort = relLeft < colPad || relRight > paneWidth - colPad;
+      if (outsideVerticalComfort) nextTop = viewTop + targetCenterY - paneHeight / 2;
+      if (outsideHorizontalComfort) nextLeft = viewLeft + targetCenterX - paneWidth / 2;
+    } else {
+      if (relTop < linePad) {
+        nextTop = viewTop + (relTop - linePad);
+      } else if (relBottom > paneHeight - linePad) {
+        nextTop = viewTop + (relBottom - (paneHeight - linePad));
+      }
+      if (relLeft < colPad) {
+        nextLeft = viewLeft + (relLeft - colPad);
+      } else if (relRight > paneWidth - colPad) {
+        nextLeft = viewLeft + (relRight - (paneWidth - colPad));
+      }
     }
-    if (relLeft < colPad) {
-      nextLeft = viewLeft + (relLeft - colPad);
-    } else if (relRight > renderPane.clientWidth - colPad) {
-      nextLeft = viewLeft + (relRight - (renderPane.clientWidth - colPad));
-    }
-    const maxTop = Math.max(0, renderPane.scrollHeight - renderPane.clientHeight);
-    const maxLeft = Math.max(0, renderPane.scrollWidth - renderPane.clientWidth);
+    const maxTop = Math.max(0, renderPane.scrollHeight - paneHeight);
+    const maxLeft = Math.max(0, renderPane.scrollWidth - paneWidth);
     renderPane.scrollTop = Math.max(0, Math.min(maxTop, nextTop));
     renderPane.scrollLeft = Math.max(0, Math.min(maxLeft, nextLeft));
   }

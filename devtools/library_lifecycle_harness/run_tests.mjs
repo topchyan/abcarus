@@ -130,4 +130,96 @@ const { createLibraryLifecycleController } = await importRendererModule(
   assert.equal(renders, 1, "selecting a tune must refresh Library ordering");
 }
 
+{
+  const selected = [];
+  const libraryIndex = {
+    root: "/music",
+    files: [{
+      path: "/music/a.abc",
+      tunes: [
+        { id: "/music/a.abc::0", tuneUid: "a-1", startOffset: 0, xNumber: "1", title: "First" },
+        { id: "/music/a.abc::20", tuneUid: "a-2", startOffset: 20, xNumber: "2", title: "Second" },
+      ],
+    }],
+  };
+  const controller = createLibraryLifecycleController({
+    api: {
+      getRecentCandidates: async () => [{
+        type: "tune",
+        entry: {
+          path: "/music/a.abc",
+          xNumber: "2",
+          title: "Second",
+          startOffset: 20,
+          endOffset: 40,
+        },
+      }],
+    },
+    state: { getLibraryIndex: () => libraryIndex },
+    actions: {
+      pathsEqual: (left, right) => left === right,
+      readFile: async () => ({ ok: true, data: "X:1\nT:First\nK:C\nC |\n" }),
+      setActiveTuneMeta: (metadata) => { selected.push(metadata.tuneUid); },
+      safeBasename: (value) => String(value || "").split("/").pop(),
+      safeDirname: (value) => String(value || "").replace(/\/[^/]*$/, ""),
+    },
+  });
+
+  const result = await controller.loadLibraryFileIntoEditor("/music/a.abc");
+  assert.equal(result.ok, true);
+  assert.deepEqual(selected, ["a-2"], "reopening a file must restore its latest selected tune");
+}
+
+{
+  const tuneText = "X:2\nT:Chosen from Recent\nK:C\nC D E F |\n";
+  const recentWrites = [];
+  const libraryIndex = {
+    root: "/music",
+    files: [{
+      path: "/music/a.abc",
+      basename: "a.abc",
+      tunes: [{
+        id: "/music/a.abc::0",
+        tuneUid: "a-2",
+        startOffset: 0,
+        endOffset: tuneText.length,
+        xNumber: "2",
+        title: "Chosen from Recent",
+      }],
+    }],
+  };
+  const controller = createLibraryLifecycleController({
+    api: {
+      addRecentTune: async (entry) => { recentWrites.push(entry); },
+    },
+    state: { getLibraryIndex: () => libraryIndex },
+    actions: {
+      pathsEqual: (left, right) => left === right,
+      readFile: async () => ({ ok: true, data: tuneText }),
+      safeBasename: (value) => String(value || "").split("/").pop(),
+      safeDirname: (value) => String(value || "").replace(/\/[^/]*$/, ""),
+    },
+  });
+  const entry = {
+    path: "/music/a.abc",
+    startOffset: 0,
+    endOffset: tuneText.length,
+    xNumber: "2",
+    title: "Chosen from Recent",
+  };
+
+  assert.equal((await controller.openRecentTune(entry)).ok, true);
+  assert.equal(recentWrites.length, 1, "a user-selected recent tune must become the latest tune");
+  assert.equal((await controller.openRecentTune(entry, { suppressRecent: true })).ok, true);
+  assert.equal(recentWrites.length, 1, "startup restoration must not rewrite recent tune order");
+
+  const staleResult = await controller.openRecentTune({
+    ...entry,
+    xNumber: "999",
+    title: "Removed tune",
+  });
+  assert.equal(staleResult.ok, false, "a stale recent entry must not silently open the first tune");
+  assert.equal(recentWrites.length, 1);
+}
+
 console.log("library lifecycle harness: all tests passed");
