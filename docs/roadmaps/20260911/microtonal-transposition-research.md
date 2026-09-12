@@ -385,9 +385,9 @@ report or a developer-side corpus runner, never as a silent editor rewrite.
 
 The following two independently maintained ABC tunes represent the same work:
 
-- `/home/avetik/Projects/ABC/abc/makams.abc`, `X:1566`, generated from SymbTr
+- `makams.abc`, `X:1566`, generated from SymbTr
   and written in the file's Bolahenk convention;
-- `/home/avetik/Projects/ABC/abc/Ara_Dinkjian_etc.abc`, `X:52`, an Ara Dinkjian
+- `Ara_Dinkjian_etc.abc`, `X:52`, an Ara Dinkjian
   working version written in concert notation.
 
 The opening maps regularly by a diatonic fourth downward: `D -> A, G -> D,
