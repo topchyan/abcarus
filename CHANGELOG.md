@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Internal microtonal research notes are kept outside the public documentation and release deliverables.
 
 
 ## [1.10.4] - 2026-09-12
