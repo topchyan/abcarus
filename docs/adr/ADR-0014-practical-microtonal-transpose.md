@@ -5,8 +5,8 @@ Status: Superseded for future development (2026-09-11)
 
 The implementation described here remains historical context for the current
 code, but its European-semitone and inferred-finalis model is no longer the
-target design. It is superseded by the tonic/perde/Ahenk-oriented direction in
-`docs/roadmaps/20260911/microtonal-transposition-research.md`.
+target design. It is superseded by the tonic/perde/Ahenk-oriented direction
+recorded during internal research.
 
 Do not extend the existing 4/5-comma heuristic. Preserve current behavior until
 the replacement has a verified reference corpus and can be introduced without

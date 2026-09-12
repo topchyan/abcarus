@@ -3,8 +3,8 @@
 > Research warning (2026-09-11): production transpose and the isolated 53-EDO
 > truth-scale harness currently use incompatible enharmonic maps. Passing tests
 > do not resolve that conflict because the harnesses validate their own models.
-> Do not extend the 4/5-comma semitone heuristic before reviewing
-> `docs/roadmaps/20260911/microtonal-transposition-research.md`.
+> Do not extend the 4/5-comma semitone heuristic without a verified reference
+> corpus and an explicit pitch model.
 
 ## Current status in the app
 Semitone transposition is implemented as a native JS transform:
@@ -35,9 +35,7 @@ The converter currently:
 - refuses input without `%%MIDI temperamentequal 53`.
 
 This is a literal notation-frame conversion, not a general makam transposer or
-an Arabic-notation adaptation. Output still requires musical review. The
-research basis and acceptance corpus are recorded in
-`docs/roadmaps/20260911/microtonal-transposition-research.md`.
+an Arabic-notation adaptation. Output still requires musical review.
 
 ### Length encoding versus rhythmic notation
 
