@@ -1909,7 +1909,6 @@ function applySettingsPatch(patch) {
   next.editorNotesBold = Boolean(next.editorNotesBold);
   next.editorLyricsBold = Boolean(next.editorLyricsBold);
   next.confirmAppendToActiveFile = Boolean(next.confirmAppendToActiveFile);
-  next.autoAlignBarsAfterTransforms = Boolean(next.autoAlignBarsAfterTransforms);
   normalizeConversionToolSettings(next);
   next.stripImportedMeasureComments = Boolean(next.stripImportedMeasureComments);
   next.autoFormatImportedAbc = Boolean(next.autoFormatImportedAbc);

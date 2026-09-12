@@ -59,14 +59,20 @@ let expandCalls = 0;
 let collapseCalls = 0;
 const reorderCalls = [];
 let generateSkeletonCalls = 0;
+const clipboardWrites = [];
 const contextTunes = [
-  { id: "/music/a.abc::0" },
-  { id: "/music/a.abc::1" },
-  { id: "/music/a.abc::2" },
+  { id: "/music/a.abc::0", xNumber: "41" },
+  { id: "/music/a.abc::1", xNumber: "52" },
+  { id: "/music/a.abc::2", xNumber: "63" },
 ];
 const contextMenu = createLibraryContextMenu({
   documentRef,
   windowRef,
+  navigatorRef: {
+    clipboard: {
+      writeText: async (value) => { clipboardWrites.push(value); },
+    },
+  },
   expandAllLibrary: () => { expandCalls += 1; },
   collapseAllLibrary: () => { collapseCalls += 1; },
   findTuneById: (tuneId) => ({
@@ -110,6 +116,10 @@ assert.equal(collapseCalls, 1);
 contextMenu.show(10, 10, { type: "editor" });
 await clickAction("editorGenerateBlankVoiceSkeleton");
 assert.equal(generateSkeletonCalls, 1, "editor context menu must expose voice skeleton generation");
+
+contextMenu.show(10, 10, { type: "tune", tuneId: "/music/a.abc::1" });
+await clickAction("copyTuneReference");
+assert.deepEqual(clipboardWrites, ["/music/a.abc X:52"]);
 
 contextMenu.show(10, 10, { type: "tune", tuneId: "/music/a.abc::1" });
 await clickAction("moveTuneUp");

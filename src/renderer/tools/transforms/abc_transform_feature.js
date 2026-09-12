@@ -12,36 +12,7 @@ import {
   transformAbcUnitScaling,
 } from "../../abc/text_transforms.js";
 import { analyzeLyricFitInText } from "../../abc/lyric_fit.js";
-
-function prepareTurkishNotationFor12Edo(text) {
-  const originalTemperamentLines = [];
-  const preparedText = String(text || "").replace(
-    /^(\s*%%\s*MIDI\s+temperamentequal\s+)53(\s*)$/gmi,
-    (line, prefix, suffix) => {
-      originalTemperamentLines.push(line);
-      return `${prefix}12${suffix}`;
-    },
-  );
-  return {
-    text: preparedText,
-    restoreTemperament(transformed) {
-      let index = 0;
-      return String(transformed || "").replace(
-        /^(\s*%%\s*MIDI\s+temperamentequal\s+)12(\s*)$/gmi,
-        (line) => originalTemperamentLines[index++] || line,
-      );
-    },
-  };
-}
-
-function rewriteTurkishKeySignature(text, direction) {
-  const toConcert = direction === "toConcert";
-  const from = toConcert ? "_2B" : "^2f";
-  const to = toConcert ? "^2f" : "_2B";
-  const escapedFrom = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(`^(\\s*K:[^\\n]*?)${escapedFrom}\\b`, "gmi");
-  return String(text || "").replace(pattern, (_line, prefix) => `${prefix}${to}`);
-}
+import { transformTurkishNotation53 } from "./turkish_notation_transform.mjs";
 
 function createAbcTransformFeature({
   windowRef = typeof window !== "undefined" ? window : null,
@@ -98,57 +69,66 @@ function createAbcTransformFeature({
       await showTransformError("Choose either double or half note lengths, not both.");
       return;
     }
+    const mertebe = String(options.mertebe || "");
+    if (mertebe && mertebe !== "augment" && mertebe !== "diminish") {
+      await showTransformError("Unknown rhythmic notation transform.");
+      setStatus("Error");
+      return;
+    }
+
+    const settings = getSettings() || {};
+    const alignAfterTransform = (text) => alignBarsInText(text);
 
     const turkish = options.turkishNotation;
     const turkishDirection = turkish && typeof turkish === "object"
       ? String(turkish.direction || "")
       : "";
     if (turkishDirection === "toConcert" || turkishDirection === "toBolahenk") {
-      const toConcert = turkishDirection === "toConcert";
-      const pitchSteps = toConcert ? -5 : 5;
-      let transformed = transformAbcUnitScaling(abcText, toConcert ? 2 : 0.5);
-      const twelveEdoText = prepareTurkishNotationFor12Edo(transformed);
-      transformed = twelveEdoText.text;
-      const headerText = prepareTurkishNotationFor12Edo(getHeaderText()).text;
-      const support = getNativeTransposeSupport(transformed, { headerText });
-      if (!support.ok) {
-        await showTransformError(support.reason || "Turkish notation macro cannot transpose this tune.");
+      resetTransposePreview();
+      const enabled = Boolean(
+        settings.supportMicrotonalNotation
+        || settings.makamToolsEnabled
+        || settings.studyToolsEnabled
+      );
+      if (!enabled) {
+        await showTransformError("Enable Support microtonal notation in Settings to use this experimental converter.");
         setStatus("Error");
         return;
       }
       try {
-        transformed = transformTranspose(transformed, pitchSteps, { headerText, prefer: "sharp" });
-        transformed = rewriteTurkishKeySignature(transformed, turkishDirection);
-        transformed = twelveEdoText.restoreTemperament(transformed);
-        const lines = transformed.split(/\r\n|\n|\r/);
-        let foundVoice = false;
-        transformed = lines.map((line) => {
-          if (!/^\s*V\s*:/i.test(line)) return line;
-          foundVoice = true;
-          if (toConcert) return line.replace(/\s+transpose\s*=\s*-17\b/gi, "").replace(/[ \t]+$/, "");
-          if (/\btranspose\s*=/i.test(line)) return line;
-          return `${line} transpose=-17`;
-        }).join("\n");
-        if (!toConcert && !foundVoice) {
-          const keyIndex = lines.findIndex((line) => /^\s*K\s*:/i.test(line));
-          const voiceLine = "V:1 transpose=-17";
-          const outputLines = transformed.split(/\r\n|\n|\r/);
-          outputLines.splice(keyIndex >= 0 ? keyIndex + 1 : 0, 0, voiceLine);
-          transformed = outputLines.join("\n");
-        }
-        applyTransformedText(transformed);
-        setStatus("OK");
+        const transformed = transformTurkishNotation53(abcText, turkishDirection, {
+          headerText: getHeaderText(),
+        });
+        applyTransformedText(alignAfterTransform(transformed));
+        setStatus("Converted (experimental)");
         return;
       } catch (e) {
-        logError(`Turkish notation macro failed.\n\n${(e && e.stack) ? e.stack : String(e)}`);
-        await showTransformError("Turkish notation macro failed.");
+        logError(`Bolahenk/concert conversion failed.\n\n${(e && e.stack) ? e.stack : String(e)}`);
+        await showTransformError((e && e.message) ? e.message : "Bolahenk/concert conversion failed.");
         setStatus("Error");
         return;
       }
     }
 
-    const settings = getSettings() || {};
-    const autoAlign = Boolean(settings && settings.autoAlignBarsAfterTransforms);
+    if (mertebe) {
+      resetTransposePreview();
+      const combined = options.doubleLengths
+        || options.halfLengths
+        || options.transposeSemitones != null
+        || options.measuresPerLine
+        || options.linebreakMarker
+        || options.voice
+        || options.renumberX != null;
+      if (combined) {
+        await showTransformError("Apply rhythmic notation changes separately from other transforms.");
+        setStatus("Error");
+        return;
+      }
+      const transformed = transformAbcUnitScaling(abcText, mertebe === "augment" ? 2 : 0.5);
+      applyTransformedText(alignAfterTransform(transformed));
+      setStatus(mertebe === "augment" ? "Rhythmic values augmented" : "Rhythmic values diminished");
+      return;
+    }
     const hasOnlyLengthTransform = (options.doubleLengths || options.halfLengths)
       && options.transposeSemitones == null
       && !options.measuresPerLine
@@ -156,9 +136,9 @@ function createAbcTransformFeature({
       && !options.voice
       && options.renumberX == null;
     if (hasOnlyLengthTransform) {
+      resetTransposePreview();
       const mode = options.doubleLengths ? "double" : "half";
-      let transformed = transformLengthScaling(abcText, mode);
-      if (autoAlign) transformed = alignBarsInText(transformed);
+      const transformed = alignAfterTransform(transformLengthScaling(abcText, mode));
       applyTransformedText(transformed);
       setStatus("OK");
       return;
@@ -172,6 +152,7 @@ function createAbcTransformFeature({
       && !options.doubleLengths
       && !options.halfLengths;
     if (hasOnlyMeasuresPerLine) {
+      resetTransposePreview();
       let transformed = transformMeasuresPerLine(abcText, options.measuresPerLine);
       transformed = normalizeMeasuresLineBreaks(transformed);
       transformed = alignBarsInText(transformed);
@@ -189,12 +170,11 @@ function createAbcTransformFeature({
       && !options.doubleLengths
       && !options.halfLengths;
     if (hasOnlyLinebreakMarker) {
+      resetTransposePreview();
       let transformed = transformMeasuresByLinebreakMarker(abcText);
       transformed = normalizeMeasuresLineBreaks(transformed);
-      if (autoAlign) {
-        transformed = alignBarsInText(transformed);
-        transformed = normalizeMeasuresLineBreaks(transformed);
-      }
+      transformed = alignAfterTransform(transformed);
+      transformed = normalizeMeasuresLineBreaks(transformed);
       applyTransformedText(transformed);
       setStatus("OK");
       return;
@@ -226,7 +206,7 @@ function createAbcTransformFeature({
           const transformed = nextDelta === 0
             ? preview.baseText
             : transformTranspose(preview.baseText, nextDelta, { headerText });
-          const aligned = autoAlign ? alignBarsInText(transformed) : transformed;
+          const aligned = alignAfterTransform(transformed);
           setTransposePreview(preview.baseText, headerText, nextDelta);
           applyTransformedText(aligned, { resetTransposePreview: false });
           setStatus("OK");
@@ -252,6 +232,7 @@ function createAbcTransformFeature({
       setStatus("Already aligned.");
       return;
     }
+    resetTransposePreview();
     applyTransformedText(aligned);
     setStatus("OK");
   }

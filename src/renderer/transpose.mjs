@@ -2398,7 +2398,7 @@ function isChordLikeText(text) {
   return false;
 }
 
-function transposeChordText(chordText, semitones, preferDefault) {
+export function transposeChordText(chordText, semitones, preferDefault) {
   const raw = String(chordText || "");
   const trimmed = raw.trim();
   if (!trimmed) return raw;

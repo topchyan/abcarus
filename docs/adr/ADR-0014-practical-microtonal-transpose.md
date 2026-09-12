@@ -1,7 +1,16 @@
 ADR-0014 - Practical Microtonal Transpose
 
 Date: 2026-04-25
-Status: Accepted
+Status: Superseded for future development (2026-09-11)
+
+The implementation described here remains historical context for the current
+code, but its European-semitone and inferred-finalis model is no longer the
+target design. It is superseded by the tonic/perde/Ahenk-oriented direction in
+`docs/roadmaps/20260911/microtonal-transposition-research.md`.
+
+Do not extend the existing 4/5-comma heuristic. Preserve current behavior until
+the replacement has a verified reference corpus and can be introduced without
+silently rewriting ambiguous notation.
 
 ## Context
 

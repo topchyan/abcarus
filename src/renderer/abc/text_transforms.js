@@ -228,35 +228,74 @@ function transformTempoScaling(text, factor) {
     .join("\n");
 }
 
-function scaleAbcUnitDenominator(line, factor) {
+function scaleAbcFractionDenominator(text, factor) {
   const numericFactor = Number(factor);
-  if (!Number.isFinite(numericFactor) || numericFactor <= 0) return line;
-  const scale = (num, den) => {
-    const nextDen = den / numericFactor;
-    if (!Number.isInteger(nextDen) || nextDen <= 0) return null;
+  if (!Number.isFinite(numericFactor) || numericFactor <= 0) return String(text || "");
+  return String(text || "").replace(/(\d+)\s*\/\s*(\d+)/g, (all, num, den) => {
+    const nextDen = Number(den) / numericFactor;
+    if (!Number.isInteger(nextDen) || nextDen <= 0) return all;
     return `${num}/${nextDen}`;
-  };
-  let match = String(line || "").match(/^(\s*M:\s*)(\d+)\s*\/\s*(\d+)(\s*)$/);
-  if (match) {
-    const value = scale(Number(match[2]), Number(match[3]));
-    return value ? `${match[1]}${value}${match[4]}` : line;
-  }
-  match = String(line || "").match(/^(\s*L:\s*)(\d+)\s*\/\s*(\d+)(\s*)$/);
-  if (match) {
-    const value = scale(Number(match[2]), Number(match[3]));
-    return value ? `${match[1]}${value}${match[4]}` : line;
-  }
-  return String(line || "").replace(/^(\s*Q:\s*)(\d+)\s*\/\s*(\d+)/, (_all, prefix, num, den) => {
-    const value = scale(Number(num), Number(den));
-    return value ? `${prefix}${value}` : _all;
   });
+}
+
+function scaleAbcUnitFieldBody(tag, body, factor) {
+  const field = String(tag || "").toUpperCase();
+  const source = String(body || "");
+  if (field === "M" || field === "L") {
+    return source.replace(/^(\s*)(\d+\s*\/\s*\d+)/, (_all, leading, fraction) => (
+      leading + scaleAbcFractionDenominator(fraction, factor)
+    ));
+  }
+  if (field === "Q") {
+    const equalsIndex = source.indexOf("=");
+    if (equalsIndex < 0) return source;
+    return scaleAbcFractionDenominator(source.slice(0, equalsIndex), factor) + source.slice(equalsIndex);
+  }
+  return source;
+}
+
+function scaleInlineAbcUnitFields(line, factor) {
+  const source = String(line || "");
+  let output = "";
+  let index = 0;
+  let inQuote = false;
+  while (index < source.length) {
+    const ch = source[index];
+    if (ch === "\"") {
+      inQuote = !inQuote;
+      output += ch;
+      index += 1;
+      continue;
+    }
+    if (!inQuote && ch === "%") {
+      output += source.slice(index);
+      break;
+    }
+    const field = !inQuote ? source.slice(index).match(/^\[([MLQ]):([^\]]*)\]/i) : null;
+    if (field) {
+      output += `[${field[1]}:${scaleAbcUnitFieldBody(field[1], field[2], factor)}]`;
+      index += field[0].length;
+      continue;
+    }
+    output += ch;
+    index += 1;
+  }
+  return output;
 }
 
 function transformAbcUnitScaling(text, factor) {
   return String(text || "")
-    .split(/\r\n|\n|\r/)
-    .map((line) => scaleAbcUnitDenominator(line, factor))
-    .join("\n");
+    .split(/(\r\n|\n|\r)/)
+    .map((line) => {
+      if (/^(?:\r\n|\n|\r)$/.test(line)) return line;
+      const field = String(line || "").match(/^(\s*)([MLQ]):([\s\S]*)$/i);
+      if (field) {
+        return `${field[1]}${field[2]}:${scaleAbcUnitFieldBody(field[2], field[3], factor)}`;
+      }
+      if (/^\s*(?:%|[wW]:)/.test(line)) return line;
+      return scaleInlineAbcUnitFields(line, factor);
+    })
+    .join("");
 }
 
 function ensureCopyTitleInAbc(abcText) {

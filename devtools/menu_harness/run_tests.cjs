@@ -60,10 +60,36 @@ assert(labels(fileMenu).includes("Print Active Set List…"));
 assert(!labels(toolsMenu).includes("Set List"));
 assert(labels(toolsMenu).includes("ABC Helpers…"));
 assert(labels(toolsMenu).includes("Update YouTube Metadata (Active File)…"));
+assert(labels(toolsMenu).includes("Rhythmic Notation (Mertebe)"));
+assert(!labels(toolsMenu).includes("Bolahenk / Concert (Experimental)"));
 assert(!labels(editMenu).includes("ABC Helpers…"));
 assert(labels(playMenu).includes("Stop"));
 assert(labels(playMenu).includes("Reset View") === false);
 assert(labels(viewMenu).includes("Reset View"));
+
+const mertebeMenu = findItem(toolsMenu, "Rhythmic Notation (Mertebe)");
+assert.deepEqual(labels(mertebeMenu), [
+  "Augment ×2 (Eighth → Quarter)",
+  "Diminish ×2 (Quarter → Eighth)",
+]);
+assert.equal(mertebeMenu.submenu[0].accelerator, "CmdOrCtrl+Shift+PageUp");
+assert.equal(mertebeMenu.submenu[1].accelerator, "CmdOrCtrl+Shift+PageDown");
+
+const experimentalTemplate = buildMenuTemplate({
+  name: "ABCarus",
+  recentFolders: [],
+  recentFiles: [],
+  recentTunes: [],
+  settings: { supportMicrotonalNotation: true },
+  debugFlags: {},
+}, () => {});
+const experimentalTools = experimentalTemplate.find((entry) => entry.label === "Tools");
+const notationConverter = experimentalTools.submenu.find((item) => item.label === "Bolahenk / Concert (Experimental)");
+assert(notationConverter);
+assert.deepEqual(labels(notationConverter), [
+  "Convert Bolahenk to Concert",
+  "Convert Concert to Bolahenk",
+]);
 
 const playOptions = findItem(playMenu, "Options");
 const loopSelection = findItem(playOptions, "Loop Selection");

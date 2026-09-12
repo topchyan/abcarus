@@ -51,6 +51,8 @@ const RAW_BLOCKED_ACTIONS = new Set([
   "transformTransposeDown",
   "transformDouble",
   "transformHalf",
+  "transformMertebeAugment",
+  "transformMertebeDiminish",
   "transformTurkishToConcert",
   "transformTurkishToBolahenk",
   "transformMeasures",
@@ -73,7 +75,6 @@ const RAW_BLOCKED_ACTIONS = new Set([
   "templatesModal",
   "abcHelpers",
   "libraryMetadata",
-  "revertToDisk",
 ]);
 
 const RAW_NEEDS_EXIT_LABELS = {
@@ -86,7 +87,6 @@ const RAW_NEEDS_EXIT_LABELS = {
   openRecentFile: "opening a recent file",
   openRecentFolder: "opening a recent folder",
   templatesModal: "opening templates",
-  revertToDisk: "reverting to disk",
   close: "closing this file",
   quit: "quitting",
 };
@@ -288,6 +288,12 @@ function createMenuActionsController({
     else if (actionType === "transformTransposeDown") await actions.applyAbc2abcTransform({ transposeSemitones: -1 });
     else if (actionType === "transformDouble") await actions.applyAbc2abcTransform({ doubleLengths: true });
     else if (actionType === "transformHalf") await actions.applyAbc2abcTransform({ halfLengths: true });
+    else if (actionType === "transformMertebeAugment") {
+      await actions.applyAbc2abcTransform({ mertebe: "augment" });
+    }
+    else if (actionType === "transformMertebeDiminish") {
+      await actions.applyAbc2abcTransform({ mertebe: "diminish" });
+    }
     else if (actionType === "transformTurkishToConcert") {
       await actions.applyAbc2abcTransform({ turkishNotation: { direction: "toConcert" } });
     }

@@ -21,6 +21,9 @@ async function importBundledModule(filePath) {
 const { createEditorRuntime } = await importBundledModule(
   "src/renderer/editor/editor_runtime.js",
 );
+const { createEditStateController } = await importBundledModule(
+  "src/renderer/app/document/edit_state_controller.js",
+);
 
 const dispatched = [];
 const doc = {
@@ -92,5 +95,29 @@ assert.doesNotMatch(rendererSource, /\blet\s+editorView\b/);
 assert.doesNotMatch(rendererSource, /\blet\s+suppressDirty\b/);
 assert.doesNotMatch(rendererSource, /\bcreateMainEditorFeature\s*\(/);
 assert.match(rendererSource, /createEditorRuntime\s*\(/);
+
+const cancelButton = { disabled: true };
+let headerDirty = false;
+let currentDoc = { dirty: false };
+const editState = createEditStateController({
+  elements: { cancelButton },
+  state: { getCurrentDoc: () => currentDoc, getHeaderDirty: () => headerDirty },
+});
+editState.setDirtyIndicator(false);
+assert.equal(cancelButton.disabled, true, "Cancel must be disabled for a clean document");
+editState.setDirtyIndicator(true);
+assert.equal(cancelButton.disabled, false, "Tune edits must enable Cancel");
+headerDirty = true;
+editState.setDirtyIndicator(false);
+assert.equal(cancelButton.disabled, false, "Header edits must enable Cancel");
+headerDirty = false;
+editState.setDirtyIndicator(false);
+assert.equal(cancelButton.disabled, true, "Restoring clean state must disable Cancel");
+currentDoc = { dirty: true };
+editState.setDirtyIndicator(false);
+assert.equal(cancelButton.disabled, false, "Dirty editor must keep Cancel enabled even after a stale clean update");
+currentDoc = { dirty: false };
+editState.setDirtyIndicator(false);
+assert.equal(cancelButton.disabled, true, "Clean editor must disable Cancel");
 
 console.log("editor runtime harness: all tests passed");

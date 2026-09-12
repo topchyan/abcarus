@@ -2353,6 +2353,26 @@ body.focus-mode .workspace-statusbar .cursor-status {
   display: none !important;
 }
 
+.library-rich-tooltip {
+  position: fixed;
+  z-index: 10000;
+  max-width: min(420px, calc(100vw - 16px));
+  padding: 7px 9px;
+  border: 1px solid #b9b9b9;
+  border-radius: 4px;
+  background: #fff;
+  color: #202020;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
+  font-size: var(--font-size-sm);
+  line-height: 1.35;
+  white-space: pre-wrap;
+  pointer-events: none;
+}
+
+.library-rich-tooltip[hidden] {
+  display: none;
+}
+
 .errors-indicator{
   font-size: var(--font-size-xs);
   padding: 2px 10px;

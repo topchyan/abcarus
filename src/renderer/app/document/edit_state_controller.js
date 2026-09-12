@@ -6,6 +6,7 @@ function createEditStateController({
 } = {}) {
   const {
     dirtyIndicator = null,
+    cancelButton = null,
     libraryTree = null,
   } = elements;
 
@@ -48,9 +49,19 @@ function createEditStateController({
   }
 
   function setDirtyIndicator(isDirty) {
-    if (!dirtyIndicator) return;
-    const tuneDirty = Boolean(isDirty);
+    // Callers may report a clean transition before the editor state callback
+    // has caught up. The document itself is the source of truth for Cancel.
+    const currentDoc = getCurrentDoc();
+    const tuneDirty = Boolean(isDirty) || Boolean(currentDoc && currentDoc.dirty);
     const hdrDirty = Boolean(getHeaderDirty());
+    const hasUnsaved = tuneDirty || hdrDirty;
+    if (cancelButton) cancelButton.disabled = !hasUnsaved;
+    if (!dirtyIndicator) {
+      updateLibraryDirtyState(hasUnsaved);
+      updateWindowTitle();
+      renderUnifiedStatus();
+      return;
+    }
     if (getRawMode()) {
       if (hdrDirty) {
         dirtyIndicator.textContent = "Header: Unsaved";
@@ -59,7 +70,7 @@ function createEditStateController({
         dirtyIndicator.textContent = "";
         dirtyIndicator.classList.remove("active");
       }
-      updateLibraryDirtyState(tuneDirty || hdrDirty);
+      updateLibraryDirtyState(hasUnsaved);
       updateWindowTitle();
       renderUnifiedStatus();
       return;
@@ -72,7 +83,7 @@ function createEditStateController({
       dirtyIndicator.textContent = "";
       dirtyIndicator.classList.remove("active");
     }
-    updateLibraryDirtyState(tuneDirty || hdrDirty);
+    updateLibraryDirtyState(hasUnsaved);
     updateWindowTitle();
     renderUnifiedStatus();
   }

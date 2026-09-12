@@ -1,6 +1,107 @@
 const LIBRARY_TUNE_DRAG_MIME = "application/x-abcarus-tune-id";
 const LIBRARY_CATEGORY_DRAG_MIME = "application/x-abcarus-library-category";
 
+function libraryPathBasename(filePath) {
+  return String(filePath || "").split(/[\\/]/).pop() || "";
+}
+
+function appendTooltipField(lines, label, value) {
+  const text = String(value == null ? "" : value).trim();
+  if (text) lines.push(`${label}: ${text}`);
+}
+
+function formatLibraryDate(timestamp) {
+  const date = new Date(Number(timestamp));
+  if (!Number.isFinite(date.getTime())) return "";
+  return date.toLocaleDateString();
+}
+
+function buildFileTooltip(entry, getEntryTuneCount) {
+  const lines = [entry.label || "File"];
+  appendTooltipField(lines, "Path", entry.id);
+  appendTooltipField(lines, "Tunes", getEntryTuneCount(entry));
+  appendTooltipField(lines, "Updated", formatLibraryDate(entry.updatedAtMs));
+  if (entry.xIssues && entry.xIssues.ok === false) {
+    const issues = [];
+    if (entry.xIssues.invalid) issues.push(`invalid X: ${entry.xIssues.invalid}`);
+    if (entry.xIssues.missing) issues.push(`missing X: ${entry.xIssues.missing}`);
+    if (entry.xIssues.duplicates) issues.push("duplicate X");
+    appendTooltipField(lines, "Index issue", issues.join(", "));
+  }
+  return lines.join("\n");
+}
+
+function buildGroupTooltip(entry, getEntryTuneCount) {
+  const lines = [entry.label || "Group"];
+  appendTooltipField(lines, "Tunes", getEntryTuneCount(entry));
+  const files = new Map();
+  for (const tune of entry.tunes || []) {
+    const path = String(tune && (tune.filePath || tune.path) || "").trim();
+    if (!path) continue;
+    const label = libraryPathBasename(path) || path;
+    const existing = files.get(path);
+    files.set(path, { label, count: existing ? existing.count + 1 : 1 });
+  }
+  if (files.size) {
+    lines.push("Files:");
+    for (const { label, count } of files.values()) {
+      lines.push(`  ${label}${count > 1 ? ` (${count})` : ""}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+function buildTuneTooltip(tune, tuneLabel, fallbackFilePath = "") {
+  const lines = [tuneLabel || "Tune"];
+  appendTooltipField(lines, "File", libraryPathBasename(tune && (tune.filePath || tune.path) || fallbackFilePath));
+  appendTooltipField(lines, "X", tune && tune.xNumber);
+  appendTooltipField(lines, "Title", tune && (tune.title || tune.preview));
+  appendTooltipField(lines, "Composer", tune && (tune.composer || (Array.isArray(tune.composers) ? tune.composers.join(", ") : "")));
+  appendTooltipField(lines, "Key", tune && tune.key);
+  appendTooltipField(lines, "Meter", tune && tune.meter);
+  appendTooltipField(lines, "Unit", tune && tune.unitLength);
+  appendTooltipField(lines, "Tempo", tune && tune.tempo);
+  appendTooltipField(lines, "Rhythm", tune && tune.rhythm);
+  appendTooltipField(lines, "Source", tune && tune.source);
+  appendTooltipField(lines, "Origin", tune && tune.origin);
+  appendTooltipField(lines, "Group", tune && (Array.isArray(tune.groups) ? tune.groups.join(", ") : tune.group));
+  return lines.join("\n");
+}
+
+function createLibraryTooltip(documentRef) {
+  if (!documentRef || !documentRef.body) return null;
+  const tooltip = documentRef.createElement("div");
+  tooltip.className = "library-rich-tooltip";
+  tooltip.setAttribute("role", "tooltip");
+  tooltip.hidden = true;
+  documentRef.body.appendChild(tooltip);
+  return tooltip;
+}
+
+function setLibraryTooltipContent(tooltip, text) {
+  if (!tooltip) return;
+  tooltip.textContent = "";
+  const lines = String(text || "").split("\n").slice(1);
+  let inFileList = false;
+  for (const line of lines) {
+    const row = tooltip.ownerDocument.createElement("div");
+    const trimmed = line.trim();
+    if (trimmed === "Files:") inFileList = true;
+    if (trimmed.startsWith("File: ")) {
+      const label = tooltip.ownerDocument.createElement("strong");
+      label.textContent = "File: ";
+      row.append(label, trimmed.slice("File: ".length));
+    } else if (inFileList && trimmed) {
+      const label = tooltip.ownerDocument.createElement("strong");
+      label.textContent = trimmed;
+      row.append(label);
+    } else {
+      row.textContent = line;
+    }
+    tooltip.appendChild(row);
+  }
+}
+
 function createLibraryTreeView({
   documentRef = typeof document !== "undefined" ? document : null,
   windowRef = typeof window !== "undefined" ? window : null,
@@ -15,6 +116,7 @@ function createLibraryTreeView({
   sortGroupEntries = (entries) => entries,
   sortTunes = (tunes) => tunes,
   getEntryTuneCount = () => 0,
+  isRichTooltipEnabled = () => true,
   getRenamingFilePath = () => "",
   setRenamingFilePath = () => {},
   getActiveFilePath = () => "",
@@ -43,6 +145,32 @@ function createLibraryTreeView({
   let pendingRenderFiles = null;
   let dragTuneId = "";
   let dragCategory = null;
+  const richTooltip = createLibraryTooltip(documentRef);
+
+  function showRichTooltip(target, text) {
+    if (!isRichTooltipEnabled() || !richTooltip || !target || !text) return;
+    setLibraryTooltipContent(richTooltip, text);
+    richTooltip.hidden = false;
+    const rect = typeof target.getBoundingClientRect === "function"
+      ? target.getBoundingClientRect()
+      : null;
+    if (!rect) return;
+    const gap = 6;
+    const width = richTooltip.offsetWidth || 280;
+    const height = richTooltip.offsetHeight || 40;
+    const viewportWidth = documentRef.documentElement ? documentRef.documentElement.clientWidth : width;
+    const viewportHeight = documentRef.documentElement ? documentRef.documentElement.clientHeight : height;
+    const left = Math.max(gap, Math.min(rect.left, viewportWidth - width - gap));
+    const top = rect.bottom + height + gap <= viewportHeight
+      ? rect.bottom + gap
+      : Math.max(gap, rect.top - height - gap);
+    richTooltip.style.left = `${left}px`;
+    richTooltip.style.top = `${top}px`;
+  }
+
+  function hideRichTooltip() {
+    if (richTooltip) richTooltip.hidden = true;
+  }
 
   function schedule(files = null) {
     pendingRenderFiles = files;
@@ -125,12 +253,10 @@ function createLibraryTreeView({
       if (entry.isFile && pathsEqual(getActiveFilePath(), entry.id)) fileNode.classList.add("active");
       if (entry.isFile && entry.xIssues && entry.xIssues.ok === false) {
         fileNode.classList.add("x-issues");
-        const parts = [];
-        if (entry.xIssues.invalid) parts.push(`invalid X: ${entry.xIssues.invalid}`);
-        if (entry.xIssues.missing) parts.push(`missing X: ${entry.xIssues.missing}`);
-        if (entry.xIssues.duplicates) parts.push("duplicate X");
-        if (parts.length) fileNode.title = `Index issue (${parts.join(", ")})`;
       }
+      const entryTooltip = entry.isFile
+        ? buildFileTooltip(entry, getEntryTuneCount)
+        : buildGroupTooltip(entry, getEntryTuneCount);
       const isCollapsed = entry.isFile
         ? collapsedFiles.has(entry.id)
         : collapsedGroups.has(entry.id);
@@ -167,14 +293,13 @@ function createLibraryTreeView({
         const labelText = documentRef.createElement("span");
         labelText.className = "tree-label-text";
         labelText.textContent = entry.label;
-        labelText.title = entry.label;
         const count = documentRef.createElement("span");
         count.className = "tree-count";
         count.textContent = String(getEntryTuneCount(entry) || 0);
         fileLabel.append(labelText, count);
         fileLabel.addEventListener("click", (ev) => {
           if (entry.isFile && ev && ev.detail && ev.detail > 1) return;
-          showHoverStatus(entry.label);
+          showHoverStatus(entryTooltip);
           if (entry.isFile) {
             const editorFilePath = getActiveEditorFilePath();
             if (!editorFilePath) setActiveFilePath(entry.id);
@@ -193,10 +318,23 @@ function createLibraryTreeView({
           ev.stopPropagation();
           requestLoadLibraryFile(entry.id).catch(() => {});
         });
-        fileLabel.addEventListener("mouseenter", () => showHoverStatus(entry.label));
-        fileLabel.addEventListener("mouseleave", () => restoreHoverStatus());
-        fileLabel.addEventListener("focus", () => showHoverStatus(entry.label));
-        fileLabel.addEventListener("blur", () => restoreHoverStatus());
+        fileLabel.setAttribute("aria-label", entryTooltip);
+        fileLabel.addEventListener("mouseenter", () => {
+          showHoverStatus(entryTooltip);
+          showRichTooltip(fileLabel, entryTooltip);
+        });
+        fileLabel.addEventListener("mouseleave", () => {
+          restoreHoverStatus();
+          hideRichTooltip();
+        });
+        fileLabel.addEventListener("focus", () => {
+          showHoverStatus(entryTooltip);
+          showRichTooltip(fileLabel, entryTooltip);
+        });
+        fileLabel.addEventListener("blur", () => {
+          restoreHoverStatus();
+          hideRichTooltip();
+        });
         fileLabel.addEventListener("contextmenu", (ev) => {
           if (!entry.isFile && !entry.categoryType) return;
           ev.preventDefault();
@@ -275,7 +413,8 @@ function createLibraryTreeView({
         const key = tune.key ? ` - ${tune.key}` : "";
         const tuneLabel = `${labelNumber}: ${title}${composer}${key}`.trim();
         button.textContent = tuneLabel;
-        button.title = tuneLabel;
+        const tuneTooltip = buildTuneTooltip(tune, tuneLabel, entry.isFile ? entry.id : "");
+        button.setAttribute("aria-label", tuneTooltip);
         button.dataset.tuneId = tune.id;
         if (tune.tuneUid) button.dataset.tuneUid = tune.tuneUid;
         const activeTuneUid = getActiveTuneUid();
@@ -283,10 +422,22 @@ function createLibraryTreeView({
         const isActiveByUid = Boolean(activeTuneUid && tune.tuneUid && tune.tuneUid === activeTuneUid);
         const isActiveById = Boolean(activeTuneId && tune.id && tune.id === activeTuneId);
         if (isActiveByUid || isActiveById) button.classList.add("active");
-        button.addEventListener("mouseenter", () => showHoverStatus(tuneLabel));
-        button.addEventListener("mouseleave", () => restoreHoverStatus());
-        button.addEventListener("focus", () => showHoverStatus(tuneLabel));
-        button.addEventListener("blur", () => restoreHoverStatus());
+        button.addEventListener("mouseenter", () => {
+          showHoverStatus(tuneTooltip);
+          showRichTooltip(button, tuneTooltip);
+        });
+        button.addEventListener("mouseleave", () => {
+          restoreHoverStatus();
+          hideRichTooltip();
+        });
+        button.addEventListener("focus", () => {
+          showHoverStatus(tuneTooltip);
+          showRichTooltip(button, tuneTooltip);
+        });
+        button.addEventListener("blur", () => {
+          restoreHoverStatus();
+          hideRichTooltip();
+        });
         button.addEventListener("dragstart", (ev) => {
           dragTuneId = tune.id;
           ev.dataTransfer.setData(LIBRARY_TUNE_DRAG_MIME, tune.id);
@@ -337,7 +488,7 @@ function createLibraryTreeView({
           showContextMenuAt(ev.clientX, ev.clientY, { type: "tune", tuneId: tune.id });
         });
         button.addEventListener("click", () => {
-          pinHoverStatus(tuneLabel);
+          pinHoverStatus(tuneTooltip);
           if (isRawMode()) {
             showToast("Raw mode: save or exit before selecting another tune.", 2400);
             return;
@@ -395,5 +546,8 @@ function createLibraryTreeView({
 }
 
 export {
+  buildFileTooltip,
+  buildGroupTooltip,
+  buildTuneTooltip,
   createLibraryTreeView,
 };

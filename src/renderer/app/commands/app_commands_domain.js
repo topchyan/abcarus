@@ -246,6 +246,7 @@ function createAppCommandsDomain({
       fileNewButton,
       newTuneButton,
       templatesButton,
+      fileCancelButton,
       chordproPdfButton,
       fileOpenButton,
       fileSaveButton,
@@ -325,6 +326,12 @@ function createAppCommandsDomain({
         if (!(await ensureRawCanLeave("opening templates"))) return;
         await callAsync(actions.openTemplatesModal);
       }));
+    }
+
+    if (fileCancelButton) {
+      fileCancelButton.addEventListener("click", () => guardedRun(
+        () => menuActionsController.dispatch("revertToDisk"),
+      ));
     }
 
     if (chordproPdfButton) {

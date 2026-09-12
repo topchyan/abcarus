@@ -812,11 +812,11 @@ function registerIpcHandlers(ctx) {
     const base = p ? path.basename(p) : "file";
     const response = dialog.showMessageBoxSync(parent || undefined, {
       type: "warning",
-      buttons: ["Reload from disk", "Cancel"],
+      buttons: ["Discard changes", "Keep editing"],
       defaultId: 0,
       cancelId: 1,
-      message: "Reload from disk?",
-      detail: `Reload “${base}” from disk and discard unsaved changes in ABCarus?`,
+      message: "Discard unsaved changes?",
+      detail: `Restore “${base}” to its last saved state? All unsaved changes in ABCarus will be lost.`,
     });
     return response === 0;
   });

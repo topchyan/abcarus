@@ -254,6 +254,7 @@ const $btnFileOpen = document.getElementById("btnFileOpen");
 const $btnFileSave = document.getElementById("btnFileSave");
 const $btnFileClose = document.getElementById("btnFileClose");
 const $btnToggleRaw = document.getElementById("btnToggleRaw");
+const $btnFileCancel = document.getElementById("btnFileCancel");
 const $btnPlay = document.getElementById("btnPlay");
 const $btnPause = document.getElementById("btnPause");
 const $btnStop = document.getElementById("btnStop");
@@ -712,6 +713,7 @@ const payloadModeFeature = createPayloadModeFeature({
     $btnFileNew,
     $btnNewTune,
     $btnTemplates,
+    $btnFileCancel,
     $btnFileOpen,
     $btnFileSave,
     $btnFileClose,
@@ -2099,6 +2101,7 @@ const startupController = createStartupController({
 editStateController = createEditStateController({
   elements: {
     dirtyIndicator: $dirtyIndicator,
+    cancelButton: $btnFileCancel,
     libraryTree: $libraryTree,
   },
   state: {
@@ -2991,7 +2994,10 @@ rawModeFeature = createRawModeFeature({
 });
 
 function setDirtyIndicator(isDirty) {
-  if (editStateController) editStateController.setDirtyIndicator(isDirty);
+  if (editStateController) {
+    const tuneDirty = typeof isDirty === "boolean" ? isDirty : isCurrentDocumentDirty();
+    editStateController.setDirtyIndicator(tuneDirty);
+  }
 }
 
 function computeHeaderPresence() {
@@ -3459,6 +3465,7 @@ function applyTransformedText(text, options = {}) {
   nextText = chordProFeature.applyTransformedText(nextText);
   editorRuntime.setTextClean(nextText);
   patchCurrentDocument({ content: nextText, dirty: true }, { create: false });
+  setDirtyIndicator(true);
   scheduleRenderNow({ clearOutput: true });
 }
 
@@ -3995,6 +4002,7 @@ appCommandsDomain = createAppCommandsDomain({
     fileNewButton: $btnFileNew,
     newTuneButton: $btnNewTune,
     templatesButton: $btnTemplates,
+    fileCancelButton: $btnFileCancel,
     chordproPdfButton: $btnChordproPdf,
     fileOpenButton: $btnFileOpen,
     fileSaveButton: $btnFileSave,

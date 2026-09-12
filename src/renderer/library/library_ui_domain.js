@@ -60,6 +60,7 @@ function createLibraryUiDomain({
   let libraryFilter = null;
   let libraryFilterLabel = "";
   let libraryTextFilter = "";
+  let richTooltipsEnabled = true;
 
   const viewStore = createLibraryViewStore({
     getIndex: () => (typeof state.getLibraryIndex === "function" ? state.getLibraryIndex() : null),
@@ -357,6 +358,7 @@ function createLibraryUiDomain({
     sortGroupEntries: (entries) => uiStateController.sortGroupEntries(entries),
     sortTunes: (tunes) => uiStateController.sortTunes(tunes, uiStateController.getTuneSortMode()),
     getEntryTuneCount,
+    isRichTooltipEnabled: () => richTooltipsEnabled,
     getRenamingFilePath: () => renameFileController.getRenamingFilePath(),
     setRenamingFilePath: (value) => renameFileController.setRenamingFilePath(value),
     getActiveFilePath: () => (typeof state.getActiveFilePath === "function" ? state.getActiveFilePath() : ""),
@@ -518,6 +520,7 @@ function createLibraryUiDomain({
   }
 
   function applyLibraryPrefsFromSettings(settings) {
+    richTooltipsEnabled = !(settings && settings.libraryRichTooltips === false);
     uiStateController.applyLibraryPrefsFromSettings(settings);
     uiStateController.syncControls({ groupBy, sortBy, sortTunesBy });
   }

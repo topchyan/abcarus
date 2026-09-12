@@ -31,6 +31,7 @@ const toggleLibraryButton = createButton();
 const toggleSetListButton = createButton();
 const libraryCatalogButton = createButton();
 const openFolderAsLibraryButton = createButton();
+const fileCancelButton = createButton();
 const toggleGlobalsButton = createButton();
 const editGlobalHeaderButton = createButton();
 const libraryToolbarMenu = {
@@ -58,6 +59,8 @@ let printSetListCalls = 0;
 let stopPlaybackCalls = 0;
 let generateSkeletonCalls = 0;
 let openHeaderSettingsCalls = 0;
+let discardReloadCalls = 0;
+const transformCalls = [];
 
 const domain = createAppCommandsDomain({
   api: {
@@ -77,12 +80,14 @@ const domain = createAppCommandsDomain({
     libraryToolbarMenu,
     libraryCatalogButton,
     openFolderAsLibraryButton,
+    fileCancelButton,
     toggleGlobalsButton,
     globalsToolbarMenu,
     editGlobalHeaderButton,
   },
   state: {
     isGlobalHeaderEnabled: () => true,
+    getActiveTuneId: () => "tune-1",
     isPayloadMode: () => false,
     isRawModeActive: () => false,
   },
@@ -98,10 +103,20 @@ const domain = createAppCommandsDomain({
     printSetList: async () => { printSetListCalls += 1; },
     stopPlaybackTransport: () => { stopPlaybackCalls += 1; },
     generateBlankVoiceSkeleton: () => { generateSkeletonCalls += 1; },
+    applyAbc2abcTransform: async (options) => { transformCalls.push(options); },
+    getActiveFileEntry: () => ({ path: "/music/test.abc" }),
+    confirmReloadFromDisk: async () => true,
+    discardAndReloadFileFromDisk: async () => {
+      discardReloadCalls += 1;
+      return { ok: true };
+    },
   },
 });
 
 domain.wire();
+fileCancelButton.click();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(discardReloadCalls, 1, "Cancel toolbar button must discard changes through Revert to Disk");
 newTuneButton.click();
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(newTuneCalls, 1, "New Tune toolbar button must dispatch the canonical fileNewTune action");
@@ -135,11 +150,21 @@ await domain.dispatch("toggleSetList");
 await domain.dispatch("printSetList");
 await domain.dispatch("stopPlayback");
 await domain.dispatch("generateBlankVoiceSkeleton");
+await domain.dispatch("transformDouble");
+await domain.dispatch("transformHalf");
+await domain.dispatch("transformMertebeAugment");
+await domain.dispatch("transformMertebeDiminish");
 await domain.dispatch({ type: "toggleSelectionLoop", value: true });
 assert.equal(toggleSetListCalls, 2, "View -> Show/Hide Set List Panel must share the toolbar action");
 assert.equal(printSetListCalls, 1, "File -> Print Active Set List must print the active Set List");
 assert.equal(stopPlaybackCalls, 1, "Play -> Stop must stop playback");
 assert.equal(generateSkeletonCalls, 1, "Edit -> Voices must generate the voice skeleton");
+assert.deepEqual(transformCalls, [
+  { doubleLengths: true },
+  { halfLengths: true },
+  { mertebe: "augment" },
+  { mertebe: "diminish" },
+], "length re-encoding and mertebe transforms must keep separate command contracts");
 assert.deepEqual(settingsPatches.at(-1), { playbackSelectionLoopEnabled: true }, "Play -> Options -> Loop Selection must persist its setting");
 
 console.log("app commands harness: all tests passed");

@@ -91,6 +91,24 @@ function createLibraryContextMenu({
       } catch {}
       return;
     }
+    if (action === "copyTuneReference" && menuTarget && menuTarget.type === "tune") {
+      hide();
+      const sourceRes = menuTarget.tuneId ? findTuneById(menuTarget.tuneId) : null;
+      const filePath = sourceRes && sourceRes.file && sourceRes.file.path
+        ? String(sourceRes.file.path)
+        : "";
+      const xNumber = sourceRes && sourceRes.tune && sourceRes.tune.xNumber != null
+        ? String(sourceRes.tune.xNumber).trim()
+        : "";
+      if (!filePath || !xNumber) return;
+      try {
+        if (navigatorRef && navigatorRef.clipboard && navigatorRef.clipboard.writeText) {
+          await navigatorRef.clipboard.writeText(`${filePath} X:${xNumber}`);
+          showToast("Tune reference copied.");
+        }
+      } catch {}
+      return;
+    }
     if (action === "copyFileTuneList" && menuTarget && menuTarget.type === "file") {
       hide();
       await copyFileTuneList(menuTarget.filePath);
@@ -296,6 +314,9 @@ function createLibraryContextMenu({
       const targetPath = (activeTuneMeta && activeTuneMeta.path) ? String(activeTuneMeta.path) : "";
       const sourceRes = target && target.tuneId ? findTuneById(target.tuneId) : null;
       const sourcePath = sourceRes && sourceRes.file && sourceRes.file.path ? String(sourceRes.file.path) : "";
+      const sourceXNumber = sourceRes && sourceRes.tune && sourceRes.tune.xNumber != null
+        ? String(sourceRes.tune.xNumber).trim()
+        : "";
       const globalDirty = Boolean(getCurrentDocDirty()) || Boolean(getHeaderDirty()) || Boolean(getIsNewTuneDraft());
       const sourceDirty = Boolean(sourcePath) && (globalDirty || hasUnsavedChangesForFile(sourcePath));
       const sourceTunes = sourceRes && sourceRes.file && Array.isArray(sourceRes.file.tunes) ? sourceRes.file.tunes : [];
@@ -312,7 +333,10 @@ function createLibraryContextMenu({
         && !getHeaderDirty()
         && !sourceDirty
       );
-      const items = [{ label: "Add to Set List", action: "addToSetList" }];
+      const items = [
+        { label: "Add to Set List", action: "addToSetList" },
+        { label: "Copy Path + X", action: "copyTuneReference", disabled: !sourcePath || !sourceXNumber },
+      ];
       if (canAppend) items.push({ separator: true }, { label: "Append to Active File…", action: "appendTuneToActiveFile" });
       if (sourceDirty || getRawMode()) {
         const blockedLabel = getRawMode()

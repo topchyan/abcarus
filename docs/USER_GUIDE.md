@@ -90,6 +90,8 @@ If the active tune is not file-backed (for example, a new draft), `File → Save
 
 Related actions:
 - `File → Save As…` writes the current tune to a new file/location.
+- The top-bar **Cancel** button is enabled while the current tune or file header is dirty.
+  After confirmation it restores the file's last saved state and becomes disabled again.
 - A Library tune's context menu exposes `Append to Active File…` when another file is active.
 
 If there is no selected target file when an append-save is needed, ABCarus shows an error instead of guessing.
@@ -246,9 +248,13 @@ Transform tools edit the ABC text in-place (conservatively):
 
 - `Tools → Transpose → Up Semitone / Down Semitone`
 - `Tools → Note Lengths → Double / Half`
+- `Tools → Rhythmic Notation (Mertebe) → Augment / Diminish ×2`
+  (`Ctrl/Cmd+Shift+PageUp` / `Ctrl/Cmd+Shift+PageDown`)
 - `Tools → Bar Layout → Measures per Line → 1…9`
 - `Tools → Renumber X (Active File)…`
 - `Tools → Bar Layout → Align Bars`
+
+Notation transforms automatically align bar columns after rewriting the ABC text.
 
 ## 11) Settings and fonts
 

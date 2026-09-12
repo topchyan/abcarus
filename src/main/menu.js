@@ -356,20 +356,35 @@ function buildMenuTemplate(appState, sendMenuAction) {
         ],
       },
       {
-        label: "Turkish Notation",
+        label: "Rhythmic Notation (Mertebe)",
         submenu: [
           {
-            label: "To Concert",
-            accelerator: "CmdOrCtrl+Shift+0",
-            click: () => sendMenuAction("transformTurkishToConcert"),
+            label: "Augment ×2 (Eighth → Quarter)",
+            accelerator: "CmdOrCtrl+Shift+PageUp",
+            click: () => sendMenuAction("transformMertebeAugment"),
           },
           {
-            label: "To Bolahenk",
-            accelerator: "CmdOrCtrl+Shift+9",
-            click: () => sendMenuAction("transformTurkishToBolahenk"),
+            label: "Diminish ×2 (Quarter → Eighth)",
+            accelerator: "CmdOrCtrl+Shift+PageDown",
+            click: () => sendMenuAction("transformMertebeDiminish"),
           },
         ],
       },
+      ...((appState && appState.settings && (appState.settings.supportMicrotonalNotation || appState.settings.makamToolsEnabled || appState.settings.studyToolsEnabled))
+        ? [{
+            label: "Bolahenk / Concert (Experimental)",
+            submenu: [
+              {
+                label: "Convert Bolahenk to Concert",
+                click: () => sendMenuAction("transformTurkishToConcert"),
+              },
+              {
+                label: "Convert Concert to Bolahenk",
+                click: () => sendMenuAction("transformTurkishToBolahenk"),
+              },
+            ],
+          }]
+        : []),
       {
         label: "Bar Layout",
         submenu: [
