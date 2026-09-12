@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [1.10.4] - 2026-09-12
 ### Added
 - Library entries can show detailed hover information for files, groups, and tunes, including source files and tune metadata.
 - The detailed Library tooltip can be enabled or disabled in Settings.
@@ -14,7 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Text transformations now update the dirty state immediately, keeping Cancel synchronized with the editor.
-
 
 ## [1.10.3] - 2026-09-11
 ### Added
