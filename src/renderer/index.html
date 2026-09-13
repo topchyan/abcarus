@@ -346,7 +346,7 @@
 	          <summary>Edit</summary>
 	          <div class="set-list-menu-popup" role="menu">
 	            <button id="setListAddCurrent" type="button" role="menuitem">Add Active Tune</button>
-	            <button id="setListRefreshSources" type="button" role="menuitem">Refresh</button>
+	            <button id="setListRefreshSources" type="button" role="menuitem">Refresh All from Library</button>
 	            <span class="set-list-menu-sep" aria-hidden="true"></span>
 	            <button id="setListHeader" type="button" role="menuitem">Set List Header…</button>
 	            <span class="set-list-menu-sep" aria-hidden="true"></span>
@@ -985,6 +985,18 @@
             <span>semitones</span>
           </span>
         </label>
+        <div class="set-list-performance-key-preview" aria-label="Key transposition preview">
+          <div class="set-list-performance-key">
+            <span>Original</span>
+            <strong id="setListPerformanceOriginalKey">-</strong>
+          </div>
+          <span class="set-list-performance-key-arrow" aria-hidden="true">&rarr;</span>
+          <div class="set-list-performance-key">
+            <span>Transposed</span>
+            <strong id="setListPerformanceTargetKey">-</strong>
+          </div>
+        </div>
+        <div id="setListPerformancePreviewError" class="set-list-performance-preview-error" role="status" hidden></div>
         <div class="set-list-performance-help">The Editor, Score, and playback use this key. Apply will ask whether to update the original tune or only this Set List.</div>
       </div>
       <div class="modal-footer">

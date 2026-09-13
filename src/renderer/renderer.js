@@ -419,6 +419,9 @@ const $setListPerformanceModal = document.getElementById("setListPerformanceModa
 const $setListPerformanceClose = document.getElementById("setListPerformanceClose");
 const $setListPerformanceTitle = document.getElementById("setListPerformanceTitle");
 const $setListPerformanceTranspose = document.getElementById("setListPerformanceTranspose");
+const $setListPerformanceOriginalKey = document.getElementById("setListPerformanceOriginalKey");
+const $setListPerformanceTargetKey = document.getElementById("setListPerformanceTargetKey");
+const $setListPerformancePreviewError = document.getElementById("setListPerformancePreviewError");
 const $setListPerformanceReset = document.getElementById("setListPerformanceReset");
 const $setListPerformanceCancel = document.getElementById("setListPerformanceCancel");
 const $setListPerformanceSave = document.getElementById("setListPerformanceSave");
@@ -1017,6 +1020,9 @@ const setListFeature = createSetListFeature({
     performanceCloseButton: $setListPerformanceClose,
     performanceTitle: $setListPerformanceTitle,
     performanceTranspose: $setListPerformanceTranspose,
+    performanceOriginalKey: $setListPerformanceOriginalKey,
+    performanceTargetKey: $setListPerformanceTargetKey,
+    performancePreviewError: $setListPerformancePreviewError,
     performanceResetButton: $setListPerformanceReset,
     performanceCancelButton: $setListPerformanceCancel,
     performanceSaveButton: $setListPerformanceSave,

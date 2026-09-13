@@ -1411,7 +1411,7 @@ function buildPrintHtml(svgMarkup, fontBase64, suggestedName) {
       .newpage { page-break-before: always; break-before: page; }
       .newpage:first-of-type { page-break-before: auto; break-before: auto; }
       .print-tune { page-break-after: always; break-after: page; overflow: visible; }
-      .print-tune:last-of-type { page-break-after: auto; break-after: auto; }
+      .print-tune:last-child { page-break-after: auto; break-after: auto; }
       .print-error-summary,
       .print-error-card {
         border: 1px solid #e5b5b5;
@@ -3074,12 +3074,18 @@ async function createWindow() {
   }
   win.webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
+    const inputModifiers = Array.isArray(input.modifiers) ? input.modifiers : [];
+    const hasInputModifier = (name) => Boolean(input[name]) || inputModifiers.includes(name);
+    const inputAlt = hasInputModifier("alt");
+    const inputMeta = hasInputModifier("meta");
+    const inputShift = hasInputModifier("shift");
+    const inputControl = hasInputModifier("control");
     // Use best-effort key handling for tune navigation.
     // Notes:
     // - Some platforms/layouts may report AltGr as Ctrl+Alt.
     // - `input.key` may be "PageDown"/"PageUp" or legacy "Next"/"Prior".
     // - Prefer not to require `!input.control` to avoid "stuck Ctrl" edge cases after accelerators.
-    if (input.alt && !input.meta && !input.shift) {
+    if (inputAlt && !inputMeta && !inputShift) {
       const key = String(input.key || "");
       const code = String(input.code || "");
       const isPgUp = key === "PageUp" || key === "Prior" || code === "PageUp";
@@ -3087,7 +3093,7 @@ async function createWindow() {
       if (process.env.ABCARUS_DEBUG_KEYS === "1") {
         try {
           // eslint-disable-next-line no-console
-          console.log("[keys] alt=%s ctrl=%s shift=%s meta=%s key=%s code=%s", input.alt, input.control, input.shift, input.meta, key, code);
+          console.log("[keys] alt=%s ctrl=%s shift=%s meta=%s key=%s code=%s", inputAlt, inputControl, inputShift, inputMeta, key, code);
         } catch {}
       }
       if (isPgUp) {
@@ -3101,8 +3107,8 @@ async function createWindow() {
         return;
       }
     }
-    const hasMod = input.control || input.meta;
-    if (!hasMod || !input.shift || input.alt) return;
+    const hasMod = inputControl || inputMeta;
+    if (!hasMod || !inputShift || inputAlt) return;
     const key = String(input.key || "");
     const code = String(input.code || "");
     const isArrowUp = key === "ArrowUp" || key === "Up" || code === "ArrowUp" || code === "Up";
@@ -3483,10 +3489,22 @@ async function runUiSmoke(win) {
       `window.__abcarusDevTransformSmoke?.getText?.() || ""`,
       true
     );
+    win.webContents.sendInputEvent({ type: "keyDown", keyCode: "Up", modifiers: ["control", "shift"] });
+    win.webContents.sendInputEvent({ type: "keyUp", keyCode: "Up", modifiers: ["control", "shift"] });
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const afterTranspose = await win.webContents.executeJavaScript(
+      `window.__abcarusDevTransformSmoke?.getText?.() || ""`,
+      true
+    );
     const afterDoubleText = String(afterDouble || "");
+    const afterTransposeText = String(afterTranspose || "");
     const result = {
-      ok: afterDoubleText.includes("L:1/16") && afterDoubleText.includes("C4"),
+      ok: afterDoubleText.includes("L:1/16")
+        && afterDoubleText.includes("C4")
+        && Boolean(afterTransposeText)
+        && afterTransposeText !== afterDoubleText,
       afterDouble: afterDoubleText.slice(0, 160),
+      transposeShortcut: afterTransposeText && afterTransposeText !== afterDoubleText,
     };
     exitUiSmoke(Boolean(result.ok), "transform keys", result);
     return;

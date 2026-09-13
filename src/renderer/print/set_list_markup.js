@@ -25,7 +25,7 @@ function formatSetListIndexTempo(text, tempoScale = 1) {
   const adjusted = Math.round(bpm * multiplier * 10) / 10;
   const value = Number.isInteger(adjusted) ? String(adjusted) : adjusted.toFixed(1);
   const beat = equals ? String(equals[1] || "").trim() : "";
-  return beat ? `Tempo ${beat} = ${value}` : `Tempo ${value} BPM`;
+  return beat ? `Q: ${beat}=${value}` : `Q: ${value}`;
 }
 
 function numberSetListTuneTitle(text, number) {
@@ -167,23 +167,37 @@ function buildSetListIncipitAbc(text, maxNotes = 12) {
     : "";
 }
 
-function buildSetListCoverMarkup({ title, itemCount, updatedAt } = {}) {
+function formatSetListPrintUpdatedAt(updatedAt, locale) {
   const date = new Date(String(updatedAt || ""));
-  const updated = Number.isFinite(date.getTime()) ? date.toLocaleDateString() : "";
-  return `<section class="print-tune set-list-cover" style="min-height:88vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;box-sizing:border-box;">
-    <h1 style="margin:0;font:600 34px/1.2 sans-serif;">${escapeHtml(title || "Untitled Set List")}</h1>
-    <div style="margin-top:14px;font:15px/1.4 sans-serif;color:#555;">Set List</div>
-    <div style="margin-top:34px;font:13px/1.5 sans-serif;color:#666;">${Math.max(0, Number(itemCount) || 0)} tunes${updated ? ` · Updated ${escapeHtml(updated)}` : ""}</div>
+  if (!Number.isFinite(date.getTime())) return "";
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(date);
+  } catch {
+    return date.toLocaleString();
+  }
+}
+
+function buildSetListCoverMarkup({ title, itemCount, updatedAt, locale, embedded = false } = {}) {
+  const updated = formatSetListPrintUpdatedAt(updatedAt, locale);
+  const classes = embedded ? "set-list-cover" : "print-tune set-list-cover";
+  const minHeight = embedded ? "" : "min-height:88vh;";
+  return `<section class="${classes}" style="${minHeight}display:flex;flex-direction:column;align-items:center;text-align:center;box-sizing:border-box;">
+    <h1 style="margin:0;font:700 44px/1.12 sans-serif;overflow-wrap:anywhere;">${escapeHtml(title || "Untitled Set List")}</h1>
+    <div style="margin-top:10px;font:15px/1.4 sans-serif;color:#555;">Set List</div>
+    <div style="margin-top:14px;font:13px/1.5 sans-serif;color:#666;">${Math.max(0, Number(itemCount) || 0)} tunes${updated ? ` · Updated ${escapeHtml(updated)}` : ""}</div>
   </section>`;
 }
 
-function buildSetListIndexMarkup({ title, entries, numberTunes = false } = {}) {
+function buildSetListIndexMarkup({ title, entries, numberTunes = false, embedded = false } = {}) {
   const list = Array.isArray(entries) ? entries : [];
   const hasIncipits = list.some((entry) => Boolean(entry && entry.incipitSvg));
   const rows = list.map((entry, index) => {
     const ordinal = numberTunes ? `${index + 1}.` : "";
-    const details = [entry.meter ? `M: ${entry.meter}` : "", entry.tempo || ""]
-      .filter(Boolean).join(" · ");
+    const details = [entry.key ? `K: ${entry.key}` : "", entry.meter ? `M: ${entry.meter}` : "", entry.tempo || ""]
+      .filter(Boolean).join(" - ");
     const practiceNote = String(entry.practiceNote || "").trim();
     const incipit = entry.incipitSvg
       ? `<div class="set-list-index-incipit" style="min-width:0;display:flex;align-items:center;">${entry.incipitSvg}</div>`
@@ -201,10 +215,21 @@ function buildSetListIndexMarkup({ title, entries, numberTunes = false } = {}) {
     </div>`;
   });
   const indexColumns = hasIncipits ? "1fr" : "repeat(2,minmax(0,1fr))";
-  return `<section class="print-tune set-list-index" style="box-sizing:border-box;">
+  const classes = embedded ? "set-list-index" : "print-tune set-list-index";
+  const heading = embedded ? "Index" : `${escapeHtml(title || "Untitled Set List")} · Index`;
+  return `<section class="${classes}" style="box-sizing:border-box;${embedded ? "margin-top:24px;" : ""}">
     <style>.set-list-index-incipit svg{display:block;width:auto!important;height:auto!important;max-width:100%}</style>
-    <h1 style="margin:0 0 12px;font:600 21px/1.2 sans-serif;">${escapeHtml(title || "Untitled Set List")} · Index</h1>
+    <h2 style="margin:0 0 12px;font:600 21px/1.2 sans-serif;">${heading}</h2>
     <div style="display:grid;grid-template-columns:${indexColumns};column-gap:20px;align-items:start;">${rows.join("\n")}</div>
+  </section>`;
+}
+
+function buildSetListTitlePageMarkup({ title, itemCount, updatedAt, locale, entries, numberTunes = false } = {}) {
+  const cover = buildSetListCoverMarkup({ title, itemCount, updatedAt, locale, embedded: true });
+  const index = buildSetListIndexMarkup({ title, entries, numberTunes, embedded: true });
+  return `<section class="print-tune set-list-title-page" style="box-sizing:border-box;">
+    ${cover}
+    ${index}
   </section>`;
 }
 
@@ -297,7 +322,7 @@ function buildSetListExportAbc({
   let writtenCount = 0;
   for (let i = 0; i < items.length; i++) {
     const item = items[i] || {};
-    const raw = String(item.text || "");
+    const raw = String(item.performanceText || item.text || "");
     if (!raw.trim()) continue;
 
     let tune = raw;
@@ -320,12 +345,14 @@ export {
   buildSetListExportAbc,
   buildSetListIncipitAbc,
   buildSetListIndexMarkup,
+  buildSetListTitlePageMarkup,
   composeSetListRenderHeader,
   getPrintableSetListItems,
   getSetListFileHeaderText,
   namespaceSetListSvgIds,
   numberSetListTuneTitle,
   formatSetListIndexTempo,
+  formatSetListPrintUpdatedAt,
   normalizeSetListHeaderTemplate,
   shouldInjectNewPageBeforeTune,
 };

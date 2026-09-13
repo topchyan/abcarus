@@ -3879,8 +3879,51 @@ body.set-list-visible .set-list-divider {
   width: 84px;
 }
 
+.set-list-performance-key-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-1);
+  background: var(--panel-bg);
+}
+
+.set-list-performance-key {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.set-list-performance-key span {
+  color: var(--muted-text);
+  font-size: 11px;
+}
+
+.set-list-performance-key strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.set-list-performance-key-arrow {
+  color: var(--muted-text);
+  font-size: 16px;
+  text-align: center;
+}
+
+.set-list-performance-preview-error {
+  color: var(--danger-text, #a12622);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .set-list-performance-help {
-  margin-top: 10px;
   color: var(--muted-text);
   font-size: 12px;
   line-height: 1.4;
@@ -3891,7 +3934,7 @@ body.set-list-visible .set-list-divider {
   z-index: 12;
   display: flex;
   flex-direction: column;
-  width: 186px;
+  width: 226px;
   padding: 4px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-1);
@@ -3904,13 +3947,36 @@ body.set-list-visible .set-list-divider {
   min-height: 28px;
   padding: 5px 8px;
   border: 0;
+  border-radius: 3px;
   background: transparent;
   box-shadow: none;
   text-align: left;
 }
 
+.set-list-item-menu button:not(:disabled) {
+  box-shadow: none;
+}
+
 .set-list-item-menu button:not(:disabled):hover {
   background: var(--button-bg-hover);
+  box-shadow: none;
+  filter: none;
+}
+
+.set-list-item-menu button:not(:disabled):active {
+  transform: none;
+  box-shadow: none;
+}
+
+.set-list-item-menu-separator {
+  display: block;
+  height: 1px;
+  margin: 3px 6px;
+  background: var(--border-color);
+}
+
+.set-list-item-menu button.is-destructive {
+  color: var(--danger-text, #a12622);
 }
 
 .set-list-title-input {

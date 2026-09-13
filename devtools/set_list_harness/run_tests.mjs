@@ -41,8 +41,27 @@ const {
   formatSetListUpdatedAt,
   getDropInsertionIndex,
   getMoveTargetIndex,
+  getSetListItemContextActions,
   getSetListDragKind,
 } = await importBundledModule("src/renderer/tools/set_list/set_list_controller.js");
+
+test("Set List item context menu contains only clear item-scoped actions", () => {
+  const actions = getSetListItemContextActions({ hasNote: true, index: 1, itemCount: 3 });
+  const commands = actions.filter((entry) => !entry.separator);
+  assert.deepEqual(commands.map((entry) => entry.label), [
+    "Edit Practice Note…",
+    "Set Performance Transposition…",
+    "Preview Stored Copy",
+    "Update Stored Copy from Library",
+    "Duplicate in Set List",
+    "Move Earlier",
+    "Move Later",
+    "Remove from Set List",
+  ]);
+  assert.equal(commands.some((entry) => entry.action === "refresh"), false);
+  assert.equal(commands.some((entry) => entry.action === "copyTuneList"), false);
+  assert.equal(commands.find((entry) => entry.action === "remove").destructive, true);
+});
 
 await test("Set List last-updated timestamp uses the persisted portable revision", async () => {
   const timestamps = [
@@ -69,7 +88,9 @@ const {
   buildSetListExportAbc,
   buildSetListIncipitAbc,
   buildSetListIndexMarkup,
+  buildSetListTitlePageMarkup,
   formatSetListIndexTempo,
+  formatSetListPrintUpdatedAt,
   composeSetListRenderHeader,
   getPrintableSetListItems,
   namespaceSetListSvgIds,
@@ -102,6 +123,8 @@ function test(name, fn) {
 
 await test("print bounds preserve abc2svg systems and honor the skip marker", async () => {
   const mainSource = fs.readFileSync("src/main/index.js", "utf8");
+  assert.match(mainSource, /\.print-tune:last-child\s*\{/);
+  assert.doesNotMatch(mainSource, /\.print-tune:last-of-type\s*\{/);
   const buildPrintHtmlSource = mainSource.match(
     /function buildPrintHtml\(svgMarkup, fontBase64, suggestedName\) \{[\s\S]*?\n\}(?=\n\nasync function withPrintWindow)/,
   );
@@ -271,14 +294,18 @@ test("print presentation helpers do not mutate source ABC", () => {
   assert.doesNotMatch(incipit, /z8|x2/);
   assert.doesNotMatch(incipit, /GABc/);
   assert.match(buildSetListCoverMarkup({ title: "Concert", itemCount: 2 }), /Concert/);
+  assert.match(
+    formatSetListPrintUpdatedAt("2026-08-20T12:05:00.000Z", "en-US"),
+    /Aug 20, 2026, \d{1,2}:05 [AP]M/,
+  );
   const index = buildSetListIndexMarkup({
     title: "Concert",
     numberTunes: true,
-    entries: [{ title: "Example", meter: "4/4", tempo: "Tempo 1/4 = 90", practiceNote: "Start softly", incipitSvg: "<svg></svg>", sourceUrl: "https://example.com", qrDataUrl: "data:image/png;base64,x" }],
+    entries: [{ title: "Example", key: "Gm", meter: "4/4", tempo: "Q: 1/4=90", practiceNote: "Start softly", incipitSvg: "<svg></svg>", sourceUrl: "https://example.com", qrDataUrl: "data:image/png;base64,x" }],
   });
   assert.match(index, /1\./);
   assert.doesNotMatch(index, /Play in/);
-  assert.match(index, /M: 4\/4 · Tempo 1\/4 = 90/);
+  assert.match(index, /K: Gm - M: 4\/4 - Q: 1\/4=90/);
   assert.match(index, /Start softly/);
   assert.match(index, /<svg><\/svg>/);
   assert.match(index, /data:image\/png;base64,x/);
@@ -286,7 +313,18 @@ test("print presentation helpers do not mutate source ABC", () => {
   assert.match(index, /grid-template-columns:1fr/);
   const compactIndex = buildSetListIndexMarkup({ title: "Concert", entries: [{ title: "Example" }] });
   assert.match(compactIndex, /grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
-  assert.equal(formatSetListIndexTempo('X:1\nQ:"Slow" 1/4=120\nK:C\nC|', 0.75), "Tempo 1/4 = 90");
+  const titlePage = buildSetListTitlePageMarkup({
+    title: "Concert",
+    itemCount: 1,
+    updatedAt: "2026-08-20T12:05:00.000Z",
+    locale: "en-US",
+    entries: [{ title: "Example" }],
+  });
+  assert.equal((titlePage.match(/class="print-tune/g) || []).length, 1);
+  assert.match(titlePage, /class="print-tune set-list-title-page"/);
+  assert.ok(titlePage.indexOf("Concert") < titlePage.indexOf("Index"));
+  assert.ok(titlePage.indexOf("Index") < titlePage.indexOf("Example"));
+  assert.equal(formatSetListIndexTempo('X:1\nQ:"Slow" 1/4=120\nK:C\nC|', 0.75), "Q: 1/4=90");
 });
 
 test("keeps duplicate tune occurrences as independent items", () => {
@@ -1275,6 +1313,7 @@ await test("restores the last Set List and uses its title for print and ABC expo
   );
   const source = serializeSetListDocument(sourceDocument);
   let abcSuggestedName = "";
+  let exportedAbc = "";
   let printSuggestedName = "";
   let renderedHeaderText = "";
   const renderedAbc = [];
@@ -1285,8 +1324,9 @@ await test("restores the last Set List and uses its title for print and ABC expo
     readFile: async (path) => path === "/sets/saved.abcarus-setlist.json"
       ? { ok: true, data: source }
       : { ok: false, error: "missing" },
-    saveAbc: async ({ suggestedName }) => {
+    saveAbc: async ({ suggestedName, content }) => {
       abcSuggestedName = suggestedName;
+      exportedAbc = content;
       return true;
     },
     renderItemToSvg: async ({ abcText, headerText }) => {
@@ -1308,15 +1348,22 @@ await test("restores the last Set List and uses its title for print and ABC expo
   assert.equal(feature.getState().filePath, "/sets/saved.abcarus-setlist.json");
   assert.equal(await feature.exportAbc(), true);
   assert.equal(abcSuggestedName, "Saved Performance.abc");
+  assert.match(exportedAbc, /^K:E$/m);
+  assert.match(exportedAbc, /E F G A\|/);
   assert.equal(await feature.runPrintAction("pdf"), true);
   assert.equal(printSuggestedName, "Saved Performance");
   assert.ok(renderedHeaderText.indexOf("%%stretchlast 1") < renderedHeaderText.indexOf("%%leftmargin 0"));
   assert.match(renderedAbc[0], /^T:1\. Song A$/m);
+  assert.match(renderedAbc[0], /^K:E$/m);
+  assert.match(renderedAbc[0], /E F G A\|/);
   assert.match(renderedAbc[1], /^K:E$/m);
-  assert.match(printMarkup, /class="print-tune set-list-cover"/);
-  assert.match(printMarkup, /class="print-tune set-list-index"/);
+  assert.match(printMarkup, /class="print-tune set-list-title-page"/);
+  assert.match(printMarkup, /class="set-list-cover"/);
+  assert.match(printMarkup, /class="set-list-index"/);
+  assert.equal((printMarkup.match(/class="print-tune/g) || []).length, 2);
+  assert.ok(printMarkup.indexOf("set-list-title-page") < printMarkup.indexOf('<div class="print-tune"><svg>'));
   assert.doesNotMatch(printMarkup, /Play in E/);
-  assert.match(printMarkup, /M: 4\/4 · Tempo 1\/4 = 110\.4/);
+  assert.match(printMarkup, /K: E - M: 4\/4 - Q: 1\/4=110\.4/);
   assert.match(printMarkup, /Use saved arrangement\./);
   assert.match(printMarkup, /data:image\/png;base64,qr/);
 });

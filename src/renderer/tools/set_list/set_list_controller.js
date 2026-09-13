@@ -1,6 +1,22 @@
 const SET_LIST_ITEM_DRAG_MIME = "application/x-abcarus-set-list-item";
 const LIBRARY_TUNE_DRAG_MIME = "application/x-abcarus-tune-id";
 
+function getSetListItemContextActions({ hasNote = false, index = 0, itemCount = 0 } = {}) {
+  return [
+    { action: "note", label: hasNote ? "Edit Practice Note…" : "Add Practice Note…" },
+    { action: "performance", label: "Set Performance Transposition…", title: "Transpose this occurrence without changing the Library source." },
+    { separator: true },
+    { action: "preview", label: "Preview Stored Copy", title: "Preview the copy stored inside this Set List." },
+    { action: "update", label: "Update Stored Copy from Library", title: "Replace the stored copy with the current Library source." },
+    { separator: true },
+    { action: "duplicate", label: "Duplicate in Set List" },
+    { action: "up", label: "Move Earlier", disabled: Number(index) <= 0 },
+    { action: "down", label: "Move Later", disabled: Number(index) >= Number(itemCount) - 1 },
+    { separator: true },
+    { action: "remove", label: "Remove from Set List", destructive: true },
+  ];
+}
+
 function getDropInsertionIndex(row, clientY, itemCount) {
   const count = Math.max(0, Number(itemCount) || 0);
   if (!row || !row.dataset) return { index: count, edge: "end" };
@@ -87,6 +103,9 @@ function createSetListController({
   performanceCloseButton,
   performanceTitle,
   performanceTranspose,
+  performanceOriginalKey,
+  performanceTargetKey,
+  performancePreviewError,
   performanceResetButton,
   performanceCancelButton,
   performanceSaveButton,
@@ -105,6 +124,7 @@ function createSetListController({
   onDuplicateItem,
   onNotesChange,
   onPerformanceChange,
+  onPerformancePreview,
   onPreviewSnapshot,
   onUpdateSnapshot,
   onCopyTuneList,
@@ -179,12 +199,29 @@ function createSetListController({
     performanceModal.setAttribute("aria-hidden", "true");
   }
 
+  function updatePerformancePreview() {
+    if (!Number.isInteger(performanceEditIndex) || typeof onPerformancePreview !== "function") return;
+    const preview = onPerformancePreview(
+      performanceEditIndex,
+      performanceTranspose ? Number(performanceTranspose.value) : 0,
+    ) || {};
+    if (performanceOriginalKey) performanceOriginalKey.textContent = preview.originalKey || "-";
+    if (performanceTargetKey) performanceTargetKey.textContent = preview.ok === false
+      ? "Unavailable"
+      : (preview.transposedKey || preview.originalKey || "-");
+    if (performancePreviewError) {
+      performancePreviewError.textContent = preview.ok === false ? String(preview.error || "Unable to transpose this key.") : "";
+      performancePreviewError.hidden = preview.ok !== false;
+    }
+  }
+
   function openPerformanceEditor(index) {
     const item = readState().items[Number(index)];
     if (!item || !performanceModal) return false;
     performanceEditIndex = Number(index);
     if (performanceTitle) performanceTitle.textContent = `${item.title || "Untitled"} - Performance`;
     if (performanceTranspose) performanceTranspose.value = String(Number(item.transposeSemitones) || 0);
+    updatePerformancePreview();
     performanceModal.classList.add("open");
     performanceModal.setAttribute("aria-hidden", "false");
     requestAnimationFrame(() => {
@@ -644,29 +681,31 @@ function createSetListController({
       closeItemContextMenu();
       contextMenu = document.createElement("div");
       contextMenu.className = "set-list-item-menu";
+      contextMenu.setAttribute("role", "menu");
       const selectedItem = readState().items[index] || {};
-      const actions = [
-        ["open", "Open Set List View (Read Only)"],
-        ["note", selectedItem.notes ? "Edit Practice Note…" : "Add Practice Note…"],
-        ["performance", "Performance Transposition…"],
-        ["preview", "Preview Snapshot"],
-        ["update", "Update Snapshot from Source"],
-        ["refresh", "Refresh"],
-        ["copyTuneList", "Copy Tune List…"],
-        ["duplicate", "Duplicate Occurrence"],
-        ["up", "Move Up"],
-        ["down", "Move Down"],
-        ["remove", "Remove from Set List"],
-      ];
-      for (const [action, label] of actions) {
+      const actions = getSetListItemContextActions({
+        hasNote: Boolean(String(selectedItem.notes || "").trim()),
+        index,
+        itemCount: readState().items.length,
+      });
+      for (const entry of actions) {
+        if (entry.separator) {
+          const separator = document.createElement("span");
+          separator.className = "set-list-item-menu-separator";
+          separator.setAttribute("role", "separator");
+          contextMenu.appendChild(separator);
+          continue;
+        }
         const button = document.createElement("button");
         button.type = "button";
-        button.textContent = label;
-        button.disabled = (action === "up" && index === 0)
-          || (action === "down" && index === readState().items.length - 1);
+        button.setAttribute("role", "menuitem");
+        button.textContent = entry.label;
+        button.disabled = Boolean(entry.disabled);
+        if (entry.title) button.title = entry.title;
+        if (entry.destructive) button.classList.add("is-destructive");
         button.addEventListener("click", () => {
           closeItemContextMenu();
-          Promise.resolve(runItemAction(action, index)).then(render).catch(() => {});
+          Promise.resolve(runItemAction(entry.action, index)).then(render).catch(() => {});
         });
         contextMenu.appendChild(button);
       }
@@ -713,7 +752,9 @@ function createSetListController({
   if (performanceCancelButton) performanceCancelButton.addEventListener("click", closePerformanceEditor);
   if (performanceResetButton) performanceResetButton.addEventListener("click", () => {
     if (performanceTranspose) performanceTranspose.value = "0";
+    updatePerformancePreview();
   });
+  if (performanceTranspose) performanceTranspose.addEventListener("input", updatePerformancePreview);
   if (performanceSaveButton) performanceSaveButton.addEventListener("click", async () => {
     let saved = false;
     if (Number.isInteger(performanceEditIndex) && typeof onPerformanceChange === "function") {
@@ -912,5 +953,6 @@ export {
   formatSetListUpdatedAt,
   getDropInsertionIndex,
   getMoveTargetIndex,
+  getSetListItemContextActions,
   getSetListDragKind,
 };

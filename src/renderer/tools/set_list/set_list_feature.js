@@ -17,6 +17,7 @@ import {
   buildSetListExportAbc,
   buildSetListIncipitAbc,
   buildSetListIndexMarkup,
+  buildSetListTitlePageMarkup,
   composeSetListRenderHeader,
   getPrintableSetListItems,
   getSetListFileHeaderText,
@@ -94,7 +95,7 @@ function createSetListFeature({
   let activeItemId = "";
   let activePerformanceContext = null;
   const itemResolutions = new Map();
-  const performanceKeyCache = new WeakMap();
+  const performanceViewCache = new WeakMap();
   const session = createSetListSession({
     makeId,
     readFile,
@@ -164,44 +165,58 @@ function createSetListFeature({
     return true;
   }
 
-  function getPerformanceKey(item) {
-    const originalKey = String(item && item.tune && item.tune.key || "").trim();
+  const getFileHeaderText = () => getSetListFileHeaderText(getHeaderText());
+
+  function getPerformanceView(item) {
     const semitones = Number(item && item.performance && item.performance.transposeSemitones) || 0;
-    if (!semitones) return originalKey;
-    const cached = performanceKeyCache.get(item);
-    if (cached && cached.semitones === semitones) return cached.key;
+    const sourceText = String(item && item.embeddedAbc || "");
+    const headerText = composeSetListRenderHeader(
+      String(item && item.embeddedHeaderAbc || ""),
+      getFileHeaderText(),
+    );
+    const cached = performanceViewCache.get(item);
+    if (cached && cached.semitones === semitones && cached.headerText === headerText) return cached.view;
     const view = buildSetListPerformanceView({
-      sourceText: String(item && item.embeddedAbc || ""),
-      headerText: String(item && item.embeddedHeaderAbc || ""),
+      sourceText,
+      headerText,
       transposeSemitones: semitones,
     });
-    const key = view && view.ok
+    performanceViewCache.set(item, { semitones, headerText, view });
+    return view;
+  }
+
+  function getPerformanceKey(item, view = getPerformanceView(item)) {
+    const originalKey = String(item && item.tune && item.tune.key || "").trim();
+    return view && view.ok
       ? extractSetListPerformanceKey(view.text, originalKey)
       : originalKey;
-    performanceKeyCache.set(item, { semitones, key });
-    return key;
   }
 
   function getExportItems() {
-    return getItems().map((item) => ({
-      id: item.id,
-      sourceTuneId: item.tune.source.locatorHint || `${item.tune.source.pathHint}::${item.tune.source.xNumberHint}`,
-      sourcePath: item.tune.source.pathHint,
-      xNumber: item.tune.source.xNumberHint,
-      title: item.tune.title,
-      composer: item.tune.composer,
-      originalKey: item.tune.key,
-      performanceKey: getPerformanceKey(item),
-      transposeSemitones: Number(item.performance && item.performance.transposeSemitones) || 0,
-      tempoScale: Number(item.performance && item.performance.tempoScale) || 1,
-      notes: item.notes || "",
-      headerText: item.embeddedHeaderAbc || "",
-      text: item.embeddedAbc || "",
-      export: { ...item.export },
-    }));
+    return getItems().map((item) => {
+      const performanceView = getPerformanceView(item);
+      return {
+        id: item.id,
+        sourceTuneId: item.tune.source.locatorHint || `${item.tune.source.pathHint}::${item.tune.source.xNumberHint}`,
+        sourcePath: item.tune.source.pathHint,
+        xNumber: item.tune.source.xNumberHint,
+        title: item.tune.title,
+        composer: item.tune.composer,
+        originalKey: item.tune.key,
+        performanceKey: getPerformanceKey(item, performanceView),
+        transposeSemitones: Number(item.performance && item.performance.transposeSemitones) || 0,
+        tempoScale: Number(item.performance && item.performance.tempoScale) || 1,
+        notes: item.notes || "",
+        headerText: item.embeddedHeaderAbc || "",
+        text: item.embeddedAbc || "",
+        performanceText: performanceView && performanceView.ok
+          ? performanceView.text
+          : (item.embeddedAbc || ""),
+        performanceError: performanceView && !performanceView.ok ? performanceView.error : "",
+        export: { ...item.export },
+      };
+    });
   }
-
-  const getFileHeaderText = () => getSetListFileHeaderText(getHeaderText());
 
   function updatePracticeNote(index, value) {
     const target = Number(index);
@@ -412,6 +427,9 @@ function createSetListFeature({
     performanceCloseButton: elements.performanceCloseButton,
     performanceTitle: elements.performanceTitle,
     performanceTranspose: elements.performanceTranspose,
+    performanceOriginalKey: elements.performanceOriginalKey,
+    performanceTargetKey: elements.performanceTargetKey,
+    performancePreviewError: elements.performancePreviewError,
     performanceResetButton: elements.performanceResetButton,
     performanceCancelButton: elements.performanceCancelButton,
     performanceSaveButton: elements.performanceSaveButton,
@@ -451,6 +469,23 @@ function createSetListFeature({
     },
     onNotesChange: updatePracticeNote,
     onPerformanceChange: updatePerformance,
+    onPerformancePreview: (index, transposeSemitones) => {
+      const item = getItems()[Number(index)];
+      if (!item) return { ok: false, error: "Set List item not found." };
+      const sourceText = String(item.embeddedAbc || "");
+      const originalKey = extractSetListPerformanceKey(sourceText, item.tune && item.tune.key);
+      const view = buildSetListPerformanceView({
+        sourceText,
+        headerText: composeSetListRenderHeader(item.embeddedHeaderAbc || "", getFileHeaderText()),
+        transposeSemitones,
+      });
+      return {
+        ok: Boolean(view && view.ok),
+        originalKey,
+        transposedKey: view && view.ok ? extractSetListPerformanceKey(view.text, originalKey) : "",
+        error: view && !view.ok ? view.error : "",
+      };
+    },
     onPreviewSnapshot: async (index) => {
       const item = getItems()[Number(index)];
       if (!item || !item.embeddedAbc) {
@@ -794,7 +829,7 @@ function createSetListFeature({
     let printableIndex = 0;
     for (let i = 0; i < total; i += 1) {
       const item = items[i] || {};
-      const raw = String(item.text || "");
+      const raw = String(item.performanceText || item.text || "");
       if (onProgress && (i % 5 === 0 || i === total - 1)) onProgress(i + 1, total);
       if (!raw.trim()) continue;
 
@@ -846,13 +881,7 @@ function createSetListFeature({
         const source = collectPrintSources(raw)[0] || null;
         let incipitSvg = "";
         if (print.tuneIndex === "incipits") {
-          const performanceView = buildSetListPerformanceView({
-            sourceText: raw,
-            headerText: item.headerText || "",
-            transposeSemitones: item.transposeSemitones,
-          });
-          const incipitSource = performanceView && performanceView.ok ? performanceView.text : raw;
-          const incipitAbc = buildSetListIncipitAbc(incipitSource);
+          const incipitAbc = buildSetListIncipitAbc(raw);
           if (incipitAbc) {
             const incipitResult = await renderItemToSvg({
               abcText: incipitAbc,
@@ -872,8 +901,10 @@ function createSetListFeature({
           try { qrDataUrl = await createQrDataUrl(source.url, { size: 80 }); } catch {}
         }
         const meterMatch = raw.match(/^\s*M:\s*(.*?)\s*$/mi);
+        const keyMatch = raw.match(/^\s*K:\s*(.*?)\s*$/mi);
         indexEntries.push({
           title: item.title || `Tune ${printableIndex + 1}`,
+          key: keyMatch ? String(keyMatch[1] || "").trim() : "",
           meter: meterMatch ? String(meterMatch[1] || "").trim() : "",
           tempo: formatSetListIndexTempo(raw, item.tempoScale),
           practiceNote: item.notes || "",
@@ -891,14 +922,22 @@ function createSetListFeature({
     if (!blocks.length) return { ok: false, error: "No SVG output produced." };
 
     const parts = [];
-    if (print.titlePage) {
+    if (print.titlePage && print.tuneIndex !== "none") {
+      parts.push(buildSetListTitlePageMarkup({
+        title: document.title,
+        itemCount: printableIndex,
+        updatedAt: document.updatedAt,
+        entries: indexEntries,
+        numberTunes: print.numberTunes,
+      }));
+    } else if (print.titlePage) {
       parts.push(buildSetListCoverMarkup({
         title: document.title,
         itemCount: printableIndex,
         updatedAt: document.updatedAt,
       }));
     }
-    if (print.tuneIndex !== "none") {
+    if (!print.titlePage && print.tuneIndex !== "none") {
       parts.push(buildSetListIndexMarkup({
         title: document.title,
         entries: indexEntries,
