@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [1.10.6] - 2026-09-13
 ### Added
 - A versioned, portable ABC transposition API and shared contract fixtures are available for Desktop and Mobile clients.
 - Set List performance transposition now previews the original and resulting keys before applying the change.
@@ -20,7 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Set List performance transposition is applied consistently to Editor, Score, playback, ABC export, print, PDF, and index incipits.
 - Set List title and index pages always break before the first printed tune.
 - Transpose keyboard shortcuts work with Electron modifier reporting across supported platforms.
-
 
 ## [1.10.5] - 2026-09-12
 ### Added
