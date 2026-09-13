@@ -185,12 +185,57 @@ run("53-TET detects Hicaz key profile after transposition", () => {
   assert.strictEqual(profile.id, "hicaz");
 });
 
+run("53-TET preserves the transposed base key instead of inferring a surrogate key", () => {
+  const input = [
+    "X:4",
+    "G:[makam] Hüseyni",
+    "%%MIDI temperamentequal 53",
+    "K:Am _1B",
+    "e3 f/e/d/ e6 eA fede | d12 | c2d2e2 g2g^f f2=fe | A16 |",
+    "",
+  ].join("\n");
+  const output = transformTranspose(input, -5, { mode: "tonal", prefer: "flat" });
+  assert.match(output, /^K:Em \^4f$/m);
+  assert.doesNotMatch(output, /^K:none\b/m);
+});
+
+run("53-TET prefers target-key spelling and preserves diatonic contour", () => {
+  const input = [
+    "X:4",
+    "%%MIDI temperamentequal 53",
+    "L:1/8",
+    "K:Am _1B",
+    '"Am" e3(3f/e/d/   e6 eA fede |',
+    "",
+  ].join("\n");
+  const output = transformTranspose(input, -2, { mode: "tonal", prefer: "flat" });
+  assert.match(output, /^K:Gm _1A$/m);
+  assert.match(output, /^"Gm" d3\(3e\/d\/c\/   d6 dG edcd \|$/m);
+  assert.doesNotMatch(output, /\^4d|=d/);
+});
+
+run("53-TET chooses the simpler enharmonic key and omits redundant modifiers", () => {
+  const input = [
+    "X:4",
+    "%%MIDI temperamentequal 53",
+    "L:1/8",
+    "K:Am _1B",
+    '"Am" e3(3f/e/d/   e6 eA fede |',
+    "",
+  ].join("\n");
+  const output = transformTranspose(input, -3, { mode: "tonal", prefer: "flat" });
+  assert.match(output, /^K:F#m \^3g$/m);
+  assert.match(output, /^"F#m" c3\(3d\/c\/B\/   c6 cF dcBc \|$/m);
+  assert.doesNotMatch(output, /(?:^|\s)[_^=][0-9/]*[dDcCbB](?:[0-9/]|\s|$)/m);
+});
+
 run("53-TET transpose uses file header inheritance", () => {
   const input = "X:1\nK:C _4B^4f^4c\nA d ^3f\n";
   const output = transformTranspose(input, 1, {
     mode: "tonal",
     prefer: "flat",
     headerText: "%%MIDI temperamentequal 53",
+    simplifyDisplayKey53: true,
   });
   assert.match(output, /^K:none$/m);
   assert.match(output, /^_5B _5e _\/g$/m);
@@ -265,6 +310,7 @@ run("53-TET hicaz bar 2 keeps transposed B notes out of western C# major default
     mode: "tonal",
     prefer: "flat",
     headerText: "%%MIDI temperamentequal 53",
+    simplifyDisplayKey53: true,
   });
   assert.match(output, /^K:none _5e _1d$/m);
   assert.match(output, /d\/B\/B\/\^4A\/ A2\|/);
@@ -288,6 +334,7 @@ run("53-TET surrogate key uses standard signature ordering", () => {
     mode: "tonal",
     prefer: "flat",
     headerText: "%%MIDI temperamentequal 53",
+    simplifyDisplayKey53: true,
   });
   assert.match(output, /^K:none _5e _1d$/m);
   assert.doesNotMatch(output, /^K:.*_4c/m);
@@ -300,8 +347,9 @@ run("53-TET prefers non-micro enharmonic spelling for key-derived notes", () => 
     prefer: "flat",
     headerText: "%%MIDI temperamentequal 53",
   });
-  assert.match(output, /^B B B\|B$/m);
-  assert.doesNotMatch(output, /_4c/);
+  const musicLine = output.match(/^B B B\|B$/m)?.[0] || "";
+  assert.strictEqual(musicLine, "B B B|B");
+  assert.doesNotMatch(musicLine, /_4c/i);
 });
 
 run("53-TET semitone size follows finalis anchor", () => {
@@ -310,6 +358,7 @@ run("53-TET semitone size follows finalis anchor", () => {
     mode: "tonal",
     prefer: "flat",
     headerText: "%%MIDI temperamentequal 53",
+    simplifyDisplayKey53: true,
   });
   assert.match(output, /^D$/m);
   assert.doesNotMatch(output, /_1D/);
@@ -400,6 +449,7 @@ run("53-TET bar accidentals are octave-specific", () => {
     mode: "tonal",
     prefer: "flat",
     headerText: "%%MIDI temperamentequal 53",
+    simplifyDisplayKey53: true,
   });
   assert.match(output, /\/A\/ \^4G2c2 \|/);
   assert.doesNotMatch(output, /\/A\/ G2c2 \|/);
@@ -434,7 +484,7 @@ run("53-TET transposes chord symbols in rest-only bars", () => {
     mode: "tonal",
     prefer: "flat",
   });
-  assert.match(output, /"Bbm7" z4 z"Ebsus4\/Ab" z4 z \|/);
+  assert.match(output, /"A#m7" z4 z"D#sus4\/G#" z4 z \|/);
   assert.doesNotMatch(output, /"Am7" z4 z"Dsus4\/G" z4 z \|/);
 });
 
@@ -459,14 +509,59 @@ run("12-EDO extra key accidental suppresses matching transposed note accidentals
   assert.strictEqual(output, expected);
 });
 
-run("12-EDO promotes frequent respelled accidentals into extra key signature", () => {
+run("12-EDO keeps inferred accidentals in the notes instead of changing the key", () => {
   const input = "X:1\nK:none ^g\nB B B B G A F\n";
-  const expected = "X:1\nK:none ^d ^F\nF F F F D E C\n";
+  const expected = "X:1\nK:none ^d\n^F F F F D E C\n";
   const output = transformTranspose(input, -5, { mode: "chromatic", prefer: "flat" });
   assert.strictEqual(output, expected);
   const before = parseABCToPitchEvents(input).map((event) => event.absolutePitch - 10);
   const after = parseABCToPitchEvents(output).map((event) => event.absolutePitch);
   assert.deepStrictEqual(after, before);
+});
+
+run("12-EDO omits transposed key accidentals already supplied by the new base key", () => {
+  const input = [
+    "X:1",
+    "K:Gm ^F",
+    "|: zd2d cde2 | zc2c cBd2 | zBAG FGA2 | ABce d4 :|",
+    "|: zd2A (BG)A2 | zF2G (FE)D2 | zB2B B-BB2 | zA2B (^c2d2) :|",
+    "|: zd2d (cd)e2 | zA2B (c=B) c2 | zD2E (FG)A2 | (FG)FE D2-D2 :|",
+    "",
+  ].join("\n");
+  const output = transformTranspose(input, -3, { mode: "tonal", prefer: "flat" });
+  assert.match(output, /^K:Em \^D$/m);
+  assert.doesNotMatch(output, /^K:.*(?:^|\s)\^F(?:\s|$)/m);
+
+  const before = parseABCToPitchEvents(input).map((event) => event.absolutePitch - 6);
+  const after = parseABCToPitchEvents(output).map((event) => event.absolutePitch);
+  assert.deepStrictEqual(after, before);
+});
+
+run("12-EDO retains a transposed natural that overrides the new base key", () => {
+  const input = "X:1\nK:D =F\nF A |\n";
+  const output = transformTranspose(input, 2, { mode: "tonal", prefer: "sharp" });
+  assert.match(output, /^K:E =G$/m);
+
+  const before = parseABCToPitchEvents(input).map((event) => event.absolutePitch + 4);
+  const after = parseABCToPitchEvents(output).map((event) => event.absolutePitch);
+  assert.deepStrictEqual(after, before);
+});
+
+run("12-EDO repeated transpose does not accumulate redundant key accidentals", () => {
+  const input = "X:1\nK:Gm ^F\nF G A B |\n";
+  const options = { mode: "tonal", prefer: "flat" };
+  const direct = transformTranspose(input, -3, options);
+  const repeated = transformTranspose(
+    transformTranspose(transformTranspose(input, -1, options), -1, options),
+    -1,
+    options
+  );
+  assert.match(direct, /^K:Em \^D$/m);
+  assert.ok(!/^K:.*(?:^|\s)\^F(?:\s|$)/m.test(repeated));
+
+  const directPitches = parseABCToPitchEvents(direct).map((event) => event.absolutePitch);
+  const repeatedPitches = parseABCToPitchEvents(repeated).map((event) => event.absolutePitch);
+  assert.deepStrictEqual(repeatedPitches, directPitches);
 });
 
 run("quarter-tone transpose K:none", () => {

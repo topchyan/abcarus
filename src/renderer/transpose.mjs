@@ -435,6 +435,17 @@ function microPrefixFor53(micro, { explicit } = {}) {
   return m > 0 ? `^${m}` : `_${-m}`;
 }
 
+function keySignatureLetterFor53(letterUpper, micro) {
+  const upper = String(letterUpper || "").toUpperCase();
+  // ABC letter case also chooses the octave where abc2svg draws an explicit
+  // key accidental. Use the conventional treble-key positions so a modified
+  // F sharp replaces the normal Em key sign instead of appearing below it.
+  const positions = Number(micro) < 0
+    ? { B: "B", E: "e", A: "A", D: "d", G: "G", C: "c", F: "f" }
+    : { F: "f", C: "c", G: "g", D: "d", A: "A", E: "e", B: "B" };
+  return positions[upper] || upper;
+}
+
 function abcTokenFor53Candidate(letterUpper, micro, octave) {
   let letter = String(letterUpper || "").toUpperCase();
   const oct = Number(octave);
@@ -568,7 +579,7 @@ function mapsEqual53(a, b) {
   const bb = b || {};
   const keys = new Set([...Object.keys(aa), ...Object.keys(bb)]);
   for (const key of keys) {
-    if ((aa[key] ?? null) !== (bb[key] ?? null)) return false;
+    if ((aa[key] ?? 0) !== (bb[key] ?? 0)) return false;
   }
   return true;
 }
@@ -580,12 +591,21 @@ function normalizeKBody53ToC(kBody) {
   const step = tonicPc12 > 6 ? 1 : -1;
   const count = tonicPc12 > 6 ? 12 - tonicPc12 : tonicPc12;
   for (let i = 0; i < count; i += 1) {
-    out = transposeKBody53Raw(out, step, { detectProfile: false }).text;
+    out = transposeKBody53Raw(out, step, {
+      detectProfile: false,
+      functionalKeyTranspose53: false,
+    }).text;
   }
   return out;
 }
 
 export function detectKnownMakamKeyProfile53(kBody) {
+  const { head } = splitComment(kBody);
+  const { keyToken } = parseInitialKKeyToken(head);
+  const keyInfo = parseKeyToken(keyToken);
+  // An explicit Western mode such as Am/Gm is authoritative. A sparse added
+  // micro-accidental is not enough evidence to replace it with a makam profile.
+  if (String(keyInfo?.modeSuffix || "").trim()) return null;
   const normalized = normalizeKBody53ToC(kBody);
   const normalizedMap = buildEffectiveKeyMicroMap53FromKBody(normalized);
   for (const entry of BUILTIN_MAKAM_K_SIGNATURES) {
@@ -783,24 +803,29 @@ function buildKeyMicroMapFromKBody53(body, { allowMicro = true } = {}) {
   return map;
 }
 
-function shouldInferWesternKeySignature53(kBody) {
+function shouldInferWesternKeySignature53(kBody, { inferWithExplicit = false } = {}) {
   const { head } = splitComment(kBody);
   const { firstToken } = parseKLineBodyForRewrite(head);
   const keyInfo = parseKeyToken(firstToken) || { isNone: true, modeSuffix: "" };
   if (!keyInfo || keyInfo.isNone) return false;
   const explicit = parseExplicitKeyAccTokens53(head);
-  if (explicit.length > 0) return false;
+  if (explicit.length > 0 && !inferWithExplicit) return false;
   const suffix = String(keyInfo.modeSuffix || "").trim().toLowerCase();
   return !suffix || suffix === "maj" || suffix === "major" || suffix === "m" || suffix === "min" || suffix === "minor";
 }
 
-export function buildEffectiveKeyMicroMap53FromKBody(kBody, { allowMicro = true } = {}) {
+export function buildEffectiveKeyMicroMap53FromKBody(kBody, {
+  allowMicro = true,
+  inferWesternWithExplicit = false,
+} = {}) {
   const { head } = splitComment(kBody);
   const { firstToken } = parseKLineBodyForRewrite(head);
   const keyInfo = parseKeyToken(firstToken) || { isNone: true, pref: "flat", accCount: 0 };
 
   const out = {};
-  if (!keyInfo.isNone && shouldInferWesternKeySignature53(head)) {
+  if (!keyInfo.isNone && shouldInferWesternKeySignature53(head, {
+    inferWithExplicit: inferWesternWithExplicit,
+  })) {
     const sig = buildKeySignature(keyInfo.accCount || 0, keyInfo.pref || "flat");
     for (const [letter, semi] of Object.entries(sig)) {
       if (!semi) continue;
@@ -828,8 +853,13 @@ function transposeKBody53Raw(body, deltaSteps, options = {}) {
   const deltaCommas = Number.isFinite(options.deltaCommasOverride)
     ? options.deltaCommasOverride
     : euroSemitoneDeltaCommas53({ tonicPc12: readTonicPc12, deltaSteps });
-  const readKeyMicroMap = buildEffectiveKeyMicroMap53FromKBody(head);
-  const sourceMakamProfile53 = options.detectProfile === false ? null : detectKnownMakamKeyProfile53(head);
+  const declaredKeyInfo = parseKeyToken(firstToken);
+  const hasDeclaredWesternMode = Boolean(String(declaredKeyInfo?.modeSuffix || "").trim());
+  const sourceMakamProfile53 = options.detectProfile === false || hasDeclaredWesternMode
+    ? null
+    : detectKnownMakamKeyProfile53(head);
+  const inferWesternWithExplicit = !sourceMakamProfile53;
+  const readKeyMicroMap = buildEffectiveKeyMicroMap53FromKBody(head, { inferWesternWithExplicit });
   const targetTonicPc12 = mod(readTonicPc12 + deltaSteps, 12);
 
   if (sourceMakamProfile53 && options.fromCanonicalProfile !== false) {
@@ -849,6 +879,10 @@ function transposeKBody53Raw(body, deltaSteps, options = {}) {
 
   const isNone = /^none$/i.test(firstToken || "");
   let newFirstToken = String(firstToken || "");
+  let functionalKeyTranspose53 = false;
+  let sourceWesternKeyMap = {};
+  let targetWesternKeyMap = {};
+  let keyLetterShift53 = 0;
   if (!isNone) {
     const tokenMatch = String(firstToken || "").match(/^([A-G])([#b]?)(.*)$/);
     if (!tokenMatch) {
@@ -860,11 +894,36 @@ function transposeKBody53Raw(body, deltaSteps, options = {}) {
     const pc0 = mod(PC_NAT_12[tonicLetter] + (tonicAcc === "#" ? 1 : tonicAcc === "b" ? -1 : 0), 12);
     const pc1 = mod(pc0 + deltaSteps, 12);
     const originalSide = tonicAcc === "#" ? "sharp" : tonicAcc === "b" ? "flat" : "neutral";
-    const tonic1Name = (sourceMakamProfile53 || options.preferMakamTonic)
-      ? chooseTonicNameByPcForMakam53(pc1, { deltaSteps, originalSide })
-      : chooseTonicNameByPc(pc1, { deltaSteps, originalSide });
+    const keyInfo = declaredKeyInfo;
+    const mode = String(keyInfo && keyInfo.modeSuffix || "").trim().toLowerCase();
+    const isSimpleWesternMode = !mode || mode === "maj" || mode === "major"
+      || mode === "m" || mode === "min" || mode === "minor";
+    const useFunctionalWestern = Boolean(
+      options.functionalKeyTranspose53 !== false
+      && !sourceMakamProfile53
+      && keyInfo
+      && isSimpleWesternMode
+      && hasDeclaredWesternMode
+    );
+    let tonic1Name;
+    if (sourceMakamProfile53 || options.preferMakamTonic) {
+      tonic1Name = chooseTonicNameByPcForMakam53(pc1, { deltaSteps, originalSide });
+    } else if (useFunctionalWestern) {
+      const prefer = originalSide === "neutral"
+        ? (options.prefer || (deltaSteps < 0 ? "flat" : "sharp"))
+        : originalSide;
+      tonic1Name = chooseKeyName(pc1, keyInfo.isMinor, prefer).name;
+    } else {
+      tonic1Name = chooseTonicNameByPc(pc1, { deltaSteps, originalSide });
+    }
     newFirstToken = `${tonic1Name}${modeInline}`;
+    functionalKeyTranspose53 = useFunctionalWestern;
+    if (functionalKeyTranspose53) {
+      sourceWesternKeyMap = buildEffectiveKeyMicroMap53FromKBody(firstToken);
+      keyLetterShift53 = computeLetterShiftBetweenTonics(firstToken, newFirstToken);
+    }
   }
+  targetWesternKeyMap = buildEffectiveKeyMicroMap53FromKBody(newFirstToken);
 
   const outTokens = [];
   const preferSharps = deltaSteps > 0;
@@ -876,12 +935,23 @@ function transposeKBody53Raw(body, deltaSteps, options = {}) {
     const base0 = baseId53ForNaturalLetter(upper);
     const parsed = parseAccidentalPrefix53(tok.acc, pc);
     if (!parsed.explicit) continue;
-    const id0 = mod(base0 + parsed.micro, 53);
-    const id1 = mod(id0 + deltaCommas, 53);
-    const chosen = chooseSpelling53ForId({ id53: id1, preferFlats, preferSharps });
-    const outLetter = (tok.letter === tok.letter.toUpperCase())
-      ? chosen.letterUpper.toUpperCase()
-      : chosen.letterUpper.toLowerCase();
+    let chosen;
+    if (functionalKeyTranspose53) {
+      const targetLetter = shiftLetterFamily(upper, keyLetterShift53);
+      const sourceDefault = sourceWesternKeyMap[upper] ?? 0;
+      const targetDefault = targetWesternKeyMap[targetLetter] ?? 0;
+      chosen = {
+        letterUpper: targetLetter,
+        micro: targetDefault + (parsed.micro - sourceDefault),
+      };
+    } else {
+      const id0 = mod(base0 + parsed.micro, 53);
+      const id1 = mod(id0 + deltaCommas, 53);
+      chosen = chooseSpelling53ForId({ id53: id1, preferFlats, preferSharps });
+    }
+    if (!chosen || !isAllowedMicro53(chosen.micro)) continue;
+    if (targetWesternKeyMap[chosen.letterUpper] === chosen.micro) continue;
+    const outLetter = keySignatureLetterFor53(chosen.letterUpper, chosen.micro);
     outTokens.push(`${microPrefixFor53(chosen.micro, { explicit: true })}${outLetter}`);
   }
 
@@ -891,10 +961,11 @@ function transposeKBody53Raw(body, deltaSteps, options = {}) {
     text,
     tonicToken: newFirstToken,
     letterShift53: computeLetterShiftBetweenTonics(firstToken, newFirstToken),
+    functionalKeyTranspose53,
     readTonicPc12,
     deltaCommas,
     readKeyMicroMap,
-    writeKeyMicroMap: buildEffectiveKeyMicroMap53FromKBody(text),
+    writeKeyMicroMap: buildEffectiveKeyMicroMap53FromKBody(text, { inferWesternWithExplicit }),
   };
 }
 
@@ -1056,7 +1127,11 @@ function detectFinalisPc12For53(text) {
     const line = String(part.line || "");
     const kMatch = line.match(/^\s*K:([\s\S]*)$/);
     if (kMatch) {
-      keyMap = buildEffectiveKeyMicroMap53FromKBody(kMatch[1] || "");
+      const kBody = kMatch[1] || "";
+      const makamProfile = detectKnownMakamKeyProfile53(kBody);
+      keyMap = buildEffectiveKeyMicroMap53FromKBody(kBody, {
+        inferWesternWithExplicit: !makamProfile,
+      });
       barMicroRead = {};
       continue;
     }
@@ -1483,7 +1558,11 @@ function transposeBarSegment53Western(segment, deltaSteps, ctx, preferDefault, p
       const close = src.indexOf("\"", i + 1);
       if (close !== -1) {
         const inner = src.slice(i + 1, close);
-        pushText(`"${transposeChordText(inner, deltaSteps, preferDefault)}"`);
+        const tonicSide = tonicSideFromKeyToken(ctx.tonicToken53);
+        const chordPreference = tonicSide === "sharp" || tonicSide === "flat"
+          ? tonicSide
+          : preferDefault;
+        pushText(`"${transposeChordText(inner, deltaSteps, chordPreference)}"`);
         i = close + 1;
         continue;
       }
@@ -1540,7 +1619,16 @@ function transposeBarSegment53Western(segment, deltaSteps, ctx, preferDefault, p
     }
 
     const abs53 = oct * 53 + baseId53ForNaturalLetter(upper) + micro;
-    const abs53New = abs53 + deltaCommas;
+    const preferredFamily = shiftLetterFamily(upper, ctx.letterShift53);
+    let abs53New = abs53 + deltaCommas;
+    if (ctx.functionalKeyTranspose53) {
+      const sourceDefault = ctx.readKeyMicroMap?.[upper] ?? 0;
+      const targetDefault = ctx.writeKeyMicroMap?.[preferredFamily] ?? 0;
+      const targetMicro = targetDefault + (micro - sourceDefault);
+      const targetBase = baseId53ForNaturalLetter(preferredFamily) + targetMicro;
+      const targetOctave = Math.round((abs53New - targetBase) / 53);
+      abs53New = targetOctave * 53 + targetBase;
+    }
     const oct2 = Math.trunc(Math.floor(abs53New / 53));
     const id2 = mod(abs53New, 53);
     const candidates = [];
@@ -1563,6 +1651,7 @@ function transposeBarSegment53Western(segment, deltaSteps, ctx, preferDefault, p
     };
 
     addCandidate(toCandidate(upper));
+    addCandidate(toCandidate(shiftLetterFamily(upper, ctx.letterShift53)));
     const bestSpell = chooseSpelling53ForId({ id53: id2, preferFlats, preferSharps });
     if (bestSpell && bestSpell.letterUpper) addCandidate(toCandidate(bestSpell.letterUpper));
     if (ctx.makamProfile53) {
@@ -1579,7 +1668,7 @@ function transposeBarSegment53Western(segment, deltaSteps, ctx, preferDefault, p
       duration: note.duration || "",
       oct2,
       candidates,
-      preferredFamily: shiftLetterFamily(upper, ctx.letterShift53),
+      preferredFamily,
       sourcePerdeToken: abcTokenFor53Candidate(upper, micro, oct),
     });
     i = note.end;
@@ -1708,6 +1797,7 @@ function transposeMusicLine53Western(line, deltaSteps, ctx, preferDefault) {
           ctx.makamProfile53 = info.makamProfile53 || null;
           ctx.tonicToken53 = info.tonicToken || null;
           ctx.letterShift53 = Number.isFinite(info.letterShift53) ? info.letterShift53 : 0;
+          ctx.functionalKeyTranspose53 = info.functionalKeyTranspose53 === true;
           ctx.lastSourceUpper53 = null;
           ctx.lastOutputUpper53 = null;
           out.push("[K:" + info.text + "]");
@@ -1759,6 +1849,7 @@ function transformTranspose53SingleStep(text, deltaSteps, options = {}) {
     makamProfile53: null,
     tonicToken53: null,
     letterShift53: 0,
+    functionalKeyTranspose53: false,
     lastSourceUpper53: null,
     lastOutputUpper53: null,
     globalDeltaCommas,
@@ -1779,6 +1870,7 @@ function transformTranspose53SingleStep(text, deltaSteps, options = {}) {
         ctx.makamProfile53 = info.makamProfile53 || null;
         ctx.tonicToken53 = info.tonicToken || null;
         ctx.letterShift53 = Number.isFinite(info.letterShift53) ? info.letterShift53 : 0;
+        ctx.functionalKeyTranspose53 = info.functionalKeyTranspose53 === true;
         ctx.lastSourceUpper53 = null;
         ctx.lastOutputUpper53 = null;
         out.push(prefix + info.text + nl);
@@ -1800,7 +1892,9 @@ function transformTranspose53(text, deltaSteps, options = {}) {
   const count = Math.abs(Math.trunc(delta));
   for (let i = 0; i < count; i += 1) {
     out = transformTranspose53SingleStep(out, step, options);
-    if (!options || options.simplifyDisplayKey53 !== false) out = simplify53DisplayKeyText(out, options && options.displayKey53 ? options.displayKey53 : {});
+    if (options && options.simplifyDisplayKey53 === true) {
+      out = simplify53DisplayKeyText(out, options.displayKey53 || {});
+    }
   }
   return out;
 }
@@ -1957,89 +2051,6 @@ function formatKeyAccidentalToken(accSteps, letter, lowerCase, options = {}) {
   return `${accidentalOut}${outLetter}`;
 }
 
-function noteAccStepsFromToken(token) {
-  const raw = String(token || "");
-  if (!raw) return null;
-  if (raw.startsWith("^^")) return 4;
-  if (raw.startsWith("__")) return -4;
-  if (raw.startsWith("^/")) return 1;
-  if (raw.startsWith("_/")) return -1;
-  if (raw.startsWith("^")) return 2;
-  if (raw.startsWith("_")) return -2;
-  if (raw.startsWith("=")) return 0;
-  return null;
-}
-
-function parseRespeltNoteToken(token) {
-  const m = String(token || "").match(/^(\^\^|__|\^\/|_\/|\^|_|=)?([A-Ga-g])/);
-  if (!m) return null;
-  const accSteps = noteAccStepsFromToken(m[1] || "");
-  return {
-    letter: m[2].toUpperCase(),
-    accSteps,
-  };
-}
-
-function inferPromotableExtraKeyAccidentals(respellReplacements, keyInfos) {
-  const countsByKey = new Map();
-  const totalsByKey = new Map();
-  for (const rep of respellReplacements || []) {
-    if (!rep || !Number.isFinite(rep.keyIndex)) continue;
-    const info = keyInfos[rep.keyIndex] || null;
-    if (!info || !info.extraAccSteps || Object.keys(info.extraAccSteps).length === 0) continue;
-    const parsed = rep.letter
-      ? { letter: String(rep.letter).toUpperCase(), accSteps: rep.desiredAcc }
-      : parseRespeltNoteToken(rep.text);
-    if (!parsed) continue;
-    const totals = totalsByKey.get(rep.keyIndex) || {};
-    totals[parsed.letter] = (totals[parsed.letter] || 0) + 1;
-    totalsByKey.set(rep.keyIndex, totals);
-    if (parsed.accSteps == null || parsed.accSteps === 0 || Math.abs(parsed.accSteps) > STEPS_PER_SEMITONE) continue;
-    const key = `${parsed.letter}:${parsed.accSteps}`;
-    const counts = countsByKey.get(rep.keyIndex) || {};
-    counts[key] = (counts[key] || 0) + 1;
-    countsByKey.set(rep.keyIndex, counts);
-  }
-
-  const out = new Map();
-  for (const [keyIndex, counts] of countsByKey.entries()) {
-    const totals = totalsByKey.get(keyIndex) || {};
-    const additions = {};
-    for (const [key, count] of Object.entries(counts)) {
-      const [letter, stepsText] = key.split(":");
-      const total = totals[letter] || 0;
-      if (count < 3) continue;
-      if (count / Math.max(1, total) < 0.6) continue;
-      const alreadyInKey = Object.prototype.hasOwnProperty.call(keyInfos[keyIndex].extraAccSteps || {}, letter);
-      if (!alreadyInKey && count <= (total - count) + 1) continue;
-      additions[letter] = Number(stepsText);
-    }
-    if (Object.keys(additions).length) out.set(keyIndex, additions);
-  }
-  return out;
-}
-
-function appendExtraKeyAccidentalsToTail(tail, additions) {
-  const entries = Object.entries(additions || {});
-  if (!entries.length) return tail || "";
-  const existing = parseKeyAccidentals(tail || "", 0).reduce((set, event) => {
-    set.add(event.letter.toUpperCase());
-    return set;
-  }, new Set());
-  const tokens = [];
-  for (const [letter, steps] of entries) {
-    if (existing.has(String(letter).toUpperCase())) continue;
-    tokens.push(formatKeyAccidentalToken(steps, letter, false));
-  }
-  if (!tokens.length) return tail || "";
-  const raw = String(tail || "");
-  const commentIdx = raw.indexOf("%");
-  const before = commentIdx >= 0 ? raw.slice(0, commentIdx).replace(/\s+$/, "") : raw.replace(/\s+$/, "");
-  const after = commentIdx >= 0 ? raw.slice(commentIdx) : "";
-  const spacer = before.trim() ? " " : " ";
-  return `${before}${spacer}${tokens.join(" ")}${after ? ` ${after}` : ""}`;
-}
-
 function parseKeyAccidentals(tail, baseOffset) {
   const events = [];
   if (!tail) return events;
@@ -2065,7 +2076,7 @@ function parseKeyAccidentals(tail, baseOffset) {
   return events;
 }
 
-function transposeKeyAccidentals(keyAccEvents, semitones, keyInfos, preferDefault) {
+function transposeKeyAccidentals(keyAccEvents, semitones, keyInfos, preferDefault, sourceText = "") {
   const replacements = [];
   const extraAccByKey = new Map();
   for (const event of keyAccEvents || []) {
@@ -2082,13 +2093,23 @@ function transposeKeyAccidentals(keyAccEvents, semitones, keyInfos, preferDefaul
     const text = formatKeyAccidentalToken(chosen.accSteps, chosen.letter, event.lowerCase, {
       preferFractional: event.preferFractional === true,
     });
+    const baseAccSteps = buildKeySigSteps(buildKeySignature(
+      keyInfo.isNone ? 0 : (keyInfo.accCount || 0),
+      keyInfo.isNone ? "flat" : (keyInfo.pref || "flat")
+    ));
+    const redundant = chosen.accSteps === baseAccSteps[chosen.letter.toUpperCase()];
+    let start = event.start;
+    if (redundant) {
+      while (start > 0 && /[\t ]/.test(sourceText[start - 1] || "")) start -= 1;
+    }
     replacements.push({
-      start: event.start,
+      start,
       end: event.end,
-      text,
+      text: redundant ? "" : text,
+      keyIndex: event.keyIndex,
     });
     const current = extraAccByKey.get(event.keyIndex) || {};
-    current[chosen.letter.toUpperCase()] = chosen.accSteps;
+    if (!redundant) current[chosen.letter.toUpperCase()] = chosen.accSteps;
     extraAccByKey.set(event.keyIndex, current);
   }
   return { replacements, extraAccByKey };
@@ -2472,7 +2493,8 @@ export function transformTranspose(text, semitones, options = {}) {
     parsed.keyAccEvents || [],
     semitones,
     outKeyInfos,
-    prefer
+    prefer,
+    text
   );
   const outKeyInfosWithAcc = outKeyInfos.map((info, index) => {
     if (!info) return info;
@@ -2481,36 +2503,15 @@ export function transformTranspose(text, semitones, options = {}) {
   });
 
   const transposedEvents = transposePitchEvents(parsed.events, semitones);
-  const replacements = respellPitchEvents(transposedEvents, {
+  const pitchReplacements = respellPitchEvents(transposedEvents, {
     mode,
     prefer,
     keyInfos: outKeyInfosWithAcc,
     preserveExplicitAccidentalLetters: semitones !== 0,
   });
-  const promotedExtraAcc = inferPromotableExtraKeyAccidentals(replacements, outKeyInfosWithAcc);
-  const finalKeyInfos = outKeyInfosWithAcc.map((info, index) => {
-    if (!info) return info;
-    const additions = promotedExtraAcc.get(index);
-    if (!additions) return info;
-    return {
-      ...info,
-      extraAccSteps: {
-        ...(info.extraAccSteps || {}),
-        ...additions,
-      },
-    };
-  });
-  const finalPitchReplacements = promotedExtraAcc.size
-    ? respellPitchEvents(transposedEvents, {
-      mode,
-      prefer,
-      keyInfos: finalKeyInfos,
-      preserveExplicitAccidentalLetters: semitones !== 0,
-    })
-    : replacements;
 
   const keyReplacements = parsed.keyEvents.map((event) => {
-    const info = finalKeyInfos[event.keyIndex];
+    const info = outKeyInfosWithAcc[event.keyIndex];
     if (!info || info.isNone || /^none$/i.test(info.raw || "")) {
       return { start: event.start, end: event.end, text: "none" };
     }
@@ -2518,42 +2519,15 @@ export function transformTranspose(text, semitones, options = {}) {
     return { start: event.start, end: event.end, text: `${info.name}${suffix}` };
   });
 
-  const promotedKeyAccReplacements = (parsed.keyEvents || []).map((event) => {
-    const additions = promotedExtraAcc.get(event.keyIndex);
-    if (!additions) return null;
-    const tailStart = event.end;
-    const lineEnd = String(text || "").indexOf("\n", tailStart);
-    const end = lineEnd >= 0 ? lineEnd : String(text || "").length;
-    let tail = String(text || "").slice(tailStart, end);
-    const localKeyAccReplacements = keyAccReplacements
-      .filter((rep) => rep.start >= tailStart && rep.end <= end)
-      .map((rep) => ({ ...rep, start: rep.start - tailStart, end: rep.end - tailStart }));
-    tail = applyReplacements(tail, localKeyAccReplacements);
-    return {
-      start: tailStart,
-      end,
-      text: appendExtraKeyAccidentalsToTail(tail, additions),
-      keyIndex: event.keyIndex,
-    };
-  }).filter(Boolean);
-  const promotedKeyIndexes = new Set(promotedKeyAccReplacements.map((rep) => rep.keyIndex));
-  const finalKeyAccReplacements = promotedKeyIndexes.size
-    ? keyAccReplacements.filter((rep) => {
-      const event = (parsed.keyAccEvents || []).find((acc) => acc.start === rep.start && acc.end === rep.end);
-      return !event || !promotedKeyIndexes.has(event.keyIndex);
-    })
-    : keyAccReplacements;
-
   const chordReplacements = (parsed.chordEvents || []).map((event) => ({
     start: event.start,
     end: event.end,
     text: transposeChordText(event.chordText, semitones, prefer),
   })).filter((rep) => rep.text !== null);
 
-  const allReplacements = finalPitchReplacements.concat(
+  const allReplacements = pitchReplacements.concat(
     keyReplacements,
-    finalKeyAccReplacements,
-    promotedKeyAccReplacements,
+    keyAccReplacements,
     chordReplacements
   );
   return applyReplacements(text, allReplacements);
