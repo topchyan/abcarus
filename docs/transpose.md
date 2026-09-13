@@ -7,8 +7,9 @@
 > corpus and an explicit pitch model.
 
 ## Current status in the app
-Semitone transposition is implemented as a native JS transform:
-- `transformTranspose` in `src/renderer/transpose.mjs`
+Semitone transposition is implemented by the portable, versioned API in
+`src/shared/abc-transpose/index.mjs`. `src/renderer/transpose.mjs` is retained
+only as a compatibility re-export for existing desktop imports.
 
 Semitone transposition runs via the built-in JS engine.
 
@@ -51,6 +52,12 @@ The Tools menu intentionally exposes two different reversible operations:
 
 Mertebe conversion is independent of Bolahenk/concert pitch conversion and is
 therefore a separate command.
+
+## Portable contract
+
+Desktop and mobile consumers should call `transposeAbc()` and run the shared
+golden fixtures in `src/shared/abc-transpose/fixtures/v1.json`. See
+`docs/transpose-api.md` for the request/result contract and Set List usage.
 
 ## Native transposition work (experimental)
 There is active/experimental work toward a broader native transposition engine and a test corpus:

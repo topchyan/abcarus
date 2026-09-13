@@ -1,0 +1,46 @@
+{
+  "schema": "abcarus.abc-transpose.fixtures.v1",
+  "cases": [
+    {
+      "id": "western-major-up-one",
+      "sourceText": "X:1\nK:C\nCDE |\n",
+      "semitones": 1,
+      "expectedEdo": 12,
+      "expectedStrategy": "western",
+      "expectedText": "X:1\nK:Db\nDEF |\n"
+    },
+    {
+      "id": "edo53-functional-down-two",
+      "sourceText": "X:4\n%%MIDI temperamentequal 53\nL:1/8\nK:Am _1B\n\"Am\" e3(3f/e/d/   e6 eA fede |\n",
+      "semitones": -2,
+      "expectedEdo": 53,
+      "expectedStrategy": "functional-key",
+      "expectedText": "X:4\n%%MIDI temperamentequal 53\nL:1/8\nK:Gm _1A\n\"Gm\" d3(3e/d/c/   d6 dG edcd |\n"
+    },
+    {
+      "id": "edo53-functional-down-three",
+      "sourceText": "X:4\n%%MIDI temperamentequal 53\nL:1/8\nK:Am _1B\n\"Am\" e3(3f/e/d/   e6 eA fede |\n",
+      "semitones": -3,
+      "expectedEdo": 53,
+      "expectedStrategy": "functional-key",
+      "expectedText": "X:4\n%%MIDI temperamentequal 53\nL:1/8\nK:F#m ^3g\n\"F#m\" c3(3d/c/B/   c6 cF dcBc |\n"
+    },
+    {
+      "id": "edo53-functional-down-five",
+      "sourceText": "X:4\n%%MIDI temperamentequal 53\nL:1/8\nK:Am _1B\n\"Am\" e3(3f/e/d/   e6 eA fede |\n",
+      "semitones": -5,
+      "expectedEdo": 53,
+      "expectedStrategy": "functional-key",
+      "expectedText": "X:4\n%%MIDI temperamentequal 53\nL:1/8\nK:Em ^4f\n\"Em\" B3(3c/B/A/   B6 BE cBAB |\n"
+    },
+    {
+      "id": "edo53-inherited-header",
+      "headerText": "%%MIDI temperamentequal 53\n",
+      "sourceText": "X:1\nK:Am _1B\ne f e d |\n",
+      "semitones": -3,
+      "expectedEdo": 53,
+      "expectedStrategy": "functional-key",
+      "expectedText": "X:1\nK:F#m ^3g\nc d c B |\n"
+    }
+  ]
+}

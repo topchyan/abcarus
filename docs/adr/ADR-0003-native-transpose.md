@@ -25,7 +25,10 @@ Introduce “native transpose” as the primary transposition path in the UI:
 - Enabled by default (`useNativeTranspose: true`), can be disabled in Settings.
 - On errors/incompatibility, the native path must refuse rather than “silently” modify text.
 
-Native transposition is implemented in `src/renderer/transpose.mjs` and invoked from the renderer (via existing UI/IPC paths), without changing IPC names or menu action strings.
+Native transposition is implemented by the portable engine in
+`src/shared/abc-transpose/` and invoked from the renderer through the compatible
+`src/renderer/transpose.mjs` entry point, without changing IPC names or menu
+action strings.
 
 ### 53-EDO (`temperamentequal 53`)
 
@@ -42,7 +45,7 @@ Strings like `"Em7"`, `"A7/E"`, `"C#m7/G#"` are transposed in 12-TET:
 
 ## Scope (where to look in code)
 
-- Algorithm: `src/renderer/transpose.mjs`
+- Algorithm: `src/shared/abc-transpose/engine.mjs`
 - Enable/fallback: `src/renderer/renderer.js` (`useNativeTranspose`)
 - Setting UI: `src/renderer/index.html`, `src/renderer/settings.js`
 - Header integration (temperamentequal from header): `src/renderer/renderer.js` (passes effective header into transpose)

@@ -93,10 +93,9 @@ document lifecycle with full-file or embedded-block segmentation respectively.
 The 5,000-line ceiling is intentionally above the current 3,865 lines. It
 allows honest wiring changes while preventing a return to unbounded growth.
 The 2,000-line module ceiling prevents solving the problem by moving the old
-monolith into a differently named file. The existing
-`src/renderer/transpose.mjs` is the sole legacy exception at 2,568 lines and is
-capped at that exact size, so it cannot grow without an explicit guardrail
-decision.
+monolith into a differently named renderer file. The former transpose exception
+has moved behind the portable `src/shared/abc-transpose/` domain boundary;
+`src/renderer/transpose.mjs` is now only a compatibility entry point.
 
 ## Remaining Work
 
@@ -104,8 +103,8 @@ No further renderer extraction is required to satisfy ADR-0017.
 
 Future work should be ordinary maintenance:
 
-- consider a separate, behavior-preserving decomposition of the legacy
-  `transpose.mjs` module; it is not a remaining `renderer.js` tail;
+- consider a behavior-preserving decomposition of the portable transpose
+  engine as its public contract matures;
 - split a domain-internal file only when its cohesion or testability warrants
   it;
 - remove a composition-root adapter when initialization order naturally allows

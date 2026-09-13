@@ -41,6 +41,7 @@
     "test:editor-commands": "node devtools/editor_commands_harness/run_tests.mjs",
     "test:editor-runtime": "node devtools/editor_runtime_harness/run_tests.mjs",
     "test:transpose": "node devtools/transpose_harness/run_tests.js",
+    "test:transpose-contract": "node devtools/transpose_contract_harness/run_tests.mjs",
     "test:turkish-notation": "node devtools/turkish_notation_harness/run_tests.mjs",
     "test:note-preview": "node devtools/note_preview_harness/run_tests.mjs",
     "test:midi-input": "node devtools/midi_input_harness/run_tests.mjs",

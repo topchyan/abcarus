@@ -1,6 +1,5 @@
 import {
-  getNativeTransposeSupport,
-  transformTranspose,
+  transposeAbc,
 } from "../../transpose.mjs";
 
 function clampSetListTransposeSemitones(value) {
@@ -20,28 +19,23 @@ function buildSetListPerformanceView({ sourceText = "", headerText = "", transpo
   const semitones = clampSetListTransposeSemitones(transposeSemitones);
   if (!semitones) return { ok: true, text, transposeSemitones: 0 };
 
-  const support = getNativeTransposeSupport(text, { headerText: String(headerText || "") });
-  if (!support.ok) {
+  const result = transposeAbc({
+    sourceText: text,
+    headerText: String(headerText || ""),
+    semitones,
+  });
+  if (!result.ok) {
     return {
       ok: false,
-      error: support.reason || "This tune cannot be transposed for Set List performance.",
+      error: result.error || "This tune cannot be transposed for Set List performance.",
       transposeSemitones: semitones,
     };
   }
-
-  try {
-    return {
-      ok: true,
-      text: transformTranspose(text, semitones, { headerText: String(headerText || "") }),
-      transposeSemitones: semitones,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error && error.message ? error.message : "Set List transposition failed.",
-      transposeSemitones: semitones,
-    };
-  }
+  return {
+    ok: true,
+    text: result.text,
+    transposeSemitones: semitones,
+  };
 }
 
 function mergeSetListSnapshotAfterSourceSave(previous, replacement, { preserveTranspose = false } = {}) {

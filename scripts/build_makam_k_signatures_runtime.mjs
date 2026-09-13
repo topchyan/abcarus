@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 
 const SOURCE = "docs/makam_dna/SYMBTR_MAKAMS_K_SIGNATURES.json";
-const OUT = "src/renderer/makam_dna/makam_k_signatures.min.mjs";
+const OUT = "src/shared/abc-transpose/makam_k_signatures.min.mjs";
 
 function firstTopK(entry) {
   if (!entry || typeof entry !== "object") return "";

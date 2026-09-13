@@ -7,9 +7,7 @@ import { join, relative, resolve } from "node:path";
 
 const RENDERER_COMPOSITION_ROOT_MAX_LINES = 5000;
 const RENDERER_MODULE_MAX_LINES = 2000;
-const LEGACY_RENDERER_MODULE_MAX_LINES = new Map([
-  ["src/renderer/transpose.mjs", 2568],
-]);
+const LEGACY_RENDERER_MODULE_MAX_LINES = new Map();
 
 async function collectRendererModules(dirPath) {
   const entries = await readdir(dirPath, { withFileTypes: true });

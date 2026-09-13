@@ -131,7 +131,7 @@ The current implementation already contains pieces of this direction:
 - practical finalis-anchor heuristics,
 - surrogate `K:none ...` extraction,
 - standard ordering and register placement for surrogate key signs,
-- named-perde lookup through `src/renderer/perde_by_abc.mjs`.
+- named-perde lookup through `src/shared/abc-transpose/perde_by_abc.mjs`.
 
 The next implementation step should be a context-aware spelling selector. A practical first version can work per bar:
 

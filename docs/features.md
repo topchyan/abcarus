@@ -64,7 +64,7 @@ The library tree supports per-tune file operations:
 Transform actions are implemented natively in the renderer:
 
 Native (renderer):
-- Transpose up/down one semitone (`transformTranspose` in `src/renderer/transpose.mjs`), including chord symbols (`"C#m7/G#"` style gchords).
+- Transpose up/down one semitone (portable `transposeAbc` API in `src/shared/abc-transpose/`), including chord symbols (`"C#m7/G#"` style gchords).
 - Double/half note lengths (`transformLengthScaling` in `src/renderer/renderer.js`).
 - "Align Bars" tool realigns bars in the editor text (`alignBarsInEditor`).
 - Set measures per line (1–9) via a conservative in-place reflow that preserves non-music constructs.

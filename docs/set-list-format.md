@@ -99,6 +99,9 @@ Library source at that transposition. Saving it to the Set List leaves the
 source ABC unchanged. Choosing **Original Tune** physically transposes the
 source, refreshes the embedded snapshot, and resets the override to `0` so the
 transposition is not applied twice. A value of `0` uses the source pitch.
+Desktop and mobile derive this view through the versioned
+`abcarus.abc-transpose.v1` contract documented in `docs/transpose-api.md` and
+must verify their implementation against its shared golden fixtures.
 While this derived performance view is active, the application's ordinary
 Save command does not write its displayed text into the source file. Source
 mutation is available only through the explicit **Original Tune** choice.
