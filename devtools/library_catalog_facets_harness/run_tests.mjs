@@ -73,6 +73,18 @@ assert.deepEqual(parseCatalogGroupValues(["[custom] Value", "unstructured"]), { 
 const multiComposerHeader = extractTuneHeader(["X:3", "T:Collaboration", "C:First", "C:Second", "K:C", ""], 0, 5);
 assert.equal(multiComposerHeader.composer, "First");
 assert.deepEqual(multiComposerHeader.composers, ["First", "Second"]);
+const arbitraryHeader = extractTuneHeader([
+  "  X:4",
+  "T:Field search",
+  "N:Collected in Yerevan",
+  "Z:First transcriber",
+  "Z:Second transcriber",
+  "K:Am",
+  "A B c d|",
+], 0, 6);
+assert.deepEqual(arbitraryHeader.headerFields.N, ["Collected in Yerevan"]);
+assert.deepEqual(arbitraryHeader.headerFields.Z, ["First transcriber", "Second transcriber"]);
+assert.deepEqual(arbitraryHeader.headerFields.X, ["4"], "indented ABC fields must be indexed");
 assert.deepEqual(parseCatalogGroupValues(["[constructor] ignored"]), {}, "unsafe object keys are not indexed");
 assert.deepEqual(
   extractTuneHeader(["X:2", "T:No facets", "M:9/8", "K:D", ""], 0, 4).catalogFacets,
@@ -89,10 +101,17 @@ const tune = {
     ...header.catalogFacets,
     makam: ["Hicaz", "Uşşak"],
   },
+  headerFields: arbitraryHeader.headerFields,
 };
 assert.deepEqual(getGroupValues(tune, "makam"), ["Hicaz", "Uşşak"]);
 
-const files = [{ path: "/music/a.abc", basename: "a.abc", updatedAtMs: 10, tunes: [tune] }];
+const files = [{
+  path: "/music/a.abc",
+  basename: "a.abc",
+  updatedAtMs: 10,
+  headerText: "I:abc-charset utf-8\nN:File-wide archive note\n",
+  tunes: [tune],
+}];
 const makamEntries = buildGroupEntries(files, "makam");
 assert.deepEqual(makamEntries.map((entry) => entry.label), ["Makam: Hicaz", "Makam: Uşşak"]);
 assert.ok(makamEntries.every((entry) => entry.tunes.length === 1));
@@ -116,6 +135,12 @@ assert.equal(plainGroupEntries.find((entry) => entry.label === "G: [makam] Hicaz
 
 assert.equal(applyLibraryTextFilter(files, "ottoman").length, 1, "facet values must be searchable");
 assert.equal(applyLibraryTextFilter(files, "uşşak").length, 1, "repeated facet values must be searchable");
+assert.equal(applyLibraryTextFilter(files, "yerevan").length, 1, "arbitrary header values must be searchable");
+assert.equal(applyLibraryTextFilter(files, "N: collected").length, 1, "field-qualified search must allow whitespace after the colon");
+assert.equal(applyLibraryTextFilter(files, "Z:second transcriber").length, 1, "repeated arbitrary fields must be searchable by tag");
+assert.equal(applyLibraryTextFilter(files, "D:second transcriber").length, 0, "field-qualified search must respect the requested tag");
+assert.equal(applyLibraryTextFilter(files, "N: archive note").length, 1, "file-header fields must apply to the file's tunes");
+assert.equal(applyLibraryTextFilter(files, "Z:archive note").length, 0, "file-header field qualification must be respected");
 assert.equal(applyLibraryTextFilter(files, "unrelated").length, 0);
 
 globalThis.window = {};
@@ -124,6 +149,8 @@ const catalogRows = createLibraryViewStore({
   safeBasename: (value) => String(value).split("/").pop(),
 }).getModalRows();
 assert.ok(catalogRows[0].searchText.includes("ottoman armenian"), "Catalog search must include facet values");
+assert.ok(catalogRows[0].searchText.includes("z: second transcriber"), "Catalog search must include qualified arbitrary fields");
+assert.ok(catalogRows[0].searchText.includes("n: file-wide archive note"), "Catalog search must include file-header fields");
 
 const tuneText = "X:1\r\nT:Example\r\nM:4/4\r\nK:C\r\nC D E F|\r\n";
 const addedToTune = addFacetToTuneText(tuneText, "makam", "Hicaz");

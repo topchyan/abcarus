@@ -62,6 +62,16 @@ export function createLibraryViewStore({ getIndex, safeBasename }) {
       const modified = file && file.updatedAtMs ? formatYmd(file.updatedAtMs) : "";
       const filePath = file && file.path ? file.path : "";
       const fileLabel = file && file.basename ? file.basename : safeBasename(filePath);
+      const fileHeaderFields = String(file && file.headerText ? file.headerText : "")
+        .split(/\r\n|\n|\r/)
+        .flatMap((line) => {
+          const match = line.match(/^\s*([A-Za-z]):\s*(.*)$/);
+          if (!match || !match[2].trim()) return [];
+          const field = match[1].toUpperCase();
+          const value = normalize(match[2]);
+          return [`${field}:${value}`, `${field}: ${value}`, value];
+        })
+        .join(" ");
       const tunes = file && Array.isArray(file.tunes) ? file.tunes : [];
       for (const tune of tunes) {
         const xNumber = tune && tune.xNumber != null ? tune.xNumber : "";
@@ -79,7 +89,12 @@ export function createLibraryViewStore({ getIndex, safeBasename }) {
         const meter = tune && tune.meter ? tune.meter : "";
         const tempo = tune && tune.tempo ? tune.tempo : "";
         const rhythm = tune && tune.rhythm ? tune.rhythm : "";
-        const searchText = `${normalize(fileLabel)} ${normalize(xNumber)} ${normalize(title)} ${normalize(titleKey)} ${normalize(composers)} ${normalize(key)} ${normalize(meter)} ${normalize(tempo)} ${normalize(rhythm)} ${normalize(origin)} ${normalize(group)} ${normalize(groups)} ${normalize(catalogFacets)} ${normalize(modified)}`.toLowerCase();
+        const headerFields = tune && tune.headerFields && typeof tune.headerFields === "object"
+          ? Object.entries(tune.headerFields).flatMap(([field, values]) => (
+            (Array.isArray(values) ? values : [values]).flatMap((value) => [`${field}:${normalize(value)}`, `${field}: ${normalize(value)}`, normalize(value)])
+          )).join(" ")
+          : "";
+        const searchText = `${normalize(fileLabel)} ${normalize(fileHeaderFields)} ${normalize(xNumber)} ${normalize(title)} ${normalize(titleKey)} ${normalize(composers)} ${normalize(key)} ${normalize(meter)} ${normalize(tempo)} ${normalize(rhythm)} ${normalize(origin)} ${normalize(group)} ${normalize(groups)} ${normalize(catalogFacets)} ${normalize(headerFields)} ${normalize(modified)}`.toLowerCase();
         rows.push({
           file: fileLabel,
           filePath,

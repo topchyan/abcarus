@@ -1877,6 +1877,8 @@ function applySettingsPatch(patch) {
   }
   next.renderZoom = clampZoom(Number(next.renderZoom));
   next.editorZoom = clampZoom(Number(next.editorZoom));
+  next.autoScalePanes = next.autoScalePanes !== false;
+  next.scoreFitMode = next.scoreFitMode === "page" ? "page" : "content";
   const splitModes = new Set([
     "vertical-editor-left",
     "vertical-score-left",
@@ -2164,6 +2166,7 @@ function buildTunesFromContent(absPath, content) {
       group: header.group,
       groups: header.groups,
       catalogFacets: header.catalogFacets,
+      headerFields: header.headerFields,
       preview: preview || "",
       startLine: startIdx + 1,
       endLine: endIdx + 1,
@@ -2237,7 +2240,7 @@ function lruSet(map, key, value, maxEntries) {
   }
 }
 
-const PERSISTED_LIBRARY_INDEX_VERSION = 2;
+const PERSISTED_LIBRARY_INDEX_VERSION = 3;
 let persistedLibraryIndex = null;
 let persistedIndexLoadAttempted = false;
 let persistedIndexSaveTimer = null;
@@ -3871,6 +3874,7 @@ async function runUiSmoke(win) {
       let panelBarHeights = null;
       let panelFooterStyles = null;
       let resetViewLayoutOk = false;
+      let autoFitToggleOk = false;
       let scoreCenteredAfterReset = false;
       let dividerResetRefitOk = false;
       let dividerResetDiagnostics = null;
@@ -4164,8 +4168,33 @@ async function runUiSmoke(win) {
             const draggedEditorRatio = availableWidth > 0
               ? editorPane.getBoundingClientRect().width / availableWidth
               : null;
+            const autoFitInitiallyActive = Boolean(resetButton && resetButton.getAttribute("aria-pressed") === "true");
+            if (resetButton) resetButton.click();
+            await wait(220);
+            const manualModeVisible = Boolean(resetButton
+              && resetButton.getAttribute("aria-pressed") === "false"
+              && /reset view/i.test(String(resetButton.textContent || "")));
+            if (resetButton) resetButton.click();
+            await wait(300);
+            const autoFitReenabled = Boolean(resetButton && resetButton.getAttribute("aria-pressed") === "true");
+            renderPane.dispatchEvent(new WheelEvent("wheel", {
+              ctrlKey: true,
+              deltaY: -100,
+              bubbles: true,
+              cancelable: true,
+            }));
+            await wait(220);
+            const manualZoomDisablesAutoFit = Boolean(resetButton
+              && resetButton.getAttribute("aria-pressed") === "false"
+              && /reset view/i.test(String(resetButton.textContent || "")));
             if (resetButton) resetButton.click();
             await wait(650);
+            autoFitToggleOk = autoFitInitiallyActive
+              && manualModeVisible
+              && autoFitReenabled
+              && manualZoomDisablesAutoFit
+              && Boolean(resetButton && resetButton.getAttribute("aria-pressed") === "true")
+              && /auto fit/i.test(String(resetButton && resetButton.textContent || ""));
             const editorRect = editorPane.getBoundingClientRect();
             const renderRect = renderPane.getBoundingClientRect();
             const occupied = horizontal
@@ -4288,6 +4317,7 @@ async function runUiSmoke(win) {
           && workspaceStatusStable
           && measureStatusInline
           && panelBarsAligned
+          && autoFitToggleOk
           && resetViewLayoutOk
           && scoreCenteredAfterReset
           && dividerResetRefitOk
@@ -4339,6 +4369,7 @@ async function runUiSmoke(win) {
         workspaceStatusStable,
         measureStatusInline,
         panelBarsAligned,
+        autoFitToggleOk,
         panelBarHeights,
         panelFooterStyles,
         resetViewLayoutOk,

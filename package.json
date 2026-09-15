@@ -78,6 +78,7 @@
     "test:soundfont": "node devtools/soundfont_harness/run_tests.mjs",
     "test:app-commands": "node devtools/app_commands_harness/run_tests.mjs",
     "test:layout-controller": "node devtools/layout_controller_harness/run_tests.mjs",
+    "test:zoom-mode": "node devtools/zoom_mode_harness/run_tests.mjs",
     "test:menu": "node devtools/menu_harness/run_tests.cjs",
     "test:document-context": "node devtools/document_context_harness/run_tests.mjs",
     "test:file-runtime": "node devtools/file_runtime_harness/run_tests.mjs",

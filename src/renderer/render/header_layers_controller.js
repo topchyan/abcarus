@@ -4,6 +4,8 @@ import {
   normalizeHeaderLayer,
 } from "../abc/header_prefix_model.js";
 
+const INTERACTIVE_SCORE_LAYOUT = "%%leftmargin 0.5cm\n%%rightmargin 0.5cm";
+
 function sanitizeFontAssetName(name) {
   const raw = String(name || "").trim();
   if (!raw) return "";
@@ -209,6 +211,14 @@ function createHeaderLayersController({
     });
   }
 
+  function buildInteractiveHeaderPrefix(entryHeader, includeCheckbars, tuneText) {
+    return buildHeaderPrefixFromLayers({
+      layers: [INTERACTIVE_SCORE_LAYOUT, ...collectLayers(entryHeader)],
+      includeCheckbars: Boolean(includeCheckbars && isMeasureCheckEnabled()),
+      tuneText,
+    });
+  }
+
   function buildHeaderPrefixWithLayerSpans(entryHeader, includeCheckbars, tuneText) {
     return buildHeaderPrefixWithLayerSpansFromLayers({
       layers: collectLayers(entryHeader, { withKinds: true }),
@@ -227,6 +237,7 @@ function createHeaderLayersController({
 
   return {
     buildHeaderPrefix,
+    buildInteractiveHeaderPrefix,
     buildHeaderPrefixWithLayerSpans,
     buildConversionHeaderPrefix,
     getSettingsSignature,

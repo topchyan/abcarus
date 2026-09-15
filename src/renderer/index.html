@@ -106,9 +106,9 @@
 	          </button>
 	        </div>
 	        <div class="segmented" aria-label="View">
-	          <button id="btnResetLayout" title="Reset view (layout + zoom) (F8)" aria-label="Reset view (layout and zoom)">
+	          <button id="btnResetLayout" class="toggle-active" title="Auto fit is on. Click to keep the current zoom and switch to manual zoom (F8)" aria-label="Disable automatic fit" aria-pressed="true">
 	            <svg class="btn-icon icon-reset" aria-hidden="true"><use href="#ui-reset"></use></svg>
-	            <span class="btn-text">Reset view</span>
+	            <span class="btn-text">Auto fit</span>
 	          </button>
 	        </div>
 	      </div>
@@ -304,7 +304,7 @@
           </div>
 	          <div class="sidebar-control sidebar-search">
 	            <label class="sidebar-label" for="librarySearch">Filter</label>
-	            <input id="librarySearch" type="text" placeholder="Title, composer, key…" aria-label="Filter library" />
+	            <input id="librarySearch" type="text" placeholder="Any ABC header field…" aria-label="Filter library by any ABC header field" />
 	            <button id="btnLibraryClearFilter" class="sidebar-action" type="button" title="Clear filter">
                 <svg class="btn-icon icon-clear" aria-hidden="true"><use href="#ui-clear"></use></svg>
                 <span class="btn-text">Clear</span>

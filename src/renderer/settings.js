@@ -16,6 +16,8 @@ import {
 } from "../../third_party/codemirror/cm.js";
 import { createSettingsStore } from "./settings_store.js";
 import { createSettingsFolderControl } from "./app/ui/settings_folder_control.js";
+import { SETTINGS_SECTION_HINTS, settingsEntryBelongsToPanel } from "./app/ui/settings_panel_model.js";
+import { createZoomModeController } from "./app/ui/zoom_mode_controller.js";
 import {
   buildUserFontFaceCss,
   createInterfaceFontControl,
@@ -43,67 +45,11 @@ const rectSelectionExt = rectangularSelection({
     )
   ),
 });
-const SETTINGS_SECTION_HINTS = {
-  general: "General application settings.",
-  playback: "Playback behavior and visuals.",
-  editor: "Editing, notation, and note-entry behavior.",
-  fonts: "Fonts and soundfonts used for UI, editor, rendering, and playback.",
-  library: "Library organization, templates, and tune handling.",
-  print: "Print and PDF output options.",
-  importexport: "MusicXML, MIDI, ChordPro, and conversion behavior.",
-  header: "Global ABC directives prepended during render/playback.",
-  microtonal: "Makam, perde, and EDO-53 notation support.",
-  advanced: "Less frequently used compatibility and diagnostic options.",
-};
-
-const SETTINGS_PANEL_KEYS = {
-  editor: new Set([
-    "editorHelpEnabled",
-    "useNativeTranspose",
-    "midiInputEnabled",
-    "midiInputMuted",
-    "midiInputKeyAware",
-    "midiInputGrid",
-    "midiInputMacroEnabled",
-    "midiInputBeepEnabled",
-    "midiInputBeepVolume",
-    "midiInputBeepDuration",
-    "noteTypingPreviewEnabled",
-    "noteTypingPreviewVolume",
-    "noteTypingPreviewLengthMode",
-    "noteTypingPreviewTrigger",
-    "noteTypingPreviewEnvelope",
-    "noteTypingPreviewRetriggerDuration",
-    "noteTypingPreviewSkipMicrotones",
-  ]),
-  importExport: new Set([
-    "abc2xmlArgs",
-    "xml2abcArgs",
-    "stripImportedMeasureComments",
-    "autoFormatImportedAbc",
-    "midiImportBackend",
-    "midi2abcArgs",
-    "mp3ExportTimidityPath",
-    "mp3ExportFfmpegPath",
-    "chordproBinPath",
-    "chordproRepoPath",
-  ]),
-  microtonal: new Set(["supportMicrotonalNotation"]),
-  advanced: new Set(["payloadModeEnabled"]),
-};
-
-function settingsEntryBelongsToPanel(entry, panelKey, sectionName) {
-  const key = String(entry && entry.key || "");
-  for (const [candidate, keys] of Object.entries(SETTINGS_PANEL_KEYS)) {
-    if (keys.has(key)) return candidate.toLowerCase() === String(panelKey || "").toLowerCase();
-  }
-  if (panelKey === "general") return sectionName === "General" || sectionName === "Dialogs";
-  return sectionName.toLowerCase() === panelKey.toLowerCase();
-}
-
 const FALLBACK_SCHEMA = [
   { key: "renderZoom", type: "number", default: 1, section: "General", label: "Score zoom (%)", ui: { input: "percent", min: 50, max: 800, step: 5 } },
   { key: "editorZoom", type: "number", default: 1, section: "General", label: "Editor zoom (%)", ui: { input: "percent", min: 50, max: 800, step: 5 } },
+  { key: "autoScalePanes", type: "boolean", default: true, section: "General", label: "Scale Editor and Score automatically", ui: { input: "checkbox" } },
+  { key: "scoreFitMode", type: "string", default: "content", section: "General", label: "Score fit", ui: { input: "select", options: [{ value: "content", label: "Notation width" }, { value: "page", label: "Page width" }] } },
   { key: "editorHelpEnabled", type: "boolean", default: true, section: "General", group: "Editor Help", groupOrder: 30, label: "Enable editor help", ui: { input: "checkbox" } },
   { key: "uiFontFamily", type: "string", default: "system-ui, -apple-system, \"Segoe UI\", Roboto, Ubuntu, Cantarell, \"Noto Sans\", sans-serif", section: "Fonts", group: "Interface", label: "Font family", ui: { input: "select", options: "interfaceFonts" } },
   { key: "uiFontSize", type: "number", default: 13, section: "Fonts", group: "Interface", label: "Font size", ui: { input: "number", min: 10, max: 28, step: 1 } },
@@ -482,11 +428,19 @@ export function initSettings(api) {
   async function updateSettings(patch) {
     const next = await store.update(patch);
     if (next) applySettings(next);
+    return next;
   }
 
   function getEffectiveSettings() {
     return { ...defaultSettings, ...currentSettings, ...(draftPatch || {}) };
   }
+
+  const zoomModeController = createZoomModeController({
+    documentRef: document,
+    getSettings: getEffectiveSettings,
+    getActivePane: () => activePane,
+    updateSettings,
+  });
 
   function setDraftPatch(next) {
     draftPatch = next && typeof next === "object" ? next : {};
@@ -611,6 +565,11 @@ export function initSettings(api) {
     applySettings(currentSettings);
   }
 
+  function stageManualZoom(key, value) {
+    setDraftPatch({ ...(draftPatch || {}), ...zoomModeController.visibleZoomPatch(), [key]: value });
+    applySettings(currentSettings);
+  }
+
   function ensureUserFontFaces() {
     const userDir = String(cachedFontDirs && cachedFontDirs.userDir ? cachedFontDirs.userDir : "");
     if (!userDir) return;
@@ -645,6 +604,7 @@ export function initSettings(api) {
       root.setProperty("--render-zoom", String(effectiveSettings.renderZoom));
     }
     root.setProperty("--editor-zoom", String(effectiveSettings.editorZoom));
+    if (effectiveSettings.autoScalePanes === false) root.setProperty("--editor-fit-zoom", "1");
 
     for (const [key, meta] of controlByKey.entries()) {
       const entry = meta.entry;
@@ -872,17 +832,19 @@ export function initSettings(api) {
   }
 
   function zoomBy(delta) {
-    if (activePane === "editor") {
-      const nextZoom = (currentSettings.editorZoom || 1) + delta;
-      updateSettings({ editorZoom: nextZoom }).catch(() => {});
-    } else {
-      const nextZoom = (currentSettings.renderZoom || 1) + delta;
-      updateSettings({ renderZoom: nextZoom }).catch(() => {});
-    }
+    zoomModeController.zoomBy(delta).catch(() => {});
   }
 
   function zoomReset() {
-    updateSettings({ renderZoom: 1, editorZoom: 1 }).catch(() => {});
+    zoomModeController.zoomReset().catch(() => {});
+  }
+
+  function disableAutoScale() {
+    return zoomModeController.disableAutoScale();
+  }
+
+  function resetAndEnableAutoScale() {
+    return zoomModeController.resetAndEnableAutoScale();
   }
 
   function createRow(entry) {
@@ -913,6 +875,11 @@ export function initSettings(api) {
       input = document.createElement("input");
       input.type = "checkbox";
       input.addEventListener("change", () => {
+        if (entry.key === "autoScalePanes" && !input.checked) {
+          setDraftPatch({ ...(draftPatch || {}), ...zoomModeController.visibleZoomPatch() });
+          applySettings(currentSettings);
+          return;
+        }
         stageSetting(entry.key, Boolean(input.checked));
       });
       row.appendChild(input);
@@ -930,7 +897,8 @@ export function initSettings(api) {
       input.addEventListener("change", () => {
         const raw = Number(input.value);
         if (kind === "percent") {
-          stageSetting(entry.key, raw / 100);
+          if (entry.key === "renderZoom" || entry.key === "editorZoom") stageManualZoom(entry.key, raw / 100);
+          else stageSetting(entry.key, raw / 100);
         } else {
           stageSetting(entry.key, raw);
         }
@@ -1992,6 +1960,8 @@ export function initSettings(api) {
     zoomIn: () => zoomBy(ZOOM_STEP),
     zoomOut: () => zoomBy(-ZOOM_STEP),
     zoomReset,
+    disableAutoScale,
+    resetAndEnableAutoScale,
     resetEditorZoom: () => updateSettings({ editorZoom: 1 }),
     setActivePane: (pane) => { activePane = pane; },
   };

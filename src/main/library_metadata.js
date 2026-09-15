@@ -26,28 +26,34 @@ function extractTuneHeader(lines, startIdx, endIdx) {
   let source = "";
   let origin = "";
   const groups = [];
+  const headerFields = {};
   let sawHeader = false;
   for (let i = startIdx; i <= endIdx; i += 1) {
     const line = lines[i] ?? "";
     const trimmed = line.trim();
     const isBlank = trimmed === "";
-    const isHeader = /^[A-Za-z]:/.test(line) || /^%/.test(line);
+    const fieldMatch = line.match(/^\s*([A-Za-z]):\s*(.*)$/);
+    const isHeader = Boolean(fieldMatch) || /^\s*%/.test(line);
     if (isHeader) sawHeader = true;
-    if (!title && /^T:/.test(line)) title = line.slice(2).trim();
-    if (/^C:/.test(line)) {
-      const value = line.slice(2).trim();
+    const field = fieldMatch ? fieldMatch[1].toUpperCase() : "";
+    const value = fieldMatch ? fieldMatch[2].trim() : "";
+    if (field) {
+      if (!headerFields[field]) headerFields[field] = [];
+      if (value && !headerFields[field].includes(value)) headerFields[field].push(value);
+    }
+    if (!title && field === "T") title = value;
+    if (field === "C") {
       if (value && !composers.includes(value)) composers.push(value);
       if (!composer) composer = value;
     }
-    if (!key && /^K:/.test(line)) key = line.slice(2).trim();
-    if (!meter && /^M:/.test(line)) meter = line.slice(2).trim();
-    if (!unitLength && /^L:/.test(line)) unitLength = line.slice(2).trim();
-    if (!tempo && /^Q:/.test(line)) tempo = line.slice(2).trim();
-    if (!rhythm && /^R:/.test(line)) rhythm = line.slice(2).trim();
-    if (!source && /^S:/.test(line)) source = line.slice(2).trim();
-    if (!origin && /^O:/.test(line)) origin = line.slice(2).trim();
-    if (/^G:/.test(line)) {
-      const value = line.slice(2).trim();
+    if (!key && field === "K") key = value;
+    if (!meter && field === "M") meter = value;
+    if (!unitLength && field === "L") unitLength = value;
+    if (!tempo && field === "Q") tempo = value;
+    if (!rhythm && field === "R") rhythm = value;
+    if (!source && field === "S") source = value;
+    if (!origin && field === "O") origin = value;
+    if (field === "G") {
       if (value && !groups.includes(value)) groups.push(value);
     }
     if (sawHeader && isBlank) break;
@@ -67,6 +73,7 @@ function extractTuneHeader(lines, startIdx, endIdx) {
     group: groups[0] || "",
     groups,
     catalogFacets: parseCatalogGroupValues(groups),
+    headerFields,
   };
 }
 

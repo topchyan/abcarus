@@ -59,6 +59,19 @@ const { createHeaderLayersController } = await importBundledModule(
   assert.match(enabled, /%%MIDI program 24/);
   assert.doesNotMatch(enabled, /%%MIDI program 1/);
   assert.match(enabled, /%%scale 0\.8/);
+  assert.doesNotMatch(enabled, /%%leftmargin 0\.5cm|%%rightmargin 0\.5cm/);
+
+  const interactive = controller.buildInteractiveHeaderPrefix("", false, "X:1\nK:C\n").text;
+  assert.match(interactive, /%%leftmargin 0\.5cm/);
+  assert.match(interactive, /%%rightmargin 0\.5cm/);
+  const explicitMargins = controller.buildInteractiveHeaderPrefix(
+    "%%leftmargin 2cm\n%%rightmargin 1cm",
+    false,
+    "X:1\nK:C\n",
+  ).text;
+  assert.doesNotMatch(explicitMargins, /0\.5cm/);
+  assert.match(explicitMargins, /%%leftmargin 2cm/);
+  assert.match(explicitMargins, /%%rightmargin 1cm/);
 
   controller.setFromSettings({ globalHeaderEnabled: false });
   const disabled = controller.buildHeaderPrefix("%%scale 0.8", false, "X:1\nK:C\n").text;

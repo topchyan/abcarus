@@ -270,9 +270,17 @@ function createSettingsDomain({
   }
 
   async function resetLayout() {
+    const autoScaleEnabled = latestSettings()?.autoScalePanes !== false;
+    if (autoScaleEnabled) {
+      if (settingsController && typeof settingsController.disableAutoScale === "function") {
+        await settingsController.disableAutoScale();
+      }
+      return;
+    }
     try {
       if (settingsController) {
-        if (typeof settingsController.resetEditorZoom === "function") await settingsController.resetEditorZoom();
+        if (typeof settingsController.resetAndEnableAutoScale === "function") await settingsController.resetAndEnableAutoScale();
+        else if (typeof settingsController.resetEditorZoom === "function") await settingsController.resetEditorZoom();
         else await settingsController.zoomReset();
       }
     } catch {

@@ -1531,6 +1531,7 @@ const layoutController = createLayoutController({
   errorPane: $errorPane,
   libraryTree: $libraryTree,
   toggleSplitButton: $btnToggleSplit,
+  autoFitButton: $btnResetLayout,
   splitModeButtons: $splitModeButtons,
   minPaneWidth: MIN_PANE_WIDTH,
   minRightPaneWidth: MIN_RIGHT_PANE_WIDTH,
@@ -1551,6 +1552,11 @@ const layoutController = createLayoutController({
     await window.api.updateSettings(patch);
   },
   showToast,
+  getEditorText: editorRuntime.getText,
+  requestEditorMeasure: () => {
+    const view = editorRuntime.getView();
+    if (view && typeof view.requestMeasure === "function") view.requestMeasure();
+  },
 });
 
 if ($setListDivider && $setListPanel) {
@@ -1611,7 +1617,7 @@ renderRuntime.initializePayload({
   computePayloadTuneOffset,
   countLinesForPrefix,
   sanitizeHeaderText: sanitizeFileHeaderForInteractiveRender,
-  buildHeaderPrefix,
+  buildHeaderPrefix: buildInteractiveHeaderPrefix,
 });
 
 async function refreshActiveTuneSnapshot() {
@@ -3717,6 +3723,7 @@ updateHeaderStateUI();
 layoutController.initPaneResizer();
 layoutController.initRightPaneResizer({ isRawMode: () => isRawModeActive() });
 layoutController.initSidebarResizer();
+layoutController.initAdaptiveFit();
 setLibraryVisible(false);
 
 checkExternalTools().catch(() => {});
@@ -4272,6 +4279,10 @@ function toggleSplitOrientation({ userAction = false } = {}) {
 
 function buildHeaderPrefix(entryHeader, includeCheckbars, tuneText) {
   return headerLayersController.buildHeaderPrefix(entryHeader, includeCheckbars, tuneText);
+}
+
+function buildInteractiveHeaderPrefix(entryHeader, includeCheckbars, tuneText) {
+  return headerLayersController.buildInteractiveHeaderPrefix(entryHeader, includeCheckbars, tuneText);
 }
 
 function buildHeaderPrefixWithLayerSpans(entryHeader, includeCheckbars, tuneText) {

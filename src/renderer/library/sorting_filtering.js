@@ -238,6 +238,30 @@ function matchLibraryValues(values, needle) {
   return Object.values(values).some((value) => matchLibraryValues(value, needle));
 }
 
+function matchLibraryHeaderFields(headerFields, needle) {
+  if (!headerFields || typeof headerFields !== "object") return false;
+  const qualified = String(needle || "").match(/^([a-z]):\s*(.*)$/i);
+  if (!qualified) return matchLibraryValues(headerFields, needle);
+  const values = headerFields[qualified[1].toUpperCase()];
+  if (!values) return false;
+  const valueNeedle = normalizeFilterValue(qualified[2]);
+  return valueNeedle ? matchLibraryValues(values, valueNeedle) : true;
+}
+
+function matchLibraryFileHeader(headerText, needle) {
+  if (!headerText) return false;
+  const fields = {};
+  for (const line of String(headerText).split(/\r\n|\n|\r/)) {
+    const match = line.match(/^\s*([A-Za-z]):\s*(.*)$/);
+    if (!match) continue;
+    const field = match[1].toUpperCase();
+    const value = match[2].trim();
+    if (!fields[field]) fields[field] = [];
+    if (value) fields[field].push(value);
+  }
+  return matchLibraryHeaderFields(fields, needle);
+}
+
 function tuneMatchesText(tune, needle, options = {}) {
   if (!tune) return false;
   const normalizeTitleKey = typeof options.normalizeTitleKey === "function" ? options.normalizeTitleKey : null;
@@ -261,6 +285,7 @@ function tuneMatchesText(tune, needle, options = {}) {
   if (matchLibraryText(tune.group, needle)) return true;
   if (matchLibraryValues(tune.groups, needle)) return true;
   if (matchLibraryValues(tune.catalogFacets, needle)) return true;
+  if (matchLibraryHeaderFields(tune.headerFields, needle)) return true;
   if (matchLibraryText(String(tune.xNumber || ""), needle)) return true;
   return false;
 }
@@ -271,7 +296,8 @@ function applyLibraryTextFilter(files, query, options = {}) {
   const filtered = [];
   for (const file of files || []) {
     const tunes = Array.isArray(file.tunes) ? file.tunes : [];
-    const fileMatch = matchLibraryText(file.basename, needle);
+    const fileMatch = matchLibraryText(file.basename, needle)
+      || matchLibraryFileHeader(file.headerText, needle);
     const matchedTunes = fileMatch ? tunes : tunes.filter((tune) => tuneMatchesText(tune, needle, options));
     if (matchedTunes.length || fileMatch) {
       filtered.push({

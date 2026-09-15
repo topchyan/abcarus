@@ -278,7 +278,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
       { label: "Zoom In", accelerator: "CmdOrCtrl+=", click: () => sendMenuAction("zoomIn") },
       { label: "Zoom Out", accelerator: "CmdOrCtrl+-", click: () => sendMenuAction("zoomOut") },
       { label: "Reset Zoom", accelerator: "CmdOrCtrl+0", click: () => sendMenuAction("zoomReset") },
-      { label: "Reset View", accelerator: "F8", click: () => sendMenuAction("resetLayout") },
+      { label: "Auto Fit / Reset View", accelerator: "F8", click: () => sendMenuAction("resetLayout") },
     ],
   };
 
@@ -403,6 +403,7 @@ function buildMenuTemplate(appState, sendMenuAction) {
           },
           {
             label: "Reflow by Linebreak Marker",
+            accelerator: "CmdOrCtrl+Shift+R",
             click: () => sendMenuAction("transformLinebreakMarkers"),
           },
           {

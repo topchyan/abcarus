@@ -65,7 +65,7 @@ assert(!labels(toolsMenu).includes("Bolahenk / Concert (Experimental)"));
 assert(!labels(editMenu).includes("ABC Helpers…"));
 assert(labels(playMenu).includes("Stop"));
 assert(labels(playMenu).includes("Reset View") === false);
-assert(labels(viewMenu).includes("Reset View"));
+assert(labels(viewMenu).includes("Auto Fit / Reset View"));
 
 const mertebeMenu = findItem(toolsMenu, "Rhythmic Notation (Mertebe)");
 assert.deepEqual(labels(mertebeMenu), [
@@ -74,6 +74,12 @@ assert.deepEqual(labels(mertebeMenu), [
 ]);
 assert.equal(mertebeMenu.submenu[0].accelerator, "CmdOrCtrl+Shift+PageUp");
 assert.equal(mertebeMenu.submenu[1].accelerator, "CmdOrCtrl+Shift+PageDown");
+
+const barLayoutMenu = findItem(toolsMenu, "Bar Layout");
+const linebreakReflow = findItem(barLayoutMenu, "Reflow by Linebreak Marker");
+assert.equal(linebreakReflow.accelerator, "CmdOrCtrl+Shift+R");
+linebreakReflow.click();
+assert.equal(actions.at(-1), "transformLinebreakMarkers");
 
 const experimentalTemplate = buildMenuTemplate({
   name: "ABCarus",
@@ -100,6 +106,7 @@ findItem(fileMenu, "Print Active Set List…").click();
 findItem(playMenu, "Stop").click();
 loopSelection.click({ checked: true });
 assert.deepEqual(actions, [
+  "transformLinebreakMarkers",
   "toggleSetList",
   "printSetList",
   "stopPlayback",

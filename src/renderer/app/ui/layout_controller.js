@@ -30,6 +30,17 @@ function defaultSplitModeForOrientation(orientation) {
   return orientation === "horizontal" ? "horizontal-score-top" : "vertical-editor-left";
 }
 
+export function firstPaneRoleForMode(mode) {
+  return mode === "vertical-score-left" || mode === "horizontal-score-top" ? "score" : "editor";
+}
+
+export function defaultFirstPaneRatioForMode(mode) {
+  if (mode === "horizontal-editor-top") return 0.38;
+  if (mode === "horizontal-score-top") return 0.62;
+  if (mode === "vertical-score-left") return 0.56;
+  return 0.44;
+}
+
 export function createLayoutController({
   main,
   divider,
@@ -44,6 +55,7 @@ export function createLayoutController({
   errorPane,
   libraryTree,
   toggleSplitButton,
+  autoFitButton,
   splitModeButtons = [],
   minPaneWidth = 220,
   minRightPaneWidth = 220,
@@ -62,6 +74,8 @@ export function createLayoutController({
   saveLibraryPrefs = () => {},
   saveLayoutPrefs = async () => {},
   showToast = () => {},
+  getEditorText = () => "",
+  requestEditorMeasure = () => {},
 } = {}) {
   let rightSplitMode = "vertical-editor-left";
   let rightSplitOrientation = "vertical";
@@ -69,9 +83,10 @@ export function createLayoutController({
   let rightSplitRatioHorizontal = 0.5;
   let layoutPrefsSaveTimer = null;
   let pendingLayoutPrefsPatch = null;
+  let adaptiveFitFrame = null;
+  let adaptiveResizeObserver = null;
+  const adaptivePaneWidths = new WeakMap();
   const layoutPrefsSaveDebounceMs = 300;
-  const defaultVerticalEditorRatio = 0.44;
-  const defaultHorizontalScoreRatio = 0.62;
   const requestFrame = (callback) => {
     if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
       return window.requestAnimationFrame(callback);
@@ -228,9 +243,8 @@ export function createLayoutController({
     splitDivider.addEventListener("pointerdown", (e) => {
       e.preventDefault();
       splitDivider.setPointerCapture(e.pointerId);
-      const startRect = (rightSplitOrientation === "horizontal")
-        ? renderPane.getBoundingClientRect()
-        : editorPane.getBoundingClientRect();
+      const firstPane = firstPaneRoleForMode(rightSplitMode) === "score" ? renderPane : editorPane;
+      const startRect = firstPane.getBoundingClientRect();
       const startSize = (rightSplitOrientation === "horizontal") ? startRect.height : startRect.width;
       const startPos = (rightSplitOrientation === "horizontal") ? e.clientY : e.clientX;
       const onMove = (ev) => {
@@ -275,34 +289,39 @@ export function createLayoutController({
     applyRightSplitSizesFromRatio();
   };
 
-  const fitScoreToCurrentPane = ({ fitScore = true, resetScroll = true, persist = true } = {}) => {
-    requestFrame(() => requestFrame(() => {
-      if (fitScore && !isRawMode()) {
-        const fit = computeFocusFitZoom({ currentZoom: readRenderZoom() });
-        if (Number.isFinite(fit) && fit > 0) {
-          setRenderZoom(fit);
-          const orientationZoomKey = rightSplitOrientation === "horizontal"
-            ? "layoutRenderZoomHorizontal"
-            : "layoutRenderZoomVertical";
-          if (persist) scheduleSaveLayoutPrefs({ renderZoom: fit, [orientationZoomKey]: fit });
-        }
+  const applyScoreFitNow = ({ fitScore = true, resetScroll = true, persist = true, tolerance = 0 } = {}) => {
+    if (fitScore && !isRawMode()) {
+      const current = readRenderZoom();
+      const fit = computeFocusFitZoom({ currentZoom: current });
+      const relativeChange = Number.isFinite(current) && current > 0 ? Math.abs(fit - current) / current : Infinity;
+      if (Number.isFinite(fit) && fit > 0 && relativeChange > tolerance) {
+        setRenderZoom(fit);
+        const orientationZoomKey = rightSplitOrientation === "horizontal"
+          ? "layoutRenderZoomHorizontal"
+          : "layoutRenderZoomVertical";
+        if (persist) scheduleSaveLayoutPrefs({ renderZoom: fit, [orientationZoomKey]: fit });
       }
-      if (resetScroll && renderPane) {
-        if (typeof renderPane.scrollTo === "function") renderPane.scrollTo({ top: 0, left: 0 });
-        else {
-          renderPane.scrollTop = 0;
-          renderPane.scrollLeft = 0;
-        }
+    }
+    if (resetScroll && renderPane) {
+      if (typeof renderPane.scrollTo === "function") renderPane.scrollTo({ top: 0, left: 0 });
+      else {
+        renderPane.scrollTop = 0;
+        renderPane.scrollLeft = 0;
       }
-    }));
+    }
+  };
+
+  const fitScoreToCurrentPane = (options = {}) => {
+    requestFrame(() => requestFrame(() => applyScoreFitNow(options)));
   };
 
   const resetView = ({ fitScore = true, resetScroll = true } = {}) => {
+    const defaultRatio = defaultFirstPaneRatioForMode(rightSplitMode);
     if (rightSplitOrientation === "horizontal") {
-      rightSplitRatioHorizontal = defaultHorizontalScoreRatio;
+      rightSplitRatioHorizontal = defaultRatio;
       scheduleSaveLayoutPrefs({ layoutSplitRatioHorizontal: rightSplitRatioHorizontal });
     } else {
-      rightSplitRatioVertical = defaultVerticalEditorRatio;
+      rightSplitRatioVertical = defaultRatio;
       scheduleSaveLayoutPrefs({ layoutSplitRatioVertical: rightSplitRatioVertical });
     }
     applyRightSplitSizesFromRatio({ rawMode: Boolean(isRawMode()) });
@@ -353,14 +372,89 @@ export function createLayoutController({
     rightSplitRatioHorizontal = clampRatio(settings.layoutSplitRatioHorizontal, rightSplitRatioHorizontal);
     const savedMode = normalizeSplitMode(settings.layoutSplitMode)
       || defaultSplitModeForOrientation(settings.layoutSplitOrientation === "horizontal" ? "horizontal" : "vertical");
+    const autoScaleEnabled = settings.autoScalePanes !== false;
+    // Older Auto Fit resets stored the leading-track ratio without accounting for reversed pane order.
+    if (autoScaleEnabled && savedMode === "horizontal-editor-top" && Math.abs(rightSplitRatioHorizontal - 0.62) < 0.001) {
+      rightSplitRatioHorizontal = defaultFirstPaneRatioForMode(savedMode);
+      scheduleSaveLayoutPrefs({ layoutSplitRatioHorizontal: rightSplitRatioHorizontal });
+    }
+    if (autoScaleEnabled && savedMode === "vertical-score-left" && Math.abs(rightSplitRatioVertical - 0.44) < 0.001) {
+      rightSplitRatioVertical = defaultFirstPaneRatioForMode(savedMode);
+      scheduleSaveLayoutPrefs({ layoutSplitRatioVertical: rightSplitRatioVertical });
+    }
     applyRightSplitMode(savedMode);
     applyRightSplitSizesFromRatio();
+    updateAutoFitButton(autoScaleEnabled);
+    if (!autoScaleEnabled) setEditorFitZoom(1);
+    else scheduleAdaptiveFit();
+  };
+
+  const updateAutoFitButton = (enabled) => {
+    if (!autoFitButton) return;
+    const active = Boolean(enabled);
+    autoFitButton.classList.toggle("toggle-active", active);
+    autoFitButton.setAttribute("aria-pressed", active ? "true" : "false");
+    const label = autoFitButton.querySelector(".btn-text");
+    if (label) label.textContent = active ? "Auto fit" : "Reset view";
+    autoFitButton.title = active
+      ? "Auto fit is on. Click to keep the current zoom and switch to manual zoom (F8)"
+      : "Reset view and enable Auto fit (F8)";
+    autoFitButton.setAttribute("aria-label", active ? "Disable automatic fit" : "Reset view and enable automatic fit");
   };
 
   const setRenderZoom = (zoom) => {
     const v = Number(zoom);
     if (!Number.isFinite(v) || v <= 0) return;
     try { document.documentElement.style.setProperty("--render-zoom", String(v)); } catch {}
+  };
+
+  const setEditorFitZoom = (zoom) => {
+    const v = Number(zoom);
+    if (!Number.isFinite(v) || v <= 0) return;
+    try { document.documentElement.style.setProperty("--editor-fit-zoom", String(v)); } catch {}
+    try { requestEditorMeasure(); } catch {}
+  };
+
+  const readEditorFitZoom = () => {
+    try {
+      const raw = getComputedStyle(document.documentElement).getPropertyValue("--editor-fit-zoom");
+      const value = Number(String(raw || "").trim());
+      if (Number.isFinite(value) && value > 0) return value;
+    } catch {}
+    return 1;
+  };
+
+  const computeEditorFitZoom = () => {
+    if (!editorPane || typeof editorPane.querySelector !== "function") return 1;
+    const content = editorPane.querySelector(".cm-content");
+    const scroller = editorPane.querySelector(".cm-scroller");
+    if (!content || !scroller || !(scroller.clientWidth > 40)) return 1;
+    const text = String(getEditorText() || "");
+    if (!text) return 1;
+    let longest = "";
+    for (const line of text.split(/\r\n|\n|\r/)) {
+      if (line.length > longest.length) longest = line;
+    }
+    if (!longest) return 1;
+    const gutters = editorPane.querySelector(".cm-gutters");
+    const gutterWidth = gutters && typeof gutters.getBoundingClientRect === "function"
+      ? gutters.getBoundingClientRect().width
+      : 0;
+    const available = Math.max(40, scroller.clientWidth - gutterWidth - 20);
+    try {
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+      const style = getComputedStyle(content);
+      if (!context || !style) return 1;
+      context.font = `${style.fontStyle || "normal"} ${style.fontWeight || "400"} ${style.fontSize || "13px"} ${style.fontFamily || "monospace"}`;
+      const currentFit = readEditorFitZoom();
+      const measured = context.measureText(longest.replace(/\t/g, "    ")).width;
+      const intrinsic = measured / currentFit;
+      if (!(intrinsic > 1)) return 1;
+      return Math.max(0.5, Math.min(1, available / (intrinsic + 8)));
+    } catch {
+      return 1;
+    }
   };
 
   const readRenderZoom = ({ fallback = 1 } = {}) => {
@@ -387,7 +481,7 @@ export function createLayoutController({
     return Number.isFinite(fromSettings) && fromSettings > 0 ? fromSettings : 1;
   };
 
-  const computeFocusFitZoom = ({ currentZoom = null, clamp = null } = {}) => {
+  const computeFocusFitZoom = ({ currentZoom = null, clamp = null, fitMode = null } = {}) => {
     if (!renderPane || !output) return null;
     const svgs = Array.from(output.querySelectorAll("svg"));
     if (!svgs.length) return null;
@@ -398,12 +492,23 @@ export function createLayoutController({
     const paneWidth = renderPane.clientWidth || 0;
     if (paneWidth < 50) return null;
 
+    const settings = getLatestSettings() || null;
+    const mode = fitMode || (settings && settings.scoreFitMode === "page" ? "page" : "content");
     let maxIntrinsicWidth = 0;
     const limit = Math.min(8, svgs.length);
     for (let i = 0; i < limit; i += 1) {
       const r = svgs[i] ? svgs[i].getBoundingClientRect() : null;
       if (!(r && r.width > 10)) continue;
-      const w = r.width / zoom;
+      let w = r.width / zoom;
+      if (mode === "content" && typeof svgs[i].getBBox === "function") {
+        try {
+          const box = svgs[i].getBBox();
+          const viewBox = svgs[i].viewBox && svgs[i].viewBox.baseVal;
+          const viewWidth = viewBox && Number(viewBox.width);
+          const contentRight = Math.max(0, Number(box.x) || 0) + Math.max(0, Number(box.width) || 0);
+          if (viewWidth > 0 && contentRight > 10) w *= Math.min(1, contentRight / viewWidth);
+        } catch {}
+      }
       if (Number.isFinite(w) && w > maxIntrinsicWidth) maxIntrinsicWidth = w;
     }
     if (!Number.isFinite(maxIntrinsicWidth) || maxIntrinsicWidth <= 10) return null;
@@ -417,6 +522,61 @@ export function createLayoutController({
     const target = Math.max(100, paneWidth);
     const next = target / (maxIntrinsicWidth + outputHorizontalPadding);
     return typeof clamp === "function" ? clamp(next, 0.5, 8, zoom) : Math.max(0.5, Math.min(8, next));
+  };
+
+  const fitEditorToCurrentPane = () => {
+    const settings = getLatestSettings() || null;
+    if (settings && settings.autoScalePanes === false) {
+      setEditorFitZoom(1);
+      return 1;
+    }
+    const fit = computeEditorFitZoom();
+    const current = readEditorFitZoom();
+    if (Math.abs(fit - current) / current > 0.003) setEditorFitZoom(fit);
+    return fit;
+  };
+
+  const scheduleAdaptiveFit = ({ score = true, editor = true } = {}) => {
+    const settings = getLatestSettings() || null;
+    if (settings && settings.autoScalePanes === false) {
+      setEditorFitZoom(1);
+      return;
+    }
+    if (adaptiveFitFrame != null) return;
+    adaptiveFitFrame = true;
+    requestFrame(() => {
+      adaptiveFitFrame = null;
+      if (editor) fitEditorToCurrentPane();
+      if (score && !isRawMode()) applyScoreFitNow({ resetScroll: false, persist: false, tolerance: 0.003 });
+    });
+  };
+
+  const initAdaptiveFit = () => {
+    if (typeof ResizeObserver !== "function") return false;
+    if (adaptiveResizeObserver) return true;
+    adaptiveResizeObserver = new ResizeObserver((entries = []) => {
+      if (!entries.length) {
+        scheduleAdaptiveFit();
+        return;
+      }
+      let fitEditor = false;
+      let fitScore = false;
+      for (const entry of entries) {
+        const target = entry && entry.target;
+        if (!target) continue;
+        const width = Number(entry.contentRect && entry.contentRect.width) || Number(target.clientWidth) || 0;
+        const previous = adaptivePaneWidths.get(target);
+        adaptivePaneWidths.set(target, width);
+        if (Number.isFinite(previous) && Math.abs(width - previous) < 1) continue;
+        if (target === editorPane) fitEditor = true;
+        if (target === renderPane) fitScore = true;
+      }
+      if (fitEditor || fitScore) scheduleAdaptiveFit({ editor: fitEditor, score: fitScore });
+    });
+    if (editorPane) adaptiveResizeObserver.observe(editorPane);
+    if (renderPane) adaptiveResizeObserver.observe(renderPane);
+    scheduleAdaptiveFit();
+    return true;
   };
 
   const setSplitOrientation = (nextOrientation, { persist = true, userAction = false } = {}) => {
@@ -434,12 +594,32 @@ export function createLayoutController({
     if (currentMode === next) return true;
     const currentOrientation = rightSplitOrientation;
     const nextOrientation = splitOrientationForMode(next);
+    const settings = getLatestSettings() || null;
+    const autoScaleEnabled = !settings || settings.autoScalePanes !== false;
+
+    if (currentOrientation !== nextOrientation && autoScaleEnabled) {
+      const defaultRatio = defaultFirstPaneRatioForMode(next);
+      if (nextOrientation === "horizontal") {
+        rightSplitRatioHorizontal = defaultRatio;
+        if (persist) scheduleSaveLayoutPrefs({ layoutSplitRatioHorizontal: rightSplitRatioHorizontal });
+      } else {
+        rightSplitRatioVertical = defaultRatio;
+        if (persist) scheduleSaveLayoutPrefs({ layoutSplitRatioVertical: rightSplitRatioVertical });
+      }
+    } else if (currentOrientation === nextOrientation && firstPaneRoleForMode(currentMode) !== firstPaneRoleForMode(next)) {
+      if (nextOrientation === "horizontal") {
+        rightSplitRatioHorizontal = 1 - rightSplitRatioHorizontal;
+        if (persist) scheduleSaveLayoutPrefs({ layoutSplitRatioHorizontal: rightSplitRatioHorizontal });
+      } else {
+        rightSplitRatioVertical = 1 - rightSplitRatioVertical;
+        if (persist) scheduleSaveLayoutPrefs({ layoutSplitRatioVertical: rightSplitRatioVertical });
+      }
+    }
 
     try {
       const currentZoom = readRenderZoom();
       if (Number.isFinite(currentZoom) && currentZoom > 0) {
         const key = (currentOrientation === "horizontal") ? "layoutRenderZoomHorizontal" : "layoutRenderZoomVertical";
-        const settings = getLatestSettings() || null;
         const prev = settings && settings[key] != null ? Number(settings[key]) : null;
         if (!Number.isFinite(prev) || Math.abs(prev - currentZoom) > 0.0001) {
           scheduleSaveLayoutPrefs({ [key]: currentZoom });
@@ -451,8 +631,7 @@ export function createLayoutController({
     applyRightSplitSizesFromRatio({ rawMode: Boolean(isRawMode()) });
 
     try {
-      const settings = getLatestSettings() || null;
-      const targetKey = (next === "horizontal") ? "layoutRenderZoomHorizontal" : "layoutRenderZoomVertical";
+      const targetKey = (nextOrientation === "horizontal") ? "layoutRenderZoomHorizontal" : "layoutRenderZoomVertical";
       const desired = settings && settings[targetKey] != null ? Number(settings[targetKey]) : null;
       if (Number.isFinite(desired) && desired > 0) {
         setRenderZoom(desired);
@@ -483,6 +662,8 @@ export function createLayoutController({
     getRightSplitMode: () => rightSplitMode,
     getSidebarWidth,
     fitScoreToCurrentPane,
+    fitEditorToCurrentPane,
+    initAdaptiveFit,
     initPaneResizer,
     initRightPaneResizer,
     initSidebarResizer,
@@ -491,6 +672,7 @@ export function createLayoutController({
     computeFocusFitZoom,
     getRenderZoomFactor,
     readRenderZoom,
+    scheduleAdaptiveFit,
     scheduleSaveLayoutPrefs,
     setFromSettings,
     setPaneSizes,

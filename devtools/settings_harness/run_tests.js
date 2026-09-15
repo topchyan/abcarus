@@ -61,6 +61,8 @@ function main() {
     xml2abcArgs: "",
     printPageMargins: "standard",
     mobileSetListFolder: "",
+    autoScalePanes: true,
+    scoreFitMode: "content",
   };
   for (const [key, expected] of Object.entries(requiredDefaults)) {
     assert(seen.has(key), `missing schema key: ${key}`);
@@ -72,6 +74,16 @@ function main() {
     assert(
       actual === expected,
       `unexpected default for ${key}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`
+    );
+  }
+
+  {
+    const fitMode = schema.find((item) => item && item.key === "scoreFitMode");
+    assert(fitMode && fitMode.ui && fitMode.ui.input === "select", "scoreFitMode must use a selector");
+    assert(
+      fitMode.ui.options.some((option) => option.value === "content")
+        && fitMode.ui.options.some((option) => option.value === "page"),
+      "scoreFitMode must offer notation-width and page-width fitting"
     );
   }
 

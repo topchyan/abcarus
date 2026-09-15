@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Auto Fit automatically adapts Editor text and Score notation to workspace changes caused by window resizing, Split movement, Library, and Set List panels.
+- Score fitting can favor either the notation width for readability or the complete rendered page.
+- Library filtering searches every indexed ABC header field, including qualified queries such as `N:Yerevan`, as well as file-wide header fields.
+
+### Changed
+- Auto Fit and Reset View share one explicit mode control: manual Editor or Score zoom switches to manual mode, while Reset View restores the layout and reenables Auto Fit.
+- Interactive Score rendering uses tighter screen-only page margins without changing print, PDF, or Set List output.
+- Reflow by Linebreak Marker is available with `Ctrl+Shift+R` (`Cmd+Shift+R` on macOS).
+
+### Fixed
+- Auto Fit remains stable without repeated Score movement during pane resizing and ignores height-only changes in horizontal Split layouts.
+- All four Split arrangements resize from the correct leading pane and use role-aware Editor/Score proportions when switching orientation or resetting the view.
+- Horizontal Split restores its saved Score zoom correctly and migrates proportions saved by the earlier reversed-pane behavior.
 
 
 ## [1.10.6] - 2026-09-13

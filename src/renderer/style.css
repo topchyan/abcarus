@@ -42,6 +42,7 @@
   --editor-lyrics-weight: 600;
   --render-zoom: 1;
   --editor-zoom: 1;
+  --editor-fit-zoom: 1;
 
   --font-size-ui: 13px;
   --font-size-sm: calc(var(--font-size-ui) - 1px);
@@ -661,6 +662,10 @@ main > .pane.right { grid-column: 5; }
 .file-tune-action.toggle-active:not(:disabled) {
   background: var(--accent);
   color: #fff;
+}
+
+#btnResetLayout {
+  min-width: 104px;
 }
 
 .btn-icon {
@@ -1926,7 +1931,7 @@ body.resizing-cols * {
 .cm-editor {
   height: 100%;
   font-family: var(--editor-font-family);
-  font-size: calc(var(--editor-font-size) * var(--editor-zoom));
+  font-size: calc(var(--editor-font-size) * var(--editor-zoom) * var(--editor-fit-zoom));
   line-height: 1.4;
 }
 
@@ -2031,7 +2036,7 @@ body.resizing-cols * {
 }
 
 #out {
-  padding: 12px;
+  padding: 6px;
   zoom: var(--render-zoom);
 }
 
