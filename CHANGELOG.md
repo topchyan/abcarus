@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [1.11.0] - 2026-09-15
 ### Added
 - Auto Fit automatically adapts Editor text and Score notation to workspace changes caused by window resizing, Split movement, Library, and Set List panels.
 - Score fitting can favor either the notation width for readability or the complete rendered page.
@@ -20,7 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto Fit remains stable without repeated Score movement during pane resizing and ignores height-only changes in horizontal Split layouts.
 - All four Split arrangements resize from the correct leading pane and use role-aware Editor/Score proportions when switching orientation or resetting the view.
 - Horizontal Split restores its saved Score zoom correctly and migrates proportions saved by the earlier reversed-pane behavior.
-
 
 ## [1.10.6] - 2026-09-13
 ### Added
