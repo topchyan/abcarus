@@ -113,6 +113,20 @@ function isSourceStructuralLine(line) {
   return /^\s*(?:M:|L:|K:|P:|I:\s*linebreak\b)/i.test(text);
 }
 
+function getInlineStructuralFields(text) {
+  const fields = [];
+  const pattern = /\[\s*([MLKP])\s*:\s*([^\]]*)\]/gi;
+  let match;
+  while ((match = pattern.exec(String(text || ""))) !== null) {
+    fields.push({
+      type: String(match[1] || "").toUpperCase(),
+      value: String(match[2] || "").trim(),
+      text: match[0],
+    });
+  }
+  return fields;
+}
+
 function resolveContextBefore(text) {
   let meter = null;
   let defaultLength = null;
@@ -130,6 +144,7 @@ function buildSkeletonBody(sourceText, lineEnding, initialContext = {}) {
   let meter = initialContext.meter || null;
   let defaultLength = initialContext.defaultLength || null;
   let measureBuffer = "";
+  let measureFields = [];
   const output = [];
 
   const updateContext = (line) => {
@@ -146,13 +161,23 @@ function buildSkeletonBody(sourceText, lineEnding, initialContext = {}) {
       : null;
     if (!multiplier) return null;
     measureBuffer = "";
-    return `${multiplier} ${barToken}`.trim();
+    const prefix = measureFields.join(" ");
+    measureFields = [];
+    return `${prefix} ${multiplier} ${barToken}`.trim();
   };
 
   for (const rawLine of lines) {
     if (isSourceStructuralLine(rawLine)) {
       updateContext(rawLine);
       output.push(rawLine);
+      continue;
+    }
+    if (/^(?:\s*\[\s*[MLKP]\s*:[^\]]*\]\s*)+$/i.test(rawLine)) {
+      for (const field of getInlineStructuralFields(rawLine)) {
+        if (field.type === "M") meter = parseMeter(field.value);
+        if (field.type === "L") defaultLength = parseFraction(field.value);
+      }
+      output.push(String(rawLine || "").trim());
       continue;
     }
     if (!isMusicLine(rawLine)) continue;
@@ -169,6 +194,11 @@ function buildSkeletonBody(sourceText, lineEnding, initialContext = {}) {
         if (!generated) return { ok: false, error: "Unable to calculate a source measure duration." };
         pieces.push(generated);
       } else {
+        for (const field of getInlineStructuralFields(part)) {
+          measureFields.push(field.text);
+          if (field.type === "M") meter = parseMeter(field.value);
+          if (field.type === "L") defaultLength = parseFraction(field.value);
+        }
         measureBuffer += ` ${part}`;
       }
     }

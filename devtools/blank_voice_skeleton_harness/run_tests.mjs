@@ -68,4 +68,26 @@ const repeatPlan = planBlankVoiceSkeleton(repeatSource, {
 assert.equal(repeatPlan.ok, true);
 assert.match(repeatPlan.change.insert, /^\|: x4 \|1 x4 :\|2 x4 \|\]\n$/);
 
+const variableMeterSource = `X:3
+M:2/4
+L:1/8
+K:C
+V:1
+[P:A]
+C2 D2 |
+[M:3/4] E2 F2 G2 |
+[P:B]
+[M:2/4] A2 B2 |]
+V:2
+x4 | x6 | x4 |]
+`;
+const variableMeterPlan = planBlankVoiceSkeleton(variableMeterSource, {
+  targetOffset: variableMeterSource.lastIndexOf("x4") + 1,
+});
+assert.equal(variableMeterPlan.ok, true);
+assert.equal(
+  variableMeterPlan.change.insert,
+  "[P:A]\nx4 |\n[M:3/4] x6 |\n[P:B]\n[M:2/4] x4 |]\n",
+);
+
 console.log("blank voice skeleton tests: OK");

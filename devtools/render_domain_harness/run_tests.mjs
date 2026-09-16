@@ -2,7 +2,9 @@
 /* eslint-disable no-console */
 import assert from "node:assert/strict";
 import { build } from "esbuild";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import vm from "node:vm";
 
 async function importBundledModule(filePath) {
   const result = await build({
@@ -26,6 +28,29 @@ const { createScoreInteractionController } = await importBundledModule(
 const { createHeaderLayersController } = await importBundledModule(
   "src/renderer/render/header_layers_controller.js",
 );
+{
+  const appended = [];
+  const windowRef = {};
+  const documentRef = {
+    body: { appendChild: (element) => appended.push(element) },
+    createElement: () => ({ style: {}, setAttribute(name, value) { this[name] = value; } }),
+  };
+  const bootstrap = await readFile(resolve("src/renderer/abc2svg_bootstrap.js"), "utf8");
+  vm.runInNewContext(bootstrap, { window: windowRef, document: documentRef });
+  assert.equal(appended.length, 1, "abc2svg must receive its browser text-measurement element");
+  assert.equal(windowRef.abc2svg.el, appended[0]);
+  assert.equal(windowRef.abc2svg.el.style.visibility, "hidden");
+  assert.equal(windowRef.abc2svg.el.style.lineHeight, "1");
+  vm.runInNewContext(bootstrap, { window: windowRef, document: documentRef });
+  assert.equal(appended.length, 1, "abc2svg text measurer initialization must be idempotent");
+
+  const rendererHtml = await readFile(resolve("src/renderer/index.html"), "utf8");
+  assert.ok(
+    rendererHtml.indexOf("./abc2svg_bootstrap.js")
+      < rendererHtml.indexOf("../../third_party/abc2svg/abc2svg-1.js"),
+    "abc2svg text measurement must be initialized before the abc2svg runtime loads",
+  );
+}
 
 {
   const files = new Map([
