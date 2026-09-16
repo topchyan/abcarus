@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [1.11.1] - 2026-09-16
 ### Changed
 - Updated the bundled abc2svg runtime to the current v1.23.5 upstream tip, including later lyric-layout and distant-volta playback fixes.
 
