@@ -6,7 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Updated the bundled abc2svg runtime to the current v1.23.5 upstream tip, including later lyric-layout and distant-volta playback fixes.
 
+### Fixed
+- Score rendering measures Unicode text with the browser before abc2svg initializes, preventing Armenian lyrics and other non-Latin text from overlapping.
+- Blank voice generation preserves inline meter and part fields such as `[M:9/4]` and `[P:B]`, keeping generated voices synchronized through variable-meter forms.
 
 ## [1.11.0] - 2026-09-15
 ### Added
