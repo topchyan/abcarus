@@ -221,6 +221,14 @@ P:B
 a|g|1a|c:|2a|g||
 `;
 
+const DISTANT_VOLTA_TUNE = `X:4
+T:Variant separated from repeat bar
+M:2/4
+L:1/4
+K:C
+|: C D |1 E F :| y [2 G A |]
+`;
+
 const FOUR_BAR_DRUM_TUNE = `X:114
 T:Zeybekiko
 M:9/8
@@ -274,6 +282,19 @@ function main() {
     fromInside.slice(0, 4).join(",") === insidePrefix.join(","),
     `playback from inside P:A restarted A instead of continuing to B: ${fromInside.slice(0, 8).join(",")}`
   );
+  const distantVolta = parseOnce(sandbox, DISTANT_VOLTA_TUNE);
+  assert(distantVolta.messages.length === 0, `distant-volta tune reported errors: ${distantVolta.messages.join("; ")}`);
+  const distantVoltaOffsets = collectPlaybackNoteOffsets(
+    sandbox,
+    distantVolta,
+    DISTANT_VOLTA_TUNE.indexOf("C D")
+  );
+  const expectedDistantVoltaOffsets = ["C D", "D |1", "E F", "F :|", "C D", "D |1", "G A", "A |]"]
+    .map((token) => DISTANT_VOLTA_TUNE.indexOf(token));
+  assert(
+    distantVoltaOffsets.slice(0, 8).join(",") === expectedDistantVoltaOffsets.join(","),
+    `variant separated from :| has an unexpected playback sequence: ${distantVoltaOffsets.slice(0, 10).join(",")}`
+  );
   const fourBars = parseOnce(sandbox, FOUR_BAR_DRUM_TUNE);
   const fourBarTune = fourBars.abc.tunes[0];
   sandbox.ToAudio().add(fourBarTune[0], fourBarTune[1], fourBarTune[3]);
@@ -297,7 +318,7 @@ function main() {
     countNativeLoopNotes(sandbox, sourceRests[0], normalizedEnd, 72) === 72,
     "native zero-gap looping must play two complete four-measure drum cycles"
   );
-  console.log("% PASS abc2svg playback harness: native drums and repeated P: cursor starts are available");
+  console.log("% PASS abc2svg playback harness: drums, repeated P: starts, and distant voltas are available");
 }
 
 try {

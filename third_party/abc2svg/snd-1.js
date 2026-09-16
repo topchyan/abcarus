@@ -417,6 +417,8 @@ s2=s.rep_p
 continue}
 po.repn=false
 po.repv=1}
+if(s.bar_type.slice(-1)==':')
+po.repv=1
 if(s.rep_s){s2=s.rep_s[po.repv]
 if(s2){if(s2.rep_p&&s2.rep_p!=po.repp){po.repv=1
 po.repp=s2.rep_p

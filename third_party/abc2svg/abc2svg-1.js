@@ -5690,7 +5690,7 @@ s.ts_next=s2}
 function check_end_bar(){var s2,s=tsfirst
 while(s.ts_next)
 s=s.ts_next
-if(s.type!=C.BAR){for(s2=s.ts_prev;s2&&s2.time==s.time;s2=s2.ts_prev){if(s2.bar_type)
+if(s.type!=C.BAR){for(s2=s;s2&&s2.time==s.time;s2=s2.ts_prev){if(s2.bar_type)
 return
 if(s2.type!=C.BLOCK)
 break}
@@ -8269,7 +8269,7 @@ tag=text.slice(is+1,i);ie=text.indexOf('</'+tag+'>',ie)
 if(ie<0)
 break
 ie+=3+tag.length}
-if(text.substr(is,7)=='<filter')
+if(text.substr(is,7)=='<filter'||text.substr(is,7)=='<marker')
 fulldefs+=text.slice(is,ie)+'\n'
 else
 glyphs[gl]=text.slice(is,ie)}}
@@ -8464,13 +8464,18 @@ output+=h.toFixed(1)
 output+=h.toFixed(1)
 +((f&4)?'h-3"/>\n':'c5 0 9 4.5 8.5 5.5c0 1 -1.5 -4.5 -12 -3.5"/>\n')}}
 function out_bracket(x,y,h){out_wings(x-5,y+2,h,0)}
-function out_hyph(x,y,w){var i,sz=cwidf('-'),d=5*sz,n=((w-2*sz)/d)|0
-if(n<0)
-n=0
-x+=(w-n*d-sz)/2
+function out_hyph(x,y,w){var i,d=8,n=w/d/7|0
+if(!n)
+d=(w-d)/2+2
+else
+w-=d*3
+x+=d
+if(n){x-=d/2
+w+=d}
 output+='<text class="'+font_class(gene.curfont)
 +'" x="'+sx(x).toFixed(2)
 i=n
+d=w/n
 while(--n>=0){x+=d
 output+=","+sx(x).toFixed(2)}
 output+='" y="'+sy(y).toFixed(2)
@@ -9183,6 +9188,16 @@ case"deco":deco_add(param)
 return
 case"linebreak":set_linebreak(param)
 return
+case"loadjs":cmd=param.match(/[^\s]+/)
+if(!cmd)
+return
+cmd=cmd[0]
+param=param.replace(cmd,'').trim()
+b=cmd.match(/([^/]*)\.js/)
+b=b?b[1]:cmd
+if(abc2svg[b])
+abc2svg[b](self,param)
+return
 case"map":get_map(param)
 return
 case"maxsysstaffsep":case"sysstaffsep":if(parse.state==3){val=get_unit(param)
@@ -9478,7 +9493,9 @@ delete p_voice.eoln}
 if(p_voice.time>maxtime)
 maxtime=p_voice.time}
 if(!maxtime){par_sy.staves=[]
-par_sy.voices=[]}else{self.voice_adj(1)
+par_sy.voices=[]
+if(!a_vf)
+return syntax(1,errs.bad_val,'%%'+cmd)}else{self.voice_adj(1)
 for(v=0;v<nv;v++){p_voice=voice_tb[v]
 if(maxtime-p_voice.time>=p_voice.meter.wmeasure)
 p_voice.acc=[]
@@ -9859,8 +9876,15 @@ if(!s){syntax(1,"Not enough measure bars for lyric line")
 return}
 s=s.next;i++
 continue
-case'-':case'_':word=p[i]
-ln=p[i]=='-'?2:3
+case'-':if(ly?.ln!=3)
+word='-',ln=2
+else
+word='_',ln=3
+break
+case'_':if(ly&&ly.ln&&ly.ln!=3)
+word='-',ln=2
+else
+word='_',ln=3
 break
 case'*':word=""
 break
@@ -9966,53 +9990,78 @@ s1=s1.ts_next}}
 if(align>0){for(i=0;i<a_ly.length;i++){ly=a_ly[i]
 if(ly&&ly.t[0]>='0'&&ly.t[0]<='9')
 ly.shift=align}}}
-function draw_lyric_line(p_voice,j,y){var p,lastx,w,s,s2,ly,lyl,ln,hyflag,lflag,x0,shift
-if(p_voice.hy_st&(1<<j)){hyflag=true;p_voice.hy_st&=~(1<<j)}
+function draw_lyric_line(p_voice,j,y){var p,lastx,w,s,ly,lyl,ln,lflag,x0,shift,hyflag={}
+function out_ly(s,w,p){if(user.anno_start||user.anno_stop){var s2={p_v:s.p_v,st:s.st,istart:s.a_ly[j].istart,iend:s.a_ly[j].iend,ts_prev:s,ts_next:s.ts_next,x:lastx,y:y,ymn:y,ymx:y+gene.curfont.size,wl:0,wr:w}
+anno_start(s2,'lyrics')}
+xy_str(lastx,y,p)
+anno_stop(s2,'lyrics')}
+function set_hy(v){if(v){hyflag.s=s
+hyflag.p=p
+hyflag.w=w}else{hyflag.s=null
+hyflag.p=""
+hyflag.w=0}}
 for(s=p_voice.sym;;s=s.next)
 if(s.type!=C.CLEF&&s.type!=C.KEY&&s.type!=C.METER)
 break
-lastx=s.prev?s.prev.x:tsfirst.x;x0=0
+x0=s.x-s.wl-10
+lastx=0
+set_hy(0)
+if(p_voice.hy_st&(1<<j)){hyflag.s=s
+p_voice.hy_st&=~(1<<j)}
 for(;s;s=s.next){if(s.a_ly)
 ly=s.a_ly[j]
 else
 ly=null
-if(!ly){switch(s.type){case C.REST:case C.MREST:if(lflag){out_wln(lastx+3,y,x0-lastx);lflag=false;lastx=s.x+s.wr}}
+if(!ly){switch(s.type){case C.REST:case C.MREST:if(lflag){out_wln(lflag,y,x0-lflag)
+lflag=0
+lastx=s.x+s.wr}}
 continue}
 if(ly.font!=gene.curfont)
 gene.curfont=ly.font
 p=ly.t;ln=ly.ln||0
 w=p.wh[0]
 shift=ly.shift
-if(hyflag){if(ln==3){ln=2}else if(ln<2){if(s.x-shift-lastx>gene.curfont.swfac*.4)
-out_hyph(lastx,y,s.x-shift-lastx);hyflag=false;lastx=s.x+s.wr}}
-if(lflag&&ln!=3){out_wln(lastx+3,y,x0-lastx+3);lflag=false;lastx=s.x+s.wr}
-if(ln>=2){if(x0==0&&lastx>s.x-18)
-lastx=s.x-18
-if(ln==2)
-hyflag=true
-else
-lflag=true;x0=s.x-shift
+if(ln==3){if(!lflag)
+lflag=x0+3
+x0=s.x-shift+w
 continue}
-x0=s.x-shift;if(ln)
-hyflag=true
-if(user.anno_start||user.anno_stop){s2={p_v:s.p_v,st:s.st,istart:ly.istart,iend:ly.iend,ts_prev:s,ts_next:s.ts_next,x:x0,y:y,ymn:y,ymx:y+gene.curfont.size,wl:0,wr:w}
-anno_start(s2,'lyrics')}
-xy_str(x0,y,p)
-anno_stop(s2,'lyrics')
-lastx=x0+w}
-if(hyflag){hyflag=false;x0=realwidth-10
+if(lflag){out_wln(lflag,y,x0-lflag)
+lflag=0}
+x0=s.x-shift
+if(ln==1&&!hyflag.s){set_hy(1)
+lastx=x0
+continue}
+if(ln==2)
+continue
+if(hyflag.s){if(x0-hyflag.w-lastx>gene.curfont.swfac){if(!lastx)
+lastx=x0-ly.font.size
+out_ly(hyflag.s,hyflag.w,hyflag.p)
+lastx+=hyflag.w
+out_hyph(lastx,y,x0-lastx)
+set_hy(0)
+lastx=x0}else{x0=lastx}
+p=hyflag.p+p
+w+=hyflag.w
+set_hy(ln)
+if(ln)
+continue}
+lastx=x0
+out_ly(s,w,p)
+x0+=w}
+if(hyflag.s){out_ly(hyflag.s,hyflag.w,hyflag.p)
+lastx+=hyflag.w
+x0=realwidth-10
 if(x0<lastx+10)
 x0=lastx+10;out_hyph(lastx,y,x0-lastx)
 if(p_voice.s_next&&p_voice.s_next.fmt.hyphencont)
 p_voice.hy_st|=(1<<j)}
-for(p_voice.s_next;s;s=s.next){if(s.type==C.NOTE){if(!s.a_ly)
+if(lflag){for(s=p_voice.s_next;s;s=s.next){if(s.type==C.NOTE){if(!s.a_ly)
 break
 ly=s.a_ly[j]
-if(ly&&ly.ln==3){lflag=true;x0=realwidth-15
-if(x0<lastx+12)
-x0=lastx+12}
+if(ly&&ly.ln==3){if(x0<realwidth-15)
+x0=realwidth-15}
 break}}
-if(lflag){out_wln(lastx+3,y,x0-lastx+3);lflag=false}}
+out_wln(lflag,y,x0-lflag)}}
 function draw_lyrics(p_voice,nly,a_h,y,incr){var j,top,sc=staff_tb[p_voice.st].staffscale;set_font("vocal")
 if(incr>0){if(y>-tsfirst.fmt.vocalspace)
 y=-tsfirst.fmt.vocalspace;y*=sc
@@ -10318,6 +10367,8 @@ Abc.prototype.add_style=function(s){style+=s};Abc.prototype.anno_a=anno_a
 Abc.prototype.cfmt=function(){return cfmt};Abc.prototype.clone=clone;Abc.prototype.clr_sty=clr_sty
 Abc.prototype.deco_put=function(nm,s){a_dcn.push(nm)
 deco_cnv(s)}
+Abc.prototype.deco_val_tb=deco_val_tb
+Abc.prototype.decos=decos
 Abc.prototype.defs_add=defs_add
 Abc.prototype.dh_put=function(nm,s,nt){a_dcn.push(nm)
 dh_cnv(s,nt)}
@@ -10346,7 +10397,7 @@ var Abc=abc2svg.Abc
 if(typeof module=='object'&&typeof exports=='object'){exports.abc2svg=abc2svg;exports.Abc=Abc}
 if(!abc2svg.loadjs){abc2svg.loadjs=function(fn,onsuccess,onerror){if(onerror)
 onerror(fn)}}
-abc2svg.modules={ambitus:{},begingrid:{fn:'grid3'},beginps:{fn:'psvg'},break:{},capo:{},chordnames:{},clip:{},clairnote:{fn:'clair'},cpp:{},voicecombine:{fn:'combine'},diagram:{fn:'diag'},equalbars:{},fit2box:{},gamelan:{},grid:{},grid2:{},jazzchord:{},jianpu:{},mdnn:{},MIDI:{},nns:{},pageheight:{fn:'page'},pedline:{},percmap:{fn:'perc'},playswing:{fn:'swing'},roman:{},soloffs:{},sth:{},strtab:{},tablature:{fn:'tblt'},temperament:{fn:'temper'},temponame:{fn:'tempo'},tropt:{},titleformat:{fn:'tunhd'},nreq:0,load:function(file,relay,errmsg){function get_errmsg(){if(typeof user=='object'&&user.errmsg)
+abc2svg.modules={ambitus:{},begingrid:{fn:'grid3'},beginps:{fn:'psvg'},break:{},capo:{},chordnames:{},clip:{},clairnote:{fn:'clair'},cpp:{},voicecombine:{fn:'combine'},diagram:{fn:'diag'},equalbars:{},fit2box:{},gamelan:{},grid:{},grid2:{},jazzchord:{},jianpu:{},loadjs:{},mdnn:{},MIDI:{},nns:{},pageheight:{fn:'page'},pedline:{},percmap:{fn:'perc'},playswing:{fn:'swing'},roman:{},soloffs:{},sth:{},strtab:{},tablature:{fn:'tblt'},temperament:{fn:'temper'},temponame:{fn:'tempo'},tropt:{},titleformat:{fn:'tunhd'},nreq:0,load:function(file,relay,errmsg){function get_errmsg(){if(typeof user=='object'&&user.errmsg)
 return user.errmsg
 if(typeof abc2svg.printErr=='function')
 return abc2svg.printErr
@@ -10357,12 +10408,28 @@ return console.log
 return function(){}}
 function load_end(){if(--abc2svg.modules.nreq==0)
 abc2svg.modules.cbf()}
-var m,i,fn,nreq_i=this.nreq,ls=file.match(/(%%|I:).+?\b/g)
+var m,i,j,k,fn,nreq_i=this.nreq,ls=file.match(/(%%|I:).+?\b/g)
 if(!ls)
 return true
 this.cbf=relay||function(){}
 this.errmsg=errmsg||get_errmsg()
 for(i=0;i<ls.length;i++){fn=ls[i].replace(/\n?(%%|I:)/,'')
+if(fn=="loadjs"){k=0
+while(1){j=file.indexOf("%%loadjs ",k)
+if(j<0)
+break
+k=file.indexOf("\n",j)
+fn=file.slice(j+9,k)
+j=fn.indexOf('%')
+if(j>0)
+fn=fn.slice(0,j)
+fn=fn.match(/[^\s]+/)[0]
+m=fn.match(/([^/]*)\.js/)
+m=m?m[1]:fn
+if(typeof abc2svg[m]!="function"&&!abc2svg.modules[m]){abc2svg.modules[m]={loaded:1}
+this.nreq++
+abc2svg.loadjs(fn,load_end)}}
+continue}
 m=abc2svg.modules[fn]
 if(!m||m.loaded)
 continue
@@ -10373,4 +10440,4 @@ this.nreq++
 abc2svg.loadjs(fn+"-1.js",load_end,function(){abc2svg.modules.errmsg('Error loading the module '+fn)
 load_end()})}
 return this.nreq==nreq_i}}
-abc2svg.version="v1.23.4";abc2svg.vdate="2026-08-20"
+abc2svg.version="v1.23.5";abc2svg.vdate="2026-09-15"
