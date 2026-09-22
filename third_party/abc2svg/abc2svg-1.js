@@ -4156,7 +4156,8 @@ s.p_v.s_prev=s
 s.next.prev=null
 s.p_v.sym=s.next
 return}
-if(s.p_v.sym==s){s.p_v.sym=s.next
+if(s.p_v.sym==s){s.next.prev=null
+s.p_v.sym=s.next
 return}}
 if(s.next)
 s.next.prev=s.prev
@@ -9943,12 +9944,12 @@ for(i=0;i<a_ly.length;i++){ly=a_ly[i]
 if(!ly)
 continue
 gene.curfont=ly.font
-ly.t=str2svg(ly.t)
-p=ly.t.replace(/<[^>]*>/g,'')
+p=ly.t
+ly.wh=strwh(p)
 if(ly.ln>=2){ly.shift=0
 continue}
 spw=cwid(' ')*ly.font.swfac
-w=ly.t.wh[0]
+w=ly.wh[0]
 r=abc2svg.lypre.exec(p)
 if(s.type==C.GRACE){shift=s.wl}else if(r){r=r[0]
 if(p[0]=='('){sz=spw}else{set_font(ly.font)
@@ -9991,9 +9992,10 @@ if(align>0){for(i=0;i<a_ly.length;i++){ly=a_ly[i]
 if(ly&&ly.t[0]>='0'&&ly.t[0]<='9')
 ly.shift=align}}}
 function draw_lyric_line(p_voice,j,y){var p,lastx,w,s,ly,lyl,ln,lflag,x0,shift,hyflag={}
-function out_ly(s,w,p){if(user.anno_start||user.anno_stop){var s2={p_v:s.p_v,st:s.st,istart:s.a_ly[j].istart,iend:s.a_ly[j].iend,ts_prev:s,ts_next:s.ts_next,x:lastx,y:y,ymn:y,ymx:y+gene.curfont.size,wl:0,wr:w}
+function out_ly(s,w,p){if(s.a_ly&&(user.anno_start||user.anno_stop)){var s2={p_v:s.p_v,st:s.st,istart:s.a_ly[j].istart,iend:s.a_ly[j].iend,ts_prev:s,ts_next:s.ts_next,x:lastx,y:y,ymn:y,ymx:y+gene.curfont.size,wl:0,wr:w}
 anno_start(s2,'lyrics')}
 xy_str(lastx,y,p)
+if(s2)
 anno_stop(s2,'lyrics')}
 function set_hy(v){if(v){hyflag.s=s
 hyflag.p=p
@@ -10019,7 +10021,7 @@ continue}
 if(ly.font!=gene.curfont)
 gene.curfont=ly.font
 p=ly.t;ln=ly.ln||0
-w=p.wh[0]
+w=ly.wh[0]
 shift=ly.shift
 if(ln==3){if(!lflag)
 lflag=x0+3
@@ -10086,7 +10088,7 @@ if(!a_ly)
 continue
 x=s.x;w=10
 for(i=0;i<a_ly.length;i++){ly=a_ly[i]
-if(ly){x-=ly.shift;w=ly.t.wh[0]
+if(ly){x-=ly.shift;w=ly.wh[0]
 break}}
 y=y_get(p_voice.st,1,x,w)
 if(top<y)
@@ -10098,8 +10100,8 @@ h_tb[v][nly++]=0
 for(i=0;i<a_ly.length;i++){ly=a_ly[i]
 if(!ly)
 continue
-if(!h_tb[v][i]||ly.t.wh[1]>h_tb[v][i])
-h_tb[v][i]=ly.t.wh[1]}}}else{y=y_get(p_voice.st,1,0,realwidth)
+if(!h_tb[v][i]||ly.wh[1]>h_tb[v][i])
+h_tb[v][i]=ly.wh[1]}}}else{y=y_get(p_voice.st,1,0,realwidth)
 if(top<y)
 top=y;y=y_get(p_voice.st,0,0,realwidth)
 if(bot>y)
@@ -10440,4 +10442,4 @@ this.nreq++
 abc2svg.loadjs(fn+"-1.js",load_end,function(){abc2svg.modules.errmsg('Error loading the module '+fn)
 load_end()})}
 return this.nreq==nreq_i}}
-abc2svg.version="v1.23.5";abc2svg.vdate="2026-09-15"
+abc2svg.version="v1.23.6";abc2svg.vdate="2026-09-21"

@@ -6,7 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Updated the bundled abc2svg renderer to pinned upstream commit `4ad7a2b97d`, including the post-v1.23.6 lyric corrections.
 
+### Fixed
+- Lyrics with inline font changes and hyphens render as proper text instead of exposing internal SVG markup, and lyric annotations no longer risk crashing the Score.
+- Music lines begin correctly when key and meter change together.
 
 ## [1.11.1] - 2026-09-16
 ### Changed
