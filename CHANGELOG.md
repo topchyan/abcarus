@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [1.11.2] - 2026-09-22
 ### Changed
 - Updated the bundled abc2svg renderer to pinned upstream commit `4ad7a2b97d`, including the post-v1.23.6 lyric corrections.
 
