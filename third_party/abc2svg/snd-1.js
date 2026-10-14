@@ -329,7 +329,7 @@ po.c_i[i]=0
 while(p_v.voice_down){p_v=p_v.voice_down
 po.v_c[p_v.v]=i}
 po.p_v[s2.v]=true}
-function play_cont(po){var d,i,st,m,note,g,s2,t,maxt,now,p_v,C=abc2svg.C,s=po.s_cur
+function play_cont(po){var d,i,st,m,n,note,g,s2,t,maxt,now,p_v,C=abc2svg.C,s=po.s_cur
 function var_end(s){var i,s2,s3,a=s.rep_v||s.rep_s
 ti=0
 for(i=1;i<a.length;i++){s2=a[i]
@@ -353,12 +353,17 @@ po.conf.new_speed=0}
 maxt=t+po.tgen
 po.timouts=[]
 s2=null
-while(1){if((!s||s.part1)&&po.i_p!=undefined){s2=po.ps[++po.i_p]
+while(1){if((!s||s.part1)&&po.ps){s2=po.ps[++po.i_p]
 if(!s2)
-s=s2=null}
-if(po.s_loop&&(!s||s==po.s_end)&&!po.stop){s2=po.s_loop.ts_next
-if(s2?.p_v.id=="_beats"){while(s2?.p_v.id=="_beats")
-s2=s2.ts_next}}
+s=s2=null
+po.repv=1}
+if(!s2&&po.s_loop&&(!s||s==po.s_end)&&!po.stop){po.i_p=0
+s2=po.ps?po.ps[0]:po.s_loop.ts_next
+if(s2.p_v.id=="_beats"){while(s2?.p_v.id=="_beats")
+s2=s2.ts_next}
+po.repn=0
+po.repv=1
+po.repp=null}
 if(s2){s=s2
 s2=null
 po.stim=t-s.ptim/po.conf.speed
@@ -436,6 +441,11 @@ function get_part(po){var s,i,s_p
 for(s=po.s_cur;s;s=s.ts_prev){if(s.parts){po.i_p=-1
 po.ps=s.p_s
 return}
+if(s.bar_type){if(s.text&&po.repv==1){i=parseInt(s.text)
+if(i)
+po.repv=i}
+if(s.rep_p)
+po.repp??=s.rep_p}
 s_p=s.part1
 if(!s_p||!s_p.p_s)
 continue
@@ -445,12 +455,12 @@ return}}}}
 if(po.stop){if(po.onend)
 po.onend(po.repv)
 return}
+if(!po.repv)
+po.repv=1
 get_part(po)
 po.stim=po.get_time(po)+.3
 -po.s_cur.ptim/po.conf.speed
 po.p_v=[]
-if(!po.repv)
-po.repv=1
 play_cont(po)}
 if(typeof module=='object'&&typeof exports=='object')
 exports.ToAudio=ToAudio

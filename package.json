@@ -20,6 +20,7 @@
   },
   "scripts": {
     "start": "electron .",
+    "styles:build": "node scripts/build_renderer_styles.mjs",
     "appimage": "bash scripts/build_appimage.sh",
     "pbs:check": "node scripts/check_pbs_lock.mjs",
     "pbs:check-runtime": "node scripts/check_pbs_runtime.mjs",

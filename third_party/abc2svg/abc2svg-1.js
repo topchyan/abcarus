@@ -3225,8 +3225,8 @@ S "Source: "\n\
 D "Discography: "\n\
 N "Notes: "\n\
 Z "Transcription: "\n\
-H "History: "',infospace:0,keywarn:true,leftmargin:1.4*CM,lineskipfac:1.1,linewarn:true,maxshrink:.65,maxstaffsep:2000,maxsysstaffsep:2000,measrepnb:1,measurefont:{name:txt_ff,style:"italic",size:10},measurenb:-1,musicfont:{name:"music",src:musicfont,size:24},musicspace:6,partsfont:{name:txt_ff,size:15},parskipfac:.4,partsspace:8,pagewidth:21*CM,"propagate-accidentals":"o",printmargin:0,rightmargin:1.4*CM,rbmax:4,rbmin:2,repeatfont:{name:txt_ff,size:9},scale:1,slurheight:1.0,spatab:new Float32Array([10.2,13.3,17.3,22.48,29.2,38,49.4,64.2,83.5,108.5]),staffsep:46,stemheight:21,stretchlast:.25,stretchstaff:true,subtitlefont:{name:txt_ff,size:16},subtitlespace:3,sysstaffsep:34,systnames:-1,systvoices:3,tempofont:{name:txt_ff,weight:"bold",size:12},textfont:{name:txt_ff,size:16},textspace:14,tieheight:1.0,titlefont:{name:txt_ff,size:20},titlespace:6,titletrim:true,topspace:22,tuplets:[0,0,0,0],tupletfont:{name:txt_ff,style:"italic",size:10},vocalfont:{name:txt_ff,weight:"bold",size:13},vocalspace:10,voicefont:{name:txt_ff,weight:"bold",size:13},writefields:"CMOPQsTWw",wordsfont:{name:txt_ff,size:16},wordsspace:5,"writeout-accidentals":"n"}
-var sfmt={bardef:true,barsperstaff:true,beamslope:true,breaklimit:true,bstemdown:true,cancelkey:true,dynalign:true,flatbeams:true,gracedur:1,gracespace:true,hyphencont:true,keywarn:true,maxshrink:true,maxstaffsep:true,measrepnb:true,rbmax:true,rbmin:true,shiftunison:true,shrinksys:1,slurheight:true,squarebreve:true,staffsep:true,systvoices:1,stemheight:true,stretchlast:true,stretchstaff:true,tieheight:true,timewarn:true,trimsvg:1,vocalspace:true}
+H "History: "',infospace:0,keywarn:true,leftmargin:1.4*CM,lineskipfac:1.1,linewarn:true,maxshrink:.65,maxstaffsep:2000,maxsysstaffsep:2000,measrepnb:1,measurefont:{name:txt_ff,style:"italic",size:10},measurenb:-1,minhyphen:13,musicfont:{name:"music",src:musicfont,size:24},musicspace:6,partsfont:{name:txt_ff,size:15},parskipfac:.4,partsspace:8,pagewidth:21*CM,"propagate-accidentals":"o",printmargin:0,rightmargin:1.4*CM,rbmax:4,rbmin:2,repeatfont:{name:txt_ff,size:9},scale:1,slurheight:1.0,spatab:new Float32Array([10.2,13.3,17.3,22.48,29.2,38,49.4,64.2,83.5,108.5]),staffsep:46,stemheight:21,stretchlast:.25,stretchstaff:true,subtitlefont:{name:txt_ff,size:16},subtitlespace:3,sysstaffsep:34,systnames:-1,systvoices:3,tempofont:{name:txt_ff,weight:"bold",size:12},textfont:{name:txt_ff,size:16},textspace:14,tieheight:1.0,titlefont:{name:txt_ff,size:20},titlespace:6,titletrim:true,topspace:22,tuplets:[0,0,0,0],tupletfont:{name:txt_ff,style:"italic",size:10},vocalfont:{name:txt_ff,weight:"bold",size:13},vocalspace:10,voicefont:{name:txt_ff,weight:"bold",size:13},writefields:"CMOPQsTWw",wordsfont:{name:txt_ff,size:16},wordsspace:5,"writeout-accidentals":"n"}
+var sfmt={bardef:true,barsperstaff:true,beamslope:true,breaklimit:true,bstemdown:true,cancelkey:true,dynalign:true,flatbeams:true,gracedur:1,gracespace:true,hyphencont:true,keywarn:true,maxshrink:true,maxstaffsep:true,measrepnb:true,minhyphen:1,rbmax:true,rbmin:true,shiftunison:true,shrinksys:1,slurheight:true,squarebreve:true,staffsep:true,systvoices:1,stemheight:true,stretchlast:true,stretchstaff:true,tieheight:true,timewarn:true,trimsvg:1,vocalspace:true}
 function get_bool(param){return!param||!/^(0|n|f)/i.test(param)}
 function get_font_scale(param){var i,font,a=info_split(param)
 if(a.length<=1)
@@ -3378,7 +3378,7 @@ param_set_font(cmd,param)
 return}
 if(sfmt[cmd]&&parse.ufmt)
 cfmt=Object.create(cfmt)
-switch(cmd){case"aligncomposer":case"barsperstaff":case"infoline":case"measurenb":case"rbmax":case"rbmin":case"measrepnb":case"shiftunison":case"systnames":case"systvoices":v=parseInt(param)
+switch(cmd){case"aligncomposer":case"barsperstaff":case"infoline":case"measurenb":case"minhyphen":case"rbmax":case"rbmin":case"measrepnb":case"shiftunison":case"systnames":case"systvoices":v=parseInt(param)
 if(isNaN(v)){syntax(1,"Bad integer value");break}
 if(cmd=="systnames"){switch(v){case-1:v=3;break
 case 1:v=2;break
@@ -3994,9 +3994,9 @@ var gene,staff_tb,nstaff,tsnext,realwidth,insert_meter,spf_last,smallest_duratio
 var dx_tb=new Float32Array([9.5,9.5,13,16,16])
 var hw_tb=new Float32Array([4.7,5,6,7.2,7.5])
 var w_note=new Float32Array([2.5,3,4.5,6,6.5])
-function identify_note(s,dur_o){var r=abc2svg.hdn[dur_o]
+function identify_note(s,dur_o){if(dur_o!=3072){var r=abc2svg.hdn[dur_o]
 if(r)
-return r
+return r}
 var head,flags,dots=0,dur=dur_o
 if(dur%12!=0)
 error(1,s,"Invalid note duration $1",dur);dur/=12
@@ -4154,11 +4154,9 @@ tsfirst.seqst=1
 if(s.p_v.s_prev&&s.p_v.s_prev.next==s){s.prev=s.p_v.s_prev
 s.p_v.s_prev=s
 s.next.prev=null
-s.p_v.sym=s.next
+s.p_v.sym=s.next}else if(s.p_v.sym==s){s.next.prev=null
+s.p_v.sym=s.next}
 return}
-if(s.p_v.sym==s){s.next.prev=null
-s.p_v.sym=s.next
-return}}
 if(s.next)
 s.next.prev=s.prev
 if(s.prev)
@@ -4873,10 +4871,7 @@ s2.ts_prev=s1.ts_prev
 s1.ts_prev=s5
 s5.ts_next=s1
 if(!s2.seqst){s2.seqst=1
-s4.seqst=0
-for(s5=s2.ts_prev;!s5.seqst;s5=s5.ts_prev);s4.ts_prev.ts_next=null
-set_allsymwidth(s5)
-s4.ts_prev.ts_next=s4}
+for(s5=s2.ts_prev;!s5.seqst;s5=s5.ts_prev);s2.shrink=s5.wr+s2.wl}
 s2=s4}
 return nl}
 s=bardiv(s)
@@ -5638,7 +5633,7 @@ s.ts_next=last_s;if(last_s)
 s.ts_prev=last_s.ts_prev
 else
 s.ts_prev=null
-if(!s.ts_prev){tsfirst=s}else{s.ts_prev.ts_next=s
+if(!s.ts_prev){tsfirst=s;s.seqst=1}else{s.ts_prev.ts_next=s
 delete s.seqst}
 if(last_s)
 last_s.ts_prev=s
@@ -8902,7 +8897,10 @@ return
 if(s.time!=s.prev.time||w_tb[s.prev.type])
 s.seqst=1
 if(s.type==C.PART){s.prev.next=s.prev.ts_next=s.next
-if(s.next){s.next.part=s
+if(s.next){if(s.next.type==C.KEY&&s.next.next)
+s.next.next.part=s
+else
+s.next.part=s
 s.next.prev=s.prev
 if(s.soln)
 s.next.soln=1
@@ -8948,7 +8946,10 @@ s.prev.next=s.next
 else
 s.p_v.sym=s.next
 vtb[v]=s.next
-if(s.next){s.next.part=s
+if(s.next){if(s.next.type==C.KEY&&s.next.next)
+s.next.next.part=s
+else
+s.next.part=s
 s.next.prev=s.prev
 if(s.soln)
 s.next.soln=1}
@@ -10035,7 +10036,7 @@ lastx=x0
 continue}
 if(ln==2)
 continue
-if(hyflag.s){if(x0-hyflag.w-lastx>gene.curfont.swfac){if(!lastx)
+if(hyflag.s){if(x0-hyflag.w-lastx>s.fmt.minhyphen){if(!lastx)
 lastx=x0-ly.font.size
 out_ly(hyflag.s,hyflag.w,hyflag.p)
 lastx+=hyflag.w
@@ -10442,4 +10443,4 @@ this.nreq++
 abc2svg.loadjs(fn+"-1.js",load_end,function(){abc2svg.modules.errmsg('Error loading the module '+fn)
 load_end()})}
 return this.nreq==nreq_i}}
-abc2svg.version="v1.23.6";abc2svg.vdate="2026-09-21"
+abc2svg.version="v1.23.6";abc2svg.vdate="2026-10-14"

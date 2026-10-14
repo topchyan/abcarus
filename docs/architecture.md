@@ -35,7 +35,8 @@ ABCarus is an Electron app with a main process and a renderer process:
 - Settings modal logic and UI state.
 - Sends settings updates to the main process for persistence.
 
-`src/renderer/index.html` and `src/renderer/style.css`:
+`src/renderer/index.html`, the ordered `src/renderer/styles/*.css` source modules,
+and their generated `src/renderer/style.css` runtime bundle:
 - UI structure and styling for panes, modals, and editor/render layout.
 
 ## Preload bridge

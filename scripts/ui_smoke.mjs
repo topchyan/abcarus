@@ -17,6 +17,7 @@ const args = new Set(process.argv.slice(2));
 const env = { ...process.env };
 env.ABCARUS_DEV_UI_SMOKE = "1";
 env.ABCARUS_DEV_NO_MAXIMIZE = "1";
+if (args.has("--visible")) env.ABCARUS_DEV_UI_SMOKE_VISIBLE = "1";
 if (args.has("--playback")) env.ABCARUS_DEV_PLAYBACK_SMOKE = "1";
 const playbackTuneArg = process.argv.slice(2).find((arg) => arg.startsWith("--playback-tune="));
 if (playbackTuneArg) {

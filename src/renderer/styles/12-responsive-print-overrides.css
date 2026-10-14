@@ -1,0 +1,328 @@
+@media (max-width: 860px) {
+  .modal-card.settings-card { min-width: 680px; }
+  .settings-entry {
+    grid-template-columns: minmax(150px, 0.8fr) minmax(180px, 1fr) minmax(180px, 1.1fr);
+  }
+  .settings-entry--font-choice {
+    grid-template-columns: minmax(130px, 0.6fr) minmax(0, 2.4fr);
+  }
+  .settings-row {
+    grid-template-columns: minmax(150px, 0.8fr) minmax(180px, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .modal-card.settings-card { min-width: 0; }
+  .settings-layout { grid-template-columns: 1fr; }
+  .settings-nav {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-color);
+    padding: 8px;
+  }
+  .settings-tabs {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 4px;
+  }
+  .settings-tabs .settings-tab {
+    width: auto;
+    white-space: nowrap;
+  }
+  .settings-entry {
+    grid-template-columns: minmax(140px, 0.8fr) minmax(150px, 1fr);
+  }
+  .settings-entry--font-choice {
+    grid-template-columns: 1fr;
+  }
+  .settings-entry > .settings-help {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-top: 2px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .header-row-top {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+
+  .left-controls,
+  .right-controls {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+
+  .left-controls .segmented,
+  .right-controls {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+}
+
+body.print-mode header,
+body.print-mode .sidebar,
+body.print-mode .divider,
+body.print-mode .split-divider,
+body.print-mode .editor-pane,
+body.print-mode .file-header-panel,
+body.print-mode .workspace-statusbar {
+  display: none;
+}
+
+body.print-mode main {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+body.print-mode .render-pane {
+  border-bottom: 0;
+  overflow: visible;
+  height: auto;
+}
+
+body.print-mode #out {
+  padding: 0;
+  width: 100%;
+  zoom: 1;
+}
+
+body.print-mode svg {
+  width: 100% !important;
+  height: auto !important;
+}
+
+body.print-mode #out svg {
+  width: 100% !important;
+  height: auto !important;
+}
+
+body.print-mode .right {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+body.print-mode .right-split {
+  display: block;
+}
+
+body.print-mode .pane {
+  height: auto;
+  overflow: visible;
+}
+
+body.print-mode {
+  overflow: visible;
+}
+
+.modal-card.print-all-options-card {
+  width: min(520px, 92vw);
+  max-width: 92vw;
+  min-width: 360px;
+}
+
+.modal-card.print-all-options-card .modal-header {
+  cursor: move;
+}
+
+.modal-card.print-all-options-card.dragging .modal-header {
+  cursor: grabbing;
+}
+
+.modal-card.print-all-options-card.dragging {
+  user-select: none;
+}
+
+.modal-card.print-all-options-card .modal-header,
+.modal-card.print-all-options-card .modal-footer {
+  padding: 8px 10px;
+}
+
+.modal-card.print-all-options-card .modal-body {
+  padding: 10px 10px 12px;
+  gap: 10px;
+}
+
+.print-all-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.print-all-row select {
+  width: 100%;
+  min-width: 0;
+}
+
+.print-all-label {
+  font-size: var(--font-size-sm);
+  color: var(--text);
+}
+
+.print-all-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  user-select: none;
+  margin-top: 2px;
+  font-size: var(--font-size-sm);
+}
+
+.print-all-inline input[type="checkbox"] {
+  margin: 0;
+}
+
+/* Payload Mode (Diagnostics) */
+
+.payload-mode-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  margin: 8px 8px 0 8px;
+}
+
+.payload-mode-bar.hidden {
+  display: none;
+}
+
+.payload-mode-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.payload-mode-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.payload-mode-tab {
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.payload-mode-tab:last-child {
+  border-right: 0;
+}
+
+.payload-mode-tab.is-active {
+  background: var(--button);
+  color: var(--text);
+  border-color: var(--border);
+  font-weight: 600;
+}
+
+.payload-mode-title {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.payload-mode-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.payload-mode-actions button {
+  padding: 5px 10px;
+}
+
+.payload-mode-actions #payloadModeExit {
+  background: var(--button);
+}
+
+.cm-line.cm-payload-layer-abcarus,
+.cm-payload-layer-abcarus {
+  background: rgba(90, 135, 255, 0.28) !important;
+  box-shadow: inset 4px 0 0 rgba(90, 135, 255, 0.75) !important;
+  background-image: linear-gradient(90deg, rgba(90, 135, 255, 0.25), rgba(90, 135, 255, 0.12)) !important;
+}
+
+.cm-line.cm-payload-layer-fileheader,
+.cm-payload-layer-fileheader {
+  background: rgba(90, 255, 165, 0.22) !important;
+  box-shadow: inset 4px 0 0 rgba(90, 255, 165, 0.70) !important;
+  background-image: linear-gradient(90deg, rgba(90, 255, 165, 0.22), rgba(90, 255, 165, 0.10)) !important;
+}
+
+.cm-line.cm-payload-layer-playback,
+.cm-payload-layer-playback {
+  background: rgba(255, 180, 90, 0.28) !important;
+  box-shadow: inset 4px 0 0 rgba(255, 150, 60, 0.80) !important;
+  background-image: linear-gradient(90deg, rgba(255, 180, 90, 0.25), rgba(255, 180, 90, 0.12)) !important;
+}
+
+.modal-card.tune-list-export-card {
+  width: min(760px, calc(100vw - 40px));
+  max-height: min(760px, calc(100vh - 40px));
+}
+
+.tune-list-export-source {
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.tune-list-export-controls {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(120px, 0.7fr) minmax(120px, 0.7fr);
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.tune-list-export-controls label {
+  display: grid;
+  gap: 4px;
+}
+
+.tune-list-export-columns {
+  margin: 0 0 10px;
+  padding: 8px 10px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+#tuneListExportColumns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+}
+
+#tuneListExportColumns label {
+  white-space: nowrap;
+}
+
+#tuneListExportPreview {
+  width: 100%;
+  min-height: 240px;
+  resize: vertical;
+  box-sizing: border-box;
+  font-family: var(--editor-font-family, monospace);
+}
+
+@media (max-width: 700px) {
+  .tune-list-export-controls {
+    grid-template-columns: 1fr;
+  }
+}

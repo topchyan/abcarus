@@ -90,6 +90,8 @@ const DEFAULT_MAIN_WINDOW_BOUNDS = {
 
 const STARTUP_PERF_ENABLED = process.env.ABCARUS_DEV_STARTUP_PERF === "1";
 const UI_SMOKE_ENABLED = process.env.ABCARUS_DEV_UI_SMOKE === "1";
+const UI_SMOKE_EXTERNAL_ENABLED = process.env.ABCARUS_DEV_UI_SMOKE_EXTERNAL === "1";
+const UI_SMOKE_HIDDEN_ENABLED = UI_SMOKE_ENABLED && process.env.ABCARUS_DEV_UI_SMOKE_VISIBLE !== "1";
 const DEV_NO_CACHE_ENABLED = process.env.ABCARUS_DEV_NO_CACHE !== "0";
 const PRINT_CAPTURE_ENABLED = process.env.ABCARUS_DEBUG_PRINT_CAPTURE === "1";
 const DEV_SOUNDFONT_PATH = UI_SMOKE_ENABLED
@@ -1183,6 +1185,7 @@ function showSaveDialog(suggestedName, suggestedDir, senderOrEvent) {
 }
 
 function confirmUnsavedChanges(contextLabel, senderOrEvent) {
+  if (UI_SMOKE_EXTERNAL_ENABLED) return "dont_save";
   const parent = prepareDialogParent(senderOrEvent, "confirm-unsaved");
   const response = dialog.showMessageBoxSync(parent || undefined, {
     type: "warning",
@@ -2920,6 +2923,7 @@ async function createWindow() {
     ...(Number.isFinite(Number(initialBounds.x)) ? { x: Number(initialBounds.x) } : {}),
     ...(Number.isFinite(Number(initialBounds.y)) ? { y: Number(initialBounds.y) } : {}),
     show: false,
+    focusable: !UI_SMOKE_HIDDEN_ENABLED,
     icon: resolveWindowIconPath(),
     webPreferences: {
       contextIsolation: true,
@@ -2985,7 +2989,7 @@ async function createWindow() {
           } catch {}
         }, 250);
       }
-      if (UI_SMOKE_ENABLED) {
+      if (UI_SMOKE_ENABLED && !UI_SMOKE_EXTERNAL_ENABLED) {
         runUiSmoke(win).catch((err) => {
           try {
             // eslint-disable-next-line no-console
@@ -3022,6 +3026,10 @@ async function createWindow() {
   );
   const shouldMaximizeByDefault = !hasPersistedBounds && process.env.ABCARUS_DEV_NO_MAXIMIZE !== "1";
   win.once("ready-to-show", () => {
+    if (UI_SMOKE_HIDDEN_ENABLED) {
+      closeSplashWindow();
+      return;
+    }
     updateSplashStatus("Opening main window…");
     if (ws.isFullScreen) {
       try { win.setFullScreen(true); } catch {}
@@ -3137,6 +3145,10 @@ async function createWindow() {
   });
   win.on("close", (e) => {
     try { captureWindowState(win); } catch {}
+    if (UI_SMOKE_EXTERNAL_ENABLED) {
+      isQuitting = true;
+      return;
+    }
     if (isQuitting) return;
     e.preventDefault();
     win.webContents.send("app:request-quit");
@@ -4789,7 +4801,7 @@ app.whenReady().then(async () => {
     await resetFactoryStateOnDisk();
   }
   if (CLI_OPTIONS.inputPath) queueOrOpenCliInputPath(CLI_OPTIONS.inputPath);
-  const startupSplashSeconds = readStartupSplashSecondsPreferenceSync();
+  const startupSplashSeconds = UI_SMOKE_HIDDEN_ENABLED ? 0 : readStartupSplashSecondsPreferenceSync();
   startupSplashMinVisibleMs = Math.round(Math.max(0, startupSplashSeconds) * 1000);
   if (startupSplashMinVisibleMs > 0) {
     createSplashWindow();

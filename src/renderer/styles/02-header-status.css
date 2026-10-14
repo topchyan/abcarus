@@ -1,0 +1,273 @@
+header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 8px var(--space-3) 6px;
+  border-bottom: 1px solid var(--border-color);
+  gap: var(--space-3);
+}
+
+.header-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.header-row-top {
+  justify-content: center;
+}
+
+.left-controls {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.center-controls {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.right-controls {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.practice-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.practice-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.practice-group[hidden] {
+  display: none;
+}
+
+.practice-group:not([hidden]) + .practice-group:not([hidden]) {
+  border-left: 1px solid var(--border-color);
+  padding-left: 10px;
+}
+
+.practice-tempo:not([hidden]) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+  color: var(--muted-text);
+}
+
+.practice-tempo select {
+  min-height: var(--button-height);
+}
+
+.practice-loop:not([hidden]) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+  color: var(--muted-text);
+}
+
+.practice-loop input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+}
+
+.practice-selection-loop:not([hidden]) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+  color: var(--muted-text);
+}
+
+.practice-selection-loop input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+}
+
+.practice-selection-suppress:not([hidden]) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+  color: var(--muted-text);
+}
+
+.practice-selection-suppress input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+}
+
+.practice-selection-gchords:not([hidden]),
+.practice-selection-drums:not([hidden]) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+  color: var(--muted-text);
+}
+
+.practice-selection-gchords input[type="checkbox"],
+.practice-selection-drums input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+}
+
+.practice-selection-muted:not([hidden]) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+  color: var(--muted-text);
+}
+
+.practice-muted-voices {
+  min-height: var(--button-height);
+  width: 96px;
+}
+
+.practice-loop-num {
+  min-height: var(--button-height);
+  width: 72px;
+}
+
+.practice-loop-arrow {
+  color: var(--muted-text);
+}
+
+.toolbar-sep {
+  width: 1px;
+  height: 22px;
+  background: #ddd;
+  margin: 0 6px;
+}
+
+.right-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.controls-sep {
+  width: 1px;
+  height: 22px;
+  background: #ddd;
+  margin: 0 6px;
+}
+
+.title {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#fileHeaderToggle {
+  border: 1px solid var(--button-border);
+  background: var(--button-bg);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  padding: 4px 10px;
+  border-radius: var(--button-radius);
+  min-height: var(--button-height);
+  color: var(--button-text);
+}
+
+#fileHeaderToggle:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+#fileHeaderToggle:hover {
+  background: var(--button-bg-hover);
+}
+
+#status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #4a5568;
+  font-weight: 400;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: min(520px, 42vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  justify-content: flex-end;
+  flex: 0 1 auto;
+}
+
+#status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #8ca3c7;
+  flex: none;
+}
+
+#status.status-ready {
+  color: #4566a8;
+}
+
+#status.status-ready::before {
+  background: #6f90d1;
+}
+
+#status.status-saved {
+  color: #2d3748;
+}
+
+#status.status-saved::before {
+  background: #8a9aae;
+}
+
+#status.status-dirty {
+  color: #b94710;
+}
+
+#status.status-dirty::before {
+  background: #d9480f;
+}
+
+#status.status-conflict {
+  color: #9f2031;
+}
+
+#status.status-conflict::before {
+  background: #b02a37;
+}
+
+#status.status-loading {
+  color: #a05a00;
+}
+
+#status.status-loading::before {
+  background: #d08a2e;
+}
+

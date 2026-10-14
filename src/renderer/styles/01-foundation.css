@@ -1,0 +1,168 @@
+@font-face {
+  font-family: "music";
+  src: url("../../../third_party/abc2svg/abc2svg.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "ABCarus Noto Sans Mono";
+  src: url("../../../assets/fonts/editor/noto-sans-mono/NotoSansMono[wdth,wght].ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "ABCarus DejaVu Sans Mono";
+  src: url("../../../assets/fonts/editor/dejavu-sans-mono/DejaVuSansMono.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "ABCarus DejaVu Sans Mono";
+  src: url("../../../assets/fonts/editor/dejavu-sans-mono/DejaVuSansMono-Bold.ttf") format("truetype");
+  font-weight: 500 900;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "ABCarus Noto Sans Mono";
+  src: url("../../../assets/fonts/editor/noto-sans-mono/NotoSansMono[wdth,wght].ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: italic;
+}
+
+:root {
+  --font-family-ui: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans", sans-serif;
+  --library-font-family: var(--font-family-ui);
+  --editor-font-family: "ABCarus DejaVu Sans Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --editor-font-size: 13px;
+  --editor-notes-weight: 600;
+  --editor-lyrics-weight: 600;
+  --render-zoom: 1;
+  --editor-zoom: 1;
+  --editor-fit-zoom: 1;
+
+  --font-size-ui: 13px;
+  --font-size-sm: calc(var(--font-size-ui) - 1px);
+  --font-size-xs: calc(var(--font-size-ui) - 2px);
+  --library-font-size: var(--font-size-sm);
+  --line-height-ui: 1.28;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+
+  --radius-1: 5px;
+  --radius-2: 8px;
+  --border-color: #d0d0d0;
+  --bg: #fff;
+  --panel-bg: #fff;
+  --panel-footer-bg: #e6e6e6;
+  --text: #111;
+  --muted-text: #666;
+  --hover-bg: rgba(0, 0, 0, 0.04);
+  --active-bg: rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.16);
+  --overlay-bg: rgba(0, 0, 0, 0.26);
+  --focus-ring: 0 0 0 3px rgba(27, 95, 191, 0.25);
+
+  --button-height: 28px;
+  --panel-header-height: 42px;
+  --panel-footer-height: 28px;
+  --button-radius: var(--radius-2);
+  --button-border: var(--border-color);
+  --button-bg: #f7f7f7;
+  --button-bg-hover: #ededed;
+  --button-bg-active: #e2e2e2;
+  --button-text: #333;
+  --button-rest-shadow: 0 2px 0 rgba(0, 0, 0, 0.18);
+  --button-hover-shadow: 0 2px 0 rgba(0, 0, 0, 0.22), 0 3px 8px rgba(0, 0, 0, 0.12);
+  --button-press-offset: 1px;
+  --button-press-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.18);
+  --button-primary-bg: var(--accent);
+  --button-primary-bg-hover: #174f9d;
+  --button-primary-text: #fff;
+  --accent: #1b5fbf;
+  --accent-soft: #e6f1ff;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-ui);
+  line-height: var(--line-height-ui);
+  color: var(--text);
+  background: var(--bg);
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+body.raw-mode .right-split {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+
+body.raw-mode .split-divider,
+body.raw-mode .render-pane {
+  display: none;
+}
+
+body.focus-mode main {
+  grid-template-columns: 0 0 0 0 1fr !important;
+}
+
+body.focus-mode .pane.right {
+  grid-column: 5;
+  grid-row: 1;
+}
+
+body.focus-mode .sidebar,
+body.focus-mode .divider,
+body.focus-mode .set-list-panel,
+body.focus-mode .set-list-divider {
+  display: none;
+}
+
+body.focus-mode .file-header-panel {
+  display: none;
+}
+
+body.focus-mode .right-split {
+  display: flex;
+}
+
+body.focus-mode .split-divider,
+body.focus-mode .editor-pane {
+  display: none;
+}
+
+/* Focus mode UI trim: keep only playback-relevant controls in the top bar. */
+body.focus-mode .library-split-control,
+body.focus-mode #btnToggleSetList,
+body.focus-mode #btnFileNew,
+body.focus-mode #btnFileOpen,
+body.focus-mode #btnFileSave,
+body.focus-mode #btnFileClose,
+body.focus-mode #btnToggleRaw,
+body.focus-mode #midiInputStatus,
+body.focus-mode #btnToggleFollow,
+body.focus-mode #btnToggleSplit {
+  display: none;
+}
+
+body.focus-mode header {
+  display: none;
+}
+
+body.focus-mode .render-pane {
+  flex: 1;
+  min-width: 0;
+}
+

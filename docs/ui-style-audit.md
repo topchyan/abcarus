@@ -11,11 +11,10 @@ Native OS menus (Electron application menu) cannot be styled and are excluded.
 
 ### Changes made
 
-- Introduced a minimal token layer (CSS variables) in `src/renderer/style.css` for:
+- Introduced a minimal token layer (CSS variables) in `src/renderer/styles/01-foundation.css` for:
   - UI typography (`--font-family-ui`, `--font-size-ui`, `--line-height-ui`)
   - spacing (`--space-*`)
   - radii, borders, colors, shadows, focus ring
 - Updated context menu styling to use the same tokens as the rest of the UI:
   - consistent font, padding, radius, border, shadow, hover background
 - Standardized focus styling via `:focus-visible` across buttons/inputs/selects/textarea.
-

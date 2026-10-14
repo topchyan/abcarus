@@ -4,7 +4,7 @@ This document describes features implemented in the current codebase. Paths refe
 
 ## Core editing workflow
 - ABC text is edited in a CodeMirror instance (`src/renderer/renderer.js`).
-- The editor uses custom styling for headers, directives, comments, and lyrics (`src/renderer/renderer.js`, `src/renderer/style.css`).
+- The editor uses custom styling for headers, directives, comments, and lyrics (`src/renderer/renderer.js`, `src/renderer/styles/05-editor-layout.css`).
 - Changes mark the current document as dirty and trigger a debounced re-render of the score.
 - A template tune is available for "New from Template" (`TEMPLATE_ABC` in `src/renderer/renderer.js`).
 

@@ -48,7 +48,7 @@ Why this path works:
 
 ## Current state in ABCarus
 
-- UI sets up a CSS `@font-face` for `font-family: "music"` in `src/renderer/style.css`, pointing at `third_party/abc2svg/abc2svg.ttf`.
+- UI sets up a CSS `@font-face` for `font-family: "music"` in `src/renderer/styles/01-foundation.css`, pointing at `third_party/abc2svg/abc2svg.ttf`.
 - However, abc2svg also embeds its own default font via `data:` URL unless overridden by `%%musicfont`.
 
 ## Bundled OFL fonts

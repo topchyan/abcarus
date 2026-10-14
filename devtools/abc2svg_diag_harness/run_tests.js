@@ -41,6 +41,7 @@ K:C
 `;
 
 const LYRIC_FONT_CHANGE_SAMPLE = `%%setfont-1 sans 22
+%%minhyphen 999
 X:1
 T:abc2svg Lyrics Fix Test
 M:4/4

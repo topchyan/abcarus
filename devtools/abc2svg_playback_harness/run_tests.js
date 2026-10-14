@@ -186,6 +186,38 @@ function countNativeLoopNotes(sandbox, start, end, stopAfter) {
   return count;
 }
 
+function collectDirectLoopOffsets(sandbox, start, stopAfter) {
+  const offsets = [];
+  const playback = {
+    conf: { speed: 1 },
+    tgen: 3600,
+    get_time() { return -0.3; },
+    midi_ctrl() {},
+    midi_prog() {},
+    note_run(state, symbol) {
+      offsets.push(Number(symbol.istart));
+      if (offsets.length >= stopAfter) state.stop = true;
+    },
+    onend() {},
+    v_c: [],
+    c_i: [],
+    stop: false,
+    s_end: null,
+    s_cur: start,
+    s_loop: start,
+    repn: false,
+    repv: 0,
+  };
+  const originalSetTimeout = sandbox.setTimeout;
+  sandbox.setTimeout = () => 0;
+  try {
+    sandbox.abc2svg.play_next(playback);
+  } finally {
+    sandbox.setTimeout = originalSetTimeout;
+  }
+  return offsets;
+}
+
 const DRUM_TUNE = `X:1
 T:Drum Hook Regression
 M:4/4
@@ -229,6 +261,32 @@ K:C
 |: C D |1 E F :| y [2 G A |]
 `;
 
+const PART_ORDER_ENDINGS_TUNE = `X:5
+T:Playback from inside numbered endings
+P:BC (AB)2
+L:1/8
+M:3/8
+K:C
+P:A
+|:g3|c3|1a3:|2f3|
+P:B
+|:a3|1g3:|2c3:|3d3:|4f3|
+P:C
+|:e3|c3|1g3:|2b3|
+`;
+
+const PART_REPEAT_LOOP_TUNE = `X:6
+T:Parts and repeats loop
+P:AB
+M:2/4
+L:1/2
+K:C
+P:A
+|:A|1B:|2c|
+P:B
+|:D|1E:|2F|]
+`;
+
 const FOUR_BAR_DRUM_TUNE = `X:114
 T:Zeybekiko
 M:9/8
@@ -240,6 +298,34 @@ K:none
 %%MIDI drumon
 z9 | z9 | z9 | z9 |]
 `;
+
+function assertPartOrderLoop(sandbox, order) {
+  const source = `X:7
+T:Parts loop ${order}
+P:${order}
+M:2/4
+L:1/2
+K:C
+P:A
+A|
+P:B
+B|
+P:C
+C|]
+`;
+  const parsed = parseOnce(sandbox, source);
+  assert(parsed.messages.length === 0, `${order} part-order loop reported errors: ${parsed.messages.join("; ")}`);
+  const tune = parsed.abc.tunes[0];
+  sandbox.ToAudio().add(tune[0], tune[1], tune[3]);
+  const offsetsByPart = {};
+  for (let s = tune[0], guard = 0; s && guard < 1000; s = s.ts_next, guard += 1) {
+    if (!Array.isArray(s.notes) || !Number.isFinite(s.istart) || Number(s.dur) <= 0) continue;
+    offsetsByPart[source[s.istart]] = Number(s.istart);
+  }
+  const expected = [...order, ...order].map((part) => offsetsByPart[part]);
+  const actual = collectDirectLoopOffsets(sandbox, tune[0], expected.length);
+  assert(actual.join(",") === expected.join(","), `${order} loop order is wrong: ${actual.join(",")}`);
+}
 
 function main() {
   const sandbox = createSandbox();
@@ -295,6 +381,38 @@ function main() {
     distantVoltaOffsets.slice(0, 8).join(",") === expectedDistantVoltaOffsets.join(","),
     `variant separated from :| has an unexpected playback sequence: ${distantVoltaOffsets.slice(0, 10).join(",")}`
   );
+  const orderedEndings = parseOnce(sandbox, PART_ORDER_ENDINGS_TUNE);
+  assert(orderedEndings.messages.length === 0, `part-order tune reported errors: ${orderedEndings.messages.join("; ")}`);
+  const partA = PART_ORDER_ENDINGS_TUNE.indexOf("P:A\n");
+  const partB = PART_ORDER_ENDINGS_TUNE.indexOf("P:B\n");
+  const partC = PART_ORDER_ENDINGS_TUNE.indexOf("P:C\n");
+  const noteAt = (part, token) => PART_ORDER_ENDINGS_TUNE.indexOf(token, part) + token.search(/[a-g]/);
+  const a = [noteAt(partA, "|:g3"), noteAt(partA, "|c3"), noteAt(partA, "|1a3"), noteAt(partA, "|:g3"), noteAt(partA, "|c3"), noteAt(partA, "|2f3")];
+  const b = [noteAt(partB, "|:a3"), noteAt(partB, "|1g3"), noteAt(partB, "|:a3"), noteAt(partB, "|2c3"), noteAt(partB, "|:a3"), noteAt(partB, "|3d3"), noteAt(partB, "|:a3"), noteAt(partB, "|4f3")];
+  const c = [noteAt(partC, "|1g3"), noteAt(partC, "|:e3"), noteAt(partC, "|c3"), noteAt(partC, "|2b3")];
+  const fromCFirstEnding = collectPlaybackNoteOffsets(sandbox, orderedEndings, c[0]);
+  const expectedOrdered = [...c, ...a, ...b, ...a, ...b];
+  assert(
+    fromCFirstEnding.slice(0, expectedOrdered.length).join(",") === expectedOrdered.join(","),
+    `repeat state leaked across P: transitions: ${fromCFirstEnding.slice(0, expectedOrdered.length).join(",")}`
+  );
+  assertPartOrderLoop(sandbox, "ABAC");
+  assertPartOrderLoop(sandbox, "BCA");
+  assertPartOrderLoop(sandbox, "CABA");
+  const repeatLoop = parseOnce(sandbox, PART_REPEAT_LOOP_TUNE);
+  assert(repeatLoop.messages.length === 0, `part-repeat loop reported errors: ${repeatLoop.messages.join("; ")}`);
+  const repeatLoopTune = repeatLoop.abc.tunes[0];
+  sandbox.ToAudio().add(repeatLoopTune[0], repeatLoopTune[1], repeatLoopTune[3]);
+  const repeatOffsets = collectDirectLoopOffsets(sandbox, repeatLoopTune[0], 16);
+  const repeatNoteAt = (token) => PART_REPEAT_LOOP_TUNE.indexOf(token) + token.search(/[A-Ga-g]/);
+  const oneCycle = [
+    repeatNoteAt("|:A"), repeatNoteAt("|1B"), repeatNoteAt("|:A"), repeatNoteAt("|2c"),
+    repeatNoteAt("|:D"), repeatNoteAt("|1E"), repeatNoteAt("|:D"), repeatNoteAt("|2F"),
+  ];
+  assert(
+    repeatOffsets.join(",") === [...oneCycle, ...oneCycle].join(","),
+    `repeat state was not reset between P: loop cycles: ${repeatOffsets.join(",")}`
+  );
   const fourBars = parseOnce(sandbox, FOUR_BAR_DRUM_TUNE);
   const fourBarTune = fourBars.abc.tunes[0];
   sandbox.ToAudio().add(fourBarTune[0], fourBarTune[1], fourBarTune[3]);
@@ -318,7 +436,7 @@ function main() {
     countNativeLoopNotes(sandbox, sourceRests[0], normalizedEnd, 72) === 72,
     "native zero-gap looping must play two complete four-measure drum cycles"
   );
-  console.log("% PASS abc2svg playback harness: drums, repeated P: starts, and distant voltas are available");
+  console.log("% PASS abc2svg playback harness: drums, P: loops, repeated starts, and distant voltas are available");
 }
 
 try {

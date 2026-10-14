@@ -2,7 +2,12 @@
 
 ### Tokens
 
-Global UI tokens live in `src/renderer/style.css` under `:root`.
+Global UI tokens live in `src/renderer/styles/01-foundation.css` under `:root`.
+
+Renderer styles are authored as the ordered modules `src/renderer/styles/01-*.css`
+through `12-*.css`. The numeric prefix is part of the cascade contract; add new
+rules to the owning module without reordering them. Run `npm run styles:build`
+to regenerate the single `src/renderer/style.css` runtime bundle.
 
 Core tokens:
 - Typography: `--font-family-ui`, `--font-size-ui`, `--line-height-ui`

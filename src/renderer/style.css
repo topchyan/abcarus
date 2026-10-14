@@ -1821,9 +1821,13 @@ body.focus-mode .score-toolbar .runtime-tempo-control input[type="range"] {
   content: "";
   position: absolute;
   inset: 0;
-  background: rgba(255, 255, 255, 0.35);
+  background: #fff;
   pointer-events: none;
   z-index: 3;
+}
+
+.render-pane.is-rendering #out {
+  visibility: hidden;
 }
 
 .render-pane.is-rendering::after {
@@ -2068,7 +2072,6 @@ body.resizing-cols * {
   font-size: 13px;
   padding: 4px 8px;
 }
-
 #out {
   padding: 6px;
   zoom: var(--render-zoom);

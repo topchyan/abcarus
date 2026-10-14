@@ -3799,8 +3799,36 @@ renderRuntime.initializePipeline({
   getErrorCount: () => errorsFeature.getErrors ? errorsFeature.getErrors().length : undefined,
 });
 
+let renderVisibilityGeneration = 0;
+
+function waitForRenderedScoreToSettle() {
+  const fontSet = document.fonts;
+  const fontsReady = fontSet && typeof fontSet.load === "function"
+    ? Promise.all([
+      fontSet.load('12px "music"').catch(() => null),
+      fontSet.ready.catch(() => null),
+    ])
+    : Promise.resolve();
+  const timeout = new Promise((resolve) => setTimeout(resolve, 500));
+  return Promise.race([fontsReady, timeout]);
+}
+
 function setRenderBusy(next) {
-  playbackDomain.setRenderBusy(next);
+  renderVisibilityGeneration += 1;
+  const generation = renderVisibilityGeneration;
+  if (next) {
+    playbackDomain.setRenderBusy(true);
+    return;
+  }
+  waitForRenderedScoreToSettle().finally(() => {
+    requestAnimationFrame(() => {
+      layoutController.scheduleAdaptiveFit({ editor: false, score: true });
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (generation !== renderVisibilityGeneration) return;
+        playbackDomain.setRenderBusy(false);
+      }));
+    });
+  });
 }
 
 initEditor();

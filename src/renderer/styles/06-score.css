@@ -1,0 +1,188 @@
+#out {
+  padding: 6px;
+  zoom: var(--render-zoom);
+}
+
+
+svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Allow deep zoom without auto-shrinking the score to fit the pane width. */
+.render-pane svg {
+  max-width: none;
+}
+
+.note-hl {
+  fill: #ffb84d;
+  fill-opacity: 0;
+  transition: fill-opacity 80ms linear;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.score-annotation-hl {
+  fill-opacity: 0;
+  pointer-events: none;
+}
+
+.note-hl.note-on {
+  fill-opacity: 0.45;
+}
+
+.note-hl.note-select {
+  fill-opacity: 0.25;
+  stroke: #ff8a00;
+  stroke-width: 1.2;
+}
+
+.note-hl.svg-error-activation {
+  fill-opacity: 0.35;
+  stroke: #b8860b;
+  stroke-width: 1.4;
+}
+
+.note-hl.svg-intonation-note {
+  fill-opacity: 0.25;
+  stroke: #b8860b;
+  stroke-width: 1.2;
+}
+
+.bar-hl.svg-error-activation {
+  fill: #ffe564;
+  fill-opacity: 0.22;
+  stroke: #b8860b;
+  stroke-width: 1.3;
+}
+
+.bar-hl.svg-practice-bar {
+  fill: #7ef7b4;
+  fill-opacity: 0.16;
+  stroke: #2f855a;
+  stroke-width: 1.2;
+}
+
+.bar-hl.svg-intonation-bar {
+  fill: #ffc04d;
+  fill-opacity: 0.16;
+  stroke: #b8860b;
+  stroke-width: 1.1;
+}
+
+.bar-hl.svg-follow-bar {
+  fill: var(--abcarus-follow-color, #1e90ff);
+  fill-opacity: var(--abcarus-follow-bar-opacity, 0.12);
+  stroke: none;
+}
+
+.svg-playhead-line {
+  display: none !important;
+  visibility: hidden !important;
+  fill: var(--abcarus-follow-color, #1e90ff);
+  fill-opacity: 0 !important;
+  stroke: none !important;
+  shape-rendering: crispEdges;
+}
+
+.svg-follow-measure {
+  fill: var(--abcarus-follow-measure-color, var(--abcarus-follow-color, #1e90ff));
+  fill-opacity: var(--abcarus-follow-measure-opacity, 0.08);
+  stroke: none;
+}
+
+.svg-focus-selection {
+  fill: #2f8fcf;
+  fill-opacity: 0.14;
+  stroke: none;
+  pointer-events: none;
+}
+
+.bar-hl {
+  fill-opacity: 0;
+  pointer-events: none;
+}
+
+.note-hl.measure-error {
+  fill: #ff6b6b;
+  fill-opacity: 0.2;
+  stroke: #d9480f;
+  stroke-width: 1.2;
+}
+
+.bar-hl.measure-error {
+  fill: #ff6b6b;
+  fill-opacity: 0.16;
+  stroke: #d9480f;
+  stroke-width: 1.2;
+}
+
+.cm-measure-error {
+  background: rgba(255, 107, 107, 0.18);
+  border-bottom: 1px dashed #d9480f;
+}
+
+.cm-bar-mismatch-mark {
+  position: relative;
+  background: rgba(245, 158, 11, 0.15);
+  border-bottom: 1px dotted rgba(180, 83, 9, 0.7);
+}
+
+.cm-bar-mismatch-mark::after {
+  display: none;
+}
+
+.cm-line.cm-bar-mismatch-line {
+  position: relative;
+  padding-top: 1.15em;
+}
+
+.cm-line.cm-bar-mismatch-line::before {
+  content: attr(data-bar-mismatch);
+  position: absolute;
+  top: 0.05em;
+  left: 0;
+  font-size: 10px;
+  line-height: 1.1;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid rgba(245, 158, 11, 0.9);
+  background: rgba(255, 247, 237, 0.98);
+  color: #b45309;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.cm-error-activation {
+  background: rgba(255, 229, 100, 0.55);
+  border-bottom: 1px solid rgba(180, 120, 0, 0.65);
+}
+
+.cm-practice-bar {
+  background: rgba(126, 247, 180, 0.2);
+  border-bottom: 1px solid rgba(47, 133, 90, 0.35);
+}
+
+.cm-voice-measure-peer {
+  background: rgba(59, 130, 246, 0.11);
+  border-bottom: 1px solid rgba(37, 99, 235, 0.38);
+}
+
+.workspace-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+}
+
+.workspace-statusbar-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+

@@ -1,0 +1,229 @@
+.playback-scope-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.playback-scope-label {
+  color: var(--muted-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playback-scope-heading {
+  color: var(--button-text);
+  font-weight: 600;
+}
+
+.playback-scope-hint {
+  color: var(--muted-text);
+}
+
+.playback-scope-loop,
+.playback-scope-options > summary,
+.playback-scope-options-menu > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.playback-scope-loop {
+  cursor: pointer;
+  color: var(--button-text);
+}
+
+.playback-scope-loop input {
+  margin: 0;
+}
+
+.playback-scope-options {
+  position: relative;
+}
+
+.playback-scope-options > summary {
+  list-style: none;
+  cursor: pointer;
+  color: var(--button-text);
+}
+
+.playback-scope-options > summary::-webkit-details-marker {
+  display: none;
+}
+
+.playback-scope-options > summary .btn-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.playback-scope-options-menu {
+  position: absolute;
+  z-index: 15;
+  left: 0;
+  bottom: calc(100% + 6px);
+  display: none;
+  min-width: 190px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-1);
+  background: var(--panel-bg, #fff);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.16);
+}
+
+.playback-scope-options[open] .playback-scope-options-menu {
+  display: grid;
+  gap: 7px;
+}
+
+.playback-scope-options-menu > label {
+  min-height: 22px;
+  color: var(--button-text);
+}
+
+.playback-scope-options-menu input[type="checkbox"] {
+  margin: 0;
+}
+
+.playback-scope-options-menu .practice-muted-voices {
+  width: 76px;
+  min-width: 0;
+  height: 24px;
+  box-sizing: border-box;
+}
+
+.playback-scope-clear {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+}
+
+@media (max-width: 760px) {
+  .playback-scope-controls {
+    position: static;
+    transform: none;
+    flex: 0 1 auto;
+  }
+
+  .playback-scope-options > summary span {
+    display: none;
+  }
+
+  .playback-scope-label {
+    max-width: 100px;
+  }
+
+  .playback-scope-hint {
+    display: none;
+  }
+}
+
+body.focus-mode .workspace-statusbar .measure-input-status,
+body.focus-mode .workspace-statusbar .cursor-status {
+  display: none;
+}
+
+.buffer-status {
+  flex: 0 0 auto;
+}
+
+.hover-status {
+  font-size: var(--font-size-sm);
+  color: var(--muted-text);
+  max-width: min(720px, 55vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: none !important;
+}
+
+.library-rich-tooltip {
+  position: fixed;
+  z-index: 10000;
+  max-width: min(420px, calc(100vw - 16px));
+  padding: 7px 9px;
+  border: 1px solid #b9b9b9;
+  border-radius: 4px;
+  background: #fff;
+  color: #202020;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
+  font-size: var(--font-size-sm);
+  line-height: 1.35;
+  white-space: pre-wrap;
+  pointer-events: none;
+}
+
+.library-rich-tooltip[hidden] {
+  display: none;
+}
+
+.errors-indicator{
+  font-size: var(--font-size-xs);
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid #d0d0d0;
+  background: #fff;
+  color: #333;
+  cursor: default;
+  white-space: nowrap;
+  margin-left: 6px;
+}
+
+.errors-indicator:not([disabled]){
+  cursor: pointer;
+  background: #fff7f7;
+  border-color: #f4c7c3;
+  color: #a40000;
+}
+
+.errors-indicator[disabled]{
+  opacity: 0.65;
+}
+
+.midi-status{
+  font-size: var(--font-size-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid #d0d0d0;
+  background: #fff;
+  color: #333;
+  cursor: pointer;
+  white-space: nowrap;
+  min-width: 96px;
+}
+
+.midi-status .btn-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.midi-status.hidden{
+  display: none;
+}
+
+.midi-status.midi-on{
+  border-color: #cfe7d3;
+  background: #f3fbf5;
+  color: #245f31;
+}
+
+.midi-status.midi-muted{
+  border-color: #e6d1a2;
+  background: #fff8e6;
+  color: #6a4b00;
+}
+
+.midi-status.midi-off{
+  border-color: #e0e0e0;
+  background: #f7f7f7;
+  color: #666;
+}
+

@@ -1,6 +1,10 @@
 import { build } from "esbuild";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
+import {
+  buildRendererStyleBundle,
+  rendererStyleModulePaths,
+} from "./renderer_style_manifest.mjs";
 
 async function assertSaveIntentGuards() {
   const rendererPath = "src/renderer/renderer.js";
@@ -275,9 +279,8 @@ async function assertSaveIntentGuards() {
 
 async function assertInlineToolbarIconsCompatibility() {
   const indexPath = "src/renderer/index.html";
-  const stylePath = "src/renderer/style.css";
   const html = await readFile(indexPath, "utf8");
-  const css = await readFile(stylePath, "utf8");
+  const css = (await Promise.all(rendererStyleModulePaths.map((stylePath) => readFile(stylePath, "utf8")))).join("\n");
 
   if (!html.includes("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"0\" height=\"0\"")) {
     throw new Error("Missing inline SVG sprite in renderer HTML.");
@@ -305,6 +308,15 @@ async function assertInlineToolbarIconsCompatibility() {
     if (!html.includes(`<symbol id="${symbol}"`)) {
       throw new Error(`Missing toolbar SVG symbol: ${symbol}`);
     }
+  }
+}
+
+async function assertRendererStyleBundleIsCurrent() {
+  const sources = await Promise.all(rendererStyleModulePaths.map((filePath) => readFile(filePath, "utf8")));
+  const expected = buildRendererStyleBundle(sources);
+  const actual = await readFile("src/renderer/style.css", "utf8");
+  if (actual !== expected) {
+    throw new Error("Renderer style bundle is stale. Run: npm run styles:build");
   }
 }
 
@@ -935,6 +947,7 @@ async function main() {
   }
 
   await assertSaveIntentGuards();
+  await assertRendererStyleBundleIsCurrent();
   await assertInlineToolbarIconsCompatibility();
   await assertPlaybackPauseResumeUsesPausedOffset();
   await assertAlignBarsDoesNotCrossSectionFields();

@@ -12,7 +12,7 @@ async function importRendererModule(filePath) {
 
 const { createRawModeFeature } = await importRendererModule(resolve("src/renderer/tools/raw_mode/raw_mode_feature.js"));
 
-const layoutCss = await readFile(resolve("src/renderer/style.css"), "utf8");
+const layoutCss = await readFile(resolve("src/renderer/styles/05-editor-layout.css"), "utf8");
 assert.match(
   layoutCss,
   /body\.raw-mode \.right-split \.editor-pane\s*\{[\s\S]*grid-column:\s*1;[\s\S]*grid-row:\s*1;/,
