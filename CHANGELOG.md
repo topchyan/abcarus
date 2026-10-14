@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [1.12.1] - 2026-10-14
 ### Changed
 - Renderer styles are maintained as twelve responsibility-based modules and deterministically assembled into the existing single runtime stylesheet, preserving cascade order and startup behavior.
 - Updated the bundled abc2svg runtime to upstream commit `be32c4abcf`, including the accepted fix for looping tunes with header `P:` part orders.
@@ -14,7 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tunes with header part orders, repeats, and numbered endings preserve the correct part sequence across playback starts and seamless loop cycles.
 - Score rendering remains hidden until the music font and Auto Fit layout are ready, preventing partially drawn noteheads and visible rescaling while a tune loads.
 - Automated UI checks run in a hidden, non-focusable window without showing an unsaved-changes prompt or interrupting desktop input.
-
 
 ## [1.12.0] - 2026-10-03
 ### Added
