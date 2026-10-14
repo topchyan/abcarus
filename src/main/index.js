@@ -3027,6 +3027,11 @@ async function createWindow() {
   const shouldMaximizeByDefault = !hasPersistedBounds && process.env.ABCARUS_DEV_NO_MAXIMIZE !== "1";
   win.once("ready-to-show", () => {
     if (UI_SMOKE_HIDDEN_ENABLED) {
+      // Chromium only produces representative layout geometry for a shown window.
+      // Keep smoke runs invisible and non-interactive while still exercising that path.
+      try { win.setOpacity(0); } catch {}
+      try { win.setSkipTaskbar(true); } catch {}
+      try { win.showInactive(); } catch {}
       closeSplashWindow();
       return;
     }
