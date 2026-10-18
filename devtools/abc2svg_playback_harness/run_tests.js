@@ -43,6 +43,73 @@ function createSandbox() {
   return sandbox;
 }
 
+function verifyVolumeFallback() {
+  const sandbox = {
+    Uint8Array,
+    console,
+    setTimeout() { return 0; },
+    clearTimeout() {},
+    performance: { now() { return 0; } },
+    navigator: { userAgent: "test" },
+    window: null,
+    abc2svg: {},
+    alert() {},
+    exports: {},
+    module: { exports: {} },
+  };
+  sandbox.window = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(fs.readFileSync(SND_PATH, "utf8"), sandbox, { filename: "snd-1.js" });
+
+  const midiVelocity = (gain) => {
+    const sent = [];
+    const output = { name: "test", send(bytes) { sent.push(Array.from(bytes)); } };
+    sandbox.abc2svg.play_next = (playback) => {
+      const symbol = { v: 0, chn: 0, instr: 0, p_v: { id: "1" } };
+      playback.midi_prog(playback, symbol);
+      playback.note_run(playback, symbol, 60, 0, 0.25);
+    };
+    sandbox.Midi5.ma = {
+      sysexEnabled: false,
+      outputs: { values() { return [output][Symbol.iterator](); } },
+    };
+    const midi = sandbox.Midi5({ gain });
+    midi.set_output("test");
+    midi.play({}, null, 0, false);
+    const noteOn = sent.find((message) => (message[0] & 0xf0) === 0x90);
+    assert(noteOn, `missing MIDI note-on for gain ${gain}`);
+    return noteOn[2];
+  };
+
+  const audioGain = (gain) => {
+    let value = null;
+    const audioContext = {
+      currentTime: 0,
+      destination: {},
+      createGain() {
+        const node = { gain: {}, connect() {}, disconnect() {} };
+        Object.defineProperty(node.gain, "value", {
+          get() { return value; },
+          set(next) { value = next; },
+        });
+        return node;
+      },
+    };
+    const audio = sandbox.Audio5({ gain, ac: audioContext, sfu: "test.sf2" });
+    try {
+      audio.play({ noplay: false, v: 0, p_v: {} }, null, 0, false);
+    } catch {
+      // Loading the fake soundfont fails after the master gain has been initialized.
+    }
+    return value;
+  };
+
+  assert(midiVelocity(0) === 0, "explicit MIDI gain 0 must remain silent");
+  assert(midiVelocity(undefined) === 88, "undefined MIDI gain must use the 0.7 default");
+  assert(audioGain(0) === 0, "explicit SF2 gain 0 must remain silent");
+  assert(audioGain(undefined) === 0.7, "undefined SF2 gain must use the 0.7 default");
+}
+
 function parseOnce(sandbox, abcText) {
   const AbcCtor = sandbox.abc2svg && sandbox.abc2svg.Abc;
   assert(typeof AbcCtor === "function", "abc2svg constructor unavailable");
@@ -328,6 +395,7 @@ C|]
 }
 
 function main() {
+  verifyVolumeFallback();
   const sandbox = createSandbox();
   assert(sandbox.abc2svg && sandbox.abc2svg.drum, "snd-1.js did not register abc2svg.drum");
   assert(typeof sandbox.abc2svg.drum === "object", "abc2svg.drum should remain an object in current upstream");

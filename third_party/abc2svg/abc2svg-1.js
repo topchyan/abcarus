@@ -10443,4 +10443,4 @@ this.nreq++
 abc2svg.loadjs(fn+"-1.js",load_end,function(){abc2svg.modules.errmsg('Error loading the module '+fn)
 load_end()})}
 return this.nreq==nreq_i}}
-abc2svg.version="v1.23.6";abc2svg.vdate="2026-10-14"
+abc2svg.version="v1.23.6";abc2svg.vdate="2026-10-17"

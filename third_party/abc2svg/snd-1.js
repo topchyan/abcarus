@@ -501,7 +501,7 @@ while(j<jl){generator=sf2par.createInstrumentGenerator_(zone,j)
 info.push({generator:generator.generator,})
 j++}
 return{info:info}}
-var i,j,k,sid,gen,parm,sample,infos,sample_hdr,scale,tune,gparm={attack:.01,hold:.01,decay:.01,},b=instr>>7,p=instr%128,pr=sf2pre
+var i,j,k,sid,gen,parm,sample,infos,sample_hdr,scale,tune,gparm={attack:.01,hold:.01,decay:.01,release:.01,},b=instr>>7,p=instr%128,pr=sf2pre
 rates[instr]=[]
 for(i=0;i<pr.length;i++){gen=pr[i].header
 if(gen.preset==p&&gen.bank==b)
@@ -524,9 +524,11 @@ parm.attack=Math.pow(2,gen.attackVolEnv.amount/1200)
 if(gen.holdVolEnv)
 parm.hold=Math.pow(2,gen.holdVolEnv.amount/1200)
 if(gen.decayVolEnv)
-parm.decay=Math.pow(2,gen.decayVolEnv.amount/1200)/4
+parm.decay=Math.pow(2,gen.decayVolEnv.amount/1200)
 if(gen.sustainVolEnv)
 parm.sustain=gen.sustainVolEnv.amount/10
+if(gen.releaseVolEnv)
+parm.release=Math.pow(2,gen.releaseVolEnv.amount/1200)
 if(gen.initialAttenuation)
 parm.atte=gen.initialAttenuation/10
 if(gen.sampleID){sid=gen.sampleID.amount
@@ -653,7 +655,7 @@ i=po.v_b[s.v]?0:128*128}
 if(po.v_b[s.v])
 i+=po.v_b[s.v]
 po.c_i[s.chn]=i}
-function note_run(po,s,key,t,d){var g,st,t2=t,c=po.v_c[s.v],instr=po.c_i[c],k=key|0,parm=params[instr][k],o=po.ac.createBufferSource(),v=s.p_v.vol==undefined?1:s.p_v.vol
+function note_run(po,s,key,t,d){var g,st,t2=t,c=po.v_c[s.v],instr=po.c_i[c],k=key|0,parm=params[instr][k],o=po.ac.createBufferSource(),v=s.p_v.vol==undefined?.7:s.p_v.vol
 if(!v||!parm)
 return
 o.buffer=parm.buffer
@@ -674,13 +676,15 @@ t2+=parm.hold
 g.gain.setValueAtTime(v,t2)}
 if(parm.sustain&&parm.decay>.01){v=parm.sustain==100?.01:v/Math.pow(10,parm.sustain/20)
 g.gain.exponentialRampToValueAtTime(v,t2+parm.decay)}
+g.gain.setValueAtTime(v,t+d)
+g.gain.linearRampToValueAtTime(.01,t+d+parm.release)
 if(s.p_v.pan!=undefined){var p=po.ac.createStereoPanner()
 p.pan.value=s.p_v.pan
 o.connect(p)
 p.connect(g)}else{o.connect(g)}
 g.connect(po.gain)
 o.start(t)
-o.stop(t+d)}
+o.stop(t+d+parm.release)}
 function play_start(){if(po.stop){po.onend(repv)
 return}
 gain.connect(ac.destination)
@@ -703,7 +707,7 @@ if(ac.state==="suspended")
 ac.resume()
 play_unlock()}
 gain=ac.createGain()
-gain.gain.value=conf.gain}
+gain.gain.value=conf.gain??.7}
 while(i_start.noplay)
 i_start=i_start.ts_next
 po={conf:conf,onend:conf.onend||empty,onnote:conf.onnote||empty,s_end:i_end,s_cur:i_start,repv:i_lvl||0,tgen:2,get_time:get_time,midi_ctrl:midi_ctrl,midi_prog:midi_prog,note_run:note_run,timouts:[],v_c:[],c_i:[],v_b:[],ac:ac,gain:gain,rates:rates}
@@ -776,7 +780,7 @@ k|=0
 t*=1000
 d*=1000
 mutone(k,a,t)
-po.op.send(new Uint8Array([0x90+c,k,80]),t)
+po.op.send(new Uint8Array([0x90+c,k,(po.conf.gain??.7)*127]),t)
 po.op.send(new Uint8Array([0x80+c,k,0]),t+d-20)}
 function midi_ctrl(po,s,t){po.op.send(new Uint8Array([0xb0+po.v_c[s.v],s.ctrl,s.val]),t*1000)}
 function midi_prog(po,s){var i,c=s.chn
