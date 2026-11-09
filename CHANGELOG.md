@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [1.13.0] - 2026-11-09
 ### Added
 - Experimental, opt-in Armenian text transliteration with editable `w:`-line and score previews, multiple scholarly/phonetic profiles, transliterated textual headers, `W:` fields and `%%begintext` blocks, insertion directly after the active tune, and optional export to a separate ABC file.
 - Empty voice skeleton generation can use either invisible `x` rests or visible `z` rests.
@@ -18,7 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Multivoice scores followed by `%%vskip` and `%%multicol` text no longer disappear because abc2svg tried to unlink a missing next symbol.
 - Complex SoundFonts no longer lose valid velocity layers, and the lowest-layer fallback now actually sorts zones because its comparator returns a value.
-
 
 ## [1.12.2] - 2026-10-18
 ### Changed
