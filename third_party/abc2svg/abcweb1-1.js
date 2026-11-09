@@ -1,4 +1,8 @@
-//abcweb1-1.js file to include in html pages for rendering the ABC music
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2026 Jean-François Moine - LGPL3+
+// abcweb1-1.js file to include in html pages for rendering the ABC music
+
 window.onerror=function(msg,url,line){if(typeof msg=='string')
 alert("window error: "+msg+"\nURL: "+url+"\nLine: "+line)
 else if(typeof msg=='object')
@@ -128,6 +132,8 @@ if(typeof follow=="function")
 follow(abc,user,playconf)
 if(select){abc.tosvg(app,"%%select "+select)
 window.location.hash=encodeURIComponent(select)}
+if(abc2svg.a_inc&&abc2svg.a_inc["default.abc"])
+abc.tosvg("default.abc",abc2svg.a_inc["default.abc"])
 try{abc.tosvg(app,page)}catch(e){alert("abc2svg javascript error: "+e.message+"\nStack:\n"+e.stack)}
 abc2svg.abc_end()
 if(errtxt){new_page+='<pre class="nop" style="background:#ff8080">'+
@@ -224,7 +230,7 @@ e.style.lineHeight=1
 document.body.appendChild(e)
 abc2svg.el=e
 abc2svg.abc_end=function(){}
-if(abc2svg.modules.load(page,include))
+if(abc2svg.modules.load(abc2svg.a_inc&&abc2svg.a_inc["default.abc"]?abc2svg.a_inc["default.abc"]:page,include))
 include()}
 if(document.readyState=="loading")
 addEventListener("DOMContentLoaded",dom_loaded,{once:true})

@@ -1,4 +1,8 @@
-//abc2svg-jazzchord.js-Adds jazz chord styling to chord symbols
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2024 Jean-Francois Moine - LGPL3+
+// abc2svg - jazzchord.js - Adds jazz chord styling to chord symbols
+
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.jazzchord={defrep:{"-":"–","°":"o","º":"o","ᵒ":"o","0":"ø","^":"∆"},gch_build:function(of,s){var gch,ix,r,t,fmt=s.fmt

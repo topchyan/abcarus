@@ -43,6 +43,8 @@ function createLibraryContextMenu({
   addTuneToSetList = async () => {},
   isTuneFavorite = () => false,
   toggleTuneFavorite = async () => {},
+  canUpdateYouTubeMetadataForTune = () => false,
+  updateYouTubeMetadataForTune = async () => {},
   copyFileTuneList = async () => {},
   appendTuneToActiveFile = async () => {},
   buildTemplatesPreviewContextMenuItems = () => [],
@@ -170,6 +172,17 @@ function createLibraryContextMenu({
       await toggleTuneFavorite(menuTarget.tuneId);
       return;
     }
+    if (action === "updateYouTubeMetadataForTune" && menuTarget && menuTarget.type === "tune") {
+      hide();
+      await updateYouTubeMetadataForTune(menuTarget.tuneId);
+      return;
+    }
+    if (action === "editorUpdateYouTubeMetadata" && menuTarget && menuTarget.type === "editor") {
+      const tuneId = getActiveTuneId();
+      hide();
+      if (tuneId) await updateYouTubeMetadataForTune(tuneId);
+      return;
+    }
     if (action === "appendTuneToActiveFile" && menuTarget && menuTarget.type === "tune") {
       hide();
       await appendTuneToActiveFile(menuTarget.tuneId);
@@ -261,9 +274,10 @@ function createLibraryContextMenu({
       hide();
       return;
     }
-    if (action === "editorGenerateBlankVoiceSkeleton" && menuTarget && menuTarget.type === "editor") {
+    if ((action === "editorGenerateBlankVoiceSkeleton" || action === "editorGenerateVisibleVoiceSkeleton")
+      && menuTarget && menuTarget.type === "editor") {
       hide();
-      generateBlankVoiceSkeleton();
+      generateBlankVoiceSkeleton({ restSymbol: action === "editorGenerateVisibleVoiceSkeleton" ? "z" : "x" });
       return;
     }
     if (await handleTemplatesContextMenuAction(action, menuTarget)) {
@@ -348,6 +362,9 @@ function createLibraryContextMenu({
         { label: "Add to Set List", action: "addToSetList" },
         { label: "Copy Path + X", action: "copyTuneReference", disabled: !sourcePath || !sourceXNumber },
       ];
+      if (canUpdateYouTubeMetadataForTune(target.tuneId)) {
+        items.push({ label: "Update YouTube Metadata…", action: "updateYouTubeMetadataForTune" });
+      }
       if (canAppend) items.push({ separator: true }, { label: "Append to Active File…", action: "appendTuneToActiveFile" });
       if (sourceDirty || getRawMode()) {
         const blockedLabel = getRawMode()
@@ -412,15 +429,24 @@ function createLibraryContextMenu({
       ]));
     } else if (target.type === "editor") {
       const canAdd = Boolean(getActiveTuneId()) && !getRawMode();
+      const canUpdateYouTube = canAdd && canUpdateYouTubeMetadataForTune(getActiveTuneId());
       buildItems([
         { label: "Add Active Tune to Set List", action: "addToSetList", disabled: !canAdd },
+        ...(canUpdateYouTube
+          ? [{ label: "Update YouTube Metadata…", action: "editorUpdateYouTubeMetadata" }]
+          : []),
         { label: "Cut", action: "editorCut" },
         { label: "Copy", action: "editorCopy" },
         { label: "Paste", action: "editorPaste" },
         { separator: true },
         {
-          label: "Generate Empty Bar Skeleton from V:1",
+          label: "Generate Skeleton from V:1: Invisible Rests (x)",
           action: "editorGenerateBlankVoiceSkeleton",
+          disabled: getRawMode(),
+        },
+        {
+          label: "Generate Skeleton from V:1: Visible Rests (z)",
+          action: "editorGenerateVisibleVoiceSkeleton",
           disabled: getRawMode(),
         },
       ]);

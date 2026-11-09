@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Experimental, opt-in Armenian text transliteration with editable `w:`-line and score previews, multiple scholarly/phonetic profiles, transliterated textual headers, `W:` fields and `%%begintext` blocks, insertion directly after the active tune, and optional export to a separate ABC file.
+- Empty voice skeleton generation can use either invisible `x` rests or visible `z` rests.
+- A qualified abc2svg runtime manifest, exact-hash patch queue, reproducible apply/verify tooling, and Desktop/Mobile parity checks protect third-party upgrades and rollback.
+
+### Changed
+- Whole-tune count-in uses abc2svg's native `%%playbeats` timeline for meter, tempo, and pickup-aware timing, while scoped starts, loops, and MIDI-drum tunes retain ABCarus transport handling.
+- Updated the qualified abc2svg runtime to v1.23.7 and retained one documented downstream patch while its upstream correction is pending.
+
+### Fixed
+- Multivoice scores followed by `%%vskip` and `%%multicol` text no longer disappear because abc2svg tried to unlink a missing next symbol.
+- Complex SoundFonts no longer lose valid velocity layers, and the lowest-layer fallback now actually sorts zones because its comparator returns a value.
 
 
 ## [1.12.2] - 2026-10-18

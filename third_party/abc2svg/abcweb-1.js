@@ -1,4 +1,8 @@
-//abcweb-1.js file to include in html pages
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2026 Jean-François Moine - LGPL3+
+// abcweb-1.js file to include in html pages
+
 window.onerror=function(msg,url,line){if(typeof msg=='string')
 alert("window error: "+msg+"\nURL: "+url+"\nLine: "+line)
 else if(typeof msg=='object')
@@ -125,6 +129,9 @@ return}
 busy=1
 function render(){var i,j,e,o,f=abc.cfmt().with_source
 outb=err=""
+if(!ix&&abc2svg.a_inc&&abc2svg.a_inc["default.abc"])
+abc.tosvg("default.abc",abc2svg.a_inc["default.abc"])
+if(t)
 abc.tosvg(mu.n,t)
 if(mu.d){abc2svg.abc_end(ix)
 if(err)
@@ -164,7 +171,7 @@ alert('Error getting '+fn+'\n'+r.statusText)
 include()}
 r.send()}
 abc=abc2svg.abc
-if(abc2svg.modules.load(t,include))
+if(abc2svg.modules.load(!ix&&abc2svg.a_inc&&abc2svg.a_inc["default.abc"]?abc2svg.a_inc["default.abc"]:t,include))
 include()}
 abc2svg.musgen=musgen
 abc2svg.user={read_file:function(fn){return a_inc[fn]},errmsg:function(msg,l,c){err+=clean_txt(msg)+'\n'},img_out:function(p){outb+=p}}
@@ -224,7 +231,6 @@ save_music()
 abc2svg.abc=abc=new abc2svg.Abc(abc2svg.user)
 if(typeof follow=="function")
 follow(abc,abc2svg.user,playconf)
-if(abc2svg.music[0].t)
 musgen(0)
 abc2svg.alldiv=[]
 for(var i=1;i<abc2svg.music.length;i++)
@@ -232,7 +238,7 @@ abc2svg.alldiv.push(i)
 visible()}
 abc2svg.get_music=function(d){var i,mu
 for(var i=1;i<abc2svg.music.length;i++){mu=abc2svg.music[i]
-if(mu.d==d)
+if(mu.d==d||mu.d==d.parentNode)
 return mu.t}}
 abc2svg.set_music=function(d,t){var i,mu,tunes
 function tune_purge(mu){var svg,cl,i,e=mu.d.getElementsByTagName('svg')
@@ -243,12 +249,11 @@ if(!cl)
 continue
 tunes[cl[1]]=null}}
 for(i=1;i<abc2svg.music.length;i++){mu=abc2svg.music[i]
-if(mu.d==d){mu.t=t
+if(mu.d==d||mu.d==d.parentNode){mu.t=t
 tunes=abc2svg.abc.tunes
 tune_purge(mu)
 abc2svg.abc=new abc2svg.Abc(abc2svg.user)
 abc2svg.abc.tunes.push.apply(abc2svg.abc.tunes,tunes)
-if(abc2svg.music[0].t)
 abc2svg.musgen(0)
 abc2svg.musgen(i)
 break}}}

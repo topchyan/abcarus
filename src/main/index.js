@@ -3768,10 +3768,19 @@ async function runUiSmoke(win) {
           ? await window.api.getSettings()
           : null;
         const configuredSoundfont = runtimeSettings ? String(runtimeSettings.soundfontName || "") : "";
+        const soundfontSnapshot = stopped.snap ? stopped.snap.soundfont : null;
+        const safeFallback = Boolean(
+          soundfontSnapshot
+          && soundfontSnapshot.name === configuredSoundfont
+          && soundfontSnapshot.readyName === "TimGM6mb.sf2"
+          && soundfontSnapshot.lastLoadError
+          && /safe loading limit/i.test(String(soundfontSnapshot.lastLoadError.message || ""))
+        );
         if (
           requireFirstNote
           && (/^[/]|^[A-Za-z]:\\\\/.test(configuredSoundfont))
           && !String(soundfontSource || "").startsWith("abcarus-sf2://")
+          && !safeFallback
         ) {
           return {
             ok: false,
@@ -3779,7 +3788,7 @@ async function runUiSmoke(win) {
             reason: "external-soundfont-was-not-applied",
             configuredSoundfont,
             soundfontSource,
-            soundfont: stopped.snap ? stopped.snap.soundfont : null,
+            soundfont: soundfontSnapshot,
           };
         }
         return {
@@ -3789,6 +3798,7 @@ async function runUiSmoke(win) {
           stopped: stopped.snap,
           soundfontSource,
           configuredSoundfont,
+          safeFallback,
           audioProbe: requireFirstNote ? audioProbe : null,
         };
       })()`,

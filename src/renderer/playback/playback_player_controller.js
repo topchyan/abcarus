@@ -118,6 +118,7 @@ function createPlaybackPlayerController({
       },
       onnote: (i, on) => {
         if (warmupSession) return;
+        if (!Number.isFinite(i)) return;
         transport.lastPlaybackIdx = i;
         if (transport.consumeFirstNoteStart(on)) {
           setStatus("Playing…");

@@ -15,6 +15,7 @@ import {
   normalizeHeaderNoneSpacing,
 } from "../render/render_payload_model.js";
 import { callAbc2svgSafely } from "../security/abc_security.js";
+import { accentNativePlaybeats } from "./count_in_model.js";
 
 function createPlaybackPrepareController({
   windowRef,
@@ -129,6 +130,10 @@ function createPlaybackPrepareController({
       showToast("No ABC block to play.", 2200);
       return p;
     }
+    transport.nativePlaybeatsActive = Boolean(playbackPayload.nativePlaybeats && playbackPayload.nativePlaybeats.active);
+    transport.nativePlaybeatsMeasures = transport.nativePlaybeatsActive
+      ? Math.max(1, Number(playbackPayload.nativePlaybeats.measures) || 1)
+      : 0;
     const playbackPayloadText = playbackPayload.text;
     const playbackPayloadOffset = playbackPayload.offset || 0;
     const selectionMode = selectionRuntime.isSelectionMode();
@@ -360,7 +365,10 @@ function createPlaybackPrepareController({
       transport.lastPlaybackTuneInfo = { count: tunes.length };
     }
 
-    for (const t of tunes) p.add(t[0], t[1], t[3]);
+    for (const t of tunes) {
+      p.add(t[0], t[1], t[3]);
+      if (transport.nativePlaybeatsActive) accentNativePlaybeats(t[0]);
+    }
 
     let playbackRoot = tunes[0][0];
     if (selectionMode) {

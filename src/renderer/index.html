@@ -1101,6 +1101,50 @@
 	    </div>
 	  </div>
 
+    <div class="modal" id="lyricsTransliterationModal" aria-hidden="true">
+      <div class="modal-card lyrics-transliteration-card" role="dialog" aria-modal="true" aria-label="Lyrics Transliteration">
+        <div class="modal-header">
+          <div class="modal-title">Lyrics Transliteration <span class="experimental-label">Experimental</span></div>
+          <button class="modal-close" id="lyricsTransliterationClose" type="button" aria-label="Close Lyrics Transliteration" title="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="lyrics-transliteration-controls">
+            <label>
+              <span>Profile</span>
+              <select id="lyricsTransliterationProfile"></select>
+            </label>
+            <label>
+              <span>Copy contains</span>
+              <select id="lyricsTransliterationMode">
+                <option value="both">Original + transliteration</option>
+                <option value="transliterated">Transliteration only</option>
+              </select>
+            </label>
+          </div>
+          <div class="lyrics-transliteration-editors">
+            <label>
+              <span>Original w: lines</span>
+              <textarea id="lyricsTransliterationOriginal" readonly spellcheck="false"></textarea>
+            </label>
+            <label>
+              <span>Generated w: draft (editable)</span>
+              <textarea id="lyricsTransliterationGenerated" spellcheck="false"></textarea>
+            </label>
+          </div>
+          <div class="lyrics-transliteration-preview-block">
+            <div class="lyrics-transliteration-preview-heading">Score preview</div>
+            <div id="lyricsTransliterationScore" class="lyrics-transliteration-score"></div>
+          </div>
+          <div id="lyricsTransliterationMessage" class="modal-status" aria-live="polite"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="lyricsTransliterationCancel" type="button">Cancel</button>
+          <button id="lyricsTransliterationSave" type="button">Save as Separate File…</button>
+          <button id="lyricsTransliterationInsert" class="primary" type="button">Insert After Current Tune</button>
+        </div>
+      </div>
+    </div>
+
 	  <div class="modal" id="disclaimerModal" aria-hidden="true">
 	    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Early-stage release">
 	      <div class="modal-header">
@@ -1147,6 +1191,7 @@
   <script src="../../third_party/abc2svg/abc2svg-1.js"></script>
   <script src="../../third_party/abc2svg/snd-1.js"></script>
   <script src="../../third_party/qrcodejs/qrcode.js"></script>
+  <script src="../../third_party/armenian-transliteration/index.global.js"></script>
   <script type="module" src="./renderer.js"></script>
   <script src="./library_modal.js"></script>
 

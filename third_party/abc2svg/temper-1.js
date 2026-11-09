@@ -1,4 +1,8 @@
-//temper.js-module to define the temperament
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2024 Jean-Francois Moine - LGPL3+
+// temper.js - module to define the temperament
+
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.temper={set_fmt:function(of,cmd,param){if(cmd=="temperament"){var i,tb,tb40=new Float32Array(40),ls=new Float32Array(param.split(/ +/))

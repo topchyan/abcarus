@@ -31,7 +31,7 @@ const PANEL_KEYS = {
     "chordproRepoPath",
   ]),
   microtonal: new Set(["supportMicrotonalNotation"]),
-  advanced: new Set(["payloadModeEnabled"]),
+  advanced: new Set(["payloadModeEnabled", "lyricsTransliterationEnabled"]),
 };
 
 export const SETTINGS_SECTION_HINTS = {

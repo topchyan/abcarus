@@ -1,4 +1,8 @@
-//tropt.js-module to optimize the notes after transposition
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2025 Jean-François Moine - LGPL3+
+// tropt.js - module to optimize the notes after transposition
+
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.tropt={voice_adj:function(of,last_s){if(last_s){of(last_s)
@@ -19,6 +23,7 @@ for(s=p_v.sym;s;s=s.next){if(s.type!=C.NOTE)
 continue
 for(m=0;m<=s.nhd;m++){nt=s.notes[m]
 if(nt.tie_s){nt.pit=nt.tie_s.pit
+nt.acc=nt.tie_s.acc
 continue}
 p=nt.pit%7
 a=nt.acc

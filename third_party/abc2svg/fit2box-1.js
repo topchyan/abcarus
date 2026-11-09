@@ -1,4 +1,8 @@
-//fit2box.js-module for filling a tune in a box
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2025 Jean-François Moine - LGPL3+
+// fit2box.js - module for filling a tune in a box
+
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.fit2box={do_fit:function(mus){var r,sv,v,w,h,hh,sc,marg,tit,cl,parse=mus.get_parse(),f=parse.file,fn=parse.fname,cfmt=mus.cfmt(),wb=cfmt.fit2box[0],hb=cfmt.fit2box[1],user=mus.get_user(),io=user.img_out,ob=""

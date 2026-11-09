@@ -63,6 +63,7 @@ function main() {
     autoScalePanes: true,
     scoreFitMode: "content",
     libraryRichTooltipDelayMs: 1400,
+    lyricsTransliterationEnabled: false,
   };
   for (const [key, expected] of Object.entries(requiredDefaults)) {
     assert(seen.has(key), `missing schema key: ${key}`);

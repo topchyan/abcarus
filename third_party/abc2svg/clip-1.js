@@ -1,4 +1,8 @@
-//clip.js-module to handle the%%clip command
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2024 Jean-Francois Moine - LGPL3+
+// clip.js - module to handle the %%clip command
+
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.clip={get_clip:function(parm){var C=abc2svg.C

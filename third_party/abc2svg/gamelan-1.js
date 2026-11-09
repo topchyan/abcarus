@@ -1,4 +1,8 @@
-//gamelan.js-module to output Gamelan(indonesian)music sheets
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2024 Jean-Francois Moine - LGPL3+
+// gamelan.js - module to output Gamelan (indonesian) music sheets
+
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.gamelan={cde2fcg:new Int8Array([0,2,4,-1,1,3,5]),cgd2cde:new Int8Array([0,-4,-1,-5,-2,-6,-3,0,-4,-1,-5,-2,-6,-3,0]),acc2:new Int8Array([-2,-1,3,1,2]),do_pscom:function(of,p){switch(p.match(/\w+/)[0]){case'staves':case'score':p=p.replace(/\(|\)/g,'')

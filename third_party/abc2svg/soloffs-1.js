@@ -1,10 +1,14 @@
-//soloffs.js-module to set the X offset of some elements at start of music line
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2026 Jean-François Moine - LGPL3+
+// soloffs.js - module to set the X offset of some elements at start of music line
+
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.soloffs={set_fmt:function(of,cmd,parm){if(cmd=="soloffs"){var i,v,C=abc2svg.C,soloffs=this.cfmt().soloffs={}
 parm=parm.split(/\s+/)
 while(parm.length){i=parm.shift().split('=')
-v=Number(i[1])
+v=parseInt(i[1])
 if(isNaN(v))
 continue
 switch(i[0]){case'part':soloffs[C.PART]=v

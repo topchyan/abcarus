@@ -1,0 +1,10 @@
+--- a/util/sndaud.js
++++ b/util/sndaud.js
+@@ -190,4 +190,3 @@
+-		pr = pr.info.sort((a,b) => {
+-			(a.generator.velRange?.lo || 0)
+-				- (b.generator.velRange?.lo || 0)
+-		})
++		pr = pr.info.sort((a,b) =>
++			(a.generator.velRange?.lo || 0)
++				- (b.generator.velRange?.lo || 0))

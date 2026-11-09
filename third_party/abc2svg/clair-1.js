@@ -1,4 +1,8 @@
-//clair.js-module to output Clairnote sheets(https:clairnote.org)
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2024 Jean-Francois Moine - LGPL3+
+// clair.js - module to output Clairnote sheets (https:clairnote.org)
+
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.clair={hl_tb:[new Int8Array([-10,-8,-6,-4,-2]),new Int8Array([-10,-9,-8,-6,-4,-2]),new Int8Array([-8,-6,-4,-2]),new Int8Array([-8,-6,-4,-2]),new Int8Array([-8,-7,-6,-4,-2]),new Int8Array([-6,-4,-2]),new Int8Array([-6,-4,-2]),new Int8Array([-6,-4,-2]),new Int8Array([-6,-5,-4,-2]),new Int8Array([-4,-2]),new Int8Array([-4,-2]),new Int8Array([-4,-2]),new Int8Array([-4,-3,-2]),new Int8Array([-2]),new Int8Array([-2]),new Int8Array([-2]),new Int8Array([-2,-1]),null,null,null,new Int8Array([1]),null,null,null,new Int8Array([3,4]),new Int8Array([4]),new Int8Array([4]),new Int8Array([4]),new Int8Array([4,5]),null,null,null,new Int8Array([7]),null,null,null,new Int8Array([9,10]),new Int8Array([10]),new Int8Array([10]),new Int8Array([10]),new Int8Array([10,11]),new Int8Array([10,11]),new Int8Array([10,12]),new Int8Array([10,12]),new Int8Array([10,12,13]),new Int8Array([10,12,13]),new Int8Array([10,12,14]),new Int8Array([10,12,14]),new Int8Array([10,12,14,15]),new Int8Array([10,12,14,15]),new Int8Array([10,12,14,16])],draw_hl:function(of,s){if(!s.p_v.clair){of(s)

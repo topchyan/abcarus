@@ -1,4 +1,8 @@
-//capo.js-module to add a capo chord line
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2024 Jean-Francois Moine - LGPL3+
+// capo.js - module to add a capo chord line
+
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.capo={icb40:[0,5,6,11,16,17,22,23,28,33,34,39],gch_build:function(of,s){var t,i,gch,gch2,i2,abc=this,p_v=abc.get_curvoice(),a_gch=s.a_gch

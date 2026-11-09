@@ -1,5 +1,6 @@
 const DEFAULT_SOUNDFONT_NAME = "TimGM6mb.sf2";
 const DEFAULT_SOUNDFONT_SOURCE = "abc2svg.sf2";
+const MAX_EXTERNAL_SOUNDFONT_BYTES = 384 * 1024 * 1024;
 const STREAMING_SF2 = new Set();
 
 function withTimeout(promise, ms, label) {
@@ -55,6 +56,7 @@ function createSoundfontController({
   let soundfontStatusTimer = null;
   let lastSoundfontApplied = null;
   let lastLoadError = null;
+  let fallbackForName = null;
   let loadGeneration = 0;
   let runtimeErrorHandlerInstalled = false;
 
@@ -116,6 +118,21 @@ function createSoundfontController({
     const isPath = name.startsWith("/") || /^[a-zA-Z]:\\/.test(name) || name.startsWith("file://");
     let sf2Url = "";
     if (isPath) {
+      if (api && typeof api.getSoundfontInfo === "function") {
+        const info = await withTimeout(
+          api.getSoundfontInfo(name),
+          15000,
+          "External soundfont inspection",
+        );
+        const size = Number(info && info.size);
+        if (Number.isFinite(size) && size > MAX_EXTERNAL_SOUNDFONT_BYTES) {
+          const error = new Error(
+            `SoundFont exceeds the ${Math.round(MAX_EXTERNAL_SOUNDFONT_BYTES / 1024 / 1024)} MiB safe loading limit.`,
+          );
+          error.code = "SOUNDFONT_TOO_LARGE";
+          throw error;
+        }
+      }
       if (!api || typeof api.getSoundfontStreamUrl !== "function") {
         throw new Error("preload API missing: window.api.getSoundfontStreamUrl");
       }
@@ -167,6 +184,12 @@ function createSoundfontController({
       soundfontReadyName === desired
       && (soundfontSource !== DEFAULT_SOUNDFONT_SOURCE || (w.abc2svg && w.abc2svg.sf2))
     ) return;
+    if (
+      fallbackForName === desired
+      && soundfontReadyName === DEFAULT_SOUNDFONT_NAME
+      && w.abc2svg
+      && w.abc2svg.sf2
+    ) return;
     if (soundfontLoadPromise && soundfontLoadTarget === desired) return soundfontLoadPromise;
 
     if (!w.abc2svg) w.abc2svg = {};
@@ -180,6 +203,7 @@ function createSoundfontController({
         ok = await loadSoundfont(desired, generation);
         if (!ok) return;
         lastLoadError = null;
+        fallbackForName = null;
       } catch (e) {
         if (generation !== loadGeneration) return;
         lastLoadError = {
@@ -188,6 +212,12 @@ function createSoundfontController({
         };
         if (desired === DEFAULT_SOUNDFONT_NAME) throw e;
         ok = await loadSoundfont(DEFAULT_SOUNDFONT_NAME, generation);
+        if (ok) {
+          fallbackForName = desired;
+          const shortName = desired.split(/[\\/]/).pop() || desired;
+          const reason = e && e.message ? String(e.message) : "The file could not be loaded.";
+          showToast(`Could not load SoundFont "${shortName}": ${reason} Using ${DEFAULT_SOUNDFONT_NAME}.`, 9000);
+        }
       } finally {
         if (soundfontLoadPromise === currentPromise) {
           soundfontLoadPromise = null;
@@ -230,6 +260,7 @@ function createSoundfontController({
     soundfontLoadTarget = null;
     lastSoundfontApplied = null;
     lastLoadError = null;
+    fallbackForName = null;
   }
 
   return {

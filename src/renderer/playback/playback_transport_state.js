@@ -91,6 +91,10 @@ function createPlaybackTransportState() {
     playbackCountInTimer: null,
     playbackCountInAudioNodes: [],
     playbackCountInAudioContext: null,
+    nativePlaybeatsEligible: false,
+    nativePlaybeatsRequestedMeasures: 0,
+    nativePlaybeatsActive: false,
+    nativePlaybeatsMeasures: 0,
     lastPlaybackGuardMessage: "",
     lastPlaybackAbortMessage: "",
     lastPlaybackException: null,
@@ -201,6 +205,10 @@ function createPlaybackTransportState() {
     state.pausedSelectionSignature = null;
     state.playbackState = null;
     state.playbackIndexOffset = 0;
+    state.nativePlaybeatsEligible = false;
+    state.nativePlaybeatsRequestedMeasures = 0;
+    state.nativePlaybeatsActive = false;
+    state.nativePlaybeatsMeasures = 0;
     state.lastPlaybackException = null;
     state.clearActiveScope();
   };

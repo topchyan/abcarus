@@ -80,6 +80,51 @@ const canceledAction = await runMetadataAction(abc, { confirmed: false });
 assert.equal(canceledAction.statuses.at(-1), "YouTube metadata update canceled.");
 assert.equal(canceledAction.writes.length, 0);
 
+{
+  const secondStart = abc.indexOf("X:2");
+  const selectedTune = {
+    id: "/music/test.abc::second",
+    xNumber: "2",
+    startOffset: secondStart,
+    endOffset: abc.length,
+    headerFields: { F: ["https://www.youtube.com/watch?v=xyz987UVW65"] },
+  };
+  const statuses = [];
+  const writes = [];
+  const action = createYouTubeMetadataAction({
+    api: {
+      fetchYouTubeMetadata: async () => ({ ok: true, ...metadata.get("xyz987UVW65") }),
+      confirmYouTubeMetadataUpdate: async () => true,
+    },
+    state: {
+      findTuneById: (tuneId) => tuneId === selectedTune.id
+        ? { file: { path: "/music/test.abc", tunes: [selectedTune] }, tune: selectedTune }
+        : null,
+      getRawMode: () => false,
+    },
+    actions: {
+      readFile: async () => ({ ok: true, data: abc }),
+      refreshLibraryFile: async () => ({ tunes: [] }),
+      requireCleanForFileOp: async () => true,
+      setStatus: (status) => statuses.push(status),
+      withFileLock: async (_path, fn) => fn(),
+      writeFile: async (_path, text) => {
+        writes.push(text);
+        return { ok: true };
+      },
+    },
+  });
+
+  assert.equal(action.hasYouTubeSourceForTune(selectedTune.id), true);
+  assert.equal(action.hasYouTubeSourceForTune("missing"), false);
+  await action.updateTune(selectedTune.id);
+  assert.equal(writes.length, 1);
+  assert.match(writes[0], /X:1\nT:First\nF:https:\/\/youtu\.be\/abc123DEF45\nN:User note/);
+  assert.doesNotMatch(writes[0], /D:\[YouTube title\] First video/);
+  assert.match(writes[0], /D:\[YouTube title\] Second video/);
+  assert.equal(statuses.at(-1), "YouTube metadata updated · 1 link.");
+}
+
 const rendererSource = fs.readFileSync("src/renderer/renderer.js", "utf8");
 assert.match(
   rendererSource,

@@ -1,4 +1,8 @@
-//break.js-module to handle the%%break command
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2024 Jean-Francois Moine - LGPL3+
+// break.js - module to handle the %%break command
+
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.break={get_break:function(parm){var C=abc2svg.C,b,c,d,n,sq,a=parm.split(/[ ,]/),cfmt=this.cfmt()

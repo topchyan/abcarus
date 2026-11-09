@@ -1,0 +1,35 @@
+{
+  "schema": "abcarus.abc2svg-runtime.v1",
+  "upstream": {
+    "project": "abc2svg",
+    "version": "v1.23.7",
+    "date": "2026-11-08",
+    "checkIn": "e035e7f60c152376e24975fe427f8f4ec132393f",
+    "archiveUrl": "https://moinejf.pages-perso.free.fr/abc2svg.zip",
+    "archiveSha256": "1175a7e7c1853949b991dd7d072e4614bd4c0e0da4e02f6fea71dc89b9df262b"
+  },
+  "filesLockSha256": "8c5f0995f5fc2914cb56216bbd517710f559277bff67e172b2f0e34c2d570df2",
+  "artifacts": {
+    "abc2svg-1.js": {
+      "upstreamSha256": "68c65474beddbe240daabfc66f3491cd15c9ec60385f53cb4bfffd788a72989f",
+      "sha256": "68c65474beddbe240daabfc66f3491cd15c9ec60385f53cb4bfffd788a72989f"
+    },
+    "MIDI-1.js": {
+      "upstreamSha256": "e53ca1bc981fef7286fa274031c2a8468d765e93022014f01beb7d2041d08e37",
+      "sha256": "e53ca1bc981fef7286fa274031c2a8468d765e93022014f01beb7d2041d08e37"
+    },
+    "snd-1.js": {
+      "upstreamSha256": "ce078319f36bee040cabad8777e99798a4b75a37c50849a76dfda1e49aa2e2ca",
+      "sha256": "5fb648ba2df9f0603329f4ed57fb9aa77b1cc2ef64e92dde8ed629a93c5b12f0"
+    }
+  },
+  "patches": [
+    {
+      "id": "0001-sf2-velocity-sort-return",
+      "recipe": "patches/abc2svg/0001-sf2-velocity-sort-return.json",
+      "sourcePatch": "patches/abc2svg/0001-sf2-velocity-sort-return.patch",
+      "upstreamTicket": "https://chiselapp.com/user/moinejf/repository/abc2svg/tktview/e10d681c675827c2effa16cf1c4db5ef1ba9bf38",
+      "removeWhen": "Remove after an upstream release returns the velocity comparator result and the unpatched runtime passes the SoundFont gate."
+    }
+  ]
+}

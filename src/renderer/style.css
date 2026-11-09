@@ -3548,6 +3548,107 @@ body.focus-mode .workspace-statusbar .cursor-status {
   min-width: 0;
 }
 
+.lyrics-transliteration-card {
+  width: min(1100px, 96vw);
+  height: min(780px, 92vh);
+  min-width: 680px;
+  min-height: 520px;
+  max-width: 96vw;
+  max-height: 92vh;
+}
+
+.experimental-label {
+  margin-left: 8px;
+  color: var(--muted-text);
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+}
+
+.lyrics-transliteration-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.lyrics-transliteration-controls label,
+.lyrics-transliteration-editors label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted-text);
+  font-size: var(--font-size-xs);
+}
+
+.lyrics-transliteration-controls select {
+  min-width: 260px;
+}
+
+.lyrics-transliteration-editors {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  min-height: 180px;
+  flex: 0 0 34%;
+}
+
+.lyrics-transliteration-editors textarea {
+  width: 100%;
+  height: 100%;
+  min-height: 150px;
+  resize: none;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-1);
+  background: #fff;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.lyrics-transliteration-editors textarea[readonly] {
+  background: var(--panel-subtle-bg, #f6f6f6);
+}
+
+.lyrics-transliteration-preview-block {
+  display: flex;
+  flex-direction: column;
+  min-height: 180px;
+  flex: 1;
+}
+
+.lyrics-transliteration-preview-heading {
+  margin-bottom: 5px;
+  color: var(--muted-text);
+  font-size: var(--font-size-xs);
+}
+
+.lyrics-transliteration-score {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  background: #fff;
+}
+
+.lyrics-transliteration-score svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+@media (max-width: 760px) {
+  .lyrics-transliteration-card {
+    min-width: min(360px, 96vw);
+  }
+
+  .lyrics-transliteration-editors {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+}
 .set-list-empty {
   color: var(--muted-text);
   font-size: 13px;

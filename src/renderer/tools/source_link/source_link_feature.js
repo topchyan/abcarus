@@ -71,6 +71,8 @@ function createSourceLinkFeature({
     scheduleUpdate: (delayMs = 250) => controller.scheduleUpdate(delayMs),
     update: () => controller.update(),
     updateYouTubeMetadata: () => youtubeMetadataAction.updateActiveFile(),
+    canUpdateYouTubeMetadataForTune: (tuneId) => youtubeMetadataAction.hasYouTubeSourceForTune(tuneId),
+    updateYouTubeMetadataForTune: (tuneId) => youtubeMetadataAction.updateTune(tuneId),
   };
 }
 

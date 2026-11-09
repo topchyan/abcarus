@@ -11,10 +11,12 @@
 #	For an other size, change
 #		PH=29.7cm
 #
-# Copyright (C) 2019-2025 Jean-François Moine - License GPL3+
+# Copyright (C) 2019-2026 Jean-François Moine - License GPL3+
 
 # set the page height
 PH=29.7cm
+# and the page width for rsvg-convert
+PW=21cm
 
 # set a browser
 if [ "x$BROWSER" = "x" ]; then
@@ -113,23 +115,32 @@ if command -v rsvg-convert >/dev/null 2>&1; then
 	# - the maintainer of librsvg does not want to handle the CSS shorthand 'font:'
 	# - rsvg-convert always gets the SVG images at 72ppi, ignoring the -p/-d values
 	# - the sets of SVG images per page must be converted to a set of one SVG per page
-	cat > /tmp/fix.abc << EOF
-%%pageheight $PH
-%%fullsvg 1
-%%musicfont abc2svg
-%%beginjs
-    var fix_out
-// install
-// - front-end
-	fix_out = user.img_out
-	user.img_out = function(p) {
-		fix_out(bug(p))
+	cat > /tmp/fix.js << EOF
+// convert cm/in into pixels
+function unit(p) {
+    var	v = p.match(/(-?[\d.]+)(.*)/)
+	if (v) {
+		p = +v[1]
+		switch (v[2]) {
+		case "cm":
+			return p * 37.8
+		case "in":
+			return p * 96
+		case "px":
+		case "":
+			return p
+		}
 	}
-// - back-end
-    var	page_h, page_out,
+	return NaN
+}
+    var	pw = unit("$PW"),
+	ph = unit("$PH"),
+	page_h, page_out,
 	page_cl = "",
 	page_sty = ""
 
+// this function is called from the module 'page'
+abc2svg.pdf_out = function(p) {
 	// get the style from the image and remove it from the block
 	function get_style(p) {
 	   var	i,
@@ -174,73 +185,77 @@ if command -v rsvg-convert >/dev/null 2>&1; then
 			p = p.replace(t, o)
 		}
 		// not reached
-	} //bug()
+	} // bug()
 
-	// low level output
-	abc2svg.page.user_out = function(p) {
-	   var	h, w,
-		cfmt = abc.cfmt()
-
-		switch (p.slice(0, 4)) {
-		case "<div":			// new page
-			page_h = 0
-			page_out = ""
-			break
-		case "<svg":			// SVG image
-			p = get_style(p)
-				.replace(/<rect[^>]+>/,'')	// remove %%bgcolor
-			if (!page_cl) {
-				h = p.match(/class=[^f]*(f[^" ]+)/)	// "
-				if (h)
-					page_cl = h[1]
-			}
-			if (page_h)
-				page_out += p
-					.replace(/<svg(.|\n)*?>/,
-						'<g transform="translate(0, ' +
-							page_h.toFixed(1) + ')">')
-					.replace('</svg>', '</g>\n')
-			else
-				page_out += p
-					.replace(/<\/?svg(.|\n)*?>/g, '')
-			page_h += Number(p.match(/height="([\d.]+)px"/)[1])
-			break
-		case "</di":			// end of page
-			w = cfmt.pagewidth
-			h = cfmt.pageheight
-			if (!page_cl)
-				page_cl = "music"	// old version
-			abc2svg.print('\
+	switch (p.slice(0, 4)) {
+	case "<div":			// new page
+		page_h = 0
+		page_out = ""
+		break
+	case "<svg":			// SVG image
+		p = bug(p)
+		if (!page_cl) {
+			h = p.match(/class=[^f]*(f\d+) tune/) // music class
+			if (h)
+				page_cl = h[1]
+		}
+		w = p.match(/viewBox="0 0 [\d.]+ ([\d.]+)/)[1]	// "
+		h = p.match(/height="([\d.]+)px"/)
+		w = h ? h[1] / w : 1
+		if (page_h)
+			page_out += p
+				.replace(/<svg(.|\n)*?>/,
+					'<g transform="translate(0, ' +
+						page_h.toFixed(1)
+					+ (w != 1 ? (') scale('
+						+ w.toFixed(2)) : '')
+					+ ')">')
+				.replace('</svg>', '</g>\n')
+		else if (w != 1)
+			page_out += p
+				.replace(/<svg(.|\n)*?>/,
+					'<g transform="scale('
+						+ w.toFixed(2) + ')">')
+				.replace('</svg>', '</g>\n')
+		else
+			page_out += p
+				.replace(/<\/?svg(.|\n)*?>/g, '')
+		page_h += +h[1]
+		break
+	case "</di":			// end of page
+		if (!page_cl)
+			page_cl = "music"	// old version
+		abc2svg.print('\
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"\n\
  xmlns:xlink="http://www.w3.org/1999/xlink"\n\
- color="black" class="' + page_cl + '" stroke-width=".7"\n\
- width="' +
-				w.toFixed(0) + 'px" height="' +
-				h.toFixed(0) + 'px" viewBox="0 0 ' +
-					w.toFixed(0) + ' ' +
-					h.toFixed(0) + '"' +
-				(cfmt.bgcolor ?
-					(' style="background-color: ' +
-						cfmt.bgcolor + '"') : '') +
-				'>\n' +
-				page_sty +
-				page_out + "</svg>")
-			break
-		default:
-			if (p.indexOf("</svg") >= 0) {
-				page_out += p.replace(/<\/svg>/, '')
-				if (page_h)
-					page_out += "</g>\n"
-			}
-			break
+ color="black" class="' + page_cl + '" stroke-width=".7"\n'
+			+ (user.imagesize != null
+				? user.imagesize
+				: ' width="'
+					+ pw.toFixed(0) + 'px" height="'
+					+ ph.toFixed(0) + 'px"')
+			+ ' viewBox="0 0 '
+				+ pw.toFixed(0) + ' '
+				+ ph.toFixed(0)
+			+ '">\n'
+			+ page_sty
+			+ page_out + "</svg>")
+		break
+	default:
+		if (p.indexOf("</svg") >= 0) {
+			page_out += p.replace(/<\/svg>/, '')
+			if (page_h)
+				page_out += "</g>\n"
 		}
-	} // user_out()
+		break
+	}
+} // abc2svg.pdf()
+
 // for tests
 abc2svg.abort = function(e) {
-abc2svg.printErr('abort: '+e.message+'\n'+e.stack)
-abc2svg.quit()
+	abc2svg.printErr('abort: '+e.message+'\n'+e.stack)
+	abc2svg.quit()
 }
-%%endjs
 EOF
 
 	# purge /tmp
@@ -249,7 +264,8 @@ EOF
 	# generate a (HTML+SVG) file with a abc2svg batch script
 	# then, extract the SVG images (pages) to /tmp
 	n=0
-	command $abcscr /tmp/fix.abc "$@" | while read v; do
+	command $abcscr /tmp/fix.js --pageheight $PH --fullsvg 1 --musicfont abc2svg \
+			"$@" | while read v; do
 		case "$v" in
 		"<svg"*)
 			n=$(($n+1))
@@ -272,8 +288,10 @@ EOF
 
 	# convert the SVG images to PDF
 	if [ -f /tmp/abc1.svg ]; then
-		echo rsvg-convert -f pdf $(ls -v /tmp/abc*.svg) -o $out
-		rsvg-convert -f pdf $(ls -v /tmp/abc*.svg) -o $out
+		echo rsvg-convert --page-height=$PH --page-width=$PW --width=$PW \
+			-f pdf $(ls -v /tmp/abc*.svg) -o $out
+		rsvg-convert --page-height=$PH --page-width=$PW --width=$PW \
+			-f pdf $(ls -v /tmp/abc*.svg) -o $out
 	else
 		echo 'Errors during the generation'
 	fi

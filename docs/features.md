@@ -37,6 +37,7 @@ The library tree supports per-tune file operations:
 
 ## Rendering (notation preview)
 - Rendering uses abc2svg scripts loaded in `src/renderer/index.html` and run from `renderNow` in `src/renderer/renderer.js`.
+- An optional experimental Lyrics Transliteration tool previews Armenian lyrics, allows manual correction of `w:` lines, transliterates textual headers, `W:` fields and `%%begintext` blocks, and inserts a copy after the active tune or exports it to a separate ABC file without modifying the source tune.
 - The renderer collects SVG fragments (`img_out`) and injects them into the preview pane.
 - Note highlights are added by abc2svg annotations and synchronized with the editor selection.
 - Clicking on a highlighted note in the render pane moves the editor cursor to the corresponding ABC position.

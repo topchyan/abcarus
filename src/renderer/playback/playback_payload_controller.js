@@ -15,6 +15,7 @@ import {
   sanitizeAbcForPlayback,
 } from "./playback_payload_model.js";
 import { composeHeaderPrefixPayload } from "../abc/header_prefix_model.js";
+import { configureNativePlaybeats } from "./count_in_model.js";
 
 function createPlaybackPayloadController({
   transport,
@@ -40,6 +41,12 @@ function createPlaybackPayloadController({
 
   function isChordProActive() {
     return typeof isChordProEnabled === "function" && isChordProEnabled();
+  }
+
+  function getNativePlaybeatsCacheKey() {
+    return transport.nativePlaybeatsEligible
+      ? `playbeats:${Number(transport.nativePlaybeatsRequestedMeasures) || 0}`
+      : "playbeats:off";
   }
 
   function getPlaybackSourceKey() {
@@ -69,7 +76,7 @@ function createPlaybackPayloadController({
     const sanitized = sanitizeAbcForPlayback(preparedText);
     const expandRepeats = getExpandRepeats();
     const repeatsFlag = expandRepeats ? "exp:on" : "exp:off";
-    return `${sanitized.text}|||${prefixPayload.offset || 0}|||${repeatsFlag}`;
+    return `${sanitized.text}|||${prefixPayload.offset || 0}|||${repeatsFlag}|||${getNativePlaybeatsCacheKey()}`;
   }
 
   function getPlaybackPayload() {
@@ -149,11 +156,16 @@ function createPlaybackPayloadController({
     const skipDrumsFlag = skipDrums ? "skipdrums:on" : "skipdrums:off";
     const gchordFlag = skipGchords ? "gchords:off" : "gchords:on";
     const ignoreFlag = ignoreRepeats ? "ignore:on" : "ignore:off";
-    const sourceKey = `${previewText}|||${prefixPayload.offset || 0}|||${repeatsFlag}|||${drumsFlag}|||${skipDrumsFlag}|||${gchordFlag}|||${ignoreFlag}`;
+    const sourceKey = `${previewText}|||${prefixPayload.offset || 0}|||${repeatsFlag}|||${drumsFlag}|||${skipDrumsFlag}|||${gchordFlag}|||${ignoreFlag}|||${getNativePlaybeatsCacheKey()}`;
     const cached = transport.getCachedPayload(sourceKey);
     if (cached) {
       const lineOffset = isChordProActive() ? countLinesForPrefix(prefixPayload.text) + (lineOffsetBase || 0) : null;
-      return { text: cached.text, offset: cached.offset, lineOffset };
+      return {
+        text: cached.text,
+        offset: cached.offset,
+        lineOffset,
+        nativePlaybeats: cached.meta && cached.meta.nativePlaybeats,
+      };
     }
 
     let payload = {
@@ -194,10 +206,22 @@ function createPlaybackPayloadController({
     if (skipDrums) payload = { text: neutralizeMidiDrumDirectivesForPlayback(payload.text), offset: payload.offset };
     if (ignoreRepeats) payload = { text: stripRepeatsLengthSafe(payload.text), offset: payload.offset };
     if (expandRepeats) payload = { text: expandRepeatsForPlayback(payload.text), offset: payload.offset };
-    transport.storePayloadCache(sourceKey, payload);
+    const nativePlaybeats = configureNativePlaybeats(payload.text, {
+      enabled: transport.nativePlaybeatsEligible,
+      measures: transport.nativePlaybeatsRequestedMeasures,
+    });
+    payload = {
+      text: nativePlaybeats.text,
+      offset: (payload.offset || 0) + nativePlaybeats.insertedLength,
+    };
+    transport.storePayloadCache(sourceKey, payload, {
+      drumInsertAtLine: null,
+      drumLineCount: 0,
+      nativePlaybeats,
+    });
     assertCleanAbcText(payload.text, "playback payload");
     const lineOffset = isChordProActive() ? countLinesForPrefix(prefixPayload.text) + (lineOffsetBase || 0) : null;
-    return { ...payload, lineOffset };
+    return { ...payload, lineOffset, nativePlaybeats };
   }
 
   return {

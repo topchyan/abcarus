@@ -102,6 +102,7 @@ import {
 } from "./tools/chordpro/chordpro_model.js";
 import { createChordProFeature } from "./tools/chordpro/chordpro_feature.js";
 import { createImportExportFeature } from "./tools/import_export/import_export_feature.js";
+import { createLyricsTransliterationFeature } from "./tools/lyrics_transliteration/lyrics_transliteration_feature.js";
 import { createRawModeEnterGuard } from "./tools/raw_mode/raw_mode_enter_guard.js";
 import { createRawModeFeature } from "./tools/raw_mode/raw_mode_feature.js";
 import { createAbcTransformFeature } from "./tools/transforms/abc_transform_feature.js";
@@ -225,6 +226,17 @@ const $templatesInsert = document.getElementById("templatesInsert");
 const $templatesReplace = document.getElementById("templatesReplace");
 const $templatesAppend = document.getElementById("templatesAppend");
 const $templatesCancel = document.getElementById("templatesCancel");
+const $lyricsTransliterationModal = document.getElementById("lyricsTransliterationModal");
+const $lyricsTransliterationClose = document.getElementById("lyricsTransliterationClose");
+const $lyricsTransliterationProfile = document.getElementById("lyricsTransliterationProfile");
+const $lyricsTransliterationMode = document.getElementById("lyricsTransliterationMode");
+const $lyricsTransliterationOriginal = document.getElementById("lyricsTransliterationOriginal");
+const $lyricsTransliterationGenerated = document.getElementById("lyricsTransliterationGenerated");
+const $lyricsTransliterationScore = document.getElementById("lyricsTransliterationScore");
+const $lyricsTransliterationMessage = document.getElementById("lyricsTransliterationMessage");
+const $lyricsTransliterationCancel = document.getElementById("lyricsTransliterationCancel");
+const $lyricsTransliterationSave = document.getElementById("lyricsTransliterationSave");
+const $lyricsTransliterationInsert = document.getElementById("lyricsTransliterationInsert");
 const $xIssuesModal = document.getElementById("xIssuesModal");
 const $xIssuesInfo = document.getElementById("xIssuesInfo");
 const $xIssuesClose = document.getElementById("xIssuesClose");
@@ -1836,6 +1848,45 @@ const templatesFeature = createTemplatesFeature({
   setStatus,
 });
 
+const lyricsTransliterationFeature = createLyricsTransliterationFeature({
+  elements: {
+    modal: $lyricsTransliterationModal,
+    closeButton: $lyricsTransliterationClose,
+    profile: $lyricsTransliterationProfile,
+    mode: $lyricsTransliterationMode,
+    original: $lyricsTransliterationOriginal,
+    generated: $lyricsTransliterationGenerated,
+    score: $lyricsTransliterationScore,
+    message: $lyricsTransliterationMessage,
+    cancelButton: $lyricsTransliterationCancel,
+    saveButton: $lyricsTransliterationSave,
+    insertButton: $lyricsTransliterationInsert,
+  },
+  getEditorText: getEditorValue,
+  getHeaderText: getHeaderEditorValue,
+  getActiveFilePath: () => activeContext.getActiveFilePath(),
+  getActiveTuneMeta: () => activeContext.getActiveTuneMeta(),
+  getNextXNumber,
+  isCurrentDocumentDirty,
+  getHeaderDirty,
+  confirmUnsavedChanges,
+  performSaveFlow,
+  renderAbcToSvgMarkup,
+  showSaveDialog,
+  readFile,
+  writeFile,
+  withFileLock,
+  refreshLibraryFile,
+  selectTune,
+  markDiskConflictPath,
+  safeDirname,
+  sanitizeFileName: sanitizeFileBaseName,
+  showSaveError,
+  showToast,
+  setStatus,
+  transliterationApi: window.armenianTransliteration,
+});
+
 const libraryUiDomain = createLibraryUiDomain({
   api: window.api,
   documentRef: document,
@@ -1886,6 +1937,8 @@ const libraryUiDomain = createLibraryUiDomain({
     toggleTuneFavorite: (tuneId) => libraryFavoritesController
       ? libraryFavoritesController.toggleTune(tuneId)
       : Promise.resolve(false),
+    canUpdateYouTubeMetadataForTune: (tuneId) => sourceLinkFeature.canUpdateYouTubeMetadataForTune(tuneId),
+    updateYouTubeMetadataForTune: (tuneId) => sourceLinkFeature.updateYouTubeMetadataForTune(tuneId),
     onLibraryFilterCleared: () => {
       if (libraryFavoritesController) libraryFavoritesController.handleExternalFilterClear();
     },
@@ -2797,6 +2850,7 @@ const sourceLinkFeature = createSourceLinkFeature({
   isDisabled: () => Boolean(isRawModeActive() || chordProFeature.isEnabled()),
   shouldIncludePrintQr: () => Boolean(settingsSnapshot.get() && settingsSnapshot.get().printSourceQrCodes),
   fileState: {
+    findTuneById,
     getActiveFileEntry,
     getActiveFilePath: () => activeContext.getActiveFilePath(),
     getActiveTuneMeta: () => activeContext.getActiveTuneMeta(),
@@ -3587,7 +3641,7 @@ function alignBarsInEditor() {
   abcTransformFeature.alignBars();
 }
 
-function generateBlankVoiceSkeleton() {
+function generateBlankVoiceSkeleton({ restSymbol = "x" } = {}) {
   if (isRawModeActive()) {
     showToast("Raw mode: switch to tune mode to generate a voice skeleton.", 2400);
     return false;
@@ -3597,6 +3651,7 @@ function generateBlankVoiceSkeleton() {
   const plan = planBlankVoiceSkeleton(view.state.doc.toString(), {
     sourceVoiceId: "1",
     targetOffset: view.state.selection.main.head,
+    restSymbol,
   });
   if (!plan.ok) {
     showToast(plan.error || "Unable to generate an empty voice skeleton.", 2800);
@@ -4211,6 +4266,7 @@ appCommandsDomain = createAppCommandsDomain({
     openFind: editorRuntime.openFind,
     openLibraryCatalog: () => libraryUiDomain.openCatalogFromCurrentIndex(),
     openLibraryMetadata: () => catalogMetadataFeature.open(),
+    openLyricsTransliteration: () => lyricsTransliterationFeature.open(),
     openRecentFile,
     openRecentFolder,
     openRecentTune,

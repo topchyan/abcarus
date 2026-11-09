@@ -1,0 +1,11 @@
+{
+  "schema": "abcarus.abc2svg-runtime-patch.v1",
+  "id": "0001-sf2-velocity-sort-return",
+  "target": "snd-1.js",
+  "expectedInputSha256": "ce078319f36bee040cabad8777e99798a4b75a37c50849a76dfda1e49aa2e2ca",
+  "expectedOutputSha256": "5fb648ba2df9f0603329f4ed57fb9aa77b1cc2ef64e92dde8ed629a93c5b12f0",
+  "replacement": {
+    "from": "pr=pr.info.sort((a,b)=>{(a.generator.velRange?.lo||0)\n-(b.generator.velRange?.lo||0)})",
+    "to": "pr=pr.info.sort((a,b)=>(a.generator.velRange?.lo||0)\n-(b.generator.velRange?.lo||0))"
+  }
+}

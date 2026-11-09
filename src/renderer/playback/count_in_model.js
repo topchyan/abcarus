@@ -59,4 +59,71 @@ function getCountInPlan({ measures = 0, abcText = "", playbackState = null, spee
   };
 }
 
-export { MAX_COUNT_IN_MEASURES, clampCountInMeasures, estimateMeasureSeconds, getCountInDelayMs, getCountInPlan };
+function configureNativePlaybeats(text, { enabled = false, measures = 0 } = {}) {
+  const src = String(text || "");
+  if (!enabled) return { text: src, active: false, insertedLength: 0, measures: 0, source: null };
+  const tuneMatch = /(?:^|\n)\s*X\s*:/m.exec(src);
+  const tuneStart = tuneMatch ? tuneMatch.index + (tuneMatch[0].startsWith("\n") ? 1 : 0) : src.length;
+  const header = src.slice(0, tuneStart);
+  const existing = header.match(/(?:^|\n)\s*%%\s*playbeats(?:\s+([^\s%]+))?[^\n]*/im);
+  if (existing) {
+    const parsed = Number(existing[1]);
+    return {
+      text: src,
+      active: existing[1] === "*" || !Number.isFinite(parsed) || parsed > 0,
+      insertedLength: 0,
+      measures: Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1,
+      source: "abc",
+    };
+  }
+  const count = clampCountInMeasures(measures);
+  if (!count || !tuneMatch) return { text: src, active: false, insertedLength: 0, measures: 0, source: null };
+  const directive = `%%playbeats ${count}\n`;
+  return {
+    text: `${src.slice(0, tuneStart)}${directive}${src.slice(tuneStart)}`,
+    active: true,
+    insertedLength: directive.length,
+    measures: count,
+    source: "abcarus",
+  };
+}
+
+function accentNativePlaybeats(firstSymbol) {
+  const beats = [];
+  const seen = new Set();
+  for (let symbol = firstSymbol; symbol && !seen.has(symbol); symbol = symbol.ts_next) {
+    seen.add(symbol);
+    const voiceId = symbol.p_v && symbol.p_v.id != null ? String(symbol.p_v.id) : "";
+    if (voiceId !== "_beats" || !Array.isArray(symbol.notes) || !symbol.notes.length) continue;
+    if (!Number.isFinite(symbol.time) || !Number.isFinite(symbol.dur) || symbol.dur <= 0) continue;
+    beats.push(symbol);
+  }
+  if (!beats.length) return 0;
+  const meter = firstSymbol && firstSymbol.p_v && firstSymbol.p_v.meter;
+  const measureDuration = Number(meter && meter.wmeasure);
+  const firstTime = Number(beats[0].time);
+  let accented = 0;
+  for (const beat of beats) {
+    beat.notes = beat.notes.map((note) => ({ ...note }));
+    beat.nhd = beat.notes.length - 1;
+    const elapsed = Number(beat.time) - firstTime;
+    const atMeasureStart = !Number.isFinite(measureDuration)
+      || measureDuration <= 0
+      || Math.abs(elapsed % measureDuration) < 1e-8;
+    if (!atMeasureStart) continue;
+    beat.notes.push({ ...beat.notes[0] });
+    beat.nhd = beat.notes.length - 1;
+    accented += 1;
+  }
+  return accented;
+}
+
+export {
+  MAX_COUNT_IN_MEASURES,
+  accentNativePlaybeats,
+  clampCountInMeasures,
+  configureNativePlaybeats,
+  estimateMeasureSeconds,
+  getCountInDelayMs,
+  getCountInPlan,
+};

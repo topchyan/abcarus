@@ -209,6 +209,7 @@ PDF / print:
 Source links:
 - A valid `F:https://…` field is shown as a source action and can be included in print/PDF output.
 - `Tools → Update YouTube Metadata (Active File)…` reads YouTube titles and channels for all YouTube `F:` links in the active file.
+- An active tune's Editor context menu, or the same tune's Library context menu, can update its YouTube metadata alone without scanning the other tunes in its file.
 - After confirmation, ABCarus writes managed `D:[YouTube title]` and `D:[YouTube channel]` discography lines immediately after each corresponding `F:` line.
 
 ### Library metadata

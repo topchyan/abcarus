@@ -1,3 +1,7 @@
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2025 Jean-François Moine - LGPL3+
+// grid3.js - module to insert a manual chords
 //grid3.js-module to insert a manual chords
 if(typeof abc2svg=="undefined")
 var abc2svg={}

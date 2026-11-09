@@ -43,15 +43,16 @@ function hasPitchedMusic(text) {
   return /[_=^]?[A-Ga-g]/.test(stripped);
 }
 
-function formatLengthMultiplier(value) {
+function formatLengthMultiplier(value, restSymbol = "x") {
+  const rest = restSymbol === "z" ? "z" : "x";
   const length = Number(value);
   if (!Number.isFinite(length) || length <= 0) return null;
   const rounded = Math.round(length);
-  if (Math.abs(length - rounded) <= 1e-8) return rounded === 1 ? "x" : `x${rounded}`;
+  if (Math.abs(length - rounded) <= 1e-8) return rounded === 1 ? rest : `${rest}${rounded}`;
   for (let denominator = 2; denominator <= 15360; denominator += 1) {
     const numerator = Math.round(length * denominator);
     if (Math.abs(length - (numerator / denominator)) > 1e-9) continue;
-    return numerator === 1 ? `x/${denominator}` : `x${numerator}/${denominator}`;
+    return numerator === 1 ? `${rest}/${denominator}` : `${rest}${numerator}/${denominator}`;
   }
   return null;
 }
@@ -139,7 +140,7 @@ function resolveContextBefore(text) {
   return { meter, defaultLength };
 }
 
-function buildSkeletonBody(sourceText, lineEnding, initialContext = {}) {
+function buildSkeletonBody(sourceText, lineEnding, initialContext = {}, restSymbol = "x") {
   const lines = String(sourceText || "").split(/\r\n|\n|\r/);
   let meter = initialContext.meter || null;
   let defaultLength = initialContext.defaultLength || null;
@@ -157,7 +158,7 @@ function buildSkeletonBody(sourceText, lineEnding, initialContext = {}) {
   const flushMeasure = (barToken) => {
     const length = getBarLength(measureBuffer, defaultLength, meter);
     const multiplier = Number.isFinite(length) && Number.isFinite(defaultLength) && defaultLength > 0
-      ? formatLengthMultiplier(length / defaultLength)
+      ? formatLengthMultiplier(length / defaultLength, restSymbol)
       : null;
     if (!multiplier) return null;
     measureBuffer = "";
@@ -227,20 +228,46 @@ function splitTargetDecoration(text) {
   };
 }
 
-function planBlankVoiceSkeleton(text, { sourceVoiceId = "1", targetOffset } = {}) {
+function planBlankVoiceSkeleton(text, { sourceVoiceId = "1", targetOffset, restSymbol = "x" } = {}) {
   const src = String(text || "");
-  const target = findActiveVoiceBlock(src, targetOffset);
-  if (!target) return { ok: false, error: "Place the cursor in the target voice." };
-  if (target.voiceId === String(sourceVoiceId)) return { ok: false, error: "Choose a different target voice." };
-  const source = selectVoiceMusicBlock(src, String(sourceVoiceId));
+  const normalizedSourceVoiceId = String(sourceVoiceId);
+  const source = selectVoiceMusicBlock(src, normalizedSourceVoiceId);
   if (!source) return { ok: false, error: `V:${sourceVoiceId} has no music block to copy.` };
+  const blocks = getVoiceBlocks(src);
+  const activeTarget = findActiveVoiceBlock(src, targetOffset);
+  const fallbackTargets = blocks.filter(
+    (block) => block.voiceId === "2" && block.voiceId !== normalizedSourceVoiceId,
+  );
+  const target = activeTarget && activeTarget.voiceId !== normalizedSourceVoiceId
+    ? activeTarget
+    : fallbackTargets.find((block) => block.headerStart >= source.end)
+      || fallbackTargets[fallbackTargets.length - 1]
+      || null;
   const { lineEnding } = getLineRecords(src);
   const skeleton = buildSkeletonBody(
     src.slice(source.bodyStart, source.end),
     lineEnding,
     resolveContextBefore(src.slice(0, source.bodyStart)),
+    restSymbol,
   );
   if (!skeleton.ok) return skeleton;
+  if (!target) {
+    const targetVoiceId = normalizedSourceVoiceId === "2" ? "3" : "2";
+    const beforeInsertion = src.slice(0, source.end);
+    const leadingBreak = beforeInsertion && !/(?:\r\n|\n|\r)$/.test(beforeInsertion) ? lineEnding : "";
+    return {
+      ok: true,
+      sourceVoiceId: normalizedSourceVoiceId,
+      targetVoiceId,
+      targetHasPitchedMusic: false,
+      createdTarget: true,
+      change: {
+        from: source.end,
+        to: source.end,
+        insert: `${leadingBreak}V:${targetVoiceId}${lineEnding}${skeleton.text}${lineEnding}`,
+      },
+    };
+  }
   const targetBody = src.slice(target.bodyStart, target.end);
   const decoration = splitTargetDecoration(targetBody);
   const replacement = [decoration.prefix, skeleton.text, decoration.suffix].filter(Boolean).join(lineEnding);
@@ -249,6 +276,7 @@ function planBlankVoiceSkeleton(text, { sourceVoiceId = "1", targetOffset } = {}
     sourceVoiceId: String(sourceVoiceId),
     targetVoiceId: target.voiceId,
     targetHasPitchedMusic: hasPitchedMusic(targetBody),
+    createdTarget: false,
     change: { from: target.bodyStart, to: target.end, insert: replacement ? `${replacement}${lineEnding}` : "" },
   };
 }

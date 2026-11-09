@@ -1,4 +1,8 @@
-//abc2svg-chordnames.js-change the names of the chord symbols
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2024 Jean-Francois Moine - LGPL3+
+// abc2svg - chordnames.js - change the names of the chord symbols
+
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.chordnames={gch_build:function(of,s){var gch,ix,t,cfmt=this.cfmt()

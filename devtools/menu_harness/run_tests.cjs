@@ -62,10 +62,21 @@ assert(labels(toolsMenu).includes("ABC Helpers…"));
 assert(labels(toolsMenu).includes("Update YouTube Metadata (Active File)…"));
 assert(labels(toolsMenu).includes("Rhythmic Notation (Mertebe)"));
 assert(!labels(toolsMenu).includes("Bolahenk / Concert (Experimental)"));
+assert(!labels(toolsMenu).includes("Lyrics Transliteration (Experimental)…"));
 assert(!labels(editMenu).includes("ABC Helpers…"));
 assert(labels(playMenu).includes("Stop"));
 assert(labels(playMenu).includes("Reset View") === false);
 assert(labels(viewMenu).includes("Auto Fit / Reset View"));
+
+const voicesMenu = findItem(editMenu, "Voices");
+const skeletonMenu = findItem(voicesMenu, "Generate Empty Bar Skeleton from V:1");
+assert.deepEqual(labels(skeletonMenu), [
+  "With Invisible Rests (x)",
+  "With Visible Rests (z)",
+]);
+skeletonMenu.submenu[1].click();
+assert.deepEqual(actions.at(-1), { type: "generateBlankVoiceSkeleton", restSymbol: "z" });
+actions.pop();
 
 const mertebeMenu = findItem(toolsMenu, "Rhythmic Notation (Mertebe)");
 assert.deepEqual(labels(mertebeMenu), [
@@ -96,6 +107,21 @@ assert.deepEqual(labels(notationConverter), [
   "Convert Bolahenk to Concert",
   "Convert Concert to Bolahenk",
 ]);
+
+const lyricsActions = [];
+const lyricsTemplate = buildMenuTemplate({
+  name: "ABCarus",
+  recentFolders: [],
+  recentFiles: [],
+  recentTunes: [],
+  settings: { lyricsTransliterationEnabled: true },
+  debugFlags: {},
+}, (action) => lyricsActions.push(action));
+const lyricsTools = lyricsTemplate.find((entry) => entry.label === "Tools");
+const lyricsItem = findItem(lyricsTools, "Lyrics Transliteration (Experimental)…");
+assert(lyricsItem);
+lyricsItem.click();
+assert.equal(lyricsActions.at(-1), "openLyricsTransliteration");
 
 const playOptions = findItem(playMenu, "Options");
 const loopSelection = findItem(playOptions, "Loop Selection");

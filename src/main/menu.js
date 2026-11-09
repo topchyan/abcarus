@@ -241,7 +241,16 @@ function buildMenuTemplate(appState, sendMenuAction) {
         submenu: [
           {
             label: "Generate Empty Bar Skeleton from V:1",
-            click: () => sendMenuAction("generateBlankVoiceSkeleton"),
+            submenu: [
+              {
+                label: "With Invisible Rests (x)",
+                click: () => sendMenuAction({ type: "generateBlankVoiceSkeleton", restSymbol: "x" }),
+              },
+              {
+                label: "With Visible Rests (z)",
+                click: () => sendMenuAction({ type: "generateBlankVoiceSkeleton", restSymbol: "z" }),
+              },
+            ],
           },
         ],
       },
@@ -383,6 +392,12 @@ function buildMenuTemplate(appState, sendMenuAction) {
                 click: () => sendMenuAction("transformTurkishToBolahenk"),
               },
             ],
+          }]
+        : []),
+      ...((appState && appState.settings && appState.settings.lyricsTransliterationEnabled)
+        ? [{
+            label: "Lyrics Transliteration (Experimental)…",
+            click: () => sendMenuAction("openLyricsTransliteration"),
           }]
         : []),
       {

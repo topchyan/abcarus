@@ -1,3 +1,7 @@
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2026 Jean-François Moine - LGPL3+
+// MIDI.js - module to handle the %%MIDI parameters
 
 if(typeof abc2svg=="undefined")
 var abc2svg={}
@@ -33,8 +37,7 @@ cfmt.chord.vol=v
 break
 case"drum":case"drumon":case"drumoff":case"drumbars":if(!curvoice){abc.syntax(1,"$1 must be in a voice","%%MIDI "+a[1])
 break}
-s=abc.new_block("mididrum")
-s.play=s.invis=1
+s=abc.new_block("mididrum",1)
 switch(a[1].slice(4)){case"on":s.on=1
 break
 case"off":s.on=0
@@ -78,8 +81,7 @@ case"gchord":case"gchordbars":case"gchordon":case"gchordoff":if(a[1].length==6&&
 break}
 if(!cfmt.chord)
 cfmt.chord={}
-if(parse.state>=2&&curvoice){s=abc.new_block("midigch")
-s.play=s.invis=1
+if(parse.state>=2&&curvoice){s=abc.new_block("midigch",1)
 if(a[1][6]=='o')
 s.on=a[1][7]=='n'
 else if(a[1][6]=='b')
@@ -91,8 +93,7 @@ case"channel":v=parseInt(a[2])
 if(isNaN(v)||v<=0||v>16){abc.syntax(1,abc.errs.bad_val,"%%MIDI channel")
 break}
 v--
-if(parse.state>=2){s=abc.new_block("midiprog")
-s.play=s.invis=1
+if(parse.state>=2){s=abc.new_block("midiprog",1)
 s.chn=v}else{abc.set_v_param("channel",v)}
 break
 case"drummap":v=Number(a[3])
@@ -113,7 +114,7 @@ v[1]=+a[1]}else{v[0]=+a[1]
 v[1]=0}
 if(isNaN(v[0])||v[0]<0||v[0]>127||(v[1]&&(isNaN(v[1])||v[1]<=0||v[1]>16))){abc.syntax(1,abc.errs.bad_val,"%%MIDI program")
 break}
-if(parse.state>=2){s=abc.new_block("midiprog");s.play=s.invis=1
+if(parse.state>=2){s=abc.new_block("midiprog",1)
 s.instr=v[0]
 s.chn=v[1]>0?(v[1]-1):curvoice.v<9?curvoice.v:curvoice.v+1}else{abc.set_v_param("instr",a.slice(1).join(' '))}
 break
@@ -123,7 +124,7 @@ break}
 v=parseInt(a[3])
 if(isNaN(v)||v<0||v>127){abc.syntax(1,"Bad controller value in %%MIDI")
 break}
-if(parse.state>=2){s=abc.new_block("midictl");s.play=s.invis=1
+if(parse.state>=2){s=abc.new_block("midictl",1)
 s.ctrl=n;s.val=v}else{abc.set_v_param("midictl",a[2]+' '+a[3])}
 break
 case"temperamentequal":n=parseInt(a[2])
@@ -171,12 +172,10 @@ abc.syntax(0,abc.errs.bad_val,"%%MIDI "+a[1])
 cfmt.temper=tb40(qs)
 break}},set_vp:function(of,a){var i,item,s,abc=this,curvoice=abc.get_curvoice()
 of(a.slice(0))
-for(i=0;i<a.length;i++){switch(a[i]){case"channel=":s=abc.new_block("midiprog")
-s.play=s.invis=1
+for(i=0;i<a.length;i++){switch(a[i]){case"channel=":s=abc.new_block("midiprog",1)
 s.chn=+a[++i]
 break
-case"instr=":s=abc.new_block("midiprog")
-s.play=s.invis=1
+case"instr=":s=abc.new_block("midiprog",1)
 s.instr=a[++i].split(' ')
 if(s.instr[1])
 s.chn=s.instr.shift()-1

@@ -151,6 +151,7 @@ function createAppCommandsDomain({
         if (settings && typeof settings.openFontsSettings === "function") settings.openFontsSettings();
       },
       openIntonationExplorer: actions.toggleIntonationExplorer,
+      openLyricsTransliteration: actions.openLyricsTransliteration,
       openLibraryCatalog: actions.openLibraryCatalog,
       openLibraryMetadata: actions.openLibraryMetadata,
       openRecentFile: actions.openRecentFile,

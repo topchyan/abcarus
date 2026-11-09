@@ -1,0 +1,5 @@
+armenian-transliteration 3.0.0
+Source: https://www.npmjs.com/package/armenian-transliteration/v/3.0.0
+Runtime artifact: lib/index.global.js
+Runtime SHA-256: 20d0b35f4db4028faa9a0975ec120fe0cbac55e1061a6f642a6cbe5036668c5d
+License: ISC

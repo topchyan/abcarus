@@ -1,4 +1,8 @@
-//abc2svg-nns.js-module to output chords in the NNS
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2024 Jean-Francois Moine - LGPL3+
+// abc2svg - nns.js - module to output chords in the NNS
+
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.nns={note_nm:"CDEFGAB",nns_nm:["1","♯1","2","♭3","3","4","♯4","5","♯5","6","♭7","7"],rnn_nm:["I","♯I","II","♭III","III","IV","♯IV","V","♯V","VI","♭VII","VII"],rnn_nm_m:["III","♯III","IV","♭V","V","VI","♯VI","VII","♯VII","I","♭II","II","III"],rnn2_nm:["I","♯I","ii","♭III","iii","IV","♯IV","V","♯V","vi","♭VII","vii"],rnn2_nm_m:["III","♯III","iv","♭V","v","VI","♯VI","VII","♯VII","i","♭II","ii","III"],block_gen:function(of,s){if(s.subtype!="nns"){of(s)

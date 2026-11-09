@@ -1,3 +1,7 @@
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2025 Jean-François Moine - LGPL3+
+// grid2.js - module to replace a voice in the music by a chord grid
 //grid2.js-module to replace a voice in the music by a chord grid
 if(typeof abc2svg=="undefined")
 var abc2svg={}
@@ -18,14 +22,17 @@ p_v.staffnonote=2
 for(s=p_v.sym;s;s=s.next){delete s.a_dd
 if(!s.dur){if(s.bar_type)
 bt=s.time
+if(s.extra)
+s.invis=1
 continue}
-s.invis=true;delete s.sl1;delete s.ti1
+s.invis=true;delete s.sl1;delete s.sls
+delete s.ti1
 delete s.ti2
 for(ix=0;ix<=s.nhd;ix++)
 delete s.notes[ix].tie_ty
-if(s.tf)
-s.tf[0]=1
-if(!s.a_gch){if(s.time==bt)
+if(s.tp)
+s.tp[0].f[0]=1
+if(!s.a_gch){if(s.time==bt&&c_a_cs)
 s.a_gch=[this.clone(c_a_cs)]
 continue}
 for(ix=0;ix<s.a_gch.length;ix++){gch=s.a_gch[ix]

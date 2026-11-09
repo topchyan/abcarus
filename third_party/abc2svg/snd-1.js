@@ -1,3 +1,14 @@
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2026 Jean-François Moine - LGPL3+
+// snd-1.js - file to include in html pages with abc2svg-1.js for playing
+// sndgen.js - sound generation
+// sndaud.js - audio output using HTML5 audio
+/*! JavaScript SoundFont 2 Parser. Copyright 2013-2015 imaya/GREE Inc and Colin Clark. Licensed under the MIT License. */
+// sndmid.js - audio output using HTML5 MIDI
+// follow-1.js - file included in snd-1.js
+// chord.js - generation of accompaniment
+// drum.js - generation of drum sequences
 
 function AbcPlay(i_conf){var conf=i_conf,init={},audio=ToAudio(),audio5,midi5,current,abcplay={clear:audio.clear,add:audio.add,set_sfu:function(v){if(v==undefined)
 return conf.sfu
@@ -509,11 +520,10 @@ break}
 pr=pr[i]
 if(!pr){errmsg('unknown instrument '+b+':'+p)
 return}
-pr=pr.info
+pr=pr.info.sort((a,b)=>(a.generator.velRange?.lo||0)
+-(b.generator.velRange?.lo||0))
 for(k=0;k<pr.length;k++){gen=pr[k].generator
 if(!gen.instrument)
-continue
-if(gen.velRange?.lo>1)
 continue
 infos=get_instr(gen.instrument.amount).info
 for(i=0;i<infos.length;i++){gen=infos[i].generator
@@ -677,7 +687,7 @@ g.gain.setValueAtTime(v,t2)}
 if(parm.sustain&&parm.decay>.01){v=parm.sustain==100?.01:v/Math.pow(10,parm.sustain/20)
 g.gain.exponentialRampToValueAtTime(v,t2+parm.decay)}
 g.gain.setValueAtTime(v,t+d)
-g.gain.linearRampToValueAtTime(.01,t+d+parm.release)
+g.gain.linearRampToValueAtTime(0,t+d+parm.release)
 if(s.p_v.pan!=undefined){var p=po.ac.createStereoPanner()
 p.pan.value=s.p_v.pan
 o.connect(p)

@@ -1,3 +1,8 @@
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2025 Jean-François Moine - LGPL3+
+// wps.js
+// psvg.js - small PS to SVG convertor for abc2svg
 //wps.js
 function isQuoted(V){return V.q}
 function quote(V){V.q=true;return V}
@@ -21,7 +26,15 @@ function text(){xchar();var L=[];var N=1;while(0<N&&peek()){var C=xchar();switch
 break}
 if(C!==false)L.push(C)}
 return L.join("")}
-function symbol(){var C=xchar();if(member(C,"()<>/% \t\n"))throw new Error("Symbol expected, got "+C);var N=member(C,"+-0123456789.");var F="."==C;var L=[C];while(peek()&&!member(peek(),"()<>[]{}/% \t\n")){C=xchar();L.push(C);if(N&&!member(C,"0123456789")){if(!F&&"."==C)F=true;else N=false}}
+function symbol(){var C=xchar();if(C=='8'&&peek()=='#'){xchar()
+var N=0
+while(1){C=peek()
+if(C<'0'||C>'7')
+break
+N=N*8+C.charCodeAt(0)-'0'.charCodeAt(0)
+xchar()}
+return N}
+if(member(C,"()<>/% \t\n"))throw new Error("Symbol expected, got "+C);var N=member(C,"+-0123456789.");var F="."==C;var L=[C];while(peek()&&!member(peek(),"()<>[]{}/% \t\n")){C=xchar();L.push(C);if(N&&!member(C,"0123456789")){if(!F&&"."==C)F=true;else N=false}}
 L=L.join("");if(1==L.length&&member(L,"+-."))N=false;return N?(F?parseFloat(L):parseInt(L,10)):new Symbol(L)}
 function token(){skip();switch(peek()){case false:return undefined;case"%":return comment();case"[":return new Symbol(xchar());case"]":return new Symbol(xchar());case"{":Self.D++;return new Symbol(xchar());case"}":Self.D--;return new Symbol(xchar());case"/":xchar();var X=symbol();return quote(X);case"(":return text();case"<":xchar();if("<"!=peek())throw new Error("Encoded strings not implemented yet");xchar();return new Symbol("<<");case">":xchar();if(">"!=peek())throw new Error("Unexpected >");xchar();return new Symbol(">>");default:return symbol()}}
 PsParser.prototype.init=init;PsParser.prototype.peek=peek;PsParser.prototype.token=token;return this}
@@ -47,7 +60,22 @@ Os.push(Os[X+I])}};Sd["length"]=function(){Os.push(Os.pop().length)};Sd["astore"
 A[I]=Os.pop();Os.push(A)};Sd["array"]=function(){Os.push(new Array(Os.pop()))};Sd["eq"]=function(){var Y=Os.pop();var X=Os.pop();Os.push(X==Y)};Sd["lt"]=function(){var Y=Os.pop();var X=Os.pop();Os.push(X<Y)};Sd["ifelse"]=function(){var N=Os.pop();var P=Os.pop();var C=Os.pop();Es.push([false,C===true?P:N])};Sd["and"]=function(){var A=Os.pop();var B=Os.pop();if(true===A||false===A){Os.push(A==true&&B===true)
 return}
 Os.push(A&B)}
-Sd["repeat"]=function Xrepeat(){var B=Os.pop();var N=Os.pop();if(1<N)Es.push([true,N-1,B,Xrepeat]);if(0<N)Es.push([false,B])};Sd["for"]=function Xfor(){var B=Os.pop();var L=Os.pop();var K=Os.pop();var J=Os.pop();if(K<0){if(L<=J+K)Es.push([true,J+K,K,L,B,Xfor]);if(L<=J)Es.push([false,J,B])}else{if(J+K<=L)Es.push([true,J+K,K,L,B,Xfor]);if(J<=L)Es.push([false,J,B])}};Sd["exec"]=function(){Es.push([false,Os.pop()])};Sd["cvx"]=function(){var X=Os.pop();if(isSymbol(X)&&isQuoted(X))Os.push(unquote(X));else if(isArray(X)&&!isQuoted(X))Os.push(quote(X));else Os.push(X)};Sd["dict"]=function(){Os.pop();Os.push({})};Sd["get"]=function(){var K=Os.pop();var D=Os.pop();if(isSymbol(K))Os.push(D[symbolName(K)]);else Os.push(D[K])};Sd["getinterval"]=function(){var N=Os.pop(),K=Os.pop()+N,D=Os.pop(),A=[]
+Sd["bitshift"]=function(){var A=Os.pop(),B=Os.pop()
+Os.push(A<0?B>>-A:A>0?B<<A:B)}
+Sd["cvi"]=function(){Os.push(Os.pop()|0)}
+Sd["repeat"]=function Xrepeat(){var B=Os.pop();
+var N=Os.pop();if(1<N)Es.push([true,N-1,B,Xrepeat]);if(0<N)Es.push([false,B])};
+Sd["for"]=function Xfor(){var B=Os.pop();var L=Os.pop();var K=Os.pop();var J=Os.pop();
+if(K<0){if(L<=J+K)Es.push([true,J+K,K,L,B,Xfor]);
+if(L<=J)Es.push([false,J,B])}else{if(J+K<=L)Es.push([true,J+K,K,L,B,Xfor]);
+if(J<=L)Es.push([false,J,B])}};
+Sd["exec"]=function(){Es.push([false,Os.pop()])};
+Sd["cvx"]=function(){var X=Os.pop();if(isSymbol(X)&&isQuoted(X))Os.push(unquote(X));
+else if(isArray(X)&&!isQuoted(X))Os.push(quote(X));else Os.push(X)};
+Sd["dict"]=function(){Os.pop();Os.push({})};
+Sd["get"]=function(){var K=Os.pop();var D=Os.pop();
+if(isSymbol(K))Os.push(D[symbolName(K)]);else Os.push(D[K])};
+Sd["getinterval"]=function(){var N=Os.pop(),K=Os.pop()+N,D=Os.pop(),A=[]
 while(--N>=0)
 A.push(D[K++])
 Os.push(A)};Sd["put"]=function(){var V=Os.pop();var K=Os.pop();var D=Os.pop();if(isSymbol(K))D[symbolName(K)]=V;else D[K]=V};Sd["begin"]=function(){Ds.push(Os.pop())};Sd["end"]=function(){Ds.pop()};Sd["currentdict"]=function(){Os.push(Ds[Ds.length-1])};Sd["where"]=function(){var K=symbolName(Os.pop());var D=inDs(Ds,K);if(D){Os.push(D);Os.push(true)}else Os.push(false)};Sd["save"]=function(){var X=Ds.slice();for(var I=0;I<X.length;I++){var A=X[I];var B={};for(var J in A)
@@ -177,12 +205,17 @@ Psvg.prototype.rlineto=rlineto;Psvg.prototype.rmoveto=function(x,y){if(path){pat
 (-y).toFixed(1)+"\n"}else if(g==2){svgbuf+="</text>\n";g=1}
 gcur.cx+=x;gcur.cy+=y}
 Psvg.prototype.rotate=function(a){setg(0)
-var x,xtmp=gcur.xoffs,y=gcur.yoffs,_sin=gcur.sin,_cos=gcur.cos;x=xtmp*_cos-y*_sin;y=xtmp*_sin+y*_cos;gcur.xoffs=x/gcur.xscale;gcur.yoffs=y/gcur.yscale;xtmp=gcur.cx;y=gcur.cy;x=xtmp*_cos-y*_sin;y=-xtmp*_sin+y*_cos;gcur.cx=x/gcur.xscale;gcur.cy=y/gcur.yscale;a=360-a;gcur.rotate+=a
+var x,xtmp=gcur.xoffs,y=gcur.yoffs,_sin=gcur.sin,_cos=gcur.cos;x=xtmp*_cos-y*_sin;y=-xtmp*_sin-y*_cos
+gcur.xoffs=x/gcur.xscale;gcur.yoffs=y/gcur.yscale;x=(gcur.cx*_cos+gcur.cy*_sin)/gcur.xscale
+y=(-gcur.cx*_sin+gcur.cy*_cos)/gcur.yscale
+a=360-a;gcur.rotate+=a
 if(gcur.rotate>180)
 gcur.rotate-=360
 else if(gcur.rotate<=-180)
 gcur.rotate+=360
-a=gcur.rotate*Math.PI/180;gcur.sin=_sin=Math.sin(a);gcur.cos=_cos=Math.cos(a);x=gcur.cx;gcur.cx=(x*_cos+gcur.cy*_sin)*gcur.xscale;gcur.cy=(-x*_sin+gcur.cy*_cos)*gcur.yscale;x=gcur.xoffs;gcur.xoffs=(x*_cos+gcur.yoffs*_sin)*gcur.xscale;gcur.yoffs=(-x*_sin+gcur.yoffs*_cos)*gcur.yscale;gchg=true}
+a=gcur.rotate*Math.PI/180;gcur.sin=_sin=Math.sin(a);gcur.cos=_cos=Math.cos(a);gcur.cx=(x*_cos-y*_sin)*gcur.xscale
+gcur.cy=(x*_sin+y*_cos)*gcur.yscale
+x=gcur.xoffs;gcur.xoffs=(x*_cos-gcur.yoffs*_sin)*gcur.xscale;gcur.yoffs=-(x*_sin+gcur.yoffs*_cos)*gcur.yscale;gchg=true}
 Psvg.prototype.scale=function(sx,sy){gcur.xoffs/=sx;gcur.yoffs/=sy;gcur.cx/=sx;gcur.cy/=sy;gcur.xscale*=sx;gcur.yscale*=sy;gchg=true}
 Psvg.prototype.selectfont=function(s,h){s=s.nm;if(font_s!=h||s!=font_n){gcur.font_n_old=gcur.font_n;gcur.font_n=s;gcur.font_s=h;gchg=true}}
 Psvg.prototype.setdash=function(a,o){var n=a.length,i

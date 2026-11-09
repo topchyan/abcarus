@@ -440,6 +440,8 @@ function createLibraryUiDomain({
     addTuneToSetList: actions.addTuneToSetList,
     isTuneFavorite: actions.isTuneFavorite,
     toggleTuneFavorite: actions.toggleTuneFavorite,
+    canUpdateYouTubeMetadataForTune: actions.canUpdateYouTubeMetadataForTune,
+    updateYouTubeMetadataForTune: actions.updateYouTubeMetadataForTune,
     copyFileTuneList: actions.copyFileTuneList,
     appendTuneToActiveFile: (tuneId) => appendTuneToActiveFileAction.run(tuneId),
     buildTemplatesPreviewContextMenuItems: actions.buildTemplatesPreviewContextMenuItems,

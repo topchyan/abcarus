@@ -51,7 +51,42 @@ const sameVoice = planBlankVoiceSkeleton(source, {
   sourceVoiceId: "1",
   targetOffset: source.indexOf("C2 D2") + 1,
 });
-assert.deepEqual(sameVoice, { ok: false, error: "Choose a different target voice." });
+assert.equal(sameVoice.ok, true);
+assert.equal(sameVoice.targetVoiceId, "2");
+assert.equal(sameVoice.createdTarget, false);
+assert.equal(sameVoice.change.insert, "%%voicecolor gray\nx8 | x8 |:\n");
+
+const missingTargetSource = `X:68
+%%score (1 2) (3 4)
+T:Groong ousdi gookas
+M:3/4
+L:1/8
+K:Cm
+V:1 stem=up
+c c | d4 e>d | c6 |
+c4 z | F6 ||
+
+% V:2 stem=down
+% E2 | F4 G>F | E6 |
+`;
+const createTargetPlan = planBlankVoiceSkeleton(missingTargetSource, {
+  sourceVoiceId: "1",
+  targetOffset: missingTargetSource.indexOf("c c |") + 1,
+});
+assert.equal(createTargetPlan.ok, true);
+assert.equal(createTargetPlan.targetVoiceId, "2");
+assert.equal(createTargetPlan.createdTarget, true);
+assert.match(createTargetPlan.change.insert, /^V:2\nx2 \| x6 \| x6 \|\nx5 \| x6 \|\|\n$/);
+const createdTargetText = `${missingTargetSource.slice(0, createTargetPlan.change.from)}${createTargetPlan.change.insert}${missingTargetSource.slice(createTargetPlan.change.to)}`;
+assert.match(createdTargetText, /% E2 \| F4 G>F \| E6 \|\nV:2\nx2 \| x6 \| x6 \|/);
+
+const visibleTargetPlan = planBlankVoiceSkeleton(missingTargetSource, {
+  sourceVoiceId: "1",
+  targetOffset: missingTargetSource.indexOf("c c |") + 1,
+  restSymbol: "z",
+});
+assert.equal(visibleTargetPlan.ok, true);
+assert.match(visibleTargetPlan.change.insert, /^V:2\nz2 \| z6 \| z6 \|\nz5 \| z6 \|\|\n$/);
 
 const repeatSource = `X:2
 M:2/4

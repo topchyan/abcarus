@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>abc2svg audio runner</title>
+  <style>
+    :root { font: 14px system-ui, sans-serif; color: #202124; }
+    body { margin: 0; padding: 14px; }
+    h2 { margin: 0 0 4px; font-size: 17px; }
+    #version { color: #5f6368; margin-bottom: 12px; }
+    #font { min-height: 20px; padding: 7px 9px; border: 1px solid #d3d7dc; background: #f7f8f9; }
+    .controls { display: flex; flex-wrap: wrap; gap: 7px; margin: 12px 0; }
+    button { padding: 7px 11px; border: 1px solid #aeb4bb; background: #fff; cursor: pointer; }
+    button:hover { background: #f0f4ff; }
+    button:disabled { cursor: default; opacity: .5; }
+    #stop { border-color: #c57878; }
+    #status { padding: 8px 10px; border-left: 3px solid #356ae6; background: #eef3ff; min-height: 35px; }
+    #score { margin-top: 12px; overflow: auto; border-top: 1px solid #ddd; padding-top: 8px; }
+    #score svg { display: block; max-width: 100%; height: auto; }
+    .notes { color: #5f6368; margin-top: 12px; line-height: 1.45; }
+  </style>
+</head>
+<body>
+  <h2 id="heading">Engine</h2>
+  <div id="version">Loading scripts...</div>
+  <div id="font">No SoundFont selected</div>
+  <div class="controls">
+    <button data-mode="normal" disabled>Play phrase</button>
+    <button data-mode="short" disabled>Short notes / release</button>
+    <button data-mode="count" disabled>Count-in + play</button>
+    <button data-mode="loop" disabled>Loop</button>
+    <button id="stop" disabled>Stop</button>
+  </div>
+  <div id="status">Select an SF2 above.</div>
+  <div id="score"></div>
+  <div class="notes">Listen for doubled notes, a quiet echo after releases, clicks at note endings, a gap after count-in, and a gap at the loop boundary.</div>
+
+  <script>
+    const engine = new URLSearchParams(location.search).get("engine") === "candidate" ? "candidate" : "current";
+    const heading = document.getElementById("heading");
+    const version = document.getElementById("version");
+    const fontLabel = document.getElementById("font");
+    const status = document.getElementById("status");
+    const score = document.getElementById("score");
+    const buttons = [...document.querySelectorAll("button[data-mode]")];
+    const stopButton = document.getElementById("stop");
+    let soundfontUrl = "";
+    let bars = 1;
+    let drumNote = 37;
+    let bank = 0;
+    let program = 0;
+    let player = null;
+
+    heading.textContent = engine === "candidate" ? "Jef tip candidate" : "Current pinned runtime";
+
+    // This harness compares SF2 playback only. Hide Web MIDI before snd-1.js is
+    // loaded so abc2svg cannot discover a host MIDI-through port and prompt for
+    // an output. Keep the stored preference as a second line of defence.
+    try {
+      Object.defineProperty(navigator, "requestMIDIAccess", {
+        configurable: true,
+        value: undefined,
+      });
+    } catch {}
+    try { sessionStorage.setItem("audio", "sf2"); } catch {}
+
+    function loadScript(name) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = `/${engine}/${name}`;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Cannot load ${name}`));
+        document.head.appendChild(script);
+      });
+    }
+
+    function setEnabled(enabled) {
+      for (const button of buttons) button.disabled = !enabled;
+      stopButton.disabled = !enabled;
+    }
+
+    function stop() {
+      try { if (player && typeof player.stop === "function") player.stop(); } catch {}
+      status.textContent = soundfontUrl ? "Stopped." : "Select an SF2 above.";
+    }
+
+    function sourceFor(mode) {
+      const directive = mode === "count" ? `%%playbeats ${bars} ${drumNote}\n` : "";
+      const instrument = `%%MIDI control 0 ${bank >> 7}\n%%MIDI control 32 ${bank & 127}\n%%MIDI program ${program}\n`;
+      const body = mode === "short"
+        ? "C z C z E z E z G z G z c z c z |]"
+        : "C2 E2 G2 c2 | c2 G2 E2 C2 |]";
+      return `${directive}X:1\nT:${mode === "short" ? "Release test" : "A/B phrase"}\nM:4/4\nL:1/8\nQ:1/4=108\nK:C\n${instrument}${body}\n`;
+    }
+
+    function build(mode) {
+      stop();
+      score.replaceChildren();
+      const errors = [];
+      player = AbcPlay({
+        sfu: soundfontUrl,
+        gain: 0.7,
+        speed: 1,
+        errmsg(message) { status.textContent = `Audio error: ${String(message || "Unknown error")}`; },
+        onend() { status.textContent = mode === "loop" ? "Loop stopped." : "Finished."; },
+      });
+      const abc = new abc2svg.Abc({
+        abcplay: player,
+        img_out(markup) { score.insertAdjacentHTML("beforeend", markup); },
+        err(message) { errors.push(String(message || "")); },
+        errmsg(message) { errors.push(String(message || "")); },
+      });
+      abc.tosvg("soundfont-ab", sourceFor(mode));
+      if (errors.length) throw new Error(errors.join("; "));
+      const tune = abc.tunes && abc.tunes[0];
+      if (!tune) throw new Error("abc2svg did not produce a tune");
+      player.add(tune[0], tune[1], tune[3]);
+      return tune;
+    }
+
+    async function play(mode) {
+      if (!soundfontUrl) return;
+      parent.postMessage({ type: "stop-other", engine }, "*");
+      try {
+        const tune = build(mode);
+        status.textContent = mode === "loop" ? "Playing loop..." : "Loading SoundFont / playing...";
+        player.play(tune[0], null, 0, mode === "loop");
+      } catch (error) {
+        status.textContent = `Error: ${error && error.message ? error.message : error}`;
+      }
+    }
+
+    for (const button of buttons) button.addEventListener("click", () => play(button.dataset.mode));
+    stopButton.addEventListener("click", stop);
+
+    window.addEventListener("message", (event) => {
+      const data = event.data || {};
+      if (data.type === "soundfont") {
+        stop();
+        soundfontUrl = String(data.url || "");
+        bars = Number(data.bars) || 1;
+        drumNote = Number(data.note) || 37;
+        bank = Math.max(0, Number(data.bank) || 0);
+        program = Math.max(0, Math.min(127, Number(data.program) || 0));
+        fontLabel.textContent = data.name ? `SF2: ${data.name} · instrument ${bank}:${program}` : "SF2 selected";
+        status.textContent = "Ready. The first play may take longer while the SF2 loads.";
+        setEnabled(Boolean(soundfontUrl));
+      } else if (data.type === "settings") {
+        bars = Number(data.bars) || 1;
+        drumNote = Number(data.note) || 37;
+        bank = Math.max(0, Number(data.bank) || 0);
+        program = Math.max(0, Math.min(127, Number(data.program) || 0));
+        if (soundfontUrl) fontLabel.textContent = `Instrument ${bank}:${program}`;
+      } else if (data.type === "stop") {
+        stop();
+      }
+    });
+
+    (async () => {
+      try {
+        await loadScript("abc2svg-1.js");
+        await loadScript("snd-1.js");
+        version.textContent = `${abc2svg.version || "unknown"} · ${abc2svg.vdate || "unknown date"}`;
+        parent.postMessage({ type: "ready", engine }, "*");
+      } catch (error) {
+        status.textContent = `Initialization error: ${error.message}`;
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>abc2svg SoundFont A/B</title>
+  <style>
+    :root { color-scheme: light; font: 14px system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #202124; background: #f3f4f6; }
+    header { display: flex; gap: 16px; align-items: center; padding: 12px 16px; background: white; border-bottom: 1px solid #ccd0d5; }
+    h1 { margin: 0; font-size: 18px; font-weight: 650; }
+    .file { display: flex; gap: 8px; align-items: center; min-width: 0; }
+    .file input { max-width: 340px; }
+    #fileName { color: #5f6368; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 380px; }
+    .options { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+    label { display: flex; gap: 5px; align-items: center; }
+    input[type="number"] { width: 58px; padding: 5px; }
+    select { max-width: 260px; padding: 5px; }
+    main { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px; height: calc(100vh - 62px); }
+    iframe { width: 100%; height: 100%; border: 1px solid #b8bdc3; background: white; }
+    @media (max-width: 900px) {
+      header { align-items: flex-start; flex-wrap: wrap; }
+      .options { margin-left: 0; }
+      main { grid-template-columns: 1fr; height: auto; }
+      iframe { height: 620px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>SoundFont A/B</h1>
+    <div class="file">
+      <input id="soundfont" type="file" accept=".sf2,application/octet-stream">
+      <span id="fileName">Select one local SF2 for both engines</span>
+    </div>
+    <div class="options">
+      <label>Instrument <select id="preset" disabled><option value="0:0">0:0 (default)</option></select></label>
+      <label>Count-in bars <input id="bars" type="number" min="1" max="8" value="1"></label>
+      <label>Drum note <input id="note" type="number" min="0" max="127" value="37"></label>
+    </div>
+  </header>
+  <main>
+    <iframe id="current" title="Current abc2svg" src="/runner.html?engine=current"></iframe>
+    <iframe id="candidate" title="Candidate abc2svg" src="/runner.html?engine=candidate"></iframe>
+  </main>
+  <script>
+    const frames = {
+      current: document.getElementById("current"),
+      candidate: document.getElementById("candidate"),
+    };
+    const fileInput = document.getElementById("soundfont");
+    const fileName = document.getElementById("fileName");
+    const presetInput = document.getElementById("preset");
+    const barsInput = document.getElementById("bars");
+    const noteInput = document.getElementById("note");
+    let soundfontUrl = "";
+    let soundfontObjectUrl = "";
+
+    function settings() {
+      const [bank, program] = presetInput.value.split(":").map(Number);
+      return {
+        bars: Math.max(1, Math.min(8, Number(barsInput.value) || 1)),
+        note: Math.max(0, Math.min(127, Number(noteInput.value) || 37)),
+        bank: Number.isInteger(bank) ? bank : 0,
+        program: Number.isInteger(program) ? program : 0,
+      };
+    }
+
+    function readPresets(buffer) {
+      const bytes = new Uint8Array(buffer);
+      const view = new DataView(buffer);
+      let offset = -1;
+      for (let i = 0; i <= bytes.length - 8; i += 1) {
+        if (bytes[i] === 0x70 && bytes[i + 1] === 0x68
+            && bytes[i + 2] === 0x64 && bytes[i + 3] === 0x72) {
+          const size = view.getUint32(i + 4, true);
+          if (size >= 76 && size % 38 === 0 && i + 8 + size <= bytes.length) {
+            offset = i + 8;
+            break;
+          }
+        }
+      }
+      if (offset < 0) throw new Error("The SF2 preset table (phdr) was not found");
+
+      const size = view.getUint32(offset - 4, true);
+      const decoder = new TextDecoder("windows-1252");
+      const presets = [];
+      // The final 38-byte phdr record is the mandatory terminal EOP entry.
+      for (let pos = offset; pos < offset + size - 38; pos += 38) {
+        const rawName = decoder.decode(bytes.subarray(pos, pos + 20));
+        presets.push({
+          name: rawName.replace(/\0.*$/, "").trim() || "Unnamed preset",
+          program: view.getUint16(pos + 20, true),
+          bank: view.getUint16(pos + 22, true),
+        });
+      }
+      return presets.sort((a, b) => a.bank - b.bank || a.program - b.program || a.name.localeCompare(b.name));
+    }
+
+    function showPresets(presets) {
+      presetInput.replaceChildren();
+      for (const preset of presets) {
+        const option = document.createElement("option");
+        option.value = `${preset.bank}:${preset.program}`;
+        option.textContent = `${preset.bank}:${preset.program}  ${preset.name}`;
+        presetInput.appendChild(option);
+      }
+      presetInput.disabled = presets.length === 0;
+    }
+
+    function postAll(message) {
+      for (const frame of Object.values(frames)) frame.contentWindow.postMessage(message, "*");
+    }
+
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      if (soundfontObjectUrl) URL.revokeObjectURL(soundfontObjectUrl);
+      soundfontObjectUrl = URL.createObjectURL(file);
+      // abc2svg selects its monolithic-SF2 loader by the URL suffix. A fragment
+      // preserves the Blob resource while providing the suffix it expects.
+      soundfontUrl = `${soundfontObjectUrl}#.sf2`;
+      try {
+        const presets = readPresets(await file.arrayBuffer());
+        if (!presets.length) throw new Error("The SF2 contains no playable presets");
+        showPresets(presets);
+        fileName.textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB, ${presets.length} presets)`;
+      } catch (error) {
+        showPresets([{ bank: 0, program: 0, name: "default (preset list unavailable)" }]);
+        fileName.textContent = `${file.name}: ${error.message}`;
+      }
+      postAll({ type: "soundfont", url: soundfontUrl, name: file.name, ...settings() });
+    });
+
+    for (const input of [presetInput, barsInput, noteInput]) {
+      input.addEventListener("change", () => postAll({ type: "settings", ...settings() }));
+    }
+
+    window.addEventListener("message", (event) => {
+      const data = event.data || {};
+      if (data.type === "ready" && soundfontUrl && frames[data.engine]) {
+        frames[data.engine].contentWindow.postMessage({
+          type: "soundfont",
+          url: soundfontUrl,
+          name: fileInput.files[0] ? fileInput.files[0].name : "SF2",
+          ...settings(),
+        }, "*");
+      }
+      if (data.type === "stop-other" && frames[data.engine]) {
+        const other = data.engine === "current" ? "candidate" : "current";
+        frames[other].contentWindow.postMessage({ type: "stop" }, "*");
+      }
+    });
+  </script>
+</body>
+</html>

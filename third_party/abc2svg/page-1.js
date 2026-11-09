@@ -1,4 +1,9 @@
-//page.js-module to generate pages
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2026 Jean-François Moine - LGPL3+
+// page.js - module to generate pages
+// Port of strftime() by T. H. Doan (https://thdoan.github.io/strftime/)
+
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.page={abc_end:function(of){var page=this.page
@@ -235,7 +240,7 @@ if(cfmt.oneperpage)
 page.oneperpage=this.get_bool(cfmt.oneperpage)
 if(!cfmt.dateformat)
 cfmt.dateformat="%b %e, %Y %H:%M"
-if(!abc2svg.page.user_out){abc2svg.page.user_out=user.img_out
+if(!abc2svg.page.user_out){abc2svg.page.user_out=abc2svg.pdf_out||user.img_out
 abc2svg.page.abc_end_o=abc2svg.abc_end}
 abc2svg.abc_end=abc2svg.page.abc_end.bind(this,abc2svg.abc_end)
 user.img_out=abc2svg.page.img_in.bind(this)}

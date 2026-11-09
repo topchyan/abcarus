@@ -1,21 +1,14 @@
-//tunhd.js-module for a formatted tune header"use strict"
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2025 Jean-François Moine - LGPL3+
+// tunhd.js - module for a formatted tune header
+"use strict"
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.tunhd={info_fnt:{A:"info",C:"composer",O:"composer",P:"parts",Q:"tempo",R:"info",T:"title",X:"title"},tunhd:function(of){var abc=this,cfmt=abc.cfmt(),glovar=abc.glovar(),info=abc.info(),info_sz={A:cfmt.infospace,C:cfmt.composerspace,O:cfmt.composerspace,R:cfmt.infospace},info_nb={},c,align,q,j,hfnt=abc.get_font("history"),line=[],p=cfmt.titleformat,i=0,ya={l:cfmt.titlespace,c:cfmt.titlespace,r:cfmt.titlespace},xa={l:0,c:abc.get_lwidth()*.5,r:abc.get_lwidth()}
 if(!p)
 return of()
-function out(){var item,align,p,h,x,yd,yb={l:0,c:0,r:0},y=0,i=0
-while(1){item=line[i++]
-if(!item)
-break
-align=item[0]
-h=item[2]*1.1
-if(y<h)
-y=h
-yb[align]=item[2]}
-ya.l+=y-yb.l
-ya.c+=y-yb.c
-ya.r+=y-yb.r
+function out(){var item,align,p,h,x,y,yd
 while(1){item=line.shift()
 if(!item)
 break
@@ -74,9 +67,9 @@ fnt=abc.get_font("subtitle")
 break
 default:t=info[c].split('\n')[j]
 break}
-if(fnt!=hfnt||nfnt){if(nfnt)
+if(nfnt)
 fnt=abc.get_font("u"+nfnt)
-abc.set_font(fnt)}
+abc.set_font(fnt)
 if(c=='Q'){wh=glovar.tempo.tempo_wh}else{t=abc.str2svg(t)
 wh=t.wh}
 if(fnt!=hfnt)

@@ -1,4 +1,8 @@
-//sth.js-module to set the stem heights
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2024 Jean-Francois Moine - LGPL3+
+// sth.js - module to set the stem heights
+
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.sth={recal_beam:function(bm,s){var staff_tb=this.get_staff_tb(),y=staff_tb[s.st].y,s2=bm.s2,y2=staff_tb[s2.st].y

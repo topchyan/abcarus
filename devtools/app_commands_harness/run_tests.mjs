@@ -58,6 +58,7 @@ let toggleSetListCalls = 0;
 let printSetListCalls = 0;
 let stopPlaybackCalls = 0;
 let generateSkeletonCalls = 0;
+const generateSkeletonOptions = [];
 let openHeaderSettingsCalls = 0;
 let discardReloadCalls = 0;
 const transformCalls = [];
@@ -102,7 +103,10 @@ const domain = createAppCommandsDomain({
     toggleSetList: () => { toggleSetListCalls += 1; },
     printSetList: async () => { printSetListCalls += 1; },
     stopPlaybackTransport: () => { stopPlaybackCalls += 1; },
-    generateBlankVoiceSkeleton: () => { generateSkeletonCalls += 1; },
+    generateBlankVoiceSkeleton: (options) => {
+      generateSkeletonCalls += 1;
+      generateSkeletonOptions.push(options);
+    },
     applyAbc2abcTransform: async (options) => { transformCalls.push(options); },
     getActiveFileEntry: () => ({ path: "/music/test.abc" }),
     confirmReloadFromDisk: async () => true,
@@ -150,6 +154,7 @@ await domain.dispatch("toggleSetList");
 await domain.dispatch("printSetList");
 await domain.dispatch("stopPlayback");
 await domain.dispatch("generateBlankVoiceSkeleton");
+await domain.dispatch({ type: "generateBlankVoiceSkeleton", restSymbol: "z" });
 await domain.dispatch("transformDouble");
 await domain.dispatch("transformHalf");
 await domain.dispatch("transformMertebeAugment");
@@ -158,7 +163,8 @@ await domain.dispatch({ type: "toggleSelectionLoop", value: true });
 assert.equal(toggleSetListCalls, 2, "View -> Show/Hide Set List Panel must share the toolbar action");
 assert.equal(printSetListCalls, 1, "File -> Print Active Set List must print the active Set List");
 assert.equal(stopPlaybackCalls, 1, "Play -> Stop must stop playback");
-assert.equal(generateSkeletonCalls, 1, "Edit -> Voices must generate the voice skeleton");
+assert.equal(generateSkeletonCalls, 2, "Edit -> Voices must generate the voice skeleton");
+assert.deepEqual(generateSkeletonOptions, [{ restSymbol: "x" }, { restSymbol: "z" }]);
 assert.deepEqual(transformCalls, [
   { doubleLengths: true },
   { halfLengths: true },

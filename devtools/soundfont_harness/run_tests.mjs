@@ -85,6 +85,37 @@ assert.deepEqual(applied, ["abcarus-sf2://local/test.sf2"]);
 assert.equal(windowRef.abc2svg.sf2, null);
 assert.doesNotMatch(controller.getSource(), /^file:/);
 
+const oversizedNotices = [];
+let oversizedStreamRequests = 0;
+const oversizedWindow = {
+  location: { href: "file:///app/src/renderer/index.html" },
+  abc2svg: {},
+};
+const oversizedController = createSoundfontController({
+  windowRef: oversizedWindow,
+  api: {
+    getSoundfontInfo: async () => ({ name: "oversized.sf2", size: 489303960 }),
+    getSoundfontStreamUrl: async () => {
+      oversizedStreamRequests += 1;
+      return "abcarus-sf2://local/oversized.sf2";
+    },
+    readFileBase64: async () => "YnVuZGxlZA==",
+  },
+  actions: {
+    showToast: (message) => oversizedNotices.push(message),
+  },
+});
+oversizedController.setFromSettings({ soundfontName: "/tmp/oversized.sf2" });
+await oversizedController.ensureLoaded();
+assert.equal(oversizedStreamRequests, 0, "oversized SF2 must be rejected before abc2svg receives it");
+assert.equal(oversizedController.getReadyName(), "TimGM6mb.sf2");
+assert.equal(oversizedController.getSource(), "abc2svg.sf2");
+assert.match(oversizedController.getLastLoadError().message, /384 MiB safe loading limit/);
+assert.equal(oversizedNotices.length, 1);
+assert.match(oversizedNotices[0], /Using TimGM6mb\.sf2/);
+await oversizedController.ensureLoaded();
+assert.equal(oversizedNotices.length, 1, "fallback notice must not repeat on every playback attempt");
+
 let releaseBundledRead;
 const bundledRead = new Promise((resolve) => {
   releaseBundledRead = resolve;

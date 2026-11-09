@@ -435,6 +435,18 @@ function getSettingsSchema() {
       advanced: true,
     },
     {
+      key: "lyricsTransliterationEnabled",
+      type: "boolean",
+      default: false,
+      section: "Tools",
+      group: "Experimental",
+      groupOrder: 4,
+      label: "Lyrics transliteration",
+      help: "Enables a non-destructive preview and copy tool for experimental Armenian lyrics transliteration.",
+      ui: { input: "checkbox" },
+      advanced: true,
+    },
+    {
       key: "libraryRichTooltips",
       type: "boolean",
       default: true,

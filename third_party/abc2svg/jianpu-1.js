@@ -1,4 +1,8 @@
-//jianpu.js-module to output jiănpŭ(简谱)music sheets
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2024 Jean-Francois Moine - LGPL3+
+// jianpu.js - module to output jiănpŭ (简谱) music sheets
+
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.jianpu={k_tb:["Cb","Gb","Db","Ab","Eb","Bb","F","C","G","D","A","E","B","F#","C#"],cde2fcg:new Int8Array([0,2,4,-1,1,3,5]),cgd2cde:new Int8Array([0,-4,-1,-5,-2,-6,-3,0,-4,-1,-5,-2,-6,-3,0]),acc2:new Int8Array([-2,-1,3,1,2]),acc_tb:["\ue264","\ue260",,"\ue262","\ue263","\ue261"],calc_beam:function(of,bm,s1){if(!s1.p_v.jianpu)

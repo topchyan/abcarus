@@ -59,6 +59,7 @@ let expandCalls = 0;
 let collapseCalls = 0;
 const reorderCalls = [];
 const favoriteCalls = [];
+const youtubeMetadataCalls = [];
 let generateSkeletonCalls = 0;
 const clipboardWrites = [];
 const contextTunes = [
@@ -66,6 +67,7 @@ const contextTunes = [
   { id: "/music/a.abc::1", xNumber: "52" },
   { id: "/music/a.abc::2", xNumber: "63" },
 ];
+const generateSkeletonOptions = [];
 const contextMenu = createLibraryContextMenu({
   documentRef,
   windowRef,
@@ -76,6 +78,7 @@ const contextMenu = createLibraryContextMenu({
   },
   expandAllLibrary: () => { expandCalls += 1; },
   collapseAllLibrary: () => { collapseCalls += 1; },
+  getActiveTuneId: () => "/music/a.abc::1",
   findTuneById: (tuneId) => ({
     file: { path: "/music/a.abc", tunes: contextTunes },
     tune: contextTunes.find((tune) => tune.id === tuneId),
@@ -83,7 +86,12 @@ const contextMenu = createLibraryContextMenu({
   reorderTune: async (tuneId, options) => { reorderCalls.push([tuneId, options]); },
   isTuneFavorite: (tuneId) => tuneId === "/music/a.abc::1",
   toggleTuneFavorite: async (tuneId) => { favoriteCalls.push(tuneId); },
-  generateBlankVoiceSkeleton: () => { generateSkeletonCalls += 1; },
+  canUpdateYouTubeMetadataForTune: (tuneId) => tuneId === "/music/a.abc::1",
+  updateYouTubeMetadataForTune: async (tuneId) => { youtubeMetadataCalls.push(tuneId); },
+  generateBlankVoiceSkeleton: (options) => {
+    generateSkeletonCalls += 1;
+    generateSkeletonOptions.push(options);
+  },
 });
 contextMenu.init();
 const menuElement = body.children[0];
@@ -102,7 +110,9 @@ for (const target of [
 
 contextMenu.show(10, 10, { type: "editor" });
 assert.ok(!menuElement.children.some((item) => item.textContent === "Expand All"));
+assert.ok(menuElement.children.some((item) => item.dataset.action === "editorUpdateYouTubeMetadata"));
 assert.ok(menuElement.children.some((item) => item.dataset.action === "editorGenerateBlankVoiceSkeleton"));
+assert.ok(menuElement.children.some((item) => item.dataset.action === "editorGenerateVisibleVoiceSkeleton"));
 contextMenu.show(10, 10, { type: "library" });
 
 async function clickAction(action) {
@@ -117,16 +127,28 @@ assert.equal(expandCalls, 1);
 assert.equal(collapseCalls, 1);
 
 contextMenu.show(10, 10, { type: "editor" });
+await clickAction("editorUpdateYouTubeMetadata");
+assert.deepEqual(youtubeMetadataCalls, ["/music/a.abc::1"]);
+contextMenu.show(10, 10, { type: "editor" });
 await clickAction("editorGenerateBlankVoiceSkeleton");
-assert.equal(generateSkeletonCalls, 1, "editor context menu must expose voice skeleton generation");
+contextMenu.show(10, 10, { type: "editor" });
+await clickAction("editorGenerateVisibleVoiceSkeleton");
+assert.equal(generateSkeletonCalls, 2, "editor context menu must expose both voice skeleton modes");
+assert.deepEqual(generateSkeletonOptions, [{ restSymbol: "x" }, { restSymbol: "z" }]);
 
 contextMenu.show(10, 10, { type: "tune", tuneId: "/music/a.abc::1" });
 assert.ok(menuElement.children.some((item) => item.textContent === "Remove from Favorites"));
+assert.ok(menuElement.children.some((item) => item.dataset.action === "updateYouTubeMetadataForTune"));
 await clickAction("toggleFavorite");
 assert.deepEqual(favoriteCalls, ["/music/a.abc::1"]);
 
+contextMenu.show(10, 10, { type: "tune", tuneId: "/music/a.abc::1" });
+await clickAction("updateYouTubeMetadataForTune");
+assert.deepEqual(youtubeMetadataCalls, ["/music/a.abc::1", "/music/a.abc::1"]);
+
 contextMenu.show(10, 10, { type: "tune", tuneId: "/music/a.abc::0" });
 assert.ok(menuElement.children.some((item) => item.textContent === "Add to Favorites"));
+assert.ok(!menuElement.children.some((item) => item.dataset.action === "updateYouTubeMetadataForTune"));
 
 contextMenu.show(10, 10, { type: "tune", tuneId: "/music/a.abc::1" });
 await clickAction("copyTuneReference");

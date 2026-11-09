@@ -1,4 +1,8 @@
-//abc2svg-roman.js-convert the chord symbols to the RNN
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2024 Jean-Francois Moine - LGPL3+
+// abc2svg - roman.js - convert the chord symbols to the RNN
+
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.roman={note_nm:"CDEFGAB",nm_M:["I","♯I","II","♭III","III","IV","♯IV","V","♯V","VI","♭VII","VII"],nm_m:["I","♭II","II","III","♯III","IV","♭V","V","VI","♯VI","VII","♯VII"],gch_build:function(of,s){var gch,ix,t,ty=this.cfmt().roman

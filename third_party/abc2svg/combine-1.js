@@ -1,7 +1,11 @@
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2025 Jean-François Moine - LGPL3+
+// combine.js - module to add a combine chord line
 //combine.js-module to add a combine chord line
 if(typeof abc2svg=="undefined")
 var abc2svg={}
-abc2svg.combine={comb_v:function(){var C=abc2svg.C,abc=this
+abc2svg.combine={comb_v:function(){var C=abc2svg.C,abc=this,sl_a=[]
 function get_cmb(s){var p,s2=s.ts_next,i=s.p_v.id.indexOf('.')
 if(i>=0){p=s.p_v.id.slice(0,i)
 while(s2&&s2.time==s.time){if(s2.p_v.id.indexOf(p)==0)
@@ -49,19 +53,20 @@ if(s2.ti1)
 s.ti1=true
 if(s2.ti2)
 s.ti2=true}
+if(s.sls&&s2.sls&&s.sls[0].se.time==s2.sls[0].se.time&&may_combine(s.sls[0].se))
+delete s2.sls
 if(s2.sls){if(s.sls)
 Array.prototype.push.apply(s.sls,s2.sls)
 else
 s.sls=s2.sls
 for(i=0;i<s2.sls.length;i++){sl=s2.sls[i]
-if(sl.se)
-sl.se.slsr=s
-sl.ty=C.SL_BELOW}
+sl.ss=s
+sl.ty=C.SL_BELOW
+sl_a.push(sl)}
 delete s2.sls}
-s3=s2.slsr
-if(s3){for(i=0;i<s3.sls.length;i++){sl=s3.sls[i]
+for(i=0;i<sl_a.length;i++){sl=sl_a[i]
 if(sl.se==s2)
-sl.se=s}}
+sl.se=s}
 if(s2.a_gch)
 s.a_gch=s2.a_gch
 if(s2.a_dd){if(!s.a_dd)

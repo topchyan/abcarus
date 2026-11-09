@@ -1,4 +1,4 @@
-import { getCountInPlan } from "./count_in_model.js";
+import { clampCountInMeasures, getCountInPlan } from "./count_in_model.js";
 
 function createPlaybackStartController({
   transport,
@@ -167,6 +167,15 @@ function createPlaybackStartController({
         )
         || isFullFocusStart
       );
+    const useNativePlaybeats = Boolean(
+      transport.nativePlaybeatsActive
+      && startsAtTuneHead
+      && rangeForStart
+      && !rangeForStart.loop
+    );
+    if (useNativePlaybeats && transport.playbackState && transport.playbackState.rootSymbol) {
+      engineStart = transport.playbackState.rootSymbol;
+    }
     if (
       isFullPartOrderStart
       && transport.playbackState
@@ -298,6 +307,22 @@ function createPlaybackStartController({
         range.suppressRepeats = null;
       }
     }
+    const countInAllowedForRange = String(getPlaybackCountInMode()) === "always"
+      || Number(range.startOffset) === 0;
+    const sourceHasMidiDrums = /(?:^|\n)\s*%%\s*MIDI\s+drum(?:on|off|bars|map)?\b/im.test(
+      String(typeof getEditorText === "function" ? getEditorText() : ""),
+    );
+    transport.nativePlaybeatsEligible = Boolean(
+      !range.skipCountIn
+      && countInAllowedForRange
+      && Number(range.startOffset) === 0
+      && !range.loop
+      && !scopedMode
+      && !sourceHasMidiDrums
+    );
+    transport.nativePlaybeatsRequestedMeasures = transport.nativePlaybeatsEligible
+      ? clampCountInMeasures(getPlaybackCountInMeasures())
+      : 0;
     const sourceKey = selectionMode ? null : getPlaybackSourceKey();
     const canReuse = (
       !scopedMode
@@ -452,6 +477,22 @@ function createPlaybackStartController({
       }
       transport.finishStartAttempt();
     };
+    if (transport.nativePlaybeatsActive) {
+      const token = transport.playbackStartToken;
+      setStatus("Preparing audio...");
+      const warmed = await warmupPlayback(startSym);
+      if (token !== transport.playbackStartToken) return;
+      if (!warmed) {
+        transport.nativePlaybeatsActive = false;
+        setStatus("Loading instrument...");
+        startPrepared();
+        return;
+      }
+      setStatus(`Count-in: ${transport.nativePlaybeatsMeasures} bar${transport.nativePlaybeatsMeasures === 1 ? "" : "s"}`);
+      updatePlayButton();
+      startPrepared();
+      return;
+    }
     const countInAllowed = String(getPlaybackCountInMode()) === "always"
       || Number(range.startOffset) === 0;
     const countInPlan = range.skipCountIn || !countInAllowed

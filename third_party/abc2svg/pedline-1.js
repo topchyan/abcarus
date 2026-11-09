@@ -1,4 +1,8 @@
-//pedline.js-module to draw pedal lines instead of'Ped .. *'
+// abc2svg - ABC to SVG translator
+// @source: https://chiselapp.com/user/moinejf/repository/abc2svg
+// Copyright (C) 2014-2024 Jean-Francois Moine - LGPL3+
+// pedline.js - module to draw pedal lines instead of 'Ped .. *'
+
 if(typeof abc2svg=="undefined")
 var abc2svg={}
 abc2svg.pedline={draw_all_deco:function(of){var de,i,x,dp,ds,a_de=this.a_de()
