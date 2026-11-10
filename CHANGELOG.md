@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
+## [1.13.1] - 2026-11-10
 ### Added
 - Playback options now let you adjust each SoundFont's note-release fade independently; `Natural · 100%` preserves its native release, custom values are restored per font, and newly selected fonts start at natural release.
 
