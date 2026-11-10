@@ -194,6 +194,7 @@ export function createPlaybackDomain({
       activePlaybackRange: transport.activePlaybackRange,
       currentPlaybackPlan: transport.currentPlaybackPlan,
       desiredPlayerSpeed: transport.desiredPlayerSpeed,
+      soundfontReleaseScale: transport.soundfontReleaseScale,
       lastPlaybackAbortMessage: transport.lastPlaybackAbortMessage,
       lastPlaybackException: transport.lastPlaybackException,
       lastPlaybackGuardMessage: transport.lastPlaybackGuardMessage,
@@ -374,6 +375,13 @@ export function createPlaybackDomain({
       followEnabled = Boolean(value);
     },
     setFollowHighlightSettings: followHighlightSettings.setFromSettings,
+    setSoundfontReleaseScale(value) {
+      const parsed = Number(value);
+      const scale = Number.isFinite(parsed) ? Math.max(0, Math.min(2, parsed)) : 1;
+      transport.soundfontReleaseScale = scale;
+      if (transport.playerConfig) transport.playerConfig.release = scale;
+      return scale;
+    },
     setRenderBusy(value) {
       const controller = getUiController();
       if (controller) controller.setRenderBusy(value);

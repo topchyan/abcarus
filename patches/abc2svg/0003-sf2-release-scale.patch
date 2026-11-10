@@ -1,0 +1,23 @@
+--- a/util/sndaud.js
++++ b/util/sndaud.js
+@@ -540,6 +540,8 @@
+ 			g.gain.setValueAtTime(v, t + d)
+ 		}
+-		g.gain.linearRampToValueAtTime(0, t + d + parm.release)
++		g.gain.linearRampToValueAtTime(0, t + d
++			+ Math.max(.01, parm.release
++				* (conf.release == undefined ? 1 : conf.release)))
+ 
+ 		if (s.p_v.pan != undefined) {	// (control 10)
+ 		    var	p = po.ac.createStereoPanner()
+@@ -554,7 +556,9 @@
+ 
+ 		// start the note
+ 		o.start(t)
+-		o.stop(t + d + parm.release)
++		o.stop(t + d
++			+ Math.max(.01, parm.release
++				* (conf.release == undefined ? 1 : conf.release)))
+ 	} // note_run()
+ 
+ 	// wait for all resources, then start playing

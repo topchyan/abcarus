@@ -572,6 +572,11 @@
 	            <span>Voices</span>
 	            <input id="selectionMutedVoices" class="practice-muted-voices" type="text" placeholder="e.g. 2,3" />
 	          </label>
+	          <label class="playback-note-fade" title="Adjust how long notes fade after release; Natural uses the SoundFont's native value">
+	            <span>Note fade</span>
+	            <input id="soundfontNoteFade" type="range" min="0" max="200" step="5" value="100" aria-label="Note fade" />
+	            <output id="soundfontNoteFadeValue" for="soundfontNoteFade">Natural · 100%</output>
+	          </label>
 	        </div>
 	      </details>
 	      <button id="playbackScopeClear" class="icon-only playback-scope-clear" type="button" title="Clear playback scope" aria-label="Clear playback scope" hidden>

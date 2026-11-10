@@ -100,6 +100,14 @@ function getSettingsSchema() {
       ui: { input: "number", min: 0, max: 8, step: 1 },
     },
     {
+      key: "soundfontNoteFadePercentByName",
+      type: "object",
+      default: {},
+      section: "Playback",
+      label: "Note fade by SoundFont",
+      help: "Stores Note fade separately for each SoundFont. A newly selected SoundFont starts at its Natural 100% value.",
+    },
+    {
       key: "playbackCountInMode",
       type: "string",
       default: "start",

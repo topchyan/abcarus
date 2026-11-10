@@ -95,6 +95,26 @@
   box-sizing: border-box;
 }
 
+.playback-scope-options-menu .playback-note-fade {
+  display: grid;
+  grid-template-columns: auto 96px 92px;
+  align-items: center;
+  gap: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border-color);
+}
+
+.playback-note-fade input[type="range"] {
+  width: 96px;
+  min-width: 0;
+}
+
+.playback-note-fade output {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .playback-scope-clear {
   width: 24px;
   min-width: 24px;

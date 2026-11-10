@@ -288,6 +288,8 @@ const $practiceTempo = document.getElementById("practiceTempo");
 const $practiceTempoValue = document.getElementById("practiceTempoValue");
 const $practiceTempoDown = document.getElementById("practiceTempoDown");
 const $practiceTempoUp = document.getElementById("practiceTempoUp");
+const $soundfontNoteFade = document.getElementById("soundfontNoteFade");
+const $soundfontNoteFadeValue = document.getElementById("soundfontNoteFadeValue");
 const $practiceFocusRangeGroup = null;
 const $practiceFocusOptionsGroup = null;
 const $practiceFocusVoicesGroup = null;
@@ -4310,6 +4312,45 @@ appCommandsDomain = createAppCommandsDomain({
     wirePayloadMode: () => payloadModeFeature.wire(),
   },
 });
+
+function applySoundfontNoteFadePercent(value) {
+  const parsed = Number(value);
+  const percent = Number.isFinite(parsed) ? Math.max(0, Math.min(200, Math.round(parsed))) : 100;
+  if ($soundfontNoteFade) $soundfontNoteFade.value = String(percent);
+  if ($soundfontNoteFadeValue) {
+    $soundfontNoteFadeValue.textContent = percent === 100 ? "Natural · 100%" : `${percent}%`;
+  }
+  playbackDomain.setSoundfontReleaseScale(percent / 100);
+  return percent;
+}
+
+function getSoundfontNoteFadePercent(settings) {
+  const snapshot = settings && typeof settings === "object" ? settings : {};
+  const soundfontName = String(snapshot.soundfontName || playbackDomain.getSoundfontName() || "TimGM6mb.sf2");
+  const byName = snapshot.soundfontNoteFadePercentByName;
+  if (!byName || typeof byName !== "object") return 100;
+  return Object.prototype.hasOwnProperty.call(byName, soundfontName) ? byName[soundfontName] : 100;
+}
+
+if ($soundfontNoteFade) {
+  $soundfontNoteFade.addEventListener("input", () => {
+    applySoundfontNoteFadePercent($soundfontNoteFade.value);
+  });
+  $soundfontNoteFade.addEventListener("change", () => {
+    const percent = applySoundfontNoteFadePercent($soundfontNoteFade.value);
+    const settings = settingsSnapshot.get() || {};
+    const soundfontName = String(settings.soundfontName || playbackDomain.getSoundfontName() || "TimGM6mb.sf2");
+    const nextByName = {
+      ...(settings.soundfontNoteFadePercentByName && typeof settings.soundfontNoteFadePercentByName === "object"
+        ? settings.soundfontNoteFadePercentByName
+        : {}),
+      [soundfontName]: percent,
+    };
+    settingsSnapshot.patch({ soundfontNoteFadePercentByName: nextByName });
+    settingsSnapshot.persistPatch({ soundfontNoteFadePercentByName: nextByName });
+  });
+  applySoundfontNoteFadePercent(100);
+}
 appCommandsDomain.wire();
 
 document.addEventListener("abcarus:reset-library-cache", () => {
@@ -4339,6 +4380,9 @@ settingsDomain = createSettingsDomain({
   controllers: {
     headerLayers: headerLayersController,
     soundfont: playbackSettingsControllers.soundfont,
+    soundfontNoteFade: {
+      setFromSettings: (settings) => applySoundfontNoteFadePercent(getSoundfontNoteFadePercent(settings)),
+    },
     layout: layoutController,
     followHighlightSettings: playbackSettingsControllers.followHighlightSettings,
     playbackAutoScroll: playbackSettingsControllers.playbackAutoScroll,

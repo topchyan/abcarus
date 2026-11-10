@@ -30,6 +30,7 @@ function createSettingsRuntimeController({
     call("applyGlobalHeader", settings);
     call("applyAbc2svgFonts", settings);
     call("applySoundfont", settings);
+    call("applySoundfontNoteFade", settings);
     call("applyDrumVelocity", settings);
     call("applyMidiSettings", settings);
     call("applyNoteTypingPreviewSettings", settings);

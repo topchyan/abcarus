@@ -59,6 +59,7 @@ function createPlaybackPlayerController({
     }
 
     const conf = {
+      release: transport.soundfontReleaseScale,
       onend: () => {
         if (suppressWarmupEnd) return;
         if (warmupSession) {

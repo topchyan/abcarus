@@ -1,0 +1,11 @@
+{
+  "schema": "abcarus.abc2svg-runtime-patch.v1",
+  "id": "0002-sf2-envelope-noteoff",
+  "target": "snd-1.js",
+  "expectedInputSha256": "5fb648ba2df9f0603329f4ed57fb9aa77b1cc2ef64e92dde8ed629a93c5b12f0",
+  "expectedOutputSha256": "41e80c36ea60d37502746a7611e4230e58faa08e6b5a274c44e4b1cd1abaca0d",
+  "replacement": {
+    "from": "g.gain.setValueAtTime(v,t+d)\ng.gain.linearRampToValueAtTime(0,t+d+parm.release)",
+    "to": "if(g.gain.cancelAndHoldAtTime)\ng.gain.cancelAndHoldAtTime(t+d)\nelse{g.gain.cancelScheduledValues(t+d)\ng.gain.setValueAtTime(v,t+d)}\ng.gain.linearRampToValueAtTime(0,t+d+parm.release)"
+  }
+}

@@ -49,8 +49,8 @@ function createSandbox() {
 function verifyPinnedPlaybackRuntime() {
   const source = fs.readFileSync(SND_PATH, "utf8");
   assert(
-    source.includes("linearRampToValueAtTime(0,t+d+parm.release)"),
-    "abc2svg must release SoundFont notes to zero gain"
+    source.includes("Math.max(.01,parm.release*(conf.release==undefined?1:conf.release))"),
+    "abc2svg must apply the configured SoundFont release scale"
   );
   assert(
     !source.includes("linearRampToValueAtTime(.01,t+d+parm.release)"),
@@ -60,6 +60,114 @@ function verifyPinnedPlaybackRuntime() {
     !source.includes("sort((a,b)=>{(a.generator.velRange?.lo||0)"),
     "abc2svg velocity-layer comparator does not return its result"
   );
+  assert(
+    source.includes("g.gain.cancelAndHoldAtTime(t+d)"),
+    "abc2svg must truncate SoundFont envelope automation at note-off"
+  );
+}
+
+function verifySoundfontEnvelopeStopsAtNoteOff() {
+  const sandbox = createSandbox();
+  const soundfontPath = path.join(ROOT, "third_party", "sf2", "TimGM6mb.sf2");
+  sandbox.abc2svg.sf2 = fs.readFileSync(soundfontPath).toString("base64");
+
+  class FakeAudioParam {
+    constructor(value = 1) {
+      this.value = value;
+      this.events = [];
+    }
+    setValueAtTime(value, time) {
+      this.value = value;
+      this.events.push({ kind: "set", value, time });
+    }
+    linearRampToValueAtTime(value, time) {
+      this.value = value;
+      this.events.push({ kind: "linear", value, time });
+    }
+    exponentialRampToValueAtTime(value, time) {
+      this.value = value;
+      this.events.push({ kind: "exponential", value, time });
+    }
+    cancelScheduledValues(time) {
+      this.events = this.events.filter((event) => event.time < time);
+    }
+    cancelAndHoldAtTime(time) {
+      this.cancelScheduledValues(time);
+      this.events.push({ kind: "hold", value: this.value, time });
+    }
+  }
+
+  const sources = [];
+  const audioContext = {
+    currentTime: 0,
+    destination: {},
+    createBuffer(_channels, length, sampleRate) {
+      const data = new Float32Array(length);
+      return { sampleRate, getChannelData() { return data; } };
+    },
+    createBufferSource() {
+      const source = {
+        playbackRate: new FakeAudioParam(),
+        detune: new FakeAudioParam(),
+        target: null,
+        startTime: null,
+        stopTime: null,
+        connect(target) { this.target = target; },
+        start(time) { this.startTime = time; sources.push(this); },
+        stop(time) { this.stopTime = time; },
+      };
+      return source;
+    },
+    createGain() {
+      return { gain: new FakeAudioParam(), connect() {}, disconnect() {} };
+    },
+    createStereoPanner() {
+      return { pan: new FakeAudioParam(0), connect() {} };
+    },
+  };
+
+  const parsed = parseOnce(sandbox, `X:1
+L:1/8
+Q:1/4=240
+M:4/4
+K:C
+C |]
+`);
+  assert(parsed.messages.length === 0, `SoundFont envelope fixture reported errors: ${parsed.messages.join("; ")}`);
+  const tune = parsed.abc.tunes[0];
+  sandbox.ToAudio().add(tune[0], tune[1], tune[3]);
+  const audio = sandbox.Audio5({ ac: audioContext, sfu: "TimGM6mb.sf2", speed: 1, release: 0.25, onend() {} });
+  audio.play(tune[0], null, 0, false);
+
+  assert(sources.length === 1, `expected one SoundFont source, got ${sources.length}`);
+  const envelope = sources[0].target && sources[0].target.gain;
+  assert(envelope, "SoundFont source was not connected to a gain envelope");
+  const held = envelope.events.find((event) => event.kind === "hold");
+  assert(held, "SoundFont envelope was not held at note-off");
+  const lateBeforeRelease = envelope.events.filter((event) => (
+    event.kind !== "hold"
+    && event.kind !== "linear"
+    && event.time > held.time
+  ));
+  assert(
+    lateBeforeRelease.length === 0,
+    `SoundFont envelope contains automation after note-off: ${JSON.stringify(lateBeforeRelease)}`
+  );
+  const release = envelope.events[envelope.events.length - 1];
+  assert(
+    release.kind === "linear" && release.value === 0 && release.time > held.time,
+    `SoundFont release must fade from the held note-off level to silence: ${JSON.stringify(envelope.events)}`
+  );
+  const releaseSeconds = release.time - held.time;
+  assert(
+    releaseSeconds > 0.2 && releaseSeconds < 0.35,
+    `SoundFont release scale was not applied: ${releaseSeconds}s`
+  );
+  assert(
+    Math.abs(sources[0].stopTime - release.time) < 1e-9,
+    "SoundFont source must stop when its scaled release reaches silence"
+  );
+  audio.stop();
 }
 
 function parseOnce(sandbox, abcText) {
@@ -348,6 +456,7 @@ C|]
 
 function main() {
   verifyPinnedPlaybackRuntime();
+  verifySoundfontEnvelopeStopsAtNoteOff();
   const sandbox = createSandbox();
   assert(sandbox.abc2svg && sandbox.abc2svg.drum, "snd-1.js did not register abc2svg.drum");
   assert(typeof sandbox.abc2svg.drum === "object", "abc2svg.drum should remain an object in current upstream");

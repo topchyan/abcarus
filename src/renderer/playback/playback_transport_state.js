@@ -62,6 +62,7 @@ function createPlaybackTransportState() {
     restartOnNextPlay: false,
     suppressOnEnd: false,
     desiredPlayerSpeed: 1,
+    soundfontReleaseScale: 1,
     lastPlaybackIdx: null,
     lastRenderIdx: null,
     lastStartPlaybackIdx: 0,

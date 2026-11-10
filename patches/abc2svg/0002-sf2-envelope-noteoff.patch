@@ -1,0 +1,16 @@
+--- a/util/sndaud.js
++++ b/util/sndaud.js
+@@ -533,7 +533,12 @@
+ 			g.gain.exponentialRampToValueAtTime(v, t2 + parm.decay)
+ 		}
+ 
+-		g.gain.setValueAtTime(v, t + d)
++		if (g.gain.cancelAndHoldAtTime) {
++			g.gain.cancelAndHoldAtTime(t + d)
++		} else {
++			g.gain.cancelScheduledValues(t + d)
++			g.gain.setValueAtTime(v, t + d)
++		}
+ 		g.gain.linearRampToValueAtTime(0, t + d + parm.release)
+ 
+ 		if (s.p_v.pan != undefined) {	// (control 10)

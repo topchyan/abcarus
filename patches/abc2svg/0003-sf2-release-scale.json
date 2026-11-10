@@ -1,0 +1,11 @@
+{
+  "schema": "abcarus.abc2svg-runtime-patch.v1",
+  "id": "0003-sf2-release-scale",
+  "target": "snd-1.js",
+  "expectedInputSha256": "41e80c36ea60d37502746a7611e4230e58faa08e6b5a274c44e4b1cd1abaca0d",
+  "expectedOutputSha256": "74cd26d599144e0e588b775569057788f973fcc60c306339adbf6b0ce5893d67",
+  "replacement": {
+    "from": "g.gain.linearRampToValueAtTime(0,t+d+parm.release)\nif(s.p_v.pan!=undefined){var p=po.ac.createStereoPanner()\np.pan.value=s.p_v.pan\no.connect(p)\np.connect(g)}else{o.connect(g)}\ng.connect(po.gain)\no.start(t)\no.stop(t+d+parm.release)",
+    "to": "g.gain.linearRampToValueAtTime(0,t+d+Math.max(.01,parm.release*(conf.release==undefined?1:conf.release)))\nif(s.p_v.pan!=undefined){var p=po.ac.createStereoPanner()\np.pan.value=s.p_v.pan\no.connect(p)\np.connect(g)}else{o.connect(g)}\ng.connect(po.gain)\no.start(t)\no.stop(t+d+Math.max(.01,parm.release*(conf.release==undefined?1:conf.release)))"
+  }
+}

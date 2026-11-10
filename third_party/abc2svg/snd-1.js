@@ -686,15 +686,18 @@ t2+=parm.hold
 g.gain.setValueAtTime(v,t2)}
 if(parm.sustain&&parm.decay>.01){v=parm.sustain==100?.01:v/Math.pow(10,parm.sustain/20)
 g.gain.exponentialRampToValueAtTime(v,t2+parm.decay)}
-g.gain.setValueAtTime(v,t+d)
-g.gain.linearRampToValueAtTime(0,t+d+parm.release)
+if(g.gain.cancelAndHoldAtTime)
+g.gain.cancelAndHoldAtTime(t+d)
+else{g.gain.cancelScheduledValues(t+d)
+g.gain.setValueAtTime(v,t+d)}
+g.gain.linearRampToValueAtTime(0,t+d+Math.max(.01,parm.release*(conf.release==undefined?1:conf.release)))
 if(s.p_v.pan!=undefined){var p=po.ac.createStereoPanner()
 p.pan.value=s.p_v.pan
 o.connect(p)
 p.connect(g)}else{o.connect(g)}
 g.connect(po.gain)
 o.start(t)
-o.stop(t+d+parm.release)}
+o.stop(t+d+Math.max(.01,parm.release*(conf.release==undefined?1:conf.release)))}
 function play_start(){if(po.stop){po.onend(repv)
 return}
 gain.connect(ac.destination)

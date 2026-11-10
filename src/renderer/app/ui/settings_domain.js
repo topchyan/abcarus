@@ -89,6 +89,10 @@ function createSettingsDomain({
     if (controllers.soundfont) controllers.soundfont.setFromSettings(settings);
   }
 
+  function setSoundfontNoteFadeFromSettings(settings) {
+    if (controllers.soundfontNoteFade) controllers.soundfontNoteFade.setFromSettings(settings);
+  }
+
   function setDrumVelocityFromSettings(settings) {
     if (!settings || typeof settings !== "object") return;
     const buildDefaultMap = helpers.buildDefaultDrumVelocityMap;
@@ -131,6 +135,7 @@ function createSettingsDomain({
         applyGlobalHeader: setGlobalHeaderFromSettings,
         applyAbc2svgFonts: setAbc2svgFontsFromSettings,
         applySoundfont: setSoundfontFromSettings,
+        applySoundfontNoteFade: setSoundfontNoteFadeFromSettings,
         applyDrumVelocity: setDrumVelocityFromSettings,
         applyMidiSettings: setMidiFromSettings,
         applyNoteTypingPreviewSettings: setNoteTypingPreviewFromSettings,
