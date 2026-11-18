@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Built-in ABC collection imports report an error when the new library cannot be opened after copying.
 
+## [1.13.1] - 2026-11-10
+### Added
+- Playback options now let you adjust each SoundFont's note-release fade independently; `Natural · 100%` preserves its native release, custom values are restored per font, and newly selected fonts start at natural release.
+
 ## [1.13.0] - 2026-11-09
 ### Added
 - Experimental, opt-in Armenian text transliteration with editable `w:`-line and score previews, multiple scholarly/phonetic profiles, transliterated textual headers, `W:` fields and `%%begintext` blocks, insertion directly after the active tune, and optional export to a separate ABC file.
