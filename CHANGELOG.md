@@ -6,7 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-11-17
+### Added
+- Library can import the bundled music21 ABC collection into a new editable folder without changing the read-only bundled source.
 
+### Changed
+- Release packages prune development-only Python content, bytecode caches, and non-ABC music21 corpus data while preserving the ABC collection and licenses.
+- Linux AppImage packaging excludes local and service directories and validates its AppStream metadata.
+- GitHub release artifacts use the current upload and download artifact actions.
+
+### Fixed
+- Built-in ABC collection imports report an error when the new library cannot be opened after copying.
 
 ## [1.13.0] - 2026-11-09
 ### Added
