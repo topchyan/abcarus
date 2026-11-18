@@ -242,6 +242,7 @@ function createAppCommandsDomain({
       libraryToolbarMenu,
       libraryCatalogButton,
       openFolderAsLibraryButton,
+      importBundledAbcButton,
       libraryRefreshButton,
       scanErrorTunesButton,
       fileNewButton,
@@ -279,6 +280,12 @@ function createAppCommandsDomain({
       openFolderAsLibraryButton.addEventListener("click", () => {
         closeLibraryToolbarMenu();
         guardedRun(actions.scanAndLoadLibrary);
+      });
+    }
+    if (importBundledAbcButton) {
+      importBundledAbcButton.addEventListener("click", () => {
+        closeLibraryToolbarMenu();
+        guardedRun(actions.importBundledAbcCollection);
       });
     }
     if (libraryToolbarMenu && documentRef) {

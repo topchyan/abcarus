@@ -31,6 +31,7 @@ const toggleLibraryButton = createButton();
 const toggleSetListButton = createButton();
 const libraryCatalogButton = createButton();
 const openFolderAsLibraryButton = createButton();
+const importBundledAbcButton = createButton();
 const fileCancelButton = createButton();
 const toggleGlobalsButton = createButton();
 const editGlobalHeaderButton = createButton();
@@ -53,6 +54,7 @@ let templatesCalls = 0;
 let toggleLibraryCalls = 0;
 let libraryCatalogCalls = 0;
 let openFolderCalls = 0;
+let importBundledAbcCalls = 0;
 let libraryMetadataCalls = 0;
 let toggleSetListCalls = 0;
 let printSetListCalls = 0;
@@ -81,6 +83,7 @@ const domain = createAppCommandsDomain({
     libraryToolbarMenu,
     libraryCatalogButton,
     openFolderAsLibraryButton,
+    importBundledAbcButton,
     fileCancelButton,
     toggleGlobalsButton,
     globalsToolbarMenu,
@@ -99,6 +102,7 @@ const domain = createAppCommandsDomain({
     toggleLibrary: () => { toggleLibraryCalls += 1; },
     openLibraryCatalog: () => { libraryCatalogCalls += 1; },
     scanAndLoadLibrary: async () => { openFolderCalls += 1; },
+    importBundledAbcCollection: async () => { importBundledAbcCalls += 1; },
     openLibraryMetadata: () => { libraryMetadataCalls += 1; },
     toggleSetList: () => { toggleSetListCalls += 1; },
     printSetList: async () => { printSetListCalls += 1; },
@@ -137,6 +141,11 @@ openFolderAsLibraryButton.click();
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(libraryToolbarMenu.open, false);
 assert.equal(openFolderCalls, 1, "Library dropdown must expose Open Folder as Library");
+libraryToolbarMenu.open = true;
+importBundledAbcButton.click();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(libraryToolbarMenu.open, false);
+assert.equal(importBundledAbcCalls, 1, "Library dropdown must expose the built-in ABC collection import");
 toggleGlobalsButton.click();
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.deepEqual(settingsPatches.at(-1), { globalHeaderEnabled: false }, "Globals primary action must toggle the global header");

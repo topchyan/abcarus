@@ -158,3 +158,9 @@ if (Test-Path $requirementsFile) {
     throw "Failed to install bundled Python dependencies from $requirementsFile."
   }
 }
+
+Write-Host "Pruning development-only Python runtime content..."
+node scripts/prune_python_runtime.mjs --root $dest
+if ($LASTEXITCODE -ne 0) {
+  throw "Failed to prune the bundled Python runtime."
+}

@@ -14,6 +14,7 @@ Details:
 - `build_appimage_release.sh` installs the pinned portable Python runtime via `devtools/pbs/`, builds the AppDir, then runs appimagetool at `../appimagetool/appimagetool-x86_64.AppImage` to generate the final AppImage.
 - `build_appimage.sh` is the AppDir staging script used by the other two scripts and always embeds the portable Python runtime.
 - `bundle_python_appimage.mjs` copies Python scripts and the runtime into the AppDir.
+- `prune_python_runtime.mjs` removes package tests, bytecode caches, and non-ABC music21 corpus data while preserving the editable ABC collection offered by Library.
 - `install_icons.sh` installs desktop icons for local dev.
 - `context-pack.mjs` generates a single Markdown file ([kitchen/context.md](../kitchen/context.md) by default) with repo state + recent `kitchen/chat-exports/` and `kitchen/debug_dumps/` artifacts for sharing.
 - Local runner scripts live under `scripts/local/` (gitignored).

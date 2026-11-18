@@ -11,6 +11,7 @@ const { parseProfileDocument, serializeProfileDocument } = require("./state_stor
 const { decodeAbcTextFromBuffer, encodeAbcTextToBuffer } = require("./abcCharset");
 const { normalizeAllowedExternalUrl } = require("./url_security");
 const { applyPrintPageMargins } = require("./print_layout");
+const { importBundledAbcCollection } = require("./bundled_abc_collection");
 
 const os = require("os");
 const { execFile } = require("child_process");
@@ -1576,6 +1577,19 @@ function registerIpcHandlers(ctx) {
     if (!filePath) return { root: "", files: [] };
     const res = await parseSingleFile(filePath, event.sender, options);
     return res || { root: "", files: [] };
+  });
+  ipcMain.handle("library:import-bundled-abc", async (event) => {
+    try {
+      return await importBundledAbcCollection({
+        fs,
+        path,
+        dialog,
+        app,
+        parent: prepareDialogParent(event, "import-bundled-abc"),
+      });
+    } catch (error) {
+      return { ok: false, error: error && error.message ? error.message : String(error) };
+    }
   });
   ipcMain.handle("mobile-library:share", async (_event, rootDir) => {
     if (typeof shareLibraryWithMobile !== "function") {

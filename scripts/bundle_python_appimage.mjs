@@ -2,6 +2,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { prunePythonRuntime } from "./python_runtime_prune_lib.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,12 +21,20 @@ if (!appDir) {
 const resolvedAppDir = path.resolve(appDir);
 
 const copiedRuntime = pythonRoot ? await copyPythonRuntime(pythonRoot, resolvedAppDir) : {};
+const pruneResult = pythonRoot
+  ? await prunePythonRuntime(path.join(resolvedAppDir, "usr"))
+  : null;
 
 if (verbose) {
   const manifest = {
     appDir: resolvedAppDir,
     pythonRoot: pythonRoot ? path.resolve(pythonRoot) : null,
     copiedRuntime,
+    pruneResult: pruneResult ? {
+      removedCount: pruneResult.removedCount,
+      bytes: pruneResult.bytes,
+      corpusAbcFiles: pruneResult.corpusAbcFiles,
+    } : null,
   };
   console.log(JSON.stringify(manifest, null, 2));
 }

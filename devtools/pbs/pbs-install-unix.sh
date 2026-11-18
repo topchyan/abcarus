@@ -87,3 +87,6 @@ if [[ -f "${requirements_file}" ]]; then
   "${dest}/bin/python3" -m pip install --upgrade pip
   "${dest}/bin/python3" -m pip install -r "${requirements_file}"
 fi
+
+echo "Pruning development-only Python runtime content..."
+node scripts/prune_python_runtime.mjs --root "${dest}"

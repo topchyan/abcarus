@@ -104,8 +104,10 @@ jobs:
       - name: Download Electron binary
         run: node node_modules/electron/install.js
 
-      - name: Install appimagetool
+      - name: Install AppImage tooling
         run: |
+          sudo apt-get update
+          sudo apt-get install -y appstream
           mkdir -p ../appimagetool
           curl -L --fail -o ../appimagetool/appimagetool-x86_64.AppImage \
             https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
@@ -155,7 +157,7 @@ jobs:
           sha256sum ABCarus-x86_64.AppImage ABCarus-x86_64-portable.tar.gz > SHA256SUMS-linux.txt
 
       - name: Store Linux release files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: release-linux
           if-no-files-found: error
@@ -214,7 +216,7 @@ jobs:
           shasum -a 256 ABCarus-macos-arm64.dmg > SHA256SUMS-macos-arm64.txt
 
       - name: Store macOS arm64 release files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: release-macos-arm64
           if-no-files-found: error
@@ -272,7 +274,7 @@ jobs:
           shasum -a 256 ABCarus-macos-x64.dmg > SHA256SUMS-macos-x64.txt
 
       - name: Store macOS x64 release files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: release-macos-x64
           if-no-files-found: error
@@ -388,7 +390,7 @@ jobs:
           $lines | Out-File -Encoding ascii "dist/electron-builder/SHA256SUMS-windows.txt"
 
       - name: Store Windows release files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: release-windows-x64
           if-no-files-found: error
@@ -412,7 +414,7 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
 
       - name: Download release files
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: release-*
           path: release-assets

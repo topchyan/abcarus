@@ -263,6 +263,7 @@ const $libraryToolbarMenu = document.getElementById("libraryToolbarMenu");
 const $btnLibraryCatalog = document.getElementById("btnLibraryCatalog");
 const $btnCopyActiveFileTuneList = document.getElementById("btnCopyActiveFileTuneList");
 const $btnOpenFolderAsLibrary = document.getElementById("btnOpenFolderAsLibrary");
+const $btnImportBundledAbc = document.getElementById("btnImportBundledAbc");
 const $btnFileNew = document.getElementById("btnFileNew");
 const $btnFileOpen = document.getElementById("btnFileOpen");
 const $btnFileSave = document.getElementById("btnFileSave");
@@ -722,6 +723,7 @@ const payloadModeFeature = createPayloadModeFeature({
     $btnToggleLibrary,
     $btnLibraryCatalog,
     $btnOpenFolderAsLibrary,
+    $btnImportBundledAbc,
     $btnLibraryRefresh,
     $btnLibraryClearFilter,
     $btnLibraryFavorites,
@@ -811,6 +813,7 @@ const chordProFeature = createChordProFeature({
     $btnToggleLibrary,
     $btnLibraryCatalog,
     $btnOpenFolderAsLibrary,
+    $btnImportBundledAbc,
     $btnLibraryRefresh,
     $btnLibraryClearFilter,
     $btnLibraryFavorites,
@@ -3491,6 +3494,41 @@ async function scanAndLoadLibrary() {
   return libraryShellController.scanAndLoadLibrary();
 }
 
+async function importBundledAbcCollection() {
+  if (!window.api || typeof window.api.importBundledAbcCollection !== "function") {
+    showToast("The built-in ABC collection is unavailable.", 3000);
+    return;
+  }
+  if (chordProFeature.isEnabled()) {
+    showToast("Library is disabled while editing ChordPro.", 2400);
+    return;
+  }
+  const canLeave = await ensureSafeToAbandonCurrentDoc("importing the built-in ABC collection");
+  if (!canLeave) return;
+  setStatus("Importing built-in ABC collection…");
+  const result = await window.api.importBundledAbcCollection();
+  if (!result || result.cancelled) {
+    setStatus("Ready");
+    return;
+  }
+  if (!result.ok || !result.root) {
+    const message = result && result.error ? result.error : "Unable to import the built-in ABC collection.";
+    showToast(message, 5000);
+    setStatus("Error");
+    return;
+  }
+  await loadLibraryFromFolder(result.root);
+  if (libraryRuntime.getRoot() !== result.root) {
+    showToast("The ABC collection was copied, but the Library could not open it.", 5000);
+    setStatus("Error");
+    return;
+  }
+  if (typeof window.api.addRecentFolder === "function") {
+    await window.api.addRecentFolder({ path: result.root, label: result.root });
+  }
+  showToast(`Imported ${Number(result.count) || 0} ABC files as an editable Library.`, 4200);
+}
+
 async function shareLibraryWithMobile() {
   const root = libraryRuntime.getRoot();
   if (!root) {
@@ -4187,6 +4225,7 @@ appCommandsDomain = createAppCommandsDomain({
     libraryToolbarMenu: $libraryToolbarMenu,
     libraryCatalogButton: $btnLibraryCatalog,
     openFolderAsLibraryButton: $btnOpenFolderAsLibrary,
+    importBundledAbcButton: $btnImportBundledAbc,
     libraryRefreshButton: $btnLibraryRefresh,
     scanErrorTunesButton: $scanErrorTunes,
     fileNewButton: $btnFileNew,
@@ -4256,6 +4295,7 @@ appCommandsDomain = createAppCommandsDomain({
     gotoLine: editorRuntime.gotoLine,
     importMidi: () => importExportFeature.importMidi(),
     importMusicXml: () => importExportFeature.importMusicXml(),
+    importBundledAbcCollection,
     leaveRawModeForAction,
     logError: logErr,
     navigateTuneByDelta,

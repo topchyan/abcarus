@@ -103,6 +103,7 @@ contextBridge.exposeInMainWorld("api", {
   scanLibraryDiscover: async (rootDir, options) => ipcRenderer.invoke("library:scan-discover", rootDir, options),
   cancelLibraryScan: async () => ipcRenderer.invoke("library:cancel-scan"),
   parseLibraryFile: async (filePath, options) => ipcRenderer.invoke("library:parse-file", filePath, options),
+  importBundledAbcCollection: async () => ipcRenderer.invoke("library:import-bundled-abc"),
   shareLibraryWithMobile: async (rootDir) => ipcRenderer.invoke("mobile-library:share", rootDir),
   getTemplatesInfo: async () => ipcRenderer.invoke("templates:get-info"),
   pickTemplatesFolder: async () => ipcRenderer.invoke("templates:pick-folder"),

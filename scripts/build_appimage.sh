@@ -9,6 +9,7 @@ desktop_id="com.abcarus.ABCarus"
 electron_dist="${repo_root}/node_modules/electron/dist"
 icon_path="${repo_root}/assets/icons/icon.png"
 metainfo_path="${repo_root}/assets/appstream/${desktop_id}.metainfo.xml"
+appdata_path="${appdir}/usr/share/metainfo/${desktop_id}.appdata.xml"
 python_embed_root="${repo_root}/third_party/python-embed/linux-x64"
 clean=1
 
@@ -45,11 +46,21 @@ cp -a "${electron_dist}/." "${electron_dst}/"
 if command -v rsync >/dev/null 2>&1; then
   rsync -a \
     --exclude ".git" \
+    --exclude ".agents" \
+    --exclude ".claude" \
+    --exclude ".github" \
+    --exclude ".playwright-cli" \
+    --exclude ".vscode" \
     --exclude "dist" \
     --exclude "node_modules" \
     --exclude "devtools" \
     --exclude "docs" \
+    --exclude "kitchen" \
+    --exclude "debug_dumps" \
+    --exclude "output" \
     --exclude "scripts" \
+    --exclude "assets/brand" \
+    --exclude "third_party/_upd" \
     --exclude "third_party/python-embed" \
     --exclude "*.md" \
     "${repo_root}/" "${resources_app}/"
@@ -58,11 +69,21 @@ else
     cd "${repo_root}"
     tar \
       --exclude "./.git" \
+      --exclude "./.agents" \
+      --exclude "./.claude" \
+      --exclude "./.github" \
+      --exclude "./.playwright-cli" \
+      --exclude "./.vscode" \
       --exclude "./dist" \
       --exclude "./node_modules" \
       --exclude "./devtools" \
       --exclude "./docs" \
+      --exclude "./kitchen" \
+      --exclude "./debug_dumps" \
+      --exclude "./output" \
       --exclude "./scripts" \
+      --exclude "./assets/brand" \
+      --exclude "./third_party/_upd" \
       --exclude "./third_party/python-embed" \
       --exclude "./*.md" \
       -cf - . | (cd "${resources_app}" && tar -xf -)
@@ -110,7 +131,11 @@ cp "${appdir}/${desktop_id}.desktop" "${appdir}/usr/share/applications/${desktop
 cp "${icon_path}" "${appdir}/${app_name}.png"
 
 mkdir -p "${appdir}/usr/share/metainfo"
-cp "${metainfo_path}" "${appdir}/usr/share/metainfo/${desktop_id}.metainfo.xml"
+cp "${metainfo_path}" "${appdata_path}"
+
+if command -v appstreamcli >/dev/null 2>&1; then
+  appstreamcli validate --no-net "${appdata_path}"
+fi
 
 python_root="${python_embed_root}"
 if [[ ! -x "${python_root}/bin/python3" ]]; then
